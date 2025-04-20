@@ -69,7 +69,7 @@ add_executable(CMakeProject2
     "tcp_client.cpp"
     "client_manager.h"
     "client_manager.cpp"
-)
+ "acs_monitor.h" "acs_monitor.cpp")
 
 # Include directories - directly include both SDL2 and ImGui
 target_include_directories(CMakeProject2 PRIVATE
