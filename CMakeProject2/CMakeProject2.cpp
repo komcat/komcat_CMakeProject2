@@ -1,8 +1,7 @@
-﻿
-#include <algorithm> // Add this include for std::min and std::max 
+﻿#include <algorithm> // For std::min and std::max 
 #include "CMakeProject2.h"
 #include "randomwindow.h"
-#include "tcp_client.h"
+#include "client_manager.h" // Replace tcp_client.h with our new manager
 
 // ImGui and SDL includes
 #include "imgui.h"
@@ -60,21 +59,8 @@ int main(int argc, char* argv[])
     // Create our RandomWindow instance
     RandomWindow randomWindow;
 
-
-
-    // Variables for TCP client
-    TcpClient tcpClient;
-    std::string serverIp = "127.0.0.1";
-    int serverPort = 8888;
-    bool connected = false;
-    float receivedValue = 0.0f;
-    char serverIpBuffer[64] = "127.0.0.1";  // Buffer for ImGui input
-    int connectionStatus = 0;  // 0: Disconnected, 1: Connected, 2: Failed
-    char statusMessage[128] = "Not connected";
-    float receivedValues[100] = {}; // Array to store last 100 values for visualization
-    int valuesCount = 0;
-    int valuesCursor = 0;
-
+    // Create our ClientManager instead of a single TcpClient
+    ClientManager clientManager;
 
     // For FPS calculation
     float frameTime = 0.0f;
@@ -83,9 +69,6 @@ int main(int argc, char* argv[])
     float fpsTimer = 0.0f;
     int frameCounter = 0;
     Uint64 lastFrameTime = SDL_GetPerformanceCounter();
-
-    
-
 
     // Main loop
     bool done = false;
@@ -102,9 +85,7 @@ int main(int argc, char* argv[])
                 done = true;
         }
 
-
-        // Then in your main loop, add this code before ImGui::NewFrame():
-    // Calculate delta time and FPS
+        // Calculate delta time and FPS
         Uint64 currentFrameTime = SDL_GetPerformanceCounter();
         float deltaTime = (currentFrameTime - lastFrameTime) / (float)SDL_GetPerformanceFrequency();
         lastFrameTime = currentFrameTime;
@@ -120,12 +101,10 @@ int main(int argc, char* argv[])
             fpsTimer = 0;
         }
 
-
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
-
 
         // Create a small window for FPS display
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
@@ -144,124 +123,11 @@ int main(int argc, char* argv[])
             done = true;
         }
 
+        // Update all TCP clients
+        clientManager.UpdateClients();
 
-
-        // Create ImGui window for TCP client
-        ImGui::Begin("TCP Client");
-
-        // Server connection settings
-        ImGui::InputText("Server IP", serverIpBuffer, sizeof(serverIpBuffer));
-        ImGui::InputInt("Server Port", &serverPort);
-
-        // Connect / Disconnect button
-        if (!connected)
-        {
-            if (ImGui::Button("Connect"))
-            {
-                serverIp = serverIpBuffer;
-                connected = tcpClient.Connect(serverIp, serverPort);
-                connectionStatus = connected ? 1 : 2;
-                snprintf(statusMessage, sizeof(statusMessage), connected ?
-                    "Connected to %s:%d" : "Failed to connect to %s:%d",
-                    serverIp.c_str(), serverPort);
-            }
-        }
-        else
-        {
-            if (ImGui::Button("Disconnect"))
-            {
-                tcpClient.Disconnect();
-                connected = false;
-                connectionStatus = 0;
-                snprintf(statusMessage, sizeof(statusMessage), "Disconnected from %s:%d",
-                    serverIp.c_str(), serverPort);
-            }
-        }
-
-        // Update connection status if it changed
-        if (connected && !tcpClient.IsConnected())
-        {
-            connected = false;
-            connectionStatus = 0;
-            snprintf(statusMessage, sizeof(statusMessage), "Connection lost to %s:%d",
-                serverIp.c_str(), serverPort);
-        }
-
-        // Display connection status
-        ImGui::Text("Status: %s", statusMessage);
-
-        // Inside the main loop where you have "if (connected)"
-        if (connected)
-        {
-            // Get all new values since last frame
-            std::deque<float> newValues = tcpClient.GetReceivedValues();
-
-            // Update the circular buffer with new values
-            for (float val : newValues) {
-                receivedValues[valuesCursor] = val;
-                valuesCursor = (valuesCursor + 1) % 100;
-                if (valuesCount < 100)
-                    valuesCount++;
-
-                // Also update the latest value
-                receivedValue = val;
-            }
-
-            // Display the latest received value (always use the latest actual value)
-            ImGui::Separator();
-            ImGui::Text("Latest received value: %.6f", tcpClient.GetLatestValue());
-
-            // Debug info
-            ImGui::Text("Values in buffer: %d", valuesCount);
-            ImGui::Text("New values this frame: %d", (int)newValues.size());
-
-            // Plot the received values
-            ImGui::Separator();
-            ImGui::Text("Received Values History:");
-
-            // Calculate min/max for better scaling (with safety checks)
-            float minValue = 0.0f;
-            float maxValue = 1.0f;
-
-            if (valuesCount > 0) {
-                // Initialize with first value
-                minValue = receivedValues[0];
-                maxValue = receivedValues[0];
-
-                // Find actual min/max
-                for (int i = 0; i < valuesCount; i++) {
-                    minValue = (std::min)(minValue, receivedValues[i]);
-                    maxValue = (std::max)(maxValue, receivedValues[i]);
-                }
-
-                // Add margins (10% padding)
-                float range = maxValue - minValue;
-                if (range < 0.001f) range = 0.1f;  // Prevent too small ranges
-
-                float margin = range * 0.1f;
-                minValue = (std::max)(0.0f, minValue - margin);
-                maxValue = (std::min)(1.0f, maxValue + margin);
-            }
-
-            // Create the plot with proper offset to show most recent values first
-            ImGui::PlotLines("##values",
-                receivedValues,           // Array
-                valuesCount,              // Count
-                valuesCursor,             // Offset (to show most recent values first)
-                nullptr,                  // Overlay text
-                minValue,                 // Y-min
-                maxValue,                 // Y-max
-                ImVec2(0, 80),            // Graph size
-                sizeof(float));           // Stride
-
-            ImGui::Text("Min displayed: %.2f, Max displayed: %.2f", minValue, maxValue);
-        }
-        ImGui::End();
-
-        // Rendering
-        ImGui::Render();
-
-
+        // Render TCP client manager UI
+        clientManager.RenderUI();
 
         // Rendering
         ImGui::Render();

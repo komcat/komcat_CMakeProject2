@@ -62,7 +62,7 @@ add_executable(CMakeProject2
     "randomwindow.cpp"
     "randomwindow.h"
     ${IMGUI_SOURCES}
- "tcp_client.h" "tcp_client.cpp")
+ "tcp_client.h" "tcp_client.cpp" "client_manager.h" "client_manager.cpp")
 
 # Include directories - directly include both SDL2 and ImGui
 target_include_directories(CMakeProject2 PRIVATE
