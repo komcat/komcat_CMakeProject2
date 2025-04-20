@@ -2,6 +2,7 @@
 #include "CMakeProject2.h"
 #include "randomwindow.h"
 #include "client_manager.h" // Replace tcp_client.h with our new manager
+#include "ACSC.h"
 
 // ImGui and SDL includes
 #include "imgui.h"
@@ -70,6 +71,17 @@ int main(int argc, char* argv[])
     int frameCounter = 0;
     Uint64 lastFrameTime = SDL_GetPerformanceCounter();
 
+    //ACS controller
+    HANDLE hComm = ACSC_INVALID;
+    bool isConnected = false;
+    static char ipAddress[64] = "192.168.0.50";
+    static bool connectionAttempted = false;
+    static bool connectionSuccessful = false;
+    static bool motorEnabledX = false;
+    static bool motorEnabledY = false;
+    static bool motorEnabledZ = false;
+    static double xPos = 0.0, yPos = 0.0, zPos = 0.0;
+
     // Main loop
     bool done = false;
     while (!done)
@@ -128,6 +140,85 @@ int main(int argc, char* argv[])
 
         // Render TCP client manager UI
         clientManager.RenderUI();
+
+
+        //ACS connection
+
+
+
+
+        ImGui::Begin("ACS Controller");
+
+
+
+        ImGui::InputText("IP Address", ipAddress, IM_ARRAYSIZE(ipAddress));
+
+        if (!isConnected && ImGui::Button("Connect")) {
+            hComm = acsc_OpenCommEthernet(ipAddress, ACSC_SOCKET_STREAM_PORT);
+            connectionAttempted = true;
+            if (hComm != ACSC_INVALID) {
+                isConnected = true;
+                connectionSuccessful = true;
+            }
+            else {
+                connectionSuccessful = false;
+            }
+        }
+
+        if (connectionAttempted) {
+            if (connectionSuccessful) {
+                ImGui::TextColored(ImVec4(0, 1, 0, 1), "✅ Connected to %s", ipAddress);
+            }
+            else {
+                ImGui::TextColored(ImVec4(1, 0, 0, 1), "❌ Failed to connect.");
+            }
+        }
+
+        if (isConnected) {
+            // Enable each motor if not already enabled
+            if (!motorEnabledX) motorEnabledX = acsc_Enable(hComm, ACSC_AXIS_X, nullptr);
+            if (!motorEnabledY) motorEnabledY = acsc_Enable(hComm, ACSC_AXIS_Y, nullptr);
+            if (!motorEnabledZ) motorEnabledZ = acsc_Enable(hComm, ACSC_AXIS_Z, nullptr);
+
+            // Display position for each axis
+            if (acsc_GetFPosition(hComm, ACSC_AXIS_X, &xPos, nullptr)) {
+                ImGui::Text("X Position: %.2f", xPos);
+            }
+            else {
+                ImGui::TextColored(ImVec4(1, 0, 0, 1), "Failed to read X position");
+            }
+
+            if (acsc_GetFPosition(hComm, ACSC_AXIS_Y, &yPos, nullptr)) {
+                ImGui::Text("Y Position: %.2f", yPos);
+            }
+            else {
+                ImGui::TextColored(ImVec4(1, 0, 0, 1), "Failed to read Y position");
+            }
+
+            if (acsc_GetFPosition(hComm, ACSC_AXIS_Z, &zPos, nullptr)) {
+                ImGui::Text("Z Position: %.2f", zPos);
+            }
+            else {
+                ImGui::TextColored(ImVec4(1, 0, 0, 1), "Failed to read Z position");
+            }
+
+            if (ImGui::Button("Disconnect")) {
+                acsc_CloseComm(hComm);
+                hComm = ACSC_INVALID;
+                isConnected = false;
+                connectionAttempted = false;
+                connectionSuccessful = false;
+                motorEnabledX = motorEnabledY = motorEnabledZ = false;
+            }
+        }
+
+        ImGui::End();
+
+
+
+
+
+
 
         // Rendering
         ImGui::Render();

@@ -9,7 +9,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Define paths to SDL2 and ImGui - adjust these if needed
 set(SDL2_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/sdl2")
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/imgui")
-
+# Define path to ACSC files
+set(ACSC_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 # Set SDL2 paths directly - using simple direct references
 set(SDL2_INCLUDE_DIR "${SDL2_DIR}/include")
 
@@ -21,11 +22,13 @@ if(WIN32)
         set(SDL2_LIBRARY "${SDL2_DIR}/lib/x64/SDL2.lib")
         set(SDL2MAIN_LIBRARY "${SDL2_DIR}/lib/x64/SDL2main.lib")
         set(SDL2_DLL "${SDL2_DIR}/lib/x64/SDL2.dll")
+        set(ACSC_LIBRARY "${ACSC_DIR}/ACSCL_x64.LIB")
     else()
         # 32-bit build
         set(SDL2_LIBRARY "${SDL2_DIR}/lib/x86/SDL2.lib")
         set(SDL2MAIN_LIBRARY "${SDL2_DIR}/lib/x86/SDL2main.lib")
         set(SDL2_DLL "${SDL2_DIR}/lib/x86/SDL2.dll")
+        set(ACSC_LIBRARY "${ACSC_DIR}/ACSCL_x86.LIB")
     endif()
 else()
     # For Linux/Mac - adjust if needed
@@ -62,12 +65,17 @@ add_executable(CMakeProject2
     "randomwindow.cpp"
     "randomwindow.h"
     ${IMGUI_SOURCES}
- "tcp_client.h" "tcp_client.cpp" "client_manager.h" "client_manager.cpp")
+    "tcp_client.h"
+    "tcp_client.cpp"
+    "client_manager.h"
+    "client_manager.cpp"
+)
 
 # Include directories - directly include both SDL2 and ImGui
 target_include_directories(CMakeProject2 PRIVATE
     ${SDL2_INCLUDE_DIR}
     ${IMGUI_DIR}
+     ${ACSC_DIR}  # Added to include the directory with ACSC.h
 )
 
 # Link libraries - directly reference libraries
@@ -75,6 +83,7 @@ target_link_libraries(CMakeProject2 PRIVATE
     ${SDL2MAIN_LIBRARY}
     ${SDL2_LIBRARY}
     ${OPENGL_LIBRARIES}
+    ${ACSC_LIBRARY}  # Added ACSC library
 )
 
 # For Windows, we need to copy the SDL2.dll
