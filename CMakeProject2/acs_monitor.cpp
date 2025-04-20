@@ -5,10 +5,10 @@
 
 ACSMonitor::ACSMonitor()
     : hComm(ACSC_INVALID), isConnected(false), connectionAttempted(false),
-      connectionSuccessful(false), motorEnabledX(false),
-      motorEnabledY(false), motorEnabledZ(false),
-      xPos(0.0), yPos(0.0), zPos(0.0),
-      updateInterval(0.1), lastUpdateTime(0.0) {
+    connectionSuccessful(false), motorEnabledX(false),
+    motorEnabledY(false), motorEnabledZ(false),
+    xPos(0.0), yPos(0.0), zPos(0.0),
+    updateInterval(0.1), lastUpdateTime(0.0), jogDistance(0.1f) {
     std::strcpy(ipAddress, "192.168.0.50");
 }
 
@@ -50,52 +50,84 @@ void ACSMonitor::RenderUI() {
         if (!motorEnabledY) motorEnabledY = acsc_Enable(hComm, ACSC_AXIS_Y, nullptr);
         if (!motorEnabledZ) motorEnabledZ = acsc_Enable(hComm, ACSC_AXIS_Z, nullptr);
 
-		if (currentTime - lastUpdateTime >= updateInterval) {
-			// Update positions every updateInterval seconds
-			if (acsc_GetFPosition(hComm, ACSC_AXIS_X, &xPos, nullptr)) {
-				lastUpdateTime = currentTime;
-			}
-			else {
-				ImGui::TextColored(ImVec4(1, 0, 0, 1), "Failed to read X position");
-			}
-			if (acsc_GetFPosition(hComm, ACSC_AXIS_Y, &yPos, nullptr)) {
-				lastUpdateTime = currentTime;
-			}
-			else {
-				ImGui::TextColored(ImVec4(1, 0, 0, 1), "Failed to read Y position");
-			}
-			if (acsc_GetFPosition(hComm, ACSC_AXIS_Z, &zPos, nullptr)) {
-				lastUpdateTime = currentTime;
-			}
-			else {
-				ImGui::TextColored(ImVec4(1, 0, 0, 1), "Failed to read Z position");
-			}
-		}
+        // Add slider for jog distance
+        ImGui::Separator();
+        ImGui::Text("Jog Controls");
+        ImGui::SliderFloat("Jog Distance (mm)", &jogDistance, 0.001f, 10.0f, "%.3f");
+        ImGui::Separator();
 
-
-        // Display position for each axis
-        if (acsc_GetFPosition(hComm, ACSC_AXIS_X, &xPos, nullptr)) {
-            ImGui::Text("X Position: %.2f", xPos);
-        }
-        else {
-            ImGui::TextColored(ImVec4(1, 0, 0, 1), "Failed to read X position");
+        if (currentTime - lastUpdateTime >= updateInterval) {
+            // Update positions every updateInterval seconds
+            acsc_GetFPosition(hComm, ACSC_AXIS_X, &xPos, nullptr);
+            acsc_GetFPosition(hComm, ACSC_AXIS_Y, &yPos, nullptr);
+            acsc_GetFPosition(hComm, ACSC_AXIS_Z, &zPos, nullptr);
+            lastUpdateTime = currentTime;
         }
 
-        if (acsc_GetFPosition(hComm, ACSC_AXIS_Y, &yPos, nullptr)) {
-            ImGui::Text("Y Position: %.2f", yPos);
+        // X axis position and jog buttons
+        ImGui::Text("X Axis:");
+        ImGui::SameLine();
+        if (ImGui::Button("<- X")) {
+            if (motorEnabledX) {
+                //acsc_Jog(hComm, ACSC_AXIS_X, ACSC_NEGATIVE_DIRECTION, 0, nullptr);
+                //acsc_WaitMotionEnd(hComm, ACSC_AXIS_X, 1000);
+                acsc_ToPoint(hComm, ACSC_AMF_RELATIVE, ACSC_AXIS_X, -jogDistance, nullptr);
+            }
         }
-        else {
-            ImGui::TextColored(ImVec4(1, 0, 0, 1), "Failed to read Y position");
+        ImGui::SameLine();
+        ImGui::Text("%.2f", xPos);
+        ImGui::SameLine();
+        if (ImGui::Button("X ->")) {
+            if (motorEnabledX) {
+                //acsc_Jog(hComm, ACSC_AXIS_X, ACSC_POSITIVE_DIRECTION, 0, nullptr);
+                //acsc_WaitMotionEnd(hComm, ACSC_AXIS_X, 1000);
+                acsc_ToPoint(hComm, ACSC_AMF_RELATIVE, ACSC_AXIS_X, jogDistance, nullptr);
+            }
         }
 
-        if (acsc_GetFPosition(hComm, ACSC_AXIS_Z, &zPos, nullptr)) {
-            ImGui::Text("Z Position: %.2f", zPos);
+        // Y axis position and jog buttons
+        ImGui::Text("Y Axis:");
+        ImGui::SameLine();
+        if (ImGui::Button("<- Y")) {
+            if (motorEnabledY) {
+                //acsc_Jog(hComm, ACSC_AXIS_Y, ACSC_NEGATIVE_DIRECTION, 0, nullptr);
+                //acsc_WaitMotionEnd(hComm, ACSC_AXIS_Y, 1000);
+                acsc_ToPoint(hComm, ACSC_AMF_RELATIVE, ACSC_AXIS_Y, -jogDistance, nullptr);
+            }
         }
-        else {
-            ImGui::TextColored(ImVec4(1, 0, 0, 1), "Failed to read Z position");
+        ImGui::SameLine();
+        ImGui::Text("%.2f", yPos);
+        ImGui::SameLine();
+        if (ImGui::Button("Y ->")) {
+            if (motorEnabledY) {
+                //acsc_Jog(hComm, ACSC_AXIS_Y, ACSC_POSITIVE_DIRECTION, 0, nullptr);
+                //acsc_WaitMotionEnd(hComm, ACSC_AXIS_Y, 1000);
+                acsc_ToPoint(hComm, ACSC_AMF_RELATIVE, ACSC_AXIS_Y, jogDistance, nullptr);
+            }
         }
 
+        // Z axis position and jog buttons
+        ImGui::Text("Z Axis:");
+        ImGui::SameLine();
+        if (ImGui::Button("<- Z")) {
+            if (motorEnabledZ) {
+                //acsc_Jog(hComm, ACSC_AXIS_Z, ACSC_NEGATIVE_DIRECTION, 0, nullptr);
+                //acsc_WaitMotionEnd(hComm, ACSC_AXIS_Z, 1000);
+                acsc_ToPoint(hComm, ACSC_AMF_RELATIVE, ACSC_AXIS_Z, -jogDistance, nullptr);
+            }
+        }
+        ImGui::SameLine();
+        ImGui::Text("%.2f", zPos);
+        ImGui::SameLine();
+        if (ImGui::Button("Z ->")) {
+            if (motorEnabledZ) {
+                //acsc_Jog(hComm, ACSC_AXIS_Z, ACSC_POSITIVE_DIRECTION, 0, nullptr);
+                //acsc_WaitMotionEnd(hComm, ACSC_AXIS_Z, 1000);
+                acsc_ToPoint(hComm, ACSC_AMF_RELATIVE, ACSC_AXIS_Z, jogDistance, nullptr);
+            }
+        }
 
+        ImGui::Separator();
         if (ImGui::Button("Disconnect")) {
             acsc_CloseComm(hComm);
             hComm = ACSC_INVALID;

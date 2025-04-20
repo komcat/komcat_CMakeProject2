@@ -20,5 +20,5 @@ private:
     double xPos, yPos, zPos;
     double updateInterval = 0.1; // seconds between updates
     double lastUpdateTime = 0.0;
-
+    float jogDistance = 0.1f; // Default jog distance in mm
 };
