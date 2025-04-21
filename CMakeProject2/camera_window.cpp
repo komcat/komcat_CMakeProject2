@@ -158,8 +158,7 @@ void CameraWindow::GrabThreadFunction()
                     pylonImage.AttachGrabResultBuffer(ptrGrabResult);
 
                     // Print info about the image
-                    printf("Grabbed image: %d x %d, PixelType: %d\n",
-                        pylonImage.GetWidth(), pylonImage.GetHeight(), pixelType);
+                    //printf("Grabbed image: %d x %d, PixelType: %d\n", pylonImage.GetWidth(), pylonImage.GetHeight(), pixelType);
 
                     // Convert to a format suitable for display
                     formatConverter.Convert(formatConverterOutput, pylonImage);
