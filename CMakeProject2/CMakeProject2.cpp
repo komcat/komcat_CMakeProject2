@@ -2,6 +2,8 @@
 #include "CMakeProject2.h"
 #include "randomwindow.h"
 #include "client_manager.h" // Replace tcp_client.h with our new manager
+#include "camera_window.h" // Add this line to include the camera window header
+
 
 #include "acs_monitor.h"
 
@@ -76,6 +78,9 @@ int main(int argc, char* argv[])
     //ACS controller
     ACSMonitor acsMonitor;
 
+    // Add camera window instance
+    CameraWindow cameraWindow;
+
     // Main loop
     bool done = false;
     while (!done)
@@ -141,6 +146,13 @@ int main(int argc, char* argv[])
 
 
 
+        // Render camera window UI
+        cameraWindow.RenderUI();
+
+        // Check if camera window wants to close (if needed)
+        if (cameraWindow.IsDone()) {
+            done = true;
+        }
 
 
 
