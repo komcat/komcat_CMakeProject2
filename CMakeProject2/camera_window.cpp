@@ -254,7 +254,7 @@ void CameraWindow::UpdateTexture()
     const uint8_t* pImageBuffer = static_cast<uint8_t*>(formatConverterOutput.GetBuffer());
 
     // Debug output - just use dimensions
-    printf("Image dimensions: %d x %d\n", width, height);
+    //printf("Image dimensions: %d x %d\n", width, height);
 
     // Create texture if not already created
     if (!textureInitialized) {
