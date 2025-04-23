@@ -12,6 +12,10 @@ if (POLICY CMP0141)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
 
+add_subdirectory(nlohmann_json)
+
+
+
 # Define paths to SDL2 and ImGui - adjust these if needed
 set(SDL2_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/sdl2")
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/imgui")
@@ -105,7 +109,7 @@ add_executable(CMakeProject2
     "camera_window.h"
     "camera_window.cpp"
     # Add your Pylon-related source files here if needed
-)
+ "logger.h" "logger.cpp" "MotionTypes.h" "MotionConfigManager.h" "MotionConfigManager.cpp"     "MotionConfigEditor.h" "MotionConfigEditor.cpp" "toolbar.h" "toolbar.cpp")
 
 # Include directories - directly include SDL2, ImGui, and Pylon
 target_include_directories(CMakeProject2 PRIVATE
@@ -122,6 +126,7 @@ target_link_libraries(CMakeProject2 PRIVATE
     ${OPENGL_LIBRARIES}
     ${ACSC_LIBRARY}  # ACSC library
     ${PYLON_LIBRARIES}  # Added Pylon libraries
+    nlohmann_json::nlohmann_json
 )
 
 # For Windows, we need to copy the SDL2.dll

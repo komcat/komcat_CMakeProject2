@@ -1,0 +1,256 @@
+{
+  "MotionDevices": {
+    "hex-left": {
+      "IsEnabled": true,
+      "IpAddress": "192.168.0.10",
+      "Port": 50000,
+      "Id": 0,
+      "Name": "hex-left",
+      "Positions": {
+        "home": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "u": 0.0,
+          "v": 0.0,
+          "w": 0.0
+        },
+        "loading": {
+          "x": -50.0,
+          "y": 25.0,
+          "z": 10.0,
+          "u": 0.0,
+          "v": 0.0,
+          "w": 45.0
+        },
+        "working": {
+          "x": 100.0,
+          "y": 75.0,
+          "z": 15.0,
+          "u": 5.0,
+          "v": 10.0,
+          "w": 90.0
+        }
+      }
+    },
+    "hex-bottom": {
+      "IsEnabled": false,
+      "IpAddress": "192.168.0.20",
+      "Port": 50000,
+      "Id": 1,
+      "Name": "hex-bottom",
+      "Positions": {
+        "home": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "u": 0.0,
+          "v": 0.0,
+          "w": 0.0
+        },
+        "calibration": {
+          "x": 25.0,
+          "y": 25.0,
+          "z": 5.0,
+          "u": 0.0,
+          "v": 0.0,
+          "w": 0.0
+        }
+      }
+    },
+    "hex-right": {
+      "IsEnabled": true,
+      "IpAddress": "192.168.0.30",
+      "Port": 50000,
+      "Id": 2,
+      "Name": "hex-right",
+      "Positions": {
+        "home": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "u": 0.0,
+          "v": 0.0,
+          "w": 0.0
+        },
+        "inspection": {
+          "x": 75.0,
+          "y": 50.0,
+          "z": 30.0,
+          "u": -10.0,
+          "v": 5.0,
+          "w": 180.0
+        }
+      }
+    },
+    "gantry-main": {
+      "IsEnabled": true,
+      "IpAddress": "192.168.0.50",
+      "Id": 3,
+      "Name": "gantry-main",
+      "Positions": {
+        "home": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "park": {
+          "x": 500.0,
+          "y": 0.0,
+          "z": 50.0
+        },
+        "pickup": {
+          "x": 250.0,
+          "y": 300.0,
+          "z": 10.0
+        }
+      }
+    }
+  },
+  "Graphs": {
+    "Process_Flow": {
+      "Nodes": [
+        {
+          "Id": "start",
+          "Label": "Start Position",
+          "Device": "gantry-main",
+          "Position": "home",
+          "X": 100,
+          "Y": 50
+        },
+        {
+          "Id": "pickup_station",
+          "Label": "Material Pickup",
+          "Device": "gantry-main",
+          "Position": "pickup",
+          "X": 200,
+          "Y": 150
+        },
+        {
+          "Id": "process_left",
+          "Label": "Left Processing",
+          "Device": "hex-left",
+          "Position": "working",
+          "X": 300,
+          "Y": 100
+        },
+        {
+          "Id": "process_right",
+          "Label": "Right Processing",
+          "Device": "hex-right",
+          "Position": "inspection",
+          "X": 400,
+          "Y": 100
+        },
+        {
+          "Id": "end",
+          "Label": "Completion",
+          "Device": "gantry-main",
+          "Position": "park",
+          "X": 500,
+          "Y": 50
+        }
+      ],
+      "Edges": [
+        {
+          "Id": "edge1",
+          "Source": "start",
+          "Target": "pickup_station",
+          "Label": "Move to pickup",
+          "Conditions": {
+            "RequiresOperatorApproval": false,
+            "TimeoutSeconds": 30
+          }
+        },
+        {
+          "Id": "edge2",
+          "Source": "pickup_station",
+          "Target": "process_left",
+          "Label": "Transfer to left hexapod",
+          "Conditions": {
+            "RequiresOperatorApproval": true,
+            "TimeoutSeconds": 60
+          }
+        },
+        {
+          "Id": "edge3",
+          "Source": "process_left",
+          "Target": "process_right",
+          "Label": "Move to inspection",
+          "Conditions": {
+            "RequiresOperatorApproval": false,
+            "TimeoutSeconds": 45
+          }
+        },
+        {
+          "Id": "edge4",
+          "Source": "process_right",
+          "Target": "end",
+          "Label": "Complete process",
+          "Conditions": {
+            "RequiresOperatorApproval": false,
+            "TimeoutSeconds": 30
+          }
+        }
+      ]
+    },
+    "Calibration_Sequence": {
+      "Nodes": [
+        {
+          "Id": "cal_start",
+          "Label": "Calibration Start",
+          "Device": "hex-left",
+          "Position": "home",
+          "X": 100,
+          "Y": 200
+        },
+        {
+          "Id": "cal_bottom",
+          "Label": "Bottom Hexapod",
+          "Device": "hex-bottom",
+          "Position": "calibration",
+          "X": 200,
+          "Y": 250
+        },
+        {
+          "Id": "cal_end",
+          "Label": "Calibration Complete",
+          "Device": "hex-left",
+          "Position": "home",
+          "X": 300,
+          "Y": 200
+        }
+      ],
+      "Edges": [
+        {
+          "Id": "cal_edge1",
+          "Source": "cal_start",
+          "Target": "cal_bottom",
+          "Label": "Begin calibration",
+          "Conditions": {
+            "RequiresOperatorApproval": true,
+            "TimeoutSeconds": 120
+          }
+        },
+        {
+          "Id": "cal_edge2",
+          "Source": "cal_bottom",
+          "Target": "cal_end",
+          "Label": "Complete calibration",
+          "Conditions": {
+            "RequiresOperatorApproval": false,
+            "TimeoutSeconds": 60
+          }
+        }
+      ]
+    }
+  },
+  "Settings": {
+    "DefaultSpeed": 10.0,
+    "DefaultAcceleration": 5.0,
+    "LogLevel": "info",
+    "AutoReconnect": true,
+    "ConnectionTimeout": 5000,
+    "PositionTolerance": 0.001
+  }
+}

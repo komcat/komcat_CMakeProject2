@@ -1,0 +1,80 @@
+#pragma once
+
+#include <string>
+#include <deque>
+#include <mutex>
+#include <fstream>
+#include <memory>
+
+// Enum for log message levels
+enum class LogLevel {
+    Info,   // White - normal information
+    Warning, // Orange - warnings
+    Error    // Red - errors
+};
+
+// Structure to store log messages with their level
+struct LogMessage {
+    std::string text;
+    LogLevel level;
+    std::string timestamp;
+
+    LogMessage(const std::string& msg, LogLevel lvl, const std::string& time)
+        : text(msg), level(lvl), timestamp(time) {
+    }
+};
+
+// Logger class for handling text logging
+class Logger {
+private:
+    // Singleton instance
+    static std::unique_ptr<Logger> s_instance;
+
+    // Container to store log messages (max 100)
+    std::deque<LogMessage> m_logMessages;
+
+    // Mutex for thread safety
+    std::mutex m_logMutex;
+
+    // Current log file
+    std::ofstream m_logFile;
+
+    // Current date string
+    std::string m_currentDate;
+
+    // Constructor is private (singleton pattern)
+    Logger();
+
+    // Open a new log file for the current date
+    void OpenLogFile();
+
+    // Check if date has changed and update log file if needed
+    void CheckAndUpdateLogFile();
+
+    // Get current timestamp as string
+    std::string GetTimestamp();
+
+public:
+    // Destructor
+    ~Logger();
+
+    // Get singleton instance
+    static Logger* GetInstance();
+
+    // Log a message with specified level
+    void Log(const std::string& message, LogLevel level = LogLevel::Info);
+
+    // Convenience methods for different log levels
+    void LogInfo(const std::string& message);
+    void LogWarning(const std::string& message);
+    void LogError(const std::string& message);
+
+    // Clear all logs
+    void Clear();
+
+    // Render ImGui window for logs
+    void RenderUI();
+
+    // Save logs to file (custom filename)
+    bool SaveLogsToFile(const std::string& filename);
+};
