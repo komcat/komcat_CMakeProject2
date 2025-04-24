@@ -3,16 +3,18 @@
 #include "imgui.h"
 #include "logger.h"
 
-Toolbar::Toolbar(MotionConfigEditor& configEditor)
+Toolbar::Toolbar(MotionConfigEditor& configEditor, GraphVisualizer& graphVisualizer)
     : m_configEditor(configEditor),
-    m_configEditorVisible(configEditor.IsVisible())
+    m_graphVisualizer(graphVisualizer),
+    m_configEditorVisible(configEditor.IsVisible()),
+    m_graphVisualizerVisible(graphVisualizer.IsVisible())
 {
     // Initialize with empty callbacks
     m_button2Callback = []() {};
     m_button3Callback = []() {};
 
     // Log toolbar initialization
-    Logger::GetInstance()->LogInfo("Toolbar initialized");
+    Logger::GetInstance()->LogInfo("Toolbar initialized with GraphVisualizer support");
 }
 
 void Toolbar::RenderUI()
@@ -41,6 +43,7 @@ void Toolbar::RenderUI()
 
     // Get the current state to determine button color
     m_configEditorVisible = m_configEditor.IsVisible();
+    m_graphVisualizerVisible = m_graphVisualizer.IsVisible();
 
     // Set button color based on state
     if (m_configEditorVisible) {
@@ -56,6 +59,22 @@ void Toolbar::RenderUI()
         m_configEditorVisible = !m_configEditorVisible;
     }
     ImGui::PopStyleColor(); // Reset button color
+
+    ImGui::SameLine(0, 10); // Add spacing between buttons
+
+    // New Graph Visualizer button
+    if (m_graphVisualizerVisible) {
+        ImGui::PushStyleColor(ImGuiCol_Button, activeButtonColor);
+    }
+    else {
+        ImGui::PushStyleColor(ImGuiCol_Button, inactiveButtonColor);
+    }
+
+    if (ImGui::Button("Graph Visualizer", ImVec2(120, 24))) {
+        m_graphVisualizer.ToggleWindow();
+        m_graphVisualizerVisible = !m_graphVisualizerVisible;
+    }
+    ImGui::PopStyleColor();
 
     ImGui::SameLine(0, 10); // Add spacing between buttons
 

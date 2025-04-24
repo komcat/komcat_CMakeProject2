@@ -9,7 +9,8 @@
 #include "MotionConfigManager.h"
 #include "toolbar.h" // Include the toolbar header
 #include "acs_monitor.h"
-
+#include "GraphVisualizer.h"
+#include "DraggableNode.h"
 
 
 
@@ -110,11 +111,17 @@ int main(int argc, char* argv[])
 	MotionConfigEditor configEditor(configManager);
 	logger->LogInfo("MotionConfigEditor initialized");
 
-	// 2. Add the toolbar instance declaration after line 106 (right after "MotionConfigEditor initialized" log message)
-// Place this code right after the MotionConfigEditor initialization in main()
-	Toolbar toolbar(configEditor);
-	logger->LogInfo("Toolbar initialized");
+	// Create the graph visualizer
+	GraphVisualizer graphVisualizer(configManager);
+	logger->LogInfo("GraphVisualizer initialized");
 
+	// Update toolbar initialization to include the graph visualizer
+	// Replace your existing toolbar initialization with:
+	Toolbar toolbar(configEditor, graphVisualizer);
+	logger->LogInfo("Toolbar initialized with GraphVisualizer support");
+
+	DraggableNode draggableNode;
+	logger->LogInfo("DraggableNode initialized");
 	// Log the loaded devices
 	const auto& devices = configManager.GetAllDevices();
 	logger->LogInfo("Loaded " + std::to_string(devices.size()) + " devices");
@@ -240,6 +247,8 @@ int main(int argc, char* argv[])
 		toolbar.RenderUI();
 		// Render motion configuration editor UI
 		configEditor.RenderUI();
+		graphVisualizer.RenderUI();
+		draggableNode.RenderUI();
 
 
 		//ACS connection
