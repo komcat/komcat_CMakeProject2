@@ -35,7 +35,7 @@ def handle_client(client_socket, client_address, binary_mode=False):
                 sys.stdout.flush()
                 
                 # Wait for 200ms
-                time.sleep(0.05)
+                time.sleep(0.110)
             except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, OSError) as e:
                 print(f"\nClient {client_address} disconnected: {str(e)}")
                 break

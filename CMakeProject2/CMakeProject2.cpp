@@ -63,6 +63,7 @@ int main(int argc, char* argv[])
 
 	// Setup Dear ImGui style
 	ImGui::StyleColorsDark();
+	//ImGui::StyleColorsLight();
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
@@ -276,14 +277,54 @@ int main(int argc, char* argv[])
 		SDL_GL_SwapWindow(window);
 	}
 
+	// When exit is triggered:
 	logger->Log("Application shutting down");
 
+	// In CMakeProject2.cpp, modify your exit sequence:
+	try {
+		std::cout << "Application exit sequence started" << std::endl;
+		logger->Log("Application exit sequence started");
 
-	// Cleanup
+		// First stop any active camera operations and disconnect
+		if (cameraWindow.IsGrabbing()) {
+			std::cout << "Stopping camera capture..." << std::endl;
+			logger->Log("Stopping camera capture...");
+			cameraWindow.StopCapture();
+			SDL_Delay(500); // Give it time
+		}
+
+		// Explicitly disconnect the camera
+		std::cout << "Disconnecting camera..." << std::endl;
+		logger->Log("Disconnecting camera...");
+		cameraWindow.Disconnect();
+		SDL_Delay(1000); // Wait longer after disconnect
+
+		// Handle Pylon termination separately BEFORE destroying the CameraWindow
+		// This is critical - terminate Pylon before the CameraWindow is destroyed
+		std::cout << "Terminating Pylon..." << std::endl;
+		logger->Log("Terminating Pylon...");
+
+		try {
+			CameraWindow::SafeTerminatePylon();
+		}
+		catch (...) {
+			logger->Log("Ignoring Pylon termination error and continuing...");
+			std::cout << "Ignoring Pylon termination error and continuing..." << std::endl;
+		}
+
+		// Now the cleanup can proceed safely
+		std::cout << "Proceeding with ImGui and SDL cleanup..." << std::endl;
+		logger->Log("Proceeding with ImGui and SDL cleanup...");
+	}
+	catch (...) {
+		logger->Log("Error during shutdown sequence - proceeding with cleanup anyway");
+		std::cout << "Error during shutdown sequence - proceeding with cleanup anyway" << std::endl;
+	}
+
+	// Cleanup - keep outside try-catch to ensure it always happens
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplSDL2_Shutdown();
 	ImGui::DestroyContext();
-
 	SDL_GL_DeleteContext(gl_context);
 	SDL_DestroyWindow(window);
 	SDL_Quit();

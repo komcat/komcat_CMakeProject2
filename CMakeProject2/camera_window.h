@@ -7,6 +7,7 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <SDL.h>  // For SDL_Delay
 
 // Forward declarations
 class CameraWindow {
@@ -78,4 +79,23 @@ public:
 
     // Check if window should be closed
     bool IsDone() const;
+    // Safely terminate Pylon runtime
+// Static method to safely terminate Pylon
+    static void SafeTerminatePylon() {
+        try {
+            // Add a small delay to ensure all resources are released
+            SDL_Delay(100);  // 100ms should be enough
+            Pylon::PylonTerminate();
+            std::cout << "Pylon terminated successfully" << std::endl;
+        }
+        catch (...) {
+            // Silently ignore any errors during termination
+            std::cout << "Ignoring Pylon termination error and continuing..." << std::endl;
+        }
+    }
+
+    // In camera_window.h, add these methods to public section:
+    bool IsGrabbing() const;
+    void StopCapture();
+    void LogResourceState() const; // For debugging
 };

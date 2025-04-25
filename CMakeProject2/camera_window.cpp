@@ -28,28 +28,35 @@ CameraWindow::CameraWindow()
 
 CameraWindow::~CameraWindow()
 {
-    // Ensure the thread is stopped
-    if (threadRunning.load()) {
-        threadRunning.store(false);
-        if (grabThread.joinable()) {
-            grabThread.join();
+    std::cout << "CameraWindow destructor called" << std::endl;
+
+    try {
+        // Only attempt cleanup if not already done
+        if (isConnected) {
+            std::cout << "Disconnecting camera in destructor..." << std::endl;
+            Disconnect();
         }
+
+        // Clean up texture if it was created
+        if (textureInitialized) {
+            std::cout << "Deleting OpenGL texture..." << std::endl;
+            glDeleteTextures(1, &textureID);
+            textureInitialized = false;
+        }
+
+        // Important: DO NOT terminate Pylon here
+        // PylonTerminate should already have been called
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error in CameraWindow destructor: " << e.what() << std::endl;
+    }
+    catch (...) {
+        std::cerr << "Unknown error in CameraWindow destructor" << std::endl;
     }
 
-    // Clean up resources
-    if (isConnected) {
-        Disconnect();
-    }
-
-    // Clean up texture if it was created
-    if (textureInitialized) {
-        glDeleteTextures(1, &textureID);
-        textureInitialized = false;
-    }
-
-    // Terminate Pylon runtime
-    Pylon::PylonTerminate();
+    std::cout << "CameraWindow destructor completed" << std::endl;
 }
+
 
 bool CameraWindow::Initialize()
 {
@@ -114,25 +121,31 @@ bool CameraWindow::Connect()
 
 void CameraWindow::Disconnect()
 {
-    // Stop the grab thread first
-    if (threadRunning.load()) {
-        threadRunning.store(false);
-        if (grabThread.joinable()) {
-            grabThread.join();
+    LogResourceState(); // Log state before disconnection
+
+    if (isConnected) {
+        try {
+            // First make sure grabbing is stopped
+            if (camera.IsGrabbing()) {
+                std::cout << "Stopping camera grabbing before disconnect..." << std::endl;
+                camera.StopGrabbing();
+                SDL_Delay(100); // Give it time to stop
+            }
+
+            std::cout << "Closing camera connection..." << std::endl;
+            // Close camera
+            camera.Close();
+
+            isConnected = false;
+            std::cout << "Camera disconnected successfully" << std::endl;
+        }
+        catch (const Pylon::GenericException& e) {
+            std::cerr << "Error disconnecting camera: " << e.GetDescription() << std::endl;
         }
     }
 
-    if (isConnected) {
-        // Stop grabbing
-        camera.StopGrabbing();
-
-        // Close camera
-        camera.Close();
-
-        isConnected = false;
-    }
+    LogResourceState(); // Log state after disconnection
 }
-
 // Thread function for continuous frame grabbing
 void CameraWindow::GrabThreadFunction()
 {
@@ -239,6 +252,42 @@ bool CameraWindow::SaveImageToDisk(const std::string& filename)
         return false;
     }
 }
+
+bool CameraWindow::IsGrabbing() const
+{
+    return isConnected && camera.IsGrabbing();
+}
+
+void CameraWindow::StopCapture()
+{
+    if (isConnected && camera.IsGrabbing()) {
+        try {
+            // Log the state before stopping
+            std::cout << "Stopping camera grabbing..." << std::endl;
+
+            // Stop the grabbing process
+            camera.StopGrabbing();
+
+            // Add a small delay
+            SDL_Delay(100);
+
+            std::cout << "Camera grabbing stopped successfully" << std::endl;
+        }
+        catch (const Pylon::GenericException& e) {
+            std::cerr << "Error stopping camera grabbing: " << e.GetDescription() << std::endl;
+        }
+    }
+}
+
+void CameraWindow::LogResourceState() const
+{
+    std::cout << "Camera resource state:" << std::endl;
+    std::cout << "  Initialized: " << (isInitialized ? "Yes" : "No") << std::endl;
+    std::cout << "  Connected: " << (isConnected ? "Yes" : "No") << std::endl;
+    std::cout << "  Is grabbing: " << (isConnected && camera.IsGrabbing() ? "Yes" : "No") << std::endl;
+    std::cout << "  Texture initialized: " << (textureInitialized ? "Yes" : "No") << std::endl;
+}
+
 
 void CameraWindow::UpdateTexture()
 {
@@ -383,3 +432,4 @@ bool CameraWindow::IsDone() const
     // For now, we always return false since we handle window closing in main
     return false;
 }
+
