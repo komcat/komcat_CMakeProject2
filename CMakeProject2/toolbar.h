@@ -27,6 +27,7 @@ private:
     std::function<void()> m_button2Callback;
     std::function<void()> m_button3Callback;
 
+
     // Button states
     bool m_configEditorVisible;
     bool m_graphVisualizerVisible;

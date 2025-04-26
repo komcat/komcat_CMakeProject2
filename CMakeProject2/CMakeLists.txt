@@ -109,7 +109,7 @@ add_executable(CMakeProject2
     "camera_window.h"
     "camera_window.cpp"
     # Add your Pylon-related source files here if needed
- "logger.h" "logger.cpp" "MotionTypes.h" "MotionConfigManager.h" "MotionConfigManager.cpp"     "MotionConfigEditor.h" "MotionConfigEditor.cpp" "toolbar.h" "toolbar.cpp" "GraphVisualizer.h" "GraphVisualizer.cpp" "DraggableNode.h" "DraggableNode.cpp")
+ "logger.h" "logger.cpp" "MotionTypes.h" "MotionConfigManager.h" "MotionConfigManager.cpp"     "MotionConfigEditor.h" "MotionConfigEditor.cpp" "toolbar.h" "toolbar.cpp" "GraphVisualizer.h" "GraphVisualizer.cpp" "DraggableNode.h" "DraggableNode.cpp" "pylon_camera.h" "pylon_camera.cpp" "pylon_camera_test.cpp" "pylon_camera_test.h")
 
 # Include directories - directly include SDL2, ImGui, and Pylon
 target_include_directories(CMakeProject2 PRIVATE

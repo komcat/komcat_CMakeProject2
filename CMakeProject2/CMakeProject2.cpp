@@ -2,7 +2,6 @@
 #include "CMakeProject2.h"
 #include "randomwindow.h"
 #include "client_manager.h" // Replace tcp_client.h with our new manager
-#include "camera_window.h" // Add this line to include the camera window header
 #include "logger.h" // Include our new logger header
 //#include "MotionTypes.h"  // Add this line - include MotionTypes.h first
 #include "MotionConfigEditor.h" // Include our new editor header
@@ -10,8 +9,7 @@
 #include "toolbar.h" // Include the toolbar header
 #include "acs_monitor.h"
 #include "GraphVisualizer.h"
-#include "DraggableNode.h"
-
+#include "pylon_camera_test.h" // Include the Pylon camera test header
 
 
 
@@ -23,6 +21,8 @@
 // Include SDL2
 #include <SDL.h>
 #include <SDL_opengl.h>
+
+
 
 int main(int argc, char* argv[])
 {
@@ -99,8 +99,7 @@ int main(int argc, char* argv[])
 	logger->LogInfo("ACSMonitor initialized");
 
 	// Add camera window instance
-	CameraWindow cameraWindow;
-	logger->LogInfo("CameraWindow initialized");
+
 
 	//load motion config json
 	 // Create path to the JSON configuration file
@@ -121,8 +120,7 @@ int main(int argc, char* argv[])
 	Toolbar toolbar(configEditor, graphVisualizer);
 	logger->LogInfo("Toolbar initialized with GraphVisualizer support");
 
-	DraggableNode draggableNode;
-	logger->LogInfo("DraggableNode initialized");
+
 	// Log the loaded devices
 	const auto& devices = configManager.GetAllDevices();
 	logger->LogInfo("Loaded " + std::to_string(devices.size()) + " devices");
@@ -179,9 +177,13 @@ int main(int argc, char* argv[])
 
 	logger->LogInfo("Configuration loaded successfully");
 
+	// Create our PylonCameraTest instance
+	PylonCameraTest pylonCameraTest;
+	// In CMakeProject2.cpp, add the following in the main loop
 
-	// Main loop
+// Main loop
 	bool done = false;
+	bool cameraDisconnectedWarningShown = false;  // To track if we've shown a notification
 	while (!done)
 	{
 		// Poll and handle events
@@ -216,8 +218,54 @@ int main(int argc, char* argv[])
 		ImGui_ImplSDL2_NewFrame();
 		ImGui::NewFrame();
 
+		// Add an exit button in a fixed position
+		ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 120, 100), ImGuiCond_Always);
+		ImGui::SetNextWindowSize(ImVec2(110, 60), ImGuiCond_Always);
+		ImGui::SetNextWindowBgAlpha(0.7f); // Semi-transparent background
+		ImGui::Begin("Exit", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+			ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+		// Style the exit button to be more noticeable
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f)); // Red button
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.1f, 0.1f, 1.0f));
+		// Make the button fill most of the window
+		if (ImGui::Button("Exit Safely", ImVec2(100, 40))) {
+			// Perform safe shutdown of camera resources
+			std::cout << "Safe exit initiated..." << std::endl;
+
+
+
+			// Access your PylonCameraTest instance
+			// Assuming you have a PylonCameraTest instance in your main loop named pylonCameraTest
+
+			// Safely stop camera operations in PylonCameraTest
+			// This will access the underlying PylonCamera instance and clean up resources
+			if (pylonCameraTest.GetCamera().IsGrabbing()) {
+				std::cout << "Stopping camera grabbing..." << std::endl;
+				pylonCameraTest.GetCamera().StopGrabbing();
+			}
+
+			if (pylonCameraTest.GetCamera().IsConnected()) {
+				std::cout << "Disconnecting camera..." << std::endl;
+				pylonCameraTest.GetCamera().Disconnect();
+			}
+
+			// Add a small delay to ensure camera operations have completed
+			SDL_Delay(200);
+
+			// Finally terminate Pylon library safely
+			// You might need to add a static method in your PylonCamera class for this
+
+
+			// Signal the main loop to exit
+			done = true;
+		}
+		ImGui::PopStyleColor(3); // Remove the 3 style colors we pushed
+		ImGui::End();
+
+
 		// Create a small window for FPS display
-		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowPos(ImVec2(10, 100), ImGuiCond_FirstUseEver);
 		ImGui::SetNextWindowSize(ImVec2(200, 50), ImGuiCond_FirstUseEver);
 		ImGui::SetNextWindowBgAlpha(0.35f); // Transparent background
 		ImGui::Begin("Performance", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
@@ -229,6 +277,17 @@ int main(int argc, char* argv[])
 		logger->RenderUI();
 
 
+
+		// Camera disconnection popup
+		if (ImGui::BeginPopupModal("Camera Disconnected", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::Text("The camera has been physically disconnected!");
+			ImGui::Text("Reconnect the device and use the 'Try Reconnect' button in the camera window.");
+
+			if (ImGui::Button("OK", ImVec2(120, 0))) {
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
 
 		// Render our random window
 		randomWindow.Render();
@@ -249,22 +308,14 @@ int main(int argc, char* argv[])
 		// Render motion configuration editor UI
 		configEditor.RenderUI();
 		graphVisualizer.RenderUI();
-		draggableNode.RenderUI();
-
+		
 
 		//ACS connection
 		acsMonitor.RenderUI();
 
 
-
-
-		// Render camera window UI
-		cameraWindow.RenderUI();
-
-		// Check if camera window wants to close (if needed)
-		if (cameraWindow.IsDone()) {
-			done = true;
-		}
+		// Render Pylon Camera Test UI
+		pylonCameraTest.RenderUI();
 
 
 
@@ -280,46 +331,7 @@ int main(int argc, char* argv[])
 	// When exit is triggered:
 	logger->Log("Application shutting down");
 
-	// In CMakeProject2.cpp, modify your exit sequence:
-	try {
-		std::cout << "Application exit sequence started" << std::endl;
-		logger->Log("Application exit sequence started");
 
-		// First stop any active camera operations and disconnect
-		if (cameraWindow.IsGrabbing()) {
-			std::cout << "Stopping camera capture..." << std::endl;
-			logger->Log("Stopping camera capture...");
-			cameraWindow.StopCapture();
-			SDL_Delay(500); // Give it time
-		}
-
-		// Explicitly disconnect the camera
-		std::cout << "Disconnecting camera..." << std::endl;
-		logger->Log("Disconnecting camera...");
-		cameraWindow.Disconnect();
-		SDL_Delay(1000); // Wait longer after disconnect
-
-		// Handle Pylon termination separately BEFORE destroying the CameraWindow
-		// This is critical - terminate Pylon before the CameraWindow is destroyed
-		std::cout << "Terminating Pylon..." << std::endl;
-		logger->Log("Terminating Pylon...");
-
-		try {
-			CameraWindow::SafeTerminatePylon();
-		}
-		catch (...) {
-			logger->Log("Ignoring Pylon termination error and continuing...");
-			std::cout << "Ignoring Pylon termination error and continuing..." << std::endl;
-		}
-
-		// Now the cleanup can proceed safely
-		std::cout << "Proceeding with ImGui and SDL cleanup..." << std::endl;
-		logger->Log("Proceeding with ImGui and SDL cleanup...");
-	}
-	catch (...) {
-		logger->Log("Error during shutdown sequence - proceeding with cleanup anyway");
-		std::cout << "Error during shutdown sequence - proceeding with cleanup anyway" << std::endl;
-	}
 
 	// Cleanup - keep outside try-catch to ensure it always happens
 	ImGui_ImplOpenGL3_Shutdown();
@@ -329,5 +341,7 @@ int main(int argc, char* argv[])
 	SDL_DestroyWindow(window);
 	SDL_Quit();
 
+
+	
 	return 0;
 }

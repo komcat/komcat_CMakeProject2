@@ -9,6 +9,22 @@
 #include <atomic>
 #include <SDL.h>  // For SDL_Delay
 
+// Configuration event handler for device removal handling
+class CameraDeviceRemovalHandler : public Pylon::CConfigurationEventHandler
+{
+private:
+    class CameraWindow* m_pOwner;
+
+public:
+    CameraDeviceRemovalHandler(CameraWindow* pOwner)
+        : m_pOwner(pOwner)
+    {
+    }
+
+    // This method is called from a different thread when camera device removal has been detected
+    virtual void OnCameraDeviceRemoved(Pylon::CInstantCamera& camera);
+};
+
 // Forward declarations
 class CameraWindow {
 private:
@@ -17,6 +33,14 @@ private:
     bool isInitialized;
     bool isConnected;
     Pylon::CGrabResultPtr ptrGrabResult;
+
+    // Device removal handling
+    CameraDeviceRemovalHandler* pDeviceRemovalHandler;
+    bool isDeviceRemoved;
+    Pylon::String_t lastDeviceSerialNumber;
+    Pylon::String_t lastDeviceClass;
+    bool attemptReconnect;
+    std::atomic<bool> reconnectionInProgress;
 
     // Image format converter
     Pylon::CImageFormatConverter formatConverter;
@@ -52,6 +76,9 @@ private:
     // Thread function for continuous frame grabbing
     void GrabThreadFunction();
 
+    // Try to reconnect to the previously connected camera
+    bool TryReconnectCamera();
+
 public:
     // Constructor
     CameraWindow();
@@ -68,6 +95,9 @@ public:
     // Disconnect from camera
     void Disconnect();
 
+    // Handle device removal (called by the event handler)
+    void HandleDeviceRemoval();
+
     // Grab a frame from the camera (now handled in thread)
     bool GrabFrame();
 
@@ -79,8 +109,9 @@ public:
 
     // Check if window should be closed
     bool IsDone() const;
+
     // Safely terminate Pylon runtime
-// Static method to safely terminate Pylon
+    // Static method to safely terminate Pylon
     static void SafeTerminatePylon() {
         try {
             // Add a small delay to ensure all resources are released
@@ -98,4 +129,10 @@ public:
     bool IsGrabbing() const;
     void StopCapture();
     void LogResourceState() const; // For debugging
+
+    // Check if the camera device has been removed
+    bool IsCameraDeviceRemoved() const;
+
+    // Friend the event handler so it can access our private members
+    friend class CameraDeviceRemovalHandler;
 };

@@ -1,0 +1,3 @@
+use following parenthesis around std:: fucntion
+(std::min)
+(std::max)
