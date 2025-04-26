@@ -95,21 +95,21 @@ endif()
 add_executable(CMakeProject2 
     "CMakeProject2.cpp" 
     "CMakeProject2.h" 
-    "random.cpp" 
-    "random.h"
-    "randomwindow.cpp"
-    "randomwindow.h"
+    "source/random.cpp" 
+    "include/random.h"
+    "source/randomwindow.cpp"
+    "include/randomwindow.h"
     ${IMGUI_SOURCES}
-    "tcp_client.h"
-    "tcp_client.cpp"
-    "client_manager.h"
-    "client_manager.cpp"
-    "acs_monitor.h" 
-    "acs_monitor.cpp"
-    "camera_window.h"
-    "camera_window.cpp"
+    "include/tcp_client.h"
+    "source/tcp_client.cpp"
+    "include/client_manager.h"
+    "source/client_manager.cpp"
+    "Include/motions/acs_monitor.h" 
+    "source/motions/acs_monitor.cpp"
+    "include/camera/camera_window.h"
+    "source/camera_window.cpp"
     # Add your Pylon-related source files here if needed
- "logger.h" "logger.cpp" "MotionTypes.h" "MotionConfigManager.h" "MotionConfigManager.cpp"     "MotionConfigEditor.h" "MotionConfigEditor.cpp" "toolbar.h" "toolbar.cpp" "GraphVisualizer.h" "GraphVisualizer.cpp" "DraggableNode.h" "DraggableNode.cpp" "pylon_camera.h" "pylon_camera.cpp" "pylon_camera_test.cpp" "pylon_camera_test.h")
+ "include/logger.h" "logger.cpp" "Include/motions/MotionTypes.h" "Include/motions/MotionConfigManager.h" "source/motions/MotionConfigManager.cpp"     "Include/motions/MotionConfigEditor.h" "source/motions/MotionConfigEditor.cpp" "include/ui/toolbar.h" "source/toolbar.cpp" "include/ui/GraphVisualizer.h" "source/GraphVisualizer.cpp" "include/ui/DraggableNode.h" "source/DraggableNode.cpp" "include/camera/pylon_camera.h" "source/pylon_camera.cpp" "source/pylon_camera_test.cpp" "include/camera/pylon_camera_test.h")
 
 # Include directories - directly include SDL2, ImGui, and Pylon
 target_include_directories(CMakeProject2 PRIVATE

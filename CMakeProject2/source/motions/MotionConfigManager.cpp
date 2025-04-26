@@ -1,5 +1,5 @@
 // MotionConfigManager.cpp
-#include "MotionConfigManager.h"
+#include "include/motions/MotionConfigManager.h"
 #include <fstream>
 #include <iostream>
 #include <queue>

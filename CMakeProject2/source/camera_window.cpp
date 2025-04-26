@@ -1,4 +1,4 @@
-#include "camera_window.h"
+#include "include/camera/camera_window.h"
 #include <SDL_opengl.h>
 #include <chrono>
 #include <iomanip>

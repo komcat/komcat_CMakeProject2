@@ -1,14 +1,14 @@
 ﻿#include <algorithm> // For std::min and std::max 
 #include "CMakeProject2.h"
-#include "client_manager.h" // Replace tcp_client.h with our new manager
-#include "logger.h" // Include our new logger header
+#include "include/client_manager.h" // Replace tcp_client.h with our new manager
+#include "include/logger.h" // Include our new logger header
 //#include "MotionTypes.h"  // Add this line - include MotionTypes.h first
-#include "MotionConfigEditor.h" // Include our new editor header
-#include "MotionConfigManager.h"
-#include "toolbar.h" // Include the toolbar header
-#include "acs_monitor.h"
-#include "GraphVisualizer.h"
-#include "pylon_camera_test.h" // Include the Pylon camera test header
+#include "include/motions/MotionConfigEditor.h" // Include our new editor header
+#include "include/motions/MotionConfigManager.h"
+#include "include/ui/toolbar.h" // Include the toolbar header
+#include "include/motions/acs_monitor.h"
+#include "include/ui/GraphVisualizer.h"
+#include "include/camera/pylon_camera_test.h" // Include the Pylon camera test header
 
 
 

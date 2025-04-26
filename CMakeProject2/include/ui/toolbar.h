@@ -1,9 +1,9 @@
 // toolbar.h
 #pragma once
 
-#include "MotionConfigEditor.h"
-#include "GraphVisualizer.h"
-#include "logger.h"
+#include "include/motions/MotionConfigEditor.h"
+#include "include/ui/GraphVisualizer.h"
+#include "include/logger.h"
 #include <functional>
 
 class Toolbar {

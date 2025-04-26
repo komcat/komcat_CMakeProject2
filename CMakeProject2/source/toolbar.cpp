@@ -1,7 +1,7 @@
 // toolbar.cpp
-#include "toolbar.h"
+#include "include/ui/toolbar.h"
 #include "imgui.h"
-#include "logger.h"
+#include "include/logger.h"
 
 Toolbar::Toolbar(MotionConfigEditor& configEditor, GraphVisualizer& graphVisualizer)
     : m_configEditor(configEditor),

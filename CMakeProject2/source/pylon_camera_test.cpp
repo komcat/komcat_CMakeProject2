@@ -1,4 +1,4 @@
-#include "pylon_camera_test.h"
+#include "include/camera/pylon_camera_test.h"
 #include <iostream>
 #include <SDL_opengl.h>
 

@@ -1,9 +1,9 @@
 // GraphVisualizer.h
 #pragma once
 
-#include "MotionConfigManager.h"
-#include "MotionTypes.h"
-#include "logger.h"
+#include "include/motions/MotionConfigManager.h"
+#include "include/motions/MotionTypes.h"
+#include "include/logger.h"
 #include "imgui.h"
 #include <string>
 #include <memory>

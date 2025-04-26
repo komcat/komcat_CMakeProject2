@@ -1,5 +1,5 @@
 // GraphVisualizer.cpp
-#include "GraphVisualizer.h"
+#include "include/ui/GraphVisualizer.h"
 #include <cmath>
 #include <algorithm>
 

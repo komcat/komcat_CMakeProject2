@@ -3,7 +3,7 @@
 
 #include "MotionConfigManager.h"
 #include "MotionTypes.h"
-#include "logger.h"
+#include "include/logger.h"
 #include <string>
 #include <memory>
 #include <map>

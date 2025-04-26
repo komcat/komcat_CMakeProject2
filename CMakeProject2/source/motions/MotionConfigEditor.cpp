@@ -1,5 +1,5 @@
 ﻿// MotionConfigEditor.cpp
-#include "MotionConfigEditor.h"
+#include "include/motions/MotionConfigEditor.h"
 #include "imgui.h"
 #include <algorithm>
 #include <iostream>

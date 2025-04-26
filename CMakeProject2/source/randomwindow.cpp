@@ -1,6 +1,6 @@
-#include "randomwindow.h"
-#include "random.h"
-#include "logger.h"
+#include "include/randomwindow.h"
+#include "include/random.h"
+#include "include/logger.h"
 #include "backends/imgui_impl_sdl2.h"
 #include "backends/imgui_impl_opengl3.h"
 #include <SDL_opengl.h>
