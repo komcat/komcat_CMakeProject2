@@ -7,3 +7,8 @@
 
 // TODO: Reference additional headers your program requires here.
 #include <math.h>
+
+
+
+
+bool enableDebug = false;

@@ -1,6 +1,5 @@
 ﻿#include <algorithm> // For std::min and std::max 
 #include "CMakeProject2.h"
-#include "randomwindow.h"
 #include "client_manager.h" // Replace tcp_client.h with our new manager
 #include "logger.h" // Include our new logger header
 //#include "MotionTypes.h"  // Add this line - include MotionTypes.h first
@@ -78,9 +77,6 @@ int main(int argc, char* argv[])
 
 
 
-	// Create our RandomWindow instance
-	RandomWindow randomWindow;
-	logger->Log("RandomWindow initialized");
 
 	// Create our ClientManager instead of a single TcpClient
 	ClientManager clientManager;
@@ -264,13 +260,19 @@ int main(int argc, char* argv[])
 		ImGui::End();
 
 
-		// Create a small window for FPS display
-		ImGui::SetNextWindowPos(ImVec2(10, 100), ImGuiCond_FirstUseEver);
-		ImGui::SetNextWindowSize(ImVec2(200, 50), ImGuiCond_FirstUseEver);
+		// Create a performance overlay
+		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
 		ImGui::SetNextWindowBgAlpha(0.35f); // Transparent background
-		ImGui::Begin("Performance", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
-			ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+		ImGui::Begin("Performance", nullptr,
+			ImGuiWindowFlags_NoDecoration |
+			ImGuiWindowFlags_AlwaysAutoResize |
+			ImGuiWindowFlags_NoSavedSettings |
+			ImGuiWindowFlags_NoFocusOnAppearing |
+			ImGuiWindowFlags_NoMove);
 		ImGui::Text("FPS: %.1f", fps);
+		
+		if(enableDebug)	logger->LogInfo("FPS: " + std::to_string(fps));
+
 		ImGui::End();
 
 		// Render logger UI
@@ -278,24 +280,20 @@ int main(int argc, char* argv[])
 
 
 
-		// Camera disconnection popup
-		if (ImGui::BeginPopupModal("Camera Disconnected", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-			ImGui::Text("The camera has been physically disconnected!");
-			ImGui::Text("Reconnect the device and use the 'Try Reconnect' button in the camera window.");
+		//// Camera disconnection popup
+		//if (ImGui::BeginPopupModal("Camera Disconnected", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+		//	ImGui::Text("The camera has been physically disconnected!");
+		//	ImGui::Text("Reconnect the device and use the 'Try Reconnect' button in the camera window.");
 
-			if (ImGui::Button("OK", ImVec2(120, 0))) {
-				ImGui::CloseCurrentPopup();
-			}
-			ImGui::EndPopup();
-		}
+		//	if (ImGui::Button("OK", ImVec2(120, 0))) {
+		//		ImGui::CloseCurrentPopup();
+		//	}
+		//	ImGui::EndPopup();
+		//}
 
-		// Render our random window
-		randomWindow.Render();
 
-		// Check if our window wants to close
-		if (randomWindow.IsDone()) {
-			done = true;
-		}
+
+
 
 		// Update all TCP clients
 		clientManager.UpdateClients();

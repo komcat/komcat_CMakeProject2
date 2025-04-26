@@ -25,7 +25,7 @@ void Toolbar::RenderUI()
     style.WindowPadding.y = 8.0f; // Increase padding for the toolbar
 
     // Create toolbar window
-    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowPos(ImVec2(0, 50));
     ImGui::SetNextWindowSize(ImVec2(ImGui::GetIO().DisplaySize.x, 40));
 
     ImGuiWindowFlags toolbarFlags =
