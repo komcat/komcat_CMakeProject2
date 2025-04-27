@@ -625,8 +625,9 @@ void ACSController::RenderUI() {
         axis.c_str(), position,
         enabled ? "(Enabled)" : "(Disabled)");
 
-      // Jog controls in a single row
-      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f)); // Red for negative
+      // Jog controls in a single row with dark blue theme and command queuing
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.3f, 0.6f, 1.0f)); // Deep blue for negative direction
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.4f, 0.7f, 1.0f)); // Slightly lighter blue on hover
       if (ImGui::Button(("-##" + axis).c_str(), buttonSize)) {
         if (enabled) {
           // Queue the motor command
@@ -635,11 +636,10 @@ void ACSController::RenderUI() {
           m_condVar.notify_one();
         }
       }
-      ImGui::PopStyleColor();
-
+      ImGui::PopStyleColor(2);
       ImGui::SameLine();
-
-      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f)); // Green for positive
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.5f, 0.4f, 1.0f)); // Teal-like blue for positive direction
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.6f, 0.5f, 1.0f)); // Slightly lighter teal on hover
       if (ImGui::Button(("+##" + axis).c_str(), buttonSize)) {
         if (enabled) {
           // Queue the motor command
@@ -648,7 +648,7 @@ void ACSController::RenderUI() {
           m_condVar.notify_one();
         }
       }
-      ImGui::PopStyleColor();
+      ImGui::PopStyleColor(2);
 
       ImGui::SameLine();
 
@@ -676,10 +676,10 @@ void ACSController::RenderUI() {
 
     ImGui::Separator();
 
-    // Stop all axes button with larger size and warning color
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.9f, 0.1f, 0.1f, 1.0f)); // Bright red
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.2f, 0.2f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.8f, 0.0f, 0.0f, 1.0f));
+    // Stop all axes button with dark blue theme
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.2f, 0.5f, 1.0f)); // Deep dark blue
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.3f, 0.6f, 1.0f)); // Slightly lighter blue on hover
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.0f, 0.1f, 0.4f, 1.0f)); // Darker blue when active
     if (ImGui::Button("STOP ALL AXES", ImVec2(-1, 40))) { // Full width, 40px height
       StopAllAxes();
     }

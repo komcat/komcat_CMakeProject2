@@ -104,7 +104,7 @@ endif()
 # Add PI controller source files
 set(PI_SOURCES
     "include/motions/pi_controller.h"
-    "source/motions/pi_controller.cpp"
+    "include/motions/pi_controller.cpp"
 )
 
 # Add source to this project's executable
@@ -130,9 +130,9 @@ add_executable(CMakeProject2
     "logger.cpp" 
     "Include/motions/MotionTypes.h" 
     "Include/motions/MotionConfigManager.h" 
-    "source/motions/MotionConfigManager.cpp"     
+    "include/motions/MotionConfigManager.cpp"     
     "Include/motions/MotionConfigEditor.h" 
-    "source/motions/MotionConfigEditor.cpp" 
+    "include/motions/MotionConfigEditor.cpp" 
     "include/ui/toolbar.h" 
     "source/toolbar.cpp" 
     "include/ui/GraphVisualizer.h" 
