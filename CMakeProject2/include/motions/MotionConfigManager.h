@@ -26,10 +26,10 @@ public:
     std::map<std::string, std::reference_wrapper<const MotionDevice>> GetEnabledDevices() const;
 
     // Get all positions for a device
-    std::optional<std::reference_wrapper<const std::map<std::string, Position>>> GetDevicePositions(const std::string& deviceName) const;
+    std::optional<std::reference_wrapper<const std::map<std::string, PositionStruct>>> GetDevicePositions(const std::string& deviceName) const;
 
     // Get a specific named position for a device
-    std::optional<std::reference_wrapper<const Position>> GetNamedPosition(const std::string& deviceName, const std::string& positionName) const;
+    std::optional<std::reference_wrapper<const PositionStruct>> GetNamedPosition(const std::string& deviceName, const std::string& positionName) const;
 
     // Get all graphs
     const std::map<std::string, Graph>& GetAllGraphs() const;
@@ -56,7 +56,7 @@ public:
     void UpdateDevice(const std::string& deviceName, const MotionDevice& updatedDevice);
 
     // Add a new position to a device
-    void AddPosition(const std::string& deviceName, const std::string& positionName, const Position& position);
+    void AddPosition(const std::string& deviceName, const std::string& positionName, const PositionStruct& position);
 
     // New methods for adding, deleting devices and positions
     void AddDevice(const std::string& deviceName, const MotionDevice& device);

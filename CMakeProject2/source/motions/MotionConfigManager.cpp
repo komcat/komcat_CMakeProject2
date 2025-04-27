@@ -37,7 +37,7 @@ void MotionConfigManager::LoadConfig(const std::string& filePath) {
                 // Parse positions if they exist
                 if (deviceJson.contains("Positions") && deviceJson["Positions"].is_object()) {
                     for (auto& [posName, posJson] : deviceJson["Positions"].items()) {
-                        Position pos;
+                      PositionStruct pos;
                         if (posJson.contains("x")) pos.x = posJson["x"];
                         if (posJson.contains("y")) pos.y = posJson["y"];
                         if (posJson.contains("z")) pos.z = posJson["z"];
@@ -157,7 +157,7 @@ std::map<std::string, std::reference_wrapper<const MotionDevice>> MotionConfigMa
     return enabledDevices;
 }
 
-std::optional<std::reference_wrapper<const std::map<std::string, Position>>> MotionConfigManager::GetDevicePositions(const std::string& deviceName) const {
+std::optional<std::reference_wrapper<const std::map<std::string, PositionStruct>>> MotionConfigManager::GetDevicePositions(const std::string& deviceName) const {
     auto deviceOpt = GetDevice(deviceName);
     if (!deviceOpt.has_value()) {  // Using has_value() for clarity
         return std::nullopt;
@@ -166,7 +166,7 @@ std::optional<std::reference_wrapper<const std::map<std::string, Position>>> Mot
     return std::cref(deviceOpt.value().get().Positions);  // Using value() to access the contained value
 }
 
-std::optional<std::reference_wrapper<const Position>> MotionConfigManager::GetNamedPosition(const std::string& deviceName, const std::string& positionName) const {
+std::optional<std::reference_wrapper<const PositionStruct>> MotionConfigManager::GetNamedPosition(const std::string& deviceName, const std::string& positionName) const {
     auto positionsOpt = GetDevicePositions(deviceName);
     if (!positionsOpt.has_value()) {  // Using has_value() for clarity
         return std::nullopt;
@@ -317,7 +317,7 @@ void MotionConfigManager::UpdateDevice(const std::string& deviceName, const Moti
     }
 }
 
-void MotionConfigManager::AddPosition(const std::string& deviceName, const std::string& positionName, const Position& position) {
+void MotionConfigManager::AddPosition(const std::string& deviceName, const std::string& positionName, const PositionStruct& position) {
     auto it = m_devices.find(deviceName);
     if (it != m_devices.end()) {
         it->second.Positions[positionName] = position;

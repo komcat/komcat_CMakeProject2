@@ -46,7 +46,7 @@ private:
     // Position editing
     std::string m_selectedPosition;
     std::string m_newPositionName;
-    Position m_editingPosition;
+    PositionStruct m_editingPosition;
     bool m_isAddingNewPosition = false;
 
     // Graph editing

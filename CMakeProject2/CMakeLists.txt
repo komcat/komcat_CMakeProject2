@@ -143,7 +143,13 @@ add_executable(CMakeProject2
     "source/pylon_camera.cpp" 
     "source/pylon_camera_test.cpp" 
     "include/camera/pylon_camera_test.h"
- "include/motions/pi_controller_manager.h" "include/motions/pi_controller_manager.cpp")
+    "include/motions/pi_controller_manager.h" 
+    "include/motions/pi_controller_manager.cpp" 
+    "include/motions/acs_controller.h" 
+    "include/motions/acs_controller.cpp" 
+    
+    
+ "include/motions/acs_controller_manager.h" "include/motions/acs_controller_manager.cpp")
 
 # Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
 target_include_directories(CMakeProject2 PRIVATE

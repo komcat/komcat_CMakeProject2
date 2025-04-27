@@ -243,7 +243,7 @@ void MotionConfigEditor::RenderPositionsTab() {
            m_newPositionName = "new_position";  
 
            // Initialize with default values  
-           m_editingPosition = Position();  
+           m_editingPosition = PositionStruct();
        }  
 
        ImGui::Separator();  
@@ -307,7 +307,7 @@ void MotionConfigEditor::RenderPositionsTab() {
            ImGui::SameLine();  
            if (ImGui::Button("Cancel")) {  
                m_isAddingNewPosition = false;  
-               m_editingPosition = Position();  
+               m_editingPosition = PositionStruct();
            }  
        }  
        else if (!m_selectedPosition.empty()) {  

@@ -2,15 +2,20 @@
 #include "CMakeProject2.h"
 #include "include/client_manager.h" // Replace tcp_client.h with our new manager
 #include "include/logger.h" // Include our new logger header
-//#include "MotionTypes.h"  // Add this line - include MotionTypes.h first
+#include "include/motions/MotionTypes.h"  // Add this line - include MotionTypes.h first
 #include "include/motions/MotionConfigEditor.h" // Include our new editor header
 #include "include/motions/MotionConfigManager.h"
 #include "include/ui/toolbar.h" // Include the toolbar header
-#include "include/motions/acs_monitor.h"
+
 #include "include/ui/GraphVisualizer.h"
 #include "include/camera/pylon_camera_test.h" // Include the Pylon camera test header
 #include "include/motions/pi_controller.h" // Include the PI controller header
 #include "include/motions/pi_controller_manager.h" // Include the PI controller manager header
+
+// Add these includes at the top with the other include statements
+#include "include/motions/acs_controller.h"
+#include "include/motions/acs_controller_manager.h"
+
 
 // ImGui and SDL includes
 #include "imgui.h"
@@ -90,9 +95,7 @@ int main(int argc, char* argv[])
 	int frameCounter = 0;
 	Uint64 lastFrameTime = SDL_GetPerformanceCounter();
 
-	//ACS controller
-	ACSMonitor acsMonitor;
-	logger->LogInfo("ACSMonitor initialized");
+
 
 	// Add camera window instance
 
@@ -131,13 +134,19 @@ int main(int argc, char* argv[])
 		logger->LogWarning("Failed to connect to some PI controllers");
 	}
 
-	// Connect to a specific device
-	//if (controller.Connect("192.168.0.30", 50000)) {
-	//	std::cout << "Successfully connected to PI controller" << std::endl;
-	//}
-	//else {
-	//	std::cout << "Failed to connect to PI controller" << std::endl;
-	//}
+	// Create the ACS Controller Manager
+	ACSControllerManager acsControllerManager(configManager);
+	// Connect to all enabled controllers
+	if (acsControllerManager.ConnectAll()) {
+		logger->LogInfo("Successfully connected to all enabled ACS controllers");
+	}
+	else {
+		logger->LogWarning("Failed to connect to some ACS controllers");
+	}
+
+
+
+
 
 	// Log the loaded devices
 	const auto& devices = configManager.GetAllDevices();
@@ -292,8 +301,8 @@ int main(int argc, char* argv[])
 			ImGuiWindowFlags_NoFocusOnAppearing |
 			ImGuiWindowFlags_NoMove);
 		ImGui::Text("FPS: %.1f", fps);
-		
-		if(enableDebug)	logger->LogInfo("FPS: " + std::to_string(fps));
+
+		if (enableDebug)	logger->LogInfo("FPS: " + std::to_string(fps));
 
 		ImGui::End();
 
@@ -301,17 +310,6 @@ int main(int argc, char* argv[])
 		logger->RenderUI();
 
 
-
-		//// Camera disconnection popup
-		//if (ImGui::BeginPopupModal("Camera Disconnected", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-		//	ImGui::Text("The camera has been physically disconnected!");
-		//	ImGui::Text("Reconnect the device and use the 'Try Reconnect' button in the camera window.");
-
-		//	if (ImGui::Button("OK", ImVec2(120, 0))) {
-		//		ImGui::CloseCurrentPopup();
-		//	}
-		//	ImGui::EndPopup();
-		//}
 
 
 
@@ -328,10 +326,8 @@ int main(int argc, char* argv[])
 		// Render motion configuration editor UI
 		configEditor.RenderUI();
 		graphVisualizer.RenderUI();
-		
 
-		//ACS connection
-		acsMonitor.RenderUI();
+
 
 		//PI hexapod
 		//controller.RenderUI();
@@ -349,6 +345,24 @@ int main(int argc, char* argv[])
 				}
 			}
 		}
+
+		// Render ACS controller manager UI
+		acsControllerManager.RenderUI();
+
+		// Add this to render each controller's individual UI window
+		// This is necessary because they won't render automatically
+		for (const auto& [name, device] : configManager.GetAllDevices()) {
+			// Check if it's an ACS device (non-PI port)
+			if (device.Port != 50000 && device.IsEnabled) {
+				ACSController* controller = acsControllerManager.GetController(name);
+				if (controller && controller->IsConnected()) {
+					controller->RenderUI();
+				}
+			}
+		}
+
+
+
 
 		// Render Pylon Camera Test UI
 		pylonCameraTest.RenderUI();
@@ -378,6 +392,6 @@ int main(int argc, char* argv[])
 	SDL_Quit();
 
 
-	
+
 	return 0;
 }

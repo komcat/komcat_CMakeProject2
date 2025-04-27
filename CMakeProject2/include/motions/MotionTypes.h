@@ -7,7 +7,7 @@
 #include <memory>
 
 // Position structure to hold axis coordinates
-struct Position {
+struct PositionStruct {
     double x = 0.0;
     double y = 0.0;
     double z = 0.0;
@@ -23,7 +23,7 @@ struct MotionDevice {
     int Port = 0;
     int Id = 0;
     std::string Name;
-    std::map<std::string, Position> Positions;
+    std::map<std::string, PositionStruct> Positions;
 };
 
 // Graph node structure
