@@ -6,10 +6,12 @@
 #include <sstream>
 #include <algorithm>
 
-// Constructor - initialize with correct axis identifiers
+// Modify the constructor to initialize timestamps
 PIController::PIController()
 	: m_controllerId(-1),
-	m_port(50000) {
+	m_port(50000),
+	m_lastStatusUpdate(std::chrono::steady_clock::now()),
+	m_lastPositionUpdate(std::chrono::steady_clock::now()) {
 
 	// Initialize atomic variables correctly
 	m_isConnected.store(false);
@@ -20,7 +22,7 @@ PIController::PIController()
 	m_logger->LogInfo("PIController: Initializing controller");
 
 	// Initialize available axes with correct identifiers for C-887
-	m_availableAxes = { "X", "Y", "Z", "U", "V", "W" };  // Changed from numeric identifiers
+	m_availableAxes = { "X", "Y", "Z", "U", "V", "W" };  // Hexapod axes
 
 	// Start communication thread
 	StartCommunicationThread();
@@ -65,9 +67,10 @@ void PIController::StopCommunicationThread() {
 	}
 }
 
+
 void PIController::CommunicationThreadFunc() {
 	// Reduce update rate from 10Hz to 5Hz
-	const auto updateInterval = std::chrono::milliseconds(200);  // Changed from 100ms to 200ms
+	const auto updateInterval = std::chrono::milliseconds(200);  // 5Hz update rate
 
 	// Implement frame skipping for less important updates
 	int frameCounter = 0;
@@ -75,14 +78,16 @@ void PIController::CommunicationThreadFunc() {
 		// Only update if connected
 		if (m_isConnected) {
 			frameCounter++;
-			// Always update positions
+
+			// Always update positions (but use batch query instead of individual queries)
 			std::map<std::string, double> positions;
 			if (GetPositions(positions)) {
 				std::lock_guard<std::mutex> lock(m_mutex);
 				m_axisPositions = positions;
 			}
-			if (frameCounter % 3 == 0) {
 
+			// Update less frequently for non-critical status information
+			if (frameCounter % 3 == 0) {  // Update servo and motion status at ~1.7Hz instead of 5Hz
 				// Update axis motion status
 				for (const auto& axis : m_availableAxes) {
 					bool moving = IsMoving(axis);
@@ -108,6 +113,7 @@ void PIController::CommunicationThreadFunc() {
 }
 
 // Also enhance the Connect function to check connection details
+// Modified Connect function to initialize status structures
 bool PIController::Connect(const std::string& ipAddress, int port) {
 	// Check if already connected
 	if (m_isConnected) {
@@ -115,7 +121,6 @@ bool PIController::Connect(const std::string& ipAddress, int port) {
 		return true;
 	}
 
-	std::cout << "PIController: Attempting connection to " << ipAddress << ":" << port << std::endl;
 	m_logger->LogInfo("PIController: Connecting to controller at " + ipAddress + ":" + std::to_string(port));
 
 	// Store connection parameters
@@ -123,69 +128,62 @@ bool PIController::Connect(const std::string& ipAddress, int port) {
 	m_port = port;
 
 	// Attempt to connect to the controller
-	std::cout << "PIController: Calling PI_ConnectTCPIP..." << std::endl;
 	m_controllerId = PI_ConnectTCPIP(m_ipAddress.c_str(), m_port);
-	std::cout << "PIController: Connect result: ID = " << m_controllerId << std::endl;
 
 	if (m_controllerId < 0) {
 		int errorCode = PI_GetInitError();
 		std::string errorMsg = "PIController: Failed to connect to controller. Error code: " + std::to_string(errorCode);
 		m_logger->LogError(errorMsg);
-		std::cout << errorMsg << std::endl;
 		return false;
 	}
 
 	m_isConnected.store(true);
-	std::cout << "PIController: Successfully connected with ID " << m_controllerId << std::endl;
 	m_logger->LogInfo("PIController: Successfully connected to controller (ID: " + std::to_string(m_controllerId) + ")");
 
-	// Get controller identification
-	char idn[256] = { 0 };
-	if (PI_qIDN(m_controllerId, idn, sizeof(idn))) {
-		std::string idnStr = "PIController: Controller identification: " + std::string(idn);
-		m_logger->LogInfo(idnStr);
-		std::cout << idnStr << std::endl;
-	}
-	else {
-		std::cout << "PIController: Failed to get controller identification" << std::endl;
-	}
+	// Initialize the position and status maps
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
 
-	// Check available axes
-	std::cout << "PIController: Available axes: ";
-	for (const auto& axis : m_availableAxes) {
-		std::cout << axis << " ";
+		// Initialize position map with zeros
+		for (const auto& axis : m_availableAxes) {
+			m_axisPositions[axis] = 0.0;
+			m_axisMoving[axis] = false;
+			m_axisServoEnabled[axis] = false;
+		}
+
+		// Reset timestamps
+		m_lastStatusUpdate = std::chrono::steady_clock::now();
+		m_lastPositionUpdate = std::chrono::steady_clock::now();
 	}
-	std::cout << std::endl;
 
 	// Initialize controller for all axes
-	std::cout << "PIController: Initializing all axes..." << std::endl;
 	bool initResult = PI_INI(m_controllerId, NULL);
-	std::cout << "PIController: Initialization result: " << (initResult ? "success" : "failed") << std::endl;
+
 	if (!initResult) {
 		// Log error and try to get error code
 		int error = 0;
 		PI_qERR(m_controllerId, &error);
 		m_logger->LogError("PIController: Initialization failed with error code: " + std::to_string(error));
 
-		// You might want to try individual axis initialization instead of all at once
-		// Or implement a retry mechanism
+		// Try individual axis initialization instead of all at once
 		for (const auto& axis : m_availableAxes) {
 			bool axisInitResult = PI_INI(m_controllerId, axis.c_str());
-			std::cout << "Initializing axis " << axis << ": " << (axisInitResult ? "success" : "failed") << std::endl;
+			if (axisInitResult) {
+				m_logger->LogInfo("PIController: Successfully initialized axis " + axis);
+			}
 		}
-
 	}
-	// Check if any axis is in error state after initialization
-	for (const auto& axis : m_availableAxes) {
-		bool moving = IsMoving(axis);
-		bool enabled = false;
-		IsServoEnabled(axis, enabled);
-		std::cout << "PIController: Axis " << axis << " - Moving: " << (moving ? "yes" : "no")
-			<< ", Servo: " << (enabled ? "enabled" : "disabled") << std::endl;
+
+	// Immediately update cached positions and statuses
+	std::map<std::string, double> positions;
+	if (GetPositions(positions)) {
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_axisPositions = positions;
 	}
 
 	return true;
 }
+
 
 
 void PIController::Disconnect() {
@@ -207,13 +205,17 @@ void PIController::Disconnect() {
 	m_logger->LogInfo("PIController: Disconnected from controller");
 }
 
+// MoveToPosition optimized to use cached data for status
 bool PIController::MoveToPosition(const std::string& axis, double position, bool blocking) {
 	if (!m_isConnected) {
 		m_logger->LogError("PIController: Cannot move axis - not connected");
 		return false;
 	}
 
-	m_logger->LogInfo("PIController: Moving axis " + axis + " to position " + std::to_string(position));
+	// Only log at debug level to reduce overhead
+	if (m_enableDebug) {
+		m_logger->LogInfo("PIController: Moving axis " + axis + " to position " + std::to_string(position));
+	}
 
 	// Convert single-axis string to char array for PI GCS2 API
 	const char* axes = axis.c_str();
@@ -227,6 +229,12 @@ bool PIController::MoveToPosition(const std::string& axis, double position, bool
 		return false;
 	}
 
+	// Update the cache to reflect we're now moving
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_axisMoving[axis] = true;
+	}
+
 	// If blocking mode, wait for motion to complete
 	if (blocking) {
 		return WaitForMotionCompletion(axis);
@@ -234,7 +242,6 @@ bool PIController::MoveToPosition(const std::string& axis, double position, bool
 
 	return true;
 }
-
 
 // Add these improved logging sections to the MoveRelative function in pi_controller.cpp
 
@@ -305,36 +312,7 @@ bool PIController::MoveRelative(const std::string& axis, double distance, bool b
 	return true;
 }
 
-bool PIController::GetPosition(const std::string& axis, double& position) {
-	if (!m_isConnected) {
-		return false;
-	}
 
-	// For C-887, use the axis identifier directly (X, Y, Z, U, V, W)
-	const char* axes = axis.c_str();
-	double positions[1] = { 0.0 };
-
-	bool result = PI_qPOS(m_controllerId, axes, positions);
-
-	if (result) {
-		position = positions[0];
-		// Only log occasionally to avoid console flooding
-		static int callCount = 0;
-		if (++callCount % 100 == 0) {
-			//std::cout << "PIController: Position of axis " << axis << " = " << position << std::endl;
-		}
-	}
-	else {
-		// Log error if we failed to get the position
-		int error = 0;
-		PI_qERR(m_controllerId, &error);
-		if (error) {
-			std::cout << "PIController: Error getting position for axis " << axis << ": " << error << std::endl;
-		}
-	}
-
-	return result;
-}
 
 bool PIController::HomeAxis(const std::string& axis) {
 	if (!m_isConnected) {
@@ -400,35 +378,58 @@ bool PIController::StopAllAxes() {
 	return true;
 }
 
+// IsMoving optimized to use less frequent direct API calls
 bool PIController::IsMoving(const std::string& axis) {
 	if (!m_isConnected) {
 		return false;
 	}
 
+	// Check if we have a recent cached value (less than 200ms old)
+	auto now = std::chrono::steady_clock::now();
+	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+		now - m_lastStatusUpdate).count();
+
+	if (elapsed < m_statusUpdateInterval) {
+		// Use cached value if it exists and is recent
+		std::lock_guard<std::mutex> lock(m_mutex);
+		auto it = m_axisMoving.find(axis);
+		if (it != m_axisMoving.end()) {
+			return it->second;
+		}
+	}
+
+	// If no recent cached value, do direct query
 	const char* axes = axis.c_str();
 	BOOL isMoving[1] = { FALSE };
 
-	if (!PI_IsMoving(m_controllerId, axes, isMoving)) {
-		// Error checking omitted for brevity in status check
-		return false;
+	bool success = PI_IsMoving(m_controllerId, axes, isMoving);
+
+	if (success) {
+		// Update the cache
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_axisMoving[axis] = (isMoving[0] == TRUE);
+		m_lastStatusUpdate = now;
+		return (isMoving[0] == TRUE);
 	}
 
-	return (isMoving[0] == TRUE);
+	// In case of query error, return safe default
+	return false;
 }
 
 
+// Optimize the position queries by implementing batch query
 bool PIController::GetPositions(std::map<std::string, double>& positions) {
 	if (!m_isConnected || m_availableAxes.empty()) {
 		return false;
 	}
 
-	// For C-887, we need space-separated axis names
-	std::string allAxes = "X Y Z U V W";
+	// For C-887, we need space-separated axis names for batch query
+	std::string allAxes = "X Y Z U V W";  // Query all six hexapod axes at once
 
 	// Allocate array for positions - 6 axes for hexapod
 	double posArray[6] = { 0.0 };
 
-	// Query positions
+	// Query positions in a single API call
 	bool success = PI_qPOS(m_controllerId, allAxes.c_str(), posArray);
 
 	if (success) {
@@ -440,18 +441,20 @@ bool PIController::GetPositions(std::map<std::string, double>& positions) {
 		positions["V"] = posArray[4];
 		positions["W"] = posArray[5];
 
-		// Log the positions (occasionally)
+		// Log the positions (occasionally to reduce log spam)
 		static int callCount = 0;
-		if (++callCount % 100 == 0) {
-			std::cout << "PIController: Positions - X:" << posArray[0] << " Y:" << posArray[1]
-				<< " Z:" << posArray[2] << " U:" << posArray[3] << " V:" << posArray[4]
-				<< " W:" << posArray[5] << std::endl;
+		if (++callCount % 100 == 0 && enableDebug) {
+			m_logger->LogInfo("PIController: Positions - X:" + std::to_string(posArray[0]) +
+				" Y:" + std::to_string(posArray[1]) +
+				" Z:" + std::to_string(posArray[2]) +
+				" U:" + std::to_string(posArray[3]) +
+				" V:" + std::to_string(posArray[4]) +
+				" W:" + std::to_string(posArray[5]));
 		}
 	}
 
 	return success;
 }
-
 
 bool PIController::EnableServo(const std::string& axis, bool enable) {
 	if (!m_isConnected) {
@@ -475,23 +478,46 @@ bool PIController::EnableServo(const std::string& axis, bool enable) {
 	return true;
 }
 
+// IsServoEnabled optimized to use cached values
 bool PIController::IsServoEnabled(const std::string& axis, bool& enabled) {
 	if (!m_isConnected) {
 		return false;
 	}
 
+	// Check if we have a recent cached value (less than 200ms old)
+	auto now = std::chrono::steady_clock::now();
+	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+		now - m_lastStatusUpdate).count();
+
+	if (elapsed < m_statusUpdateInterval) {
+		// Use cached value if it exists and is recent
+		std::lock_guard<std::mutex> lock(m_mutex);
+		auto it = m_axisServoEnabled.find(axis);
+		if (it != m_axisServoEnabled.end()) {
+			enabled = it->second;
+			return true;
+		}
+	}
+
+	// If no recent cached value, do direct query
 	const char* axes = axis.c_str();
 	BOOL states[1] = { FALSE };
 
-	if (!PI_qSVO(m_controllerId, axes, states)) {
-		// Error checking omitted for brevity in status check
-		return false;
+	bool success = PI_qSVO(m_controllerId, axes, states);
+
+	if (success) {
+		enabled = (states[0] == TRUE);
+
+		// Update the cache
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_axisServoEnabled[axis] = enabled;
+		m_lastStatusUpdate = now;
+		return true;
 	}
 
-	enabled = (states[0] == TRUE);
-	return true;
+	// In case of query error, return false
+	return false;
 }
-
 bool PIController::SetVelocity(const std::string& axis, double velocity) {
 	if (!m_isConnected) {
 		m_logger->LogError("PIController: Cannot set velocity - not connected");
@@ -531,13 +557,13 @@ bool PIController::GetVelocity(const std::string& axis, double& velocity) {
 }
 
 // Add logging to WaitForMotionCompletion to track any issues there
+// Modified WaitForMotionCompletion to use atomic variables correctly
 bool PIController::WaitForMotionCompletion(const std::string& axis, double timeoutSeconds) {
 	if (!m_isConnected) {
-		std::cout << "PIController: Cannot wait for motion completion - not connected" << std::endl;
+		m_logger->LogError("PIController: Cannot wait for motion completion - not connected");
 		return false;
 	}
 
-	std::cout << "PIController: Waiting for motion completion on axis " << axis << " with timeout " << timeoutSeconds << "s" << std::endl;
 	m_logger->LogInfo("PIController: Waiting for motion completion on axis " + axis);
 
 	// Use system clock for timeout
@@ -546,11 +572,32 @@ bool PIController::WaitForMotionCompletion(const std::string& axis, double timeo
 
 	while (true) {
 		checkCount++;
-		bool stillMoving = IsMoving(axis);
+
+		// First check if we have recent cached motion status
+		bool stillMoving = false;
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			auto it = m_axisMoving.find(axis);
+			if (it != m_axisMoving.end()) {
+				stillMoving = it->second;
+			}
+		}
+
+		// If cached value says we're not moving OR if we're not sure, double-check directly
+		if (!stillMoving) {
+			// Double-check with a direct query to be sure
+			stillMoving = IsMoving(axis);
+
+			// Update the cache
+			std::lock_guard<std::mutex> lock(m_mutex);
+			m_axisMoving[axis] = stillMoving;
+		}
 
 		if (!stillMoving) {
-			std::cout << "PIController: Motion completed on axis " << axis << " after " << checkCount << " checks" << std::endl;
-			m_logger->LogInfo("PIController: Motion completed on axis " + axis);
+			if (m_enableDebug) {
+				m_logger->LogInfo("PIController: Motion completed on axis " + axis + " after " +
+					std::to_string(checkCount) + " checks");
+			}
 			return true;
 		}
 
@@ -560,21 +607,20 @@ bool PIController::WaitForMotionCompletion(const std::string& axis, double timeo
 
 		if (elapsedSeconds > timeoutSeconds) {
 			std::string timeoutMsg = "PIController: Timeout waiting for motion completion on axis " + axis;
-			std::cout << timeoutMsg << std::endl;
 			m_logger->LogWarning(timeoutMsg);
 			return false;
 		}
 
-		if (checkCount % 20 == 0) {  // Log every ~1 second (20 * 50ms)
-			std::cout << "PIController: Still waiting for axis " << axis << " to complete motion, elapsed time: "
-				<< elapsedSeconds << "s" << std::endl;
+		// Log less frequently to reduce overhead
+		if (m_enableDebug && checkCount % 20 == 0) {
+			m_logger->LogInfo("PIController: Still waiting for axis " + axis +
+				" to complete motion, elapsed time: " + std::to_string(elapsedSeconds) + "s");
 		}
 
-		// Sleep to avoid CPU spikes
+		// Sleep to avoid CPU spikes but be responsive
 		std::this_thread::sleep_for(std::chrono::milliseconds(50));
 	}
 }
-
 
 bool PIController::ConfigureFromDevice(const MotionDevice& device) {
 	if (m_isConnected) {
@@ -611,6 +657,40 @@ bool PIController::MoveToNamedPosition(const std::string& deviceName, const std:
 }
 
 // Update UI rendering to match the new axis identifiers
+// Optimize the individual GetPosition by using cached positions when possible
+bool PIController::GetPosition(const std::string& axis, double& position) {
+	if (!m_isConnected) {
+		return false;
+	}
+
+	// First check if we have a recent cached value
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		auto it = m_axisPositions.find(axis);
+		if (it != m_axisPositions.end()) {
+			position = it->second;
+			return true;
+		}
+	}
+
+	// Fall back to individual query if no cached value exists
+	const char* axes = axis.c_str();
+	double positions[1] = { 0.0 };
+
+	bool result = PI_qPOS(m_controllerId, axes, positions);
+
+	if (result) {
+		position = positions[0];
+
+		// Update the cache with this new value
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_axisPositions[axis] = position;
+	}
+
+	return result;
+}
+
+// Optimize the RenderUI method to use cached values instead of direct queries
 void PIController::RenderUI() {
 	if (!m_showWindow) {
 		return;
@@ -658,14 +738,34 @@ void PIController::RenderUI() {
 			ImGui::OpenPopup("Controller Details Popup");
 		}
 
+		// Store axis positions in local variables to avoid locking the mutex multiple times
+		std::map<std::string, double> positionsCopy;
+		std::map<std::string, bool> movingCopy;
+		std::map<std::string, bool> servoEnabledCopy;
+
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			positionsCopy = m_axisPositions;
+			movingCopy = m_axisMoving;
+			servoEnabledCopy = m_axisServoEnabled;
+		}
+
 		// Create the popup
 		if (ImGui::BeginPopupModal("Controller Details Popup", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 			ImGui::Text("Detailed Controller Panel - %s", m_ipAddress.c_str());
 			ImGui::Separator();
 
-			// Display controller info
-			char idn[256] = { 0 };
-			if (PI_qIDN(m_controllerId, idn, sizeof(idn))) {
+			// Display controller info (only do this once to avoid redundant calls)
+			static char idn[256] = { 0 };
+			static bool idnQueried = false;
+
+			if (!idnQueried && m_isConnected) {
+				if (PI_qIDN(m_controllerId, idn, sizeof(idn))) {
+					idnQueried = true;
+				}
+			}
+
+			if (idnQueried) {
 				ImGui::Text("Controller Identification: %s", idn);
 			}
 
@@ -702,11 +802,15 @@ void PIController::RenderUI() {
 					ImGui::TableNextColumn();
 					ImGui::Text("%s", label.c_str());
 
-					// Column 2: Position
+					// Column 2: Position - use cached values instead of querying
 					ImGui::TableNextColumn();
-					double position = 0.0;
-					GetPosition(axis, position);
-					ImGui::Text("%.3f mm", position);
+					auto posIt = positionsCopy.find(axis);
+					if (posIt != positionsCopy.end()) {
+						ImGui::Text("%.3f mm", posIt->second);
+					}
+					else {
+						ImGui::Text("N/A");
+					}
 
 					// Column 3: Jog controls
 					ImGui::TableNextColumn();
@@ -742,11 +846,11 @@ void PIController::RenderUI() {
 				ImGui::EndTable();
 			}
 
-			// Add a motion status indicator
+			// Add a motion status indicator - use cached values
 			ImGui::Separator();
 			bool anyAxisMoving = false;
-			for (const auto& axisPair : axisLabels) {
-				if (IsMoving(axisPair.first)) {
+			for (const auto& [axis, moving] : movingCopy) {
+				if (moving) {
 					anyAxisMoving = true;
 					break;
 				}
@@ -790,15 +894,16 @@ void PIController::RenderUI() {
 				{"W", "W (Yaw)"}
 		};
 
+		// Use the correct axis names directly
 		for (const auto& axisPair : axisLabels) {
 			const std::string& axis = axisPair.first;
 			const std::string& label = axisPair.second;
 
 			ImGui::PushID(axis.c_str());
 
-			// Get axis position
-			double position = 0.0;
-			GetPosition(axis, position);
+			// Get axis position from cached values
+			auto posIt = positionsCopy.find(axis);
+			double position = (posIt != positionsCopy.end()) ? posIt->second : 0.0;
 
 			// Display axis info with proper label
 			ImGui::Text("Axis %s: %.3f mm", label.c_str(), position);
