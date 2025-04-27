@@ -1,4 +1,4 @@
-﻿# Simplified CMakeLists.txt for CMakeProject2 with SDL2, ImGui, and Pylon SDK
+﻿# Simplified CMakeLists.txt for CMakeProject2 with SDL2, ImGui, Pylon SDK, and PI GCS2 support
 cmake_minimum_required(VERSION 3.12)
 project(CMakeProject2)
 
@@ -14,13 +14,16 @@ endif()
 
 add_subdirectory(nlohmann_json)
 
-
-
 # Define paths to SDL2 and ImGui - adjust these if needed
 set(SDL2_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/sdl2")
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/imgui")
 # Define path to ACSC files
 set(ACSC_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+
+# Add PI GCS2 paths
+set(PI_ROOT "C:/Program Files (x86)/Physik Instrumente (PI)/Software Suite/Development/C++/API")
+set(PI_INCLUDE_DIR "${PI_ROOT}")
+set(PI_LIB_DIR "${PI_ROOT}")
 
 # Set Pylon SDK path - adjust this if your installation is different
 set(PYLON_ROOT "C:/Program Files/Basler/pylon 8")
@@ -39,12 +42,16 @@ if(WIN32)
         set(SDL2MAIN_LIBRARY "${SDL2_DIR}/lib/x64/SDL2main.lib")
         set(SDL2_DLL "${SDL2_DIR}/lib/x64/SDL2.dll")
         set(ACSC_LIBRARY "${ACSC_DIR}/ACSCL_x64.LIB")
+        # Set PI library for 64-bit
+        set(PI_LIBRARY "${PI_LIB_DIR}/PI_GCS2_DLL_x64.lib")
     else()
         # 32-bit build
         set(SDL2_LIBRARY "${SDL2_DIR}/lib/x86/SDL2.lib")
         set(SDL2MAIN_LIBRARY "${SDL2_DIR}/lib/x86/SDL2main.lib")
         set(SDL2_DLL "${SDL2_DIR}/lib/x86/SDL2.dll")
         set(ACSC_LIBRARY "${ACSC_DIR}/ACSCL_x86.LIB")
+        # Set PI library for 32-bit
+        set(PI_LIBRARY "${PI_LIB_DIR}/PI_GCS2_DLL.lib")
     endif()
     
     # For Windows, specify the Pylon library paths manually
@@ -69,6 +76,9 @@ else()
     # For Linux/Mac, Pylon libraries would need to be configured here
     # This is a placeholder - adjust as needed for your Linux/Mac environment
     # set(PYLON_LIBRARIES "")
+    
+    # Set PI library for Linux
+    # set(PI_LIBRARY "${PI_LIB_DIR}/libpi_gcs2_dll.so")
 endif()
 
 # ImGui source files - directly referenced
@@ -91,6 +101,12 @@ else()
     set(OPENGL_LIBRARIES "-lGL")
 endif()
 
+# Add PI controller source files
+set(PI_SOURCES
+    "include/motions/pi_controller.h"
+    "source/motions/pi_controller.cpp"
+)
+
 # Add source to this project's executable
 add_executable(CMakeProject2 
     "CMakeProject2.cpp" 
@@ -108,15 +124,34 @@ add_executable(CMakeProject2
     "source/motions/acs_monitor.cpp"
     "include/camera/camera_window.h"
     "source/camera_window.cpp"
+    ${PI_SOURCES}  # Add the PI controller sources
     # Add your Pylon-related source files here if needed
- "include/logger.h" "logger.cpp" "Include/motions/MotionTypes.h" "Include/motions/MotionConfigManager.h" "source/motions/MotionConfigManager.cpp"     "Include/motions/MotionConfigEditor.h" "source/motions/MotionConfigEditor.cpp" "include/ui/toolbar.h" "source/toolbar.cpp" "include/ui/GraphVisualizer.h" "source/GraphVisualizer.cpp" "include/ui/DraggableNode.h" "source/DraggableNode.cpp" "include/camera/pylon_camera.h" "source/pylon_camera.cpp" "source/pylon_camera_test.cpp" "include/camera/pylon_camera_test.h")
+    "include/logger.h" 
+    "logger.cpp" 
+    "Include/motions/MotionTypes.h" 
+    "Include/motions/MotionConfigManager.h" 
+    "source/motions/MotionConfigManager.cpp"     
+    "Include/motions/MotionConfigEditor.h" 
+    "source/motions/MotionConfigEditor.cpp" 
+    "include/ui/toolbar.h" 
+    "source/toolbar.cpp" 
+    "include/ui/GraphVisualizer.h" 
+    "source/GraphVisualizer.cpp" 
+    "include/ui/DraggableNode.h" 
+    "source/DraggableNode.cpp" 
+    "include/camera/pylon_camera.h" 
+    "source/pylon_camera.cpp" 
+    "source/pylon_camera_test.cpp" 
+    "include/camera/pylon_camera_test.h"
+ "include/motions/pi_controller_manager.h" "include/motions/pi_controller_manager.cpp")
 
-# Include directories - directly include SDL2, ImGui, and Pylon
+# Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
 target_include_directories(CMakeProject2 PRIVATE
     ${SDL2_INCLUDE_DIR}
     ${IMGUI_DIR}
     ${ACSC_DIR}  # Added to include the directory with ACSC.h
     ${PYLON_INCLUDE_DIR}  # Added Pylon include directory
+    ${PI_INCLUDE_DIR}  # Added PI GCS2 include directory
 )
 
 # Link libraries - directly reference libraries
@@ -126,10 +161,11 @@ target_link_libraries(CMakeProject2 PRIVATE
     ${OPENGL_LIBRARIES}
     ${ACSC_LIBRARY}  # ACSC library
     ${PYLON_LIBRARIES}  # Added Pylon libraries
+    ${PI_LIBRARY}  # Added PI GCS2 library
     nlohmann_json::nlohmann_json
 )
 
-# For Windows, we need to copy the SDL2.dll
+# For Windows, we need to copy the SDL2.dll and PI_GCS2_DLL
 if(WIN32)
     # Simple command to copy SDL2.dll
     add_custom_command(TARGET CMakeProject2 POST_BUILD
@@ -144,6 +180,23 @@ if(WIN32)
         "${PYLON_ROOT}/Runtime/x64"
         $<TARGET_FILE_DIR:CMakeProject2>
     )
+    
+    # Copy PI_GCS2_DLL to the output directory
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        # 64-bit build
+        add_custom_command(TARGET CMakeProject2 POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${PI_LIB_DIR}/PI_GCS2_DLL_x64.dll"
+            $<TARGET_FILE_DIR:CMakeProject2>
+        )
+    else()
+        # 32-bit build
+        add_custom_command(TARGET CMakeProject2 POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${PI_LIB_DIR}/PI_GCS2_DLL.dll"
+            $<TARGET_FILE_DIR:CMakeProject2>
+        )
+    endif()
 endif()
 
 # For Windows, set subsystem

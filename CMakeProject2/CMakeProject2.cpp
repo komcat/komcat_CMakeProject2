@@ -9,8 +9,8 @@
 #include "include/motions/acs_monitor.h"
 #include "include/ui/GraphVisualizer.h"
 #include "include/camera/pylon_camera_test.h" // Include the Pylon camera test header
-
-
+#include "include/motions/pi_controller.h" // Include the PI controller header
+#include "include/motions/pi_controller_manager.h" // Include the PI controller manager header
 
 // ImGui and SDL includes
 #include "imgui.h"
@@ -116,6 +116,28 @@ int main(int argc, char* argv[])
 	Toolbar toolbar(configEditor, graphVisualizer);
 	logger->LogInfo("Toolbar initialized with GraphVisualizer support");
 
+
+	//create PIController
+	// Create a controller instance
+	//PIController controller;
+
+	// Create the PI Controller Manager
+	PIControllerManager piControllerManager(configManager);
+	// Connect to all enabled controllers
+	if (piControllerManager.ConnectAll()) {
+		logger->LogInfo("Successfully connected to all enabled PI controllers");
+	}
+	else {
+		logger->LogWarning("Failed to connect to some PI controllers");
+	}
+
+	// Connect to a specific device
+	//if (controller.Connect("192.168.0.30", 50000)) {
+	//	std::cout << "Successfully connected to PI controller" << std::endl;
+	//}
+	//else {
+	//	std::cout << "Failed to connect to PI controller" << std::endl;
+	//}
 
 	// Log the loaded devices
 	const auto& devices = configManager.GetAllDevices();
@@ -311,6 +333,22 @@ int main(int argc, char* argv[])
 		//ACS connection
 		acsMonitor.RenderUI();
 
+		//PI hexapod
+		//controller.RenderUI();
+		piControllerManager.RenderUI();
+
+
+		// Add this to render each controller's individual UI window
+		// This is necessary because they won't render automatically
+		for (const auto& [name, device] : configManager.GetAllDevices()) {
+			// Check if it's a PI device
+			if (device.Port == 50000 && device.IsEnabled) {
+				PIController* controller = piControllerManager.GetController(name);
+				if (controller && controller->IsConnected()) {
+					controller->RenderUI();
+				}
+			}
+		}
 
 		// Render Pylon Camera Test UI
 		pylonCameraTest.RenderUI();
