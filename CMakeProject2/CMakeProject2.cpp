@@ -246,8 +246,8 @@ int main(int argc, char* argv[])
 		ImGui::NewFrame();
 
 		// Add an exit button in a fixed position
-		ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 120, 100), ImGuiCond_Always);
-		ImGui::SetNextWindowSize(ImVec2(110, 60), ImGuiCond_Always);
+		ImGui::SetNextWindowPos(ImVec2(105, 0), ImGuiCond_Always);
+		ImGui::SetNextWindowSize(ImVec2(120, 60), ImGuiCond_Always);
 		ImGui::SetNextWindowBgAlpha(0.7f); // Semi-transparent background
 		ImGui::Begin("Exit", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
 			ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);

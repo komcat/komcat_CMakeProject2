@@ -1,4 +1,4 @@
-// acs_controller.cpp
+﻿// acs_controller.cpp
 #include "../include/motions/acs_controller.h"
 #include "imgui.h"
 #include <iostream>
@@ -20,7 +20,7 @@ ACSController::ACSController()
   m_logger->LogInfo("ACSController: Initializing controller");
 
   // Initialize available axes with string identifiers (consistent with PI controller)
-  m_availableAxes = { "X", "Y", "Z", "U", "V", "W" };
+  m_availableAxes = { "X", "Y", "Z"};
 
   // Start communication thread
   StartCommunicationThread();
@@ -64,6 +64,7 @@ void ACSController::StopCommunicationThread() {
   }
 }
 
+// In ACSController.cpp - improve CommunicationThreadFunc
 void ACSController::CommunicationThreadFunc() {
   // Set update interval to 200ms (5 Hz)
   const auto updateInterval = std::chrono::milliseconds(200);
@@ -71,8 +72,14 @@ void ACSController::CommunicationThreadFunc() {
   // Frame counter for less frequent updates
   int frameCounter = 0;
 
+  // Initialization of last update timestamps
+  m_lastStatusUpdate = std::chrono::steady_clock::now();
+  m_lastPositionUpdate = m_lastStatusUpdate;
+
   while (!m_terminateThread) {
-    // Process any pending motor commands
+    auto cycleStartTime = std::chrono::steady_clock::now();
+
+    // Process any pending motor commands first for responsiveness
     {
       std::lock_guard<std::mutex> lock(m_commandMutex);
       for (auto& cmd : m_commandQueue) {
@@ -99,32 +106,101 @@ void ACSController::CommunicationThreadFunc() {
       if (GetPositions(positions)) {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_axisPositions = positions;
+        m_lastPositionUpdate = std::chrono::steady_clock::now();
       }
 
-      // Update other status less frequently
+      // Update other status less frequently (every 3rd frame, ~1.67Hz)
       if (frameCounter % 3 == 0) {
-        // Update axis motion status
-        for (const auto& axis : m_availableAxes) {
+        // Update axis motion status for X, Y, Z only
+        for (const auto& axis : { "X", "Y", "Z" }) {
           bool moving = IsMoving(axis);
           std::lock_guard<std::mutex> lock(m_mutex);
           m_axisMoving[axis] = moving;
         }
 
-        // Update servo status
-        for (const auto& axis : m_availableAxes) {
+        // Update servo status for X, Y, Z only
+        for (const auto& axis : { "X", "Y", "Z" }) {
           bool enabled;
           if (IsServoEnabled(axis, enabled)) {
             std::lock_guard<std::mutex> lock(m_mutex);
             m_axisServoEnabled[axis] = enabled;
           }
         }
+
+        m_lastStatusUpdate = std::chrono::steady_clock::now();
       }
     }
 
+    // Calculate how long to sleep to maintain consistent update rate
+    auto cycleEndTime = std::chrono::steady_clock::now();
+    auto cycleDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+      cycleEndTime - cycleStartTime);
+    auto sleepTime = updateInterval - cycleDuration;
+
     // Wait for next update or termination
     std::unique_lock<std::mutex> lock(m_mutex);
-    m_condVar.wait_for(lock, updateInterval, [this]() { return m_terminateThread.load(); });
+    if (sleepTime.count() > 0) {
+      m_condVar.wait_for(lock, sleepTime, [this]() { return m_terminateThread.load(); });
+    }
+    else {
+      // No sleep needed if we're already behind schedule, but yield to let other threads run
+      lock.unlock();
+      std::this_thread::yield();
+    }
   }
+}
+
+
+// Helper method to process the command queue
+void ACSController::ProcessCommandQueue() {
+  std::lock_guard<std::mutex> lock(m_commandMutex);
+  for (auto& cmd : m_commandQueue) {
+    if (!cmd.executed) {
+      // Execute the command
+      MoveRelative(cmd.axis, cmd.distance, false);
+      cmd.executed = true;
+    }
+  }
+
+  // Remove executed commands
+  m_commandQueue.erase(
+    std::remove_if(m_commandQueue.begin(), m_commandQueue.end(),
+      [](const MotorCommand& cmd) { return cmd.executed; }),
+    m_commandQueue.end());
+}
+
+// Helper method to update positions using batch query
+void ACSController::UpdatePositions() {
+  if (!m_isConnected) return;
+
+  std::map<std::string, double> positions;
+  if (GetPositions(positions)) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_axisPositions = positions;
+    m_lastPositionUpdate = std::chrono::steady_clock::now();
+  }
+}
+
+// Helper method to update motor status (moving, servo state)
+void ACSController::UpdateMotorStatus() {
+  if (!m_isConnected) return;
+
+  auto now = std::chrono::steady_clock::now();
+
+  // Use batch queries if possible, otherwise query each axis
+  for (const auto& axis : m_availableAxes) {
+    int axisIndex = GetAxisIndex(axis);
+    if (axisIndex >= 0) {
+      int state = 0;
+      if (acsc_GetMotorState(m_controllerId, axisIndex, &state, NULL)) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_axisMoving[axis] = (state & ACSC_MST_MOVE) != 0;
+        m_axisServoEnabled[axis] = (state & ACSC_MST_ENABLE) != 0;
+      }
+    }
+  }
+
+  m_lastStatusUpdate = now;
 }
 
 // Helper to convert string axis identifiers to ACS axis indices
@@ -132,9 +208,6 @@ int ACSController::GetAxisIndex(const std::string& axis) {
   if (axis == "X") return ACSC_AXIS_X;
   if (axis == "Y") return ACSC_AXIS_Y;
   if (axis == "Z") return ACSC_AXIS_Z;
-  if (axis == "U") return 3; // Assuming U is axis 3 in ACS
-  if (axis == "V") return 4; // Assuming V is axis 4 in ACS
-  if (axis == "W") return 5; // Assuming W is axis 5 in ACS
 
   m_logger->LogWarning("ACSController: Unknown axis identifier: " + axis);
   return -1;
@@ -186,6 +259,27 @@ bool ACSController::Connect(const std::string& ipAddress, int port) {
         m_logger->LogError("ACSController: Failed to enable axis " + axis + ". Error: " + std::to_string(error));
       }
     }
+  }
+
+  // Initialize position cache immediately
+  std::map<std::string, double> initialPositions;
+  if (GetPositions(initialPositions)) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_axisPositions = initialPositions;
+    m_lastPositionUpdate = std::chrono::steady_clock::now();
+
+    // Log initial positions for debugging
+    if (m_enableDebug) {
+      std::stringstream ss;
+      ss << "Initial positions: ";
+      for (const auto& [axis, pos] : initialPositions) {
+        ss << axis << "=" << pos << " ";
+      }
+      m_logger->LogInfo(ss.str());
+    }
+  }
+  else {
+    m_logger->LogWarning("ACSController: Failed to initialize position cache after connection");
   }
 
   return true;
@@ -339,11 +433,27 @@ bool ACSController::StopAllAxes() {
   return true;
 }
 
+// In ACSController.cpp - modify IsMoving to use cached values
 bool ACSController::IsMoving(const std::string& axis) {
   if (!m_isConnected) {
     return false;
   }
 
+  // Check if we have a recent cached value (less than 200ms old)
+  auto now = std::chrono::steady_clock::now();
+  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+    now - m_lastStatusUpdate).count();
+
+  if (elapsed < m_statusUpdateInterval) {
+    // Use cached value if it exists and is recent
+    std::lock_guard<std::mutex> lock(m_mutex);
+    auto it = m_axisMoving.find(axis);
+    if (it != m_axisMoving.end()) {
+      return it->second;
+    }
+  }
+
+  // If no recent cached value, do direct query
   int axisIndex = GetAxisIndex(axis);
   if (axisIndex < 0) {
     return false;
@@ -352,14 +462,25 @@ bool ACSController::IsMoving(const std::string& axis) {
   // Get the motion state
   int state = 0;
   if (!acsc_GetMotorState(m_controllerId, axisIndex, &state, NULL)) {
-    // Error checking omitted for brevity in status check
     return false;
   }
 
   // Check if the axis is moving based on state bits
-  return (state & ACSC_MST_MOVE) != 0;
+  bool isMoving = (state & ACSC_MST_MOVE) != 0;
+
+  // Update the cache
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_axisMoving[axis] = isMoving;
+    m_lastStatusUpdate = now;
+  }
+
+  return isMoving;
 }
 
+
+// Modify logging in performance-critical areas
+// For example, in GetPosition method:
 bool ACSController::GetPosition(const std::string& axis, double& position) {
   if (!m_isConnected) {
     return false;
@@ -372,6 +493,7 @@ bool ACSController::GetPosition(const std::string& axis, double& position) {
 
   if (!acsc_GetFPosition(m_controllerId, axisIndex, &position, NULL)) {
     int error = acsc_GetLastError();
+    // Only log in debug mode to reduce overhead
     if (m_enableDebug) {
       std::cout << "ACSController: Error getting position for axis " << axis << ": " << error << std::endl;
     }
@@ -381,19 +503,38 @@ bool ACSController::GetPosition(const std::string& axis, double& position) {
   return true;
 }
 
+
+
+// In ACSController::GetPositions - modify to use batch queries
 bool ACSController::GetPositions(std::map<std::string, double>& positions) {
   if (!m_isConnected || m_availableAxes.empty()) {
     return false;
   }
 
+  // Since we now have only X, Y, Z axes, we can optimize this for exactly 3 axes
+  // Create arrays for the axes we know we have
+  int axisIndices[3] = {
+      GetAxisIndex("X"), GetAxisIndex("Y"), GetAxisIndex("Z")
+  };
+  double posArray[3] = { 0.0 };
+
+  // Query positions individually for each axis
+  // This could be optimized with a batch call if the ACS API supports it
   bool success = true;
-  for (const auto& axis : m_availableAxes) {
-    double position = 0.0;
-    if (GetPosition(axis, position)) {
-      positions[axis] = position;
+  for (int i = 0; i < 3; i++) {
+    if (axisIndices[i] >= 0) {
+      if (!acsc_GetFPosition(m_controllerId, axisIndices[i], &posArray[i], NULL)) {
+        success = false;
+      }
     }
-    else {
-      success = false;
+  }
+
+  if (success) {
+    // Fill the map with results
+    for (int i = 0; i < 3; i++) {
+      if (axisIndices[i] >= 0) {
+        positions[m_availableAxes[i]] = posArray[i];
+      }
     }
   }
 
@@ -545,12 +686,13 @@ bool ACSController::ConfigureFromDevice(const MotionDevice& device) {
   m_ipAddress = device.IpAddress;
   m_port = device.Port;
 
-  // Define available axes based on device type
+  // Define available axes - use only X, Y, Z for this controller
   m_availableAxes.clear();
-  m_availableAxes = { "X", "Y", "Z", "U", "V", "W" };
+  m_availableAxes = { "X", "Y", "Z" };
 
   return true;
 }
+
 
 bool ACSController::MoveToNamedPosition(const std::string& deviceName, const std::string& positionName) {
   m_logger->LogInfo("ACSController: Moving to named position " + positionName + " for device " + deviceName);
@@ -562,6 +704,7 @@ bool ACSController::MoveToNamedPosition(const std::string& deviceName, const std
 }
 
 void ACSController::RenderUI() {
+  // Skip rendering if window is hidden
   if (!m_showWindow) {
     return;
   }
@@ -577,9 +720,13 @@ void ACSController::RenderUI() {
 
   if (!m_isConnected) {
     // Show connection controls
-    static char ipBuffer[64] = "192.168.0.50"; // Default IP
+    char ipBuffer[64];
+    strncpy(ipBuffer, m_ipAddress.empty() ? "192.168.0.50" : m_ipAddress.c_str(), sizeof(ipBuffer) - 1);
+    ipBuffer[sizeof(ipBuffer) - 1] = '\0';
+
+    int port = m_port == 0 ? ACSC_SOCKET_STREAM_PORT : m_port;
+
     ImGui::InputText("IP Address", ipBuffer, sizeof(ipBuffer));
-    static int port = ACSC_SOCKET_STREAM_PORT; // Default port
     ImGui::InputInt("Port", &port);
 
     if (ImGui::Button("Connect")) {
@@ -603,83 +750,172 @@ void ACSController::RenderUI() {
       m_jogDistance = static_cast<double>(jogDistanceFloat);
     }
 
-    // Display simplified axis controls in the main window
-    ImGui::Text("Quick Controls");
+    // Create static variables to persist previous values
+    static std::map<std::string, double> lastPositions;
+    static std::map<std::string, bool> lastMoving;
+    static std::map<std::string, bool> lastServoEnabled;
 
-    // Axis status and controls with improved layout
-    ImVec2 buttonSize(30, 25); // Standard size for all jog buttons
+    // Store axis positions in local variables to avoid locking the mutex multiple times
+    std::map<std::string, double> positionsCopy;
+    std::map<std::string, bool> movingCopy;
+    std::map<std::string, bool> servoEnabledCopy;
 
-    for (const auto& axis : m_availableAxes) {
-      ImGui::PushID(axis.c_str());
-
-      // Get axis position
-      double position = 0.0;
-      GetPosition(axis, position);
-
-      // Get axis status
-      bool enabled = false;
-      IsServoEnabled(axis, enabled);
-
-      // Display axis info with proper label
-      ImGui::Text("Axis %s: %.3f mm %s",
-        axis.c_str(), position,
-        enabled ? "(Enabled)" : "(Disabled)");
-
-      // Jog controls in a single row with dark blue theme and command queuing
-      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.3f, 0.6f, 1.0f)); // Deep blue for negative direction
-      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.4f, 0.7f, 1.0f)); // Slightly lighter blue on hover
-      if (ImGui::Button(("-##" + axis).c_str(), buttonSize)) {
-        if (enabled) {
-          // Queue the motor command
-          std::lock_guard<std::mutex> lock(m_commandMutex);
-          m_commandQueue.push_back({ axis, -m_jogDistance, false });
-          m_condVar.notify_one();
-        }
-      }
-      ImGui::PopStyleColor(2);
-      ImGui::SameLine();
-      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.5f, 0.4f, 1.0f)); // Teal-like blue for positive direction
-      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.6f, 0.5f, 1.0f)); // Slightly lighter teal on hover
-      if (ImGui::Button(("+##" + axis).c_str(), buttonSize)) {
-        if (enabled) {
-          // Queue the motor command
-          std::lock_guard<std::mutex> lock(m_commandMutex);
-          m_commandQueue.push_back({ axis, m_jogDistance, false });
-          m_condVar.notify_one();
-        }
-      }
-      ImGui::PopStyleColor(2);
-
-      ImGui::SameLine();
-
-      if (ImGui::Button(("Home##" + axis).c_str(), ImVec2(60, 25))) {
-        if (enabled) {
-          HomeAxis(axis);
-        }
-      }
-
-      ImGui::SameLine();
-
-      if (ImGui::Button(("Stop##" + axis).c_str(), ImVec2(60, 25))) {
-        StopAxis(axis);
-      }
-
-      // Enable/Disable button
-      ImGui::SameLine();
-      std::string buttonLabel = enabled ? "Disable##" + axis : "Enable##" + axis;
-      if (ImGui::Button(buttonLabel.c_str(), ImVec2(60, 25))) {
-        EnableServo(axis, !enabled);
-      }
-
-      ImGui::PopID();
+    {
+      // Single mutex lock to copy all cached data
+      std::lock_guard<std::mutex> lock(m_mutex);
+      positionsCopy = m_axisPositions;
+      movingCopy = m_axisMoving;
+      servoEnabledCopy = m_axisServoEnabled;
     }
+
+    // Merge with last known values - keep previous values if not present in current data
+    for (const auto& axis : m_availableAxes) {
+      // If we don't have a position for this axis but we had one before, keep the old one
+      if (positionsCopy.find(axis) == positionsCopy.end() && lastPositions.find(axis) != lastPositions.end()) {
+        positionsCopy[axis] = lastPositions[axis];
+      }
+
+      // Same for servo enabled status
+      if (servoEnabledCopy.find(axis) == servoEnabledCopy.end() && lastServoEnabled.find(axis) != lastServoEnabled.end()) {
+        servoEnabledCopy[axis] = lastServoEnabled[axis];
+      }
+
+      // Same for moving status
+      if (movingCopy.find(axis) == movingCopy.end() && lastMoving.find(axis) != lastMoving.end()) {
+        movingCopy[axis] = lastMoving[axis];
+      }
+    }
+
+    // Save current values for next frame
+    lastPositions = positionsCopy;
+    lastMoving = movingCopy;
+    lastServoEnabled = servoEnabledCopy;
+
+    // Display axis controls in a grid layout
+    ImVec2 buttonSize(30, 25); // Standard size for all jog buttons
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6, 8)); // Tighter spacing
+
+    // Create a table for better layout
+    if (ImGui::BeginTable("AxisControlTable", 1, ImGuiTableFlags_Borders)) {
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+
+      // Title for the axis controls
+      ImGui::TextColored(ImVec4(0.2f, 0.5f, 0.8f, 1.0f), "XYZ Axis Controls");
+
+      // Display each axis control in a separate row
+      for (const auto& axis : m_availableAxes) {
+        ImGui::PushID(axis.c_str());
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+
+        // Get axis position from cached values
+        auto posIt = positionsCopy.find(axis);
+        double position = (posIt != positionsCopy.end()) ? posIt->second : 0.0;
+
+        // Get servo status from cached values
+        auto servoIt = servoEnabledCopy.find(axis);
+        bool enabled = (servoIt != servoEnabledCopy.end()) ? servoIt->second : false;
+
+        // Get motion status
+        auto movingIt = movingCopy.find(axis);
+        bool moving = (movingIt != movingCopy.end()) ? movingIt->second : false;
+
+        // Add a colored indicator for moving status
+        ImVec4 statusColor = moving ? ImVec4(1.0f, 0.5f, 0.0f, 1.0f) : ImVec4(0.0f, 0.8f, 0.0f, 1.0f);
+        ImGui::TextColored(statusColor, "●");
+        ImGui::SameLine();
+
+        // Display axis info with proper label
+        ImGui::Text("Axis %s: %.3f mm %s",
+          axis.c_str(), position,
+          enabled ? "(Enabled)" : "(Disabled)");
+
+        // Create a line with jog controls
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 20); // Indent the controls
+
+        // Jog negative button
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.3f, 0.6f, 1.0f)); // Deep blue for negative direction
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.4f, 0.7f, 1.0f)); // Slightly lighter blue on hover
+        if (ImGui::Button(("-##" + axis).c_str(), buttonSize)) {
+          if (enabled) {
+            // Queue the motor command
+            std::lock_guard<std::mutex> lock(m_commandMutex);
+            m_commandQueue.push_back({ axis, -m_jogDistance, false });
+            m_condVar.notify_one();
+          }
+        }
+        ImGui::PopStyleColor(2);
+        ImGui::SameLine();
+
+        // Jog positive button
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.5f, 0.4f, 1.0f)); // Teal-like blue for positive direction
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.6f, 0.5f, 1.0f)); // Slightly lighter teal on hover
+        if (ImGui::Button(("+##" + axis).c_str(), buttonSize)) {
+          if (enabled) {
+            // Queue the motor command
+            std::lock_guard<std::mutex> lock(m_commandMutex);
+            m_commandQueue.push_back({ axis, m_jogDistance, false });
+            m_condVar.notify_one();
+          }
+        }
+        ImGui::PopStyleColor(2);
+        ImGui::SameLine();
+
+        // Home button
+        if (ImGui::Button(("Home##" + axis).c_str(), ImVec2(60, 25))) {
+          if (enabled) {
+            HomeAxis(axis);
+          }
+        }
+        ImGui::SameLine();
+
+        // Stop button
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f)); // Red for stop
+        if (ImGui::Button(("Stop##" + axis).c_str(), ImVec2(60, 25))) {
+          StopAxis(axis);
+        }
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+
+        // Enable/Disable button
+        std::string buttonLabel = enabled ? "Disable##" + axis : "Enable##" + axis;
+        ImGui::PushStyleColor(ImGuiCol_Button, enabled ? ImVec4(0.2f, 0.6f, 0.2f, 1.0f) : ImVec4(0.6f, 0.2f, 0.2f, 1.0f));
+        if (ImGui::Button(buttonLabel.c_str(), ImVec2(70, 25))) {
+          EnableServo(axis, !enabled);
+        }
+        ImGui::PopStyleColor();
+
+        ImGui::PopID();
+      }
+
+      ImGui::EndTable();
+    }
+    ImGui::PopStyleVar(); // Pop the spacing style
 
     ImGui::Separator();
 
-    // Stop all axes button with dark blue theme
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.2f, 0.5f, 1.0f)); // Deep dark blue
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.3f, 0.6f, 1.0f)); // Slightly lighter blue on hover
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.0f, 0.1f, 0.4f, 1.0f)); // Darker blue when active
+    // Add a motion status indicator - use cached values
+    bool anyAxisMoving = false;
+    for (const auto& [axis, moving] : movingCopy) {
+      if (moving) {
+        anyAxisMoving = true;
+        break;
+      }
+    }
+
+    // Display a status bar
+    ImVec4 statusColor = anyAxisMoving ? ImVec4(1.0f, 0.5f, 0.0f, 1.0f) : ImVec4(0.0f, 0.8f, 0.0f, 1.0f);
+    ImGui::TextColored(statusColor, "●");
+    ImGui::SameLine();
+    ImGui::Text("Motion Status: %s", anyAxisMoving ? "Moving" : "Idle");
+
+    ImGui::Separator();
+
+    // Stop all axes button with red theme
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.1f, 0.1f, 1.0f)); // Red for emergency stop
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.2f, 0.2f, 1.0f)); // Lighter red on hover
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.0f, 0.0f, 1.0f)); // Darker red when active
     if (ImGui::Button("STOP ALL AXES", ImVec2(-1, 40))) { // Full width, 40px height
       StopAllAxes();
     }

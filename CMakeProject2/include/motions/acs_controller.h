@@ -65,6 +65,10 @@ private:
   void StartCommunicationThread();
   void StopCommunicationThread();
   void CommunicationThreadFunc();
+  // Add to the private section of ACSController class in acs_controller.h
+  void ProcessCommandQueue();
+  void UpdatePositions();
+  void UpdateMotorStatus();
 
   // Command queue structure
   struct MotorCommand {
@@ -112,4 +116,9 @@ private:
 
   // Debug flag
   bool m_enableDebug = false;  // Enable debug logging
+
+  // Cache status
+  std::chrono::steady_clock::time_point m_lastStatusUpdate;
+  std::chrono::steady_clock::time_point m_lastPositionUpdate;
+  const int m_statusUpdateInterval = 200;  // 5Hz updates
 };
