@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EziIO_Manager.h"
+#include "IOConfigManager.h" // Add this
 #include "imgui.h"
 #include <string>
 #include <memory>
@@ -11,7 +12,10 @@ class EziIO_UI {
 public:
   EziIO_UI(EziIOManager& manager);
   ~EziIO_UI();
-
+  // Add this method to set the config manager
+  void setConfigManager(IOConfigManager* configManager) {
+    m_configManager = configManager;
+  }
   // Render the ImGui UI window
   void RenderUI();
 
@@ -24,7 +28,8 @@ public:
 private:
   // Reference to the EziIO manager
   EziIOManager& m_ioManager;
-
+  // Add this for configuration
+  IOConfigManager* m_configManager = nullptr;
   // UI state
   bool m_showWindow;
   bool m_autoRefresh;
@@ -57,4 +62,8 @@ private:
   void RenderOutputPins(DeviceState& device);
   bool IsPinOn(uint32_t value, int pin) const;
   uint32_t GetOutputPinMask(const std::string& deviceName, int pin) const;
+
+  // Add this method to get pin name from config
+  std::string GetPinName(const std::string& deviceName, bool isInput, int pin) const;
+
 };

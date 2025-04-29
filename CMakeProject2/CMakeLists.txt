@@ -158,7 +158,7 @@ add_executable(CMakeProject2
     "include/motions/acs_controller.cpp" 
     
     
- "include/motions/acs_controller_manager.h" "include/motions/acs_controller_manager.cpp" "include/eziio/EziIO_Manager.h" "include/eziio/EziIO_Manager.cpp" "include/eziio/EziIO_UI.h" "include/eziio/EziIO_UI.cpp")
+ "include/motions/acs_controller_manager.h" "include/motions/acs_controller_manager.cpp" "include/eziio/EziIO_Manager.h" "include/eziio/EziIO_Manager.cpp" "include/eziio/EziIO_UI.h" "include/eziio/EziIO_UI.cpp" "IOConfigManager.h" "IOConfigManager.cpp")
 
 # Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
 target_include_directories(CMakeProject2 PRIVATE

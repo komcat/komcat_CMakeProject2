@@ -6,7 +6,7 @@ EziIO_UI::EziIO_UI(EziIOManager& manager)
   : m_ioManager(manager),
   m_showWindow(true),
   m_autoRefresh(true),
-  m_refreshInterval(0.5f),  // Refresh every 500ms by default
+  m_refreshInterval(0.2f),  // Refresh every 200ms by default
   m_refreshTimer(0.0f),
   m_showDebugInfo(false)    // Debug info hidden by default
 {
@@ -271,14 +271,16 @@ void EziIO_UI::RenderDevicePanel(DeviceState& device)
   ImGui::Separator();
 }
 
+// EziIO_UI.cpp - Modify your RenderInputPins method
 void EziIO_UI::RenderInputPins(DeviceState& device)
 {
   ImGui::Text("Input Pins:");
 
   // Create a table for input pins
-  if (ImGui::BeginTable("Inputs", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+  if (ImGui::BeginTable("Inputs", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
   {
-    ImGui::TableSetupColumn("Pin", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+    ImGui::TableSetupColumn("Pin", ImGuiTableColumnFlags_WidthFixed, 30.0f);
+    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 100.0f);  // Add this column
     ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 50.0f);
     ImGui::TableSetupColumn("Latch", ImGuiTableColumnFlags_WidthFixed, 50.0f);
     ImGui::TableSetupColumn("Visual", ImGuiTableColumnFlags_WidthFixed, 80.0f);
@@ -293,6 +295,11 @@ void EziIO_UI::RenderInputPins(DeviceState& device)
       // Pin number
       ImGui::TableNextColumn();
       ImGui::Text("%d", i);
+
+      // Pin name - Add this column
+      ImGui::TableNextColumn();
+      std::string pinName = GetPinName(device.name, true, i);
+      ImGui::Text("%s", pinName.c_str());
 
       // State (ON/OFF)
       ImGui::TableNextColumn();
@@ -324,7 +331,7 @@ void EziIO_UI::RenderInputPins(DeviceState& device)
           bool success = dev->clearLatch(mask);
           if (m_showDebugInfo) {
             std::cout << "[EziIO_UI] Clear latch for " << device.name
-              << " pin " << i << ": " << (success ? "Success" : "Failed")
+              << " pin " << i << " (" << pinName << "): " << (success ? "Success" : "Failed")
               << " (mask: 0x" << std::hex << mask << std::dec << ")" << std::endl;
           }
         }
@@ -335,14 +342,16 @@ void EziIO_UI::RenderInputPins(DeviceState& device)
   }
 }
 
+// EziIO_UI.cpp - Modify your RenderOutputPins method
 void EziIO_UI::RenderOutputPins(DeviceState& device)
 {
   ImGui::Text("Output Pins:");
 
   // Create a table for output pins
-  if (ImGui::BeginTable("Outputs", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+  if (ImGui::BeginTable("Outputs", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
   {
-    ImGui::TableSetupColumn("Pin", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+    ImGui::TableSetupColumn("Pin", ImGuiTableColumnFlags_WidthFixed, 30.0f);
+    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 100.0f);  // Add this column
     ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 80.0f);
     ImGui::TableSetupColumn("Visual", ImGuiTableColumnFlags_WidthFixed, 80.0f);
     ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthFixed, 120.0f);
@@ -356,6 +365,11 @@ void EziIO_UI::RenderOutputPins(DeviceState& device)
       // Pin number
       ImGui::TableNextColumn();
       ImGui::Text("%d", i);
+
+      // Pin name - Add this column
+      ImGui::TableNextColumn();
+      std::string pinName = GetPinName(device.name, false, i);
+      ImGui::Text("%s", pinName.c_str());
 
       // State (ON/OFF)
       ImGui::TableNextColumn();
@@ -400,7 +414,7 @@ void EziIO_UI::RenderOutputPins(DeviceState& device)
 
         if (m_showDebugInfo) {
           std::cout << "[EziIO_UI] Set output " << device.name
-            << " pin " << i << " to ON: " << (success ? "Success" : "Failed") << std::endl;
+            << " pin " << i << " (" << pinName << ") to ON: " << (success ? "Success" : "Failed") << std::endl;
         }
 
         // Force an immediate update of the output status
@@ -441,7 +455,7 @@ void EziIO_UI::RenderOutputPins(DeviceState& device)
 
         if (m_showDebugInfo) {
           std::cout << "[EziIO_UI] Set output " << device.name
-            << " pin " << i << " to OFF: " << (success ? "Success" : "Failed") << std::endl;
+            << " pin " << i << " (" << pinName << ") to OFF: " << (success ? "Success" : "Failed") << std::endl;
         }
 
         // Force an immediate update of the output status
@@ -478,6 +492,8 @@ void EziIO_UI::RenderOutputPins(DeviceState& device)
   }
 }
 
+
+
 uint32_t EziIO_UI::GetOutputPinMask(const std::string& deviceName, int pin) const
 {
   if (deviceName == "IOBottom" && pin < 16) {
@@ -512,4 +528,14 @@ void EziIO_UI::SetInputChangeCallback(std::function<void(const std::string&, int
 void EziIO_UI::SetOutputChangeCallback(std::function<void(const std::string&, int, bool)> callback)
 {
   m_outputChangeCallback = callback;
+}
+
+// EziIO_UI.cpp - Add this new method
+std::string EziIO_UI::GetPinName(const std::string& deviceName, bool isInput, int pin) const {
+  if (m_configManager != nullptr) {
+    return m_configManager->getPinName(deviceName, isInput, pin);
+  }
+
+  // Default behavior if no config manager is set
+  return std::string("Pin ") + std::to_string(pin);
 }

@@ -28,6 +28,7 @@
 
 #include "include/eziio/EziIO_Manager.h"
 #include "include/eziio/EziIO_UI.h"
+#include "IOConfigManager.h"
 
 int main(int argc, char* argv[])
 {
@@ -221,12 +222,16 @@ int main(int argc, char* argv[])
 		std::cerr << "Failed to initialize EziIO manager" << std::endl;
 		return 1;
 	}
+	// Initialize and load the IO configuration
+	IOConfigManager ioconfigManager;
+	if (!ioconfigManager.loadConfig("IOConfig.json")) {
+		std::cerr << "Failed to load IO configuration, using default settings" << std::endl;
+	}
 
-	// Add your IO modules
-	//TODO use device information from ioconfigjson
-	
-	ioManager.addDevice(0, "IOBottom", "192.168.0.3", 0, 16);
-	ioManager.addDevice(1, "IOTop", "192.168.0.5", 8, 8);
+	// Setup devices from config
+	ioconfigManager.initializeIOManager(ioManager);
+
+
 
 	// Connect to all devices
 	if (!ioManager.connectAll()) {
@@ -241,7 +246,8 @@ int main(int argc, char* argv[])
 	EziIO_UI ioUI(ioManager);
 	//TODO UI take ioconfigjson information about pin name and show on the status table.
 
-
+	// Set the config manager to enable named pins in the UI
+	ioUI.setConfigManager(&ioconfigManager);
 
 
 // Main loop
