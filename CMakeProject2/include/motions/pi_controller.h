@@ -18,7 +18,9 @@ class PIController {
 public:
   PIController();
   ~PIController();
-
+  // Toggle verbose debug output
+  void SetDebugVerbose(bool enabled) { m_debugVerbose = enabled; }
+  bool GetDebugVerbose() const { return m_debugVerbose; }
   // Connection methods
   bool Connect(const std::string& ipAddress, int port = 50000);
   void Disconnect();
@@ -61,7 +63,12 @@ public:
   void SetWindowTitle(const std::string& title) { m_windowTitle = title; }
   // Add this to the public section of PIController class
   bool MoveToPositionAll(double x, double y, double z, double u, double v, double w, bool blocking = true);
+
+  void RenderJogDistanceControl();
 private:
+  bool m_debugVerbose = false;
+
+
   // Communication thread methods
   void StartCommunicationThread();
   void StopCommunicationThread();
@@ -107,4 +114,6 @@ private:
 
   // Added for optimization: status update interval (ms)
   const int m_statusUpdateInterval = 200;  // 5Hz updates
+
+  
 };

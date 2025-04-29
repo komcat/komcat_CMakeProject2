@@ -1,4 +1,4 @@
-// pi_controller.cpp
+﻿// pi_controller.cpp
 #include "../include/motions/pi_controller.h"
 #include "imgui.h"
 #include <iostream>
@@ -68,6 +68,8 @@ void PIController::StopCommunicationThread() {
 }
 
 
+// Add this improved version to the CommunicationThreadFunc
+// 4. Update CommunicationThreadFunc in pi_controller.cpp
 void PIController::CommunicationThreadFunc() {
 	// Reduce update rate from 10Hz to 5Hz
 	const auto updateInterval = std::chrono::milliseconds(200);  // 5Hz update rate
@@ -86,16 +88,46 @@ void PIController::CommunicationThreadFunc() {
 				m_axisPositions = positions;
 			}
 
-			// Update less frequently for non-critical status information
-			if (frameCounter % 3 == 0) {  // Update servo and motion status at ~1.7Hz instead of 5Hz
-				// Update axis motion status
-				for (const auto& axis : m_availableAxes) {
-					bool moving = IsMoving(axis);
-					std::lock_guard<std::mutex> lock(m_mutex);
-					m_axisMoving[axis] = moving;
-				}
+			// More frequent status updates - once every frame
+			// This ensures we catch short movements in jogging
+			{
+				// Instead of iterating through each axis individually, 
+				// query all axes at once for more efficiency
+				const char* allAxes = "X Y Z U V W";  // All hexapod axes
+				BOOL isMovingArray[6] = { FALSE, FALSE, FALSE, FALSE, FALSE, FALSE };
 
-				// Update servo status
+				bool success = PI_IsMoving(m_controllerId, allAxes, isMovingArray);
+
+				if (success) {
+					std::lock_guard<std::mutex> lock(m_mutex);
+
+					// Map results to individual axes
+					const std::vector<std::string> axisNames = { "X", "Y", "Z", "U", "V", "W" };
+					bool anyAxisMoving = false;
+
+					// Only output detailed status logs if verbose debugging is enabled
+					if (m_debugVerbose) {
+						std::cout << "Movement status update:" << std::endl;
+					}
+
+					for (int i = 0; i < 6; i++) {
+						m_axisMoving[axisNames[i]] = (isMovingArray[i] == TRUE);
+						if (isMovingArray[i]) anyAxisMoving = true;
+
+						if (m_debugVerbose) {
+							std::cout << "  Axis " << axisNames[i] << ": "
+								<< (isMovingArray[i] ? "MOVING" : "IDLE") << std::endl;
+						}
+					}
+
+					if (m_debugVerbose) {
+						std::cout << "System status: " << (anyAxisMoving ? "MOVING" : "IDLE") << std::endl;
+					}
+				}
+			}
+
+			// Update servo status less frequently
+			if (frameCounter % 3 == 0) {
 				for (const auto& axis : m_availableAxes) {
 					bool enabled;
 					if (IsServoEnabled(axis, enabled)) {
@@ -246,33 +278,40 @@ bool PIController::MoveToPosition(const std::string& axis, double position, bool
 // Add these improved logging sections to the MoveRelative function in pi_controller.cpp
 
 // Update MoveRelative function to use correct identifiers
+// 5. Update the MoveRelative function in pi_controller.cpp
 bool PIController::MoveRelative(const std::string& axis, double distance, bool blocking) {
 	if (!m_isConnected) {
 		m_logger->LogError("PIController: Cannot move axis - not connected");
 		return false;
 	}
 
-	m_logger->LogInfo("PIController: START Moving axis " + axis + " relative distance " + std::to_string(distance));
-	std::cout << "PIController: START Moving axis " + axis + " relative distance " + std::to_string(distance) << std::endl;
-
-	// Log controller ID and connection status
-	std::cout << "PIController: Controller ID = " << m_controllerId << ", IsConnected = " << (m_isConnected ? "true" : "false") << std::endl;
+	// Only log if verbose is enabled
+	if (m_debugVerbose) {
+		m_logger->LogInfo("PIController: START Moving axis " + axis + " relative distance " + std::to_string(distance));
+		std::cout << "PIController: START Moving axis " + axis + " relative distance " + std::to_string(distance) << std::endl;
+		std::cout << "PIController: Controller ID = " << m_controllerId << ", IsConnected = " << (m_isConnected ? "true" : "false") << std::endl;
+	}
 
 	// Use the correct axis identifier directly
-	const char* axes = axis.c_str();  // No conversion needed if already using "X", "Y", etc.
+	const char* axes = axis.c_str();
 	double distances[1] = { distance };
 
-	// Log pre-move position
-	double currentPos = 0.0;
-	if (GetPosition(axis, currentPos)) {
-		std::cout << "PIController: Pre-move position of axis " << axis << " = " << currentPos << std::endl;
-	}
-	else {
-		std::cout << "PIController: Failed to get pre-move position of axis " << axis << std::endl;
+	// Log pre-move position only if verbose debugging is enabled
+	if (m_debugVerbose) {
+		double currentPos = 0.0;
+		if (GetPosition(axis, currentPos)) {
+			std::cout << "PIController: Pre-move position of axis " << axis << " = " << currentPos << std::endl;
+		}
+		else {
+			std::cout << "PIController: Failed to get pre-move position of axis " << axis << std::endl;
+		}
 	}
 
-	// Command the relative move
-	std::cout << "PIController: Sending MVR command with axis=" << axis << ", distance=" << distance << std::endl;
+	// Command the relative move - only log if verbose is enabled
+	if (m_debugVerbose) {
+		std::cout << "PIController: Sending MVR command with axis=" << axis << ", distance=" << distance << std::endl;
+	}
+
 	bool moveResult = PI_MVR(m_controllerId, axes, distances);
 
 	if (!moveResult) {
@@ -280,38 +319,63 @@ bool PIController::MoveRelative(const std::string& axis, double distance, bool b
 		PI_qERR(m_controllerId, &error);
 		std::string errorMsg = "PIController: Failed to move axis relatively. Error code: " + std::to_string(error);
 		m_logger->LogError(errorMsg);
-		std::cout << errorMsg << std::endl;
 
-		// Add detailed error information
-		char errorText[256] = { 0 };
-		if (PI_TranslateError(error, errorText, sizeof(errorText))) {
-			std::cout << "PIController: Error translation: " << errorText << std::endl;
+		if (m_debugVerbose) {
+			std::cout << errorMsg << std::endl;
+
+			// Add detailed error information
+			char errorText[256] = { 0 };
+			if (PI_TranslateError(error, errorText, sizeof(errorText))) {
+				std::cout << "PIController: Error translation: " << errorText << std::endl;
+			}
 		}
 
 		return false;
 	}
 
-	std::cout << "PIController: MVR command sent successfully" << std::endl;
+	if (m_debugVerbose) {
+		std::cout << "PIController: MVR command sent successfully" << std::endl;
+	}
+
+	// *** KEY FIX: IMMEDIATELY UPDATE THE MOVING STATUS AFTER SENDING THE COMMAND ***
+	// This ensures that the UI reflects that the axis is moving right away
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_axisMoving[axis] = true;
+
+		if (m_debugVerbose) {
+			std::cout << "PIController: Manually set axis " << axis << " movement status to MOVING" << std::endl;
+		}
+	}
 
 	// If blocking mode, wait for motion to complete
 	if (blocking) {
-		std::cout << "PIController: Waiting for motion to complete..." << std::endl;
+		if (m_debugVerbose) {
+			std::cout << "PIController: Waiting for motion to complete..." << std::endl;
+		}
+
 		bool waitResult = WaitForMotionCompletion(axis);
-		std::cout << "PIController: Motion completion wait result: " << (waitResult ? "success" : "failed") << std::endl;
+
+		if (m_debugVerbose) {
+			std::cout << "PIController: Motion completion wait result: " << (waitResult ? "success" : "failed") << std::endl;
+		}
+
 		return waitResult;
 	}
 
-	// Get post-move position
-	if (GetPosition(axis, currentPos)) {
-		std::cout << "PIController: Post-move position of axis " << axis << " = " << currentPos << std::endl;
-	}
+	// Get post-move position if verbose debugging is enabled
+	if (m_debugVerbose) {
+		double currentPos = 0.0;
+		if (GetPosition(axis, currentPos)) {
+			std::cout << "PIController: Post-move position of axis " << axis << " = " << currentPos << std::endl;
+		}
 
-	m_logger->LogInfo("PIController: FINISHED Moving axis " + axis + " relative distance " + std::to_string(distance));
-	std::cout << "PIController: FINISHED Moving axis " + axis + " relative distance " + std::to_string(distance) << std::endl;
+		m_logger->LogInfo("PIController: FINISHED Moving axis " + axis + " relative distance " + std::to_string(distance));
+		std::cout << "PIController: FINISHED Moving axis " + axis + " relative distance " + std::to_string(distance) << std::endl;
+	}
 
 	return true;
 }
-
 
 
 bool PIController::HomeAxis(const std::string& axis) {
@@ -379,42 +443,50 @@ bool PIController::StopAllAxes() {
 }
 
 // IsMoving optimized to use less frequent direct API calls
+// Updated IsMoving method in PIController with better detection
+// 3. Updated IsMoving method for PIController implementation in pi_controller.cpp
 bool PIController::IsMoving(const std::string& axis) {
 	if (!m_isConnected) {
 		return false;
 	}
 
-	// Check if we have a recent cached value (less than 200ms old)
-	auto now = std::chrono::steady_clock::now();
-	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-		now - m_lastStatusUpdate).count();
-
-	if (elapsed < m_statusUpdateInterval) {
-		// Use cached value if it exists and is recent
-		std::lock_guard<std::mutex> lock(m_mutex);
-		auto it = m_axisMoving.find(axis);
-		if (it != m_axisMoving.end()) {
-			return it->second;
-		}
-	}
-
-	// If no recent cached value, do direct query
+	// Direct query implementation for more reliable status
 	const char* axes = axis.c_str();
-	BOOL isMoving[1] = { FALSE };
+	BOOL isMovingArray[1] = { FALSE };
 
-	bool success = PI_IsMoving(m_controllerId, axes, isMoving);
+	// Call the PI_IsMoving function - this is the key function that checks motion status
+	bool success = PI_IsMoving(m_controllerId, axes, isMovingArray);
 
 	if (success) {
-		// Update the cache
-		std::lock_guard<std::mutex> lock(m_mutex);
-		m_axisMoving[axis] = (isMoving[0] == TRUE);
-		m_lastStatusUpdate = now;
-		return (isMoving[0] == TRUE);
-	}
+		// Log the actual value returned by the PI API, but only if verbose debugging is enabled
+		if (m_debugVerbose) {
+			std::cout << "PI_IsMoving API returned for axis " << axis << ": "
+				<< (isMovingArray[0] ? "TRUE (moving)" : "FALSE (idle)") << std::endl;
+		}
 
-	// In case of query error, return safe default
-	return false;
+		// Explicitly update the cache
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			m_axisMoving[axis] = (isMovingArray[0] == TRUE);
+		}
+
+		return (isMovingArray[0] == TRUE);
+	}
+	else {
+		// If query fails, report the error, but only if verbose debugging is enabled
+		if (m_debugVerbose) {
+			int error = PI_GetError(m_controllerId);
+			std::cout << "ERROR: IsMoving query failed for axis " << axis
+				<< " with error code: " << error << std::endl;
+		}
+
+		// Keep existing status if query fails
+		std::lock_guard<std::mutex> lock(m_mutex);
+		auto it = m_axisMoving.find(axis);
+		return (it != m_axisMoving.end() && it->second);
+	}
 }
+
 
 
 // Optimize the position queries by implementing batch query
@@ -735,14 +807,99 @@ bool PIController::MoveToPositionAll(double x, double y, double z, double u, dou
 }
 
 
+void PIController::RenderJogDistanceControl()
+{
+	// Define the discrete jog distance values
+	static const std::vector<double> jogDistanceValues = {
+			0.0001, 0.0002, 0.0003, 0.0005,
+			0.001, 0.002, 0.003, 0.005,
+			0.01, 0.02, 0.03, 0.05,
+			0.1, 0.2, 0.3, 0.5,
+			1.0, 2.0, 3.0, 5.0,
+			10.0
+	};
+
+	// Find the current index
+	int currentIndex = 0;
+	for (size_t i = 0; i < jogDistanceValues.size(); i++) {
+		if (std::abs(m_jogDistance - jogDistanceValues[i]) < 0.0000001) {
+			currentIndex = static_cast<int>(i);
+			break;
+		}
+		if (i == jogDistanceValues.size() - 1) {
+			// Find the closest value
+			double minDiff = std::abs(m_jogDistance - jogDistanceValues[0]);
+			for (size_t j = 1; j < jogDistanceValues.size(); j++) {
+				double diff = std::abs(m_jogDistance - jogDistanceValues[j]);
+				if (diff < minDiff) {
+					minDiff = diff;
+					currentIndex = static_cast<int>(j);
+				}
+			}
+		}
+	}
+
+	// Create text labels for each value
+	static std::vector<std::string> jogLabels;
+	if (jogLabels.empty()) {
+		for (double val : jogDistanceValues) {
+			char buffer[64];
+			if (val < 0.001) {
+				snprintf(buffer, sizeof(buffer), "%.4f mm", val);
+			}
+			else if (val < 0.01) {
+				snprintf(buffer, sizeof(buffer), "%.3f mm", val);
+			}
+			else if (val < 0.1) {
+				snprintf(buffer, sizeof(buffer), "%.2f mm", val);
+			}
+			else {
+				snprintf(buffer, sizeof(buffer), "%.1f mm", val);
+			}
+			jogLabels.push_back(buffer);
+		}
+	}
+
+	// Display header
+	ImGui::Text("Jog Distance:");
+
+	// Create a dropdown combo box
+	if (ImGui::BeginCombo("##JogDistance", jogLabels[currentIndex].c_str())) {
+		for (int i = 0; i < static_cast<int>(jogDistanceValues.size()); i++) {
+			bool isSelected = (currentIndex == i);
+			if (ImGui::Selectable(jogLabels[i].c_str(), isSelected)) {
+				currentIndex = i;
+				m_jogDistance = jogDistanceValues[i];
+
+				if (m_debugVerbose) {
+					std::cout << "PIController: Jog distance set to " << m_jogDistance << " mm" << std::endl;
+				}
+			}
+
+			// Set the initial focus when opening the combo
+			if (isSelected) {
+				ImGui::SetItemDefaultFocus();
+			}
+		}
+		ImGui::EndCombo();
+	}
+
+	// Display current value more prominently
+	ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.8f, 1.0f), "Current: %.4f mm", m_jogDistance);
+}
+
+
 // Optimize the RenderUI method to use cached values instead of direct queries
+// Enhanced RenderUI method for PIController to display motion status clearly
+// Enhanced RenderUI method for PIController to display motion status clearly
 void PIController::RenderUI() {
 	if (!m_showWindow) {
 		return;
 	}
 
 	// Use the unique window title
-	if (!ImGui::Begin(m_windowTitle.c_str(), &m_showWindow, ImGuiWindowFlags_AlwaysAutoResize)) {
+	//ImGuiWindowFlags_AlwaysAutoResize
+	if (!ImGui::Begin(m_windowTitle.c_str(), &m_showWindow, ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
 		ImGui::End();
 		return;
 	}
@@ -768,15 +925,65 @@ void PIController::RenderUI() {
 		}
 
 		ImGui::Separator();
+		// Add debug verbose toggle
+		bool debugVerbose = m_debugVerbose;
+		if (ImGui::Checkbox("Verbose Debug", &debugVerbose)) {
+			m_debugVerbose = debugVerbose;
+			if (m_debugVerbose) {
+				std::cout << "PIController: Verbose debugging ENABLED" << std::endl;
+			}
+			else {
+				std::cout << "PIController: Verbose debugging DISABLED" << std::endl;
+			}
+		}
+		// *** ENHANCED MOTION STATUS INDICATOR (TOP) ***
+		// Get motion status of all axes
+		bool anyAxisMoving = false;
+		std::map<std::string, bool> movingCopy;
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			movingCopy = m_axisMoving;
+		}
+
+		for (const auto& [axis, moving] : movingCopy) {
+			if (moving) {
+				anyAxisMoving = true;
+				break;
+			}
+		}
+
+		// Create a visually distinct status indicator
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 6));
+		ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Use default font
+
+		ImVec4 statusColor = anyAxisMoving
+			? ImVec4(1.0f, 0.5f, 0.0f, 1.0f)  // Orange for moving
+			: ImVec4(0.0f, 0.8f, 0.0f, 1.0f); // Green for idle
+
+		ImGui::PushStyleColor(ImGuiCol_Text, statusColor);
+		ImGui::PushStyleColor(ImGuiCol_Button, anyAxisMoving
+			? ImVec4(0.8f, 0.4f, 0.0f, 0.2f)  // Light orange background when moving
+			: ImVec4(0.0f, 0.6f, 0.0f, 0.2f)); // Light green background when idle
+
+		// Create a button with the status that fills the width
+		std::string statusText = anyAxisMoving
+			? "SYSTEM STATUS: MOVING"
+			: "SYSTEM STATUS: IDLE";
+
+		ImGui::Button(statusText.c_str(), ImVec2(-1, 40));
+
+		// Pop the styles
+		ImGui::PopStyleColor(2);
+		ImGui::PopFont();
+		ImGui::PopStyleVar();
+
+		ImGui::Separator();
 
 		// Motion controls
 		ImGui::Text("Motion Controls");
 
 		// Jog distance control
-		float jogDistanceFloat = static_cast<float>(m_jogDistance);
-		if (ImGui::SliderFloat("Jog Distance (mm)", &jogDistanceFloat, 0.01f, 10.0f, "%.3f")) {
-			m_jogDistance = static_cast<double>(jogDistanceFloat);
-		}
+		RenderJogDistanceControl();
 
 		// Add a button to open the detailed panel
 		if (ImGui::Button("Open Detailed Panel")) {
@@ -785,13 +992,11 @@ void PIController::RenderUI() {
 
 		// Store axis positions in local variables to avoid locking the mutex multiple times
 		std::map<std::string, double> positionsCopy;
-		std::map<std::string, bool> movingCopy;
 		std::map<std::string, bool> servoEnabledCopy;
 
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
 			positionsCopy = m_axisPositions;
-			movingCopy = m_axisMoving;
 			servoEnabledCopy = m_axisServoEnabled;
 		}
 
@@ -815,25 +1020,34 @@ void PIController::RenderUI() {
 			}
 
 			ImGui::Separator();
+
+			// *** ENHANCED MOTION STATUS INDICATOR (IN DETAILED POPUP) ***
+			ImGui::PushStyleColor(ImGuiCol_Text, statusColor);
+			ImGui::Text("●");
+			ImGui::SameLine();
+			ImGui::TextColored(statusColor, "%s", anyAxisMoving ? "SYSTEM MOVING" : "SYSTEM IDLE");
+			ImGui::PopStyleColor();
+
+			ImGui::Separator();
 			ImGui::Text("Axis Status and Controls");
 
 			// Use the correct axis names directly
 			std::vector<std::pair<std::string, std::string>> axisLabels = {
-					{"X", "X"},
-					{"Y", "Y"},
-					{"Z", "Z"},
-					{"U", "U (Roll)"},
-					{"V", "V (Pitch)"},
-					{"W", "W (Yaw)"}
+							{"X", "X"},
+							{"Y", "Y"},
+							{"Z", "Z"},
+							{"U", "U (Roll)"},
+							{"V", "V (Pitch)"},
+							{"W", "W (Yaw)"}
 			};
 
 			// Display a table for better organization
-			if (ImGui::BeginTable("AxisControlTable", 5, ImGuiTableFlags_Borders)) {
+			if (ImGui::BeginTable("AxisControlTable", 4, ImGuiTableFlags_Borders)) { // Changed from 6 to 4 columns
 				ImGui::TableSetupColumn("Axis");
 				ImGui::TableSetupColumn("Position");
+				ImGui::TableSetupColumn("Status");  // Added status column
 				ImGui::TableSetupColumn("Jog");
-				ImGui::TableSetupColumn("Home");
-				ImGui::TableSetupColumn("Stop");
+				// Removed Home and Stop columns
 				ImGui::TableHeadersRow();
 
 				for (const auto& axisPair : axisLabels) {
@@ -857,7 +1071,20 @@ void PIController::RenderUI() {
 						ImGui::Text("N/A");
 					}
 
-					// Column 3: Jog controls
+					// Column 3: Movement status for each axis
+					ImGui::TableNextColumn();
+					auto movingIt = movingCopy.find(axis);
+					bool isAxisMoving = (movingIt != movingCopy.end()) ? movingIt->second : false;
+
+					ImVec4 axisStatusColor = isAxisMoving
+						? ImVec4(1.0f, 0.5f, 0.0f, 1.0f)  // Orange for moving
+						: ImVec4(0.0f, 0.8f, 0.0f, 1.0f); // Green for idle
+
+					ImGui::TextColored(axisStatusColor, "●");
+					ImGui::SameLine();
+					ImGui::TextColored(axisStatusColor, "%s", isAxisMoving ? "Moving" : "Idle");
+
+					// Column 4: Jog controls
 					ImGui::TableNextColumn();
 					ImVec2 buttonSize(30, 25);
 					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
@@ -874,34 +1101,12 @@ void PIController::RenderUI() {
 					}
 					ImGui::PopStyleColor();
 
-					// Column 4: Home button
-					ImGui::TableNextColumn();
-					if (ImGui::Button(("Home##" + axis).c_str(), ImVec2(60, 25))) {
-						HomeAxis(axis);
-					}
-
-					// Column 5: Stop button
-					ImGui::TableNextColumn();
-					if (ImGui::Button(("Stop##" + axis).c_str(), ImVec2(60, 25))) {
-						StopAxis(axis);
-					}
+					// Removed Home and Stop button columns
 
 					ImGui::PopID();
 				}
 				ImGui::EndTable();
 			}
-
-			// Add a motion status indicator - use cached values
-			ImGui::Separator();
-			bool anyAxisMoving = false;
-			for (const auto& [axis, moving] : movingCopy) {
-				if (moving) {
-					anyAxisMoving = true;
-					break;
-				}
-			}
-
-			ImGui::Text("Motion Status: %s", anyAxisMoving ? "Moving" : "Idle");
 
 			ImGui::Separator();
 
@@ -931,12 +1136,12 @@ void PIController::RenderUI() {
 
 		// Use the correct axis names directly
 		std::vector<std::pair<std::string, std::string>> axisLabels = {
-				{"X", "X"},
-				{"Y", "Y"},
-				{"Z", "Z"},
-				{"U", "U (Roll)"},
-				{"V", "V (Pitch)"},
-				{"W", "W (Yaw)"}
+						{"X", "X"},
+						{"Y", "Y"},
+						{"Z", "Z"},
+						{"U", "U (Roll)"},
+						{"V", "V (Pitch)"},
+						{"W", "W (Yaw)"}
 		};
 
 		// Use the correct axis names directly
@@ -946,14 +1151,30 @@ void PIController::RenderUI() {
 
 			ImGui::PushID(axis.c_str());
 
-			// Get axis position from cached values
+			// Get axis position and motion status from cached values
 			auto posIt = positionsCopy.find(axis);
 			double position = (posIt != positionsCopy.end()) ? posIt->second : 0.0;
 
+			auto movingIt = movingCopy.find(axis);
+			bool isAxisMoving = (movingIt != movingCopy.end()) ? movingIt->second : false;
+
+			// *** ENHANCED: Show status indicator for each axis ***
+			ImVec4 axisStatusColor = isAxisMoving
+				? ImVec4(1.0f, 0.5f, 0.0f, 1.0f)  // Orange for moving
+				: ImVec4(0.0f, 0.8f, 0.0f, 1.0f); // Green for idle
+
+			ImGui::TextColored(axisStatusColor, "●");
+			ImGui::SameLine();
+
 			// Display axis info with proper label
-			ImGui::Text("Axis %s: %.3f mm", label.c_str(), position);
+			ImGui::Text("Axis %s: %.3f mm %s",
+				label.c_str(),
+				position,
+				isAxisMoving ? "[MOVING]" : "[IDLE]");
 
 			// Jog controls in a single row
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 20); // Indent the controls
+
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.3f, 0.6f, 1.0f)); // Deep blue for negative direction
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.4f, 0.7f, 1.0f)); // Slightly lighter blue on hover
 			if (ImGui::Button(("-##" + axis).c_str(), buttonSize)) {
@@ -968,9 +1189,9 @@ void PIController::RenderUI() {
 			}
 			ImGui::PopStyleColor(2);
 
-			ImGui::SameLine();
+			/*ImGui::SameLine();*/
 
-			if (ImGui::Button(("Home##" + axis).c_str(), ImVec2(60, 25))) {
+			/*if (ImGui::Button(("Home##" + axis).c_str(), ImVec2(60, 25))) {
 				HomeAxis(axis);
 			}
 
@@ -978,17 +1199,17 @@ void PIController::RenderUI() {
 
 			if (ImGui::Button(("Stop##" + axis).c_str(), ImVec2(60, 25))) {
 				StopAxis(axis);
-			}
+			}*/
 
 			ImGui::PopID();
 		}
 
 		ImGui::Separator();
 
-		// Stop all axes button with dark blue theme
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.2f, 0.5f, 1.0f)); // Deep dark blue
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.3f, 0.6f, 1.0f)); // Slightly lighter blue on hover
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.0f, 0.1f, 0.4f, 1.0f)); // Darker blue when active
+		// Stop all axes button with red theme for emergency stop
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.1f, 0.1f, 1.0f)); // Red for emergency stop
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.2f, 0.2f, 1.0f)); // Lighter red on hover
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.0f, 0.0f, 1.0f)); // Darker red when active
 		if (ImGui::Button("STOP ALL AXES", ImVec2(-1, 40))) { // Full width, 40px height
 			StopAllAxes();
 		}
@@ -997,3 +1218,6 @@ void PIController::RenderUI() {
 
 	ImGui::End();
 }
+
+
+
