@@ -2,6 +2,9 @@
 #include <sstream>
 #include <chrono>
 #include <thread>
+#include <atomic>
+#include <mutex>
+#include <condition_variable>
 
 // Define the output pin masks
 const uint32_t EziIODevice::OUTPUT_PIN_MASKS_16[16] = {
@@ -42,7 +45,12 @@ EziIODevice::EziIODevice(int id, const std::string& name, const std::string& ip,
   m_ipAddress(ip),
   m_inputCount(inputCount),
   m_outputCount(outputCount),
-  m_isConnected(false)
+  m_isConnected(false),
+  m_lastInputs(0),
+  m_lastLatch(0),
+  m_lastOutputs(0),
+  m_lastOutputStatus(0),
+  m_statusUpdated(false)
 {
   // Parse IP address string into bytes
   std::istringstream iss(ip);
@@ -138,12 +146,28 @@ bool EziIODevice::readInputs(uint32_t& inputs, uint32_t& latch) {
     // Copy the values back to the uint32_t references
     inputs = static_cast<uint32_t>(temp_inputs);
     latch = static_cast<uint32_t>(temp_latch);
+
+    // Update last known values
+    {
+      std::lock_guard<std::mutex> lock(m_statusMutex);
+      m_lastInputs = inputs;
+      m_lastLatch = latch;
+      m_statusUpdated = true;
+    }
+
     return true;
   }
   else {
     std::cerr << "Failed to read inputs from device " << m_name << ", error code: " << result << std::endl;
     return false;
   }
+}
+
+bool EziIODevice::getLastInputStatus(uint32_t& inputs, uint32_t& latch) {
+  std::lock_guard<std::mutex> lock(m_statusMutex);
+  inputs = m_lastInputs;
+  latch = m_lastLatch;
+  return m_statusUpdated;
 }
 
 bool EziIODevice::clearLatch(uint32_t latchMask) {
@@ -180,12 +204,27 @@ bool EziIODevice::getOutputs(uint32_t& outputs, uint32_t& status) {
     // Copy back to the original parameters
     outputs = static_cast<uint32_t>(temp_outputs);
     status = static_cast<uint32_t>(temp_status);
+
+    // Update last known values
+    {
+      std::lock_guard<std::mutex> lock(m_statusMutex);
+      m_lastOutputs = outputs;
+      m_lastOutputStatus = status;
+    }
+
     return true;
   }
   else {
     std::cerr << "Failed to get outputs from device " << m_name << ", error code: " << result << std::endl;
     return false;
   }
+}
+
+bool EziIODevice::getLastOutputStatus(uint32_t& outputs, uint32_t& status) {
+  std::lock_guard<std::mutex> lock(m_statusMutex);
+  outputs = m_lastOutputs;
+  status = m_lastOutputStatus;
+  return true;
 }
 
 bool EziIODevice::setOutputs(uint32_t setMask, uint32_t clearMask) {
@@ -206,12 +245,9 @@ bool EziIODevice::setOutputs(uint32_t setMask, uint32_t clearMask) {
     // Add a small delay to ensure the operation completes
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    // Verify the output change
-    unsigned long outputs = 0, status = 0;
-    if (PE::FAS_GetOutput(m_deviceId, &outputs, &status) == FMM_OK) {
-      std::cout << "Output verification: Current outputs = 0x" << std::hex
-        << outputs << std::dec << std::endl;
-    }
+    // Update the output status after setting
+    uint32_t outputs = 0, status = 0;
+    getOutputs(outputs, status);
 
     return true;
   }
@@ -244,7 +280,12 @@ bool EziIODevice::setOutput(int outputPin, bool state) {
 }
 
 // EziIOManager Implementation
-EziIOManager::EziIOManager() : m_initialized(false) {
+EziIOManager::EziIOManager()
+  : m_initialized(false),
+  m_pollingThread(nullptr),
+  m_stopPolling(false),
+  m_pollingInterval(100) // Default 100ms polling interval
+{
 }
 
 EziIOManager::~EziIOManager() {
@@ -267,6 +308,9 @@ void EziIOManager::shutdown() {
   if (!m_initialized) {
     return;
   }
+
+  // Stop the polling thread
+  stopPolling();
 
   disconnectAll();
   m_devices.clear();
@@ -349,6 +393,16 @@ bool EziIOManager::readInputs(int deviceId, uint32_t& inputs, uint32_t& latch) {
   return device->readInputs(inputs, latch);
 }
 
+bool EziIOManager::getLastInputStatus(int deviceId, uint32_t& inputs, uint32_t& latch) {
+  auto device = getDevice(deviceId);
+  if (!device) {
+    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
+    return false;
+  }
+
+  return device->getLastInputStatus(inputs, latch);
+}
+
 bool EziIOManager::getOutputs(int deviceId, uint32_t& outputs, uint32_t& status) {
   auto device = getDevice(deviceId);
   if (!device) {
@@ -357,6 +411,16 @@ bool EziIOManager::getOutputs(int deviceId, uint32_t& outputs, uint32_t& status)
   }
 
   return device->getOutputs(outputs, status);
+}
+
+bool EziIOManager::getLastOutputStatus(int deviceId, uint32_t& outputs, uint32_t& status) {
+  auto device = getDevice(deviceId);
+  if (!device) {
+    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
+    return false;
+  }
+
+  return device->getLastOutputStatus(outputs, status);
 }
 
 bool EziIOManager::setOutputs(int deviceId, uint32_t setMask, uint32_t clearMask) {
@@ -395,4 +459,71 @@ EziIODevice* EziIOManager::getDeviceByName(const std::string& name) {
   }
 
   return it->second.get();
+}
+
+// Thread functions for polling
+void EziIOManager::startPolling(unsigned int intervalMs) {
+  // Don't start if already running
+  if (m_pollingThread) {
+    return;
+  }
+
+  // Set the polling interval
+  m_pollingInterval = intervalMs;
+
+  // Reset the stop flag
+  m_stopPolling = false;
+
+  // Start the polling thread
+  m_pollingThread = new std::thread(&EziIOManager::pollingThreadFunc, this);
+}
+
+void EziIOManager::stopPolling() {
+  // Signal the thread to stop
+  m_stopPolling = true;
+
+  // Wait for the thread to exit
+  if (m_pollingThread) {
+    if (m_pollingThread->joinable()) {
+      m_pollingThread->join();
+    }
+    delete m_pollingThread;
+    m_pollingThread = nullptr;
+  }
+}
+
+void EziIOManager::setPollingInterval(unsigned int intervalMs) {
+  m_pollingInterval = intervalMs;
+}
+
+void EziIOManager::pollingThreadFunc() {
+  std::cout << "Polling thread started with interval " << m_pollingInterval << "ms" << std::endl;
+
+  while (!m_stopPolling) {
+    // Poll status of all connected devices
+    for (auto& device : m_devices) {
+      if (device->isConnected()) {
+        // Poll for inputs and outputs
+        uint32_t inputs = 0, latch = 0;
+        uint32_t outputs = 0, status = 0;
+
+        // Read inputs (this will update the device's internal status)
+        device->readInputs(inputs, latch);
+
+        // Read outputs (this will update the device's internal status)
+        device->getOutputs(outputs, status);
+
+        // Check if any inputs changed - you could implement callbacks here in the future
+      }
+    }
+
+    // Sleep for the specified interval
+    std::this_thread::sleep_for(std::chrono::milliseconds(m_pollingInterval));
+  }
+
+  std::cout << "Polling thread stopped" << std::endl;
+}
+
+bool EziIOManager::isPolling() const {
+  return m_pollingThread != nullptr && !m_stopPolling;
 }

@@ -27,6 +27,7 @@
 #include <SDL_opengl.h>
 
 #include "include/eziio/EziIO_Manager.h"
+#include "include/eziio/EziIO_UI.h"
 
 int main(int argc, char* argv[])
 {
@@ -210,8 +211,9 @@ int main(int argc, char* argv[])
 
 
 	//initialize EZIIO
-
-	// Create the EziIO manager
+	//TODOload jsonconfig.
+	//TODO ioconfigjson...
+// Create the EziIO manager
 	EziIOManager ioManager;
 
 	// Initialize the manager
@@ -220,62 +222,24 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	// Add your two IO modules
+	// Add your IO modules
+	//TODO use device information from ioconfigjson
+	
 	ioManager.addDevice(0, "IOBottom", "192.168.0.3", 0, 16);
 	ioManager.addDevice(1, "IOTop", "192.168.0.5", 8, 8);
 
 	// Connect to all devices
 	if (!ioManager.connectAll()) {
 		std::cerr << "Failed to connect to all devices" << std::endl;
-		// Continue anyway to demonstrate other functions
+		// Continue anyway
 	}
+	// Start the polling thread - 100ms refresh rate
+	ioManager.startPolling(100);
+	std::cout << "Status polling started in background thread" << std::endl;
 
-	// --- Read inputs from the top module ---
-    uint32_t inputs = 0, latch = 0;
-    if (ioManager.readInputs(1, inputs, latch)) {
-        std::cout << "\nTop module inputs: 0x" << std::hex << inputs << std::dec << std::endl;
-        
-        // Print each input status
-        for (int i = 0; i < 8; i++) {
-            bool inputState = (inputs & (1 << i)) != 0;
-            std::cout << "Input " << i << ": " << (inputState ? "ON" : "OFF") << std::endl;
-        }
-    }
-    
-
-    
-    // Wait for a moment
-    std::cout << "Waiting for 1 second..." << std::endl;
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    
-    // Get current output status
-    uint32_t outputs = 0, status = 0;
-    if (ioManager.getOutputs(0, outputs, status)) {
-        std::cout << "Bottom module outputs: 0x" << std::hex << outputs << std::dec << std::endl;
-        
-        // Check each output pin with correct masks
-        EziIODevice* device = ioManager.getDevice(0);
-        for (int i = 0; i < 16; i++) {
-            // Using the hex output value directly for demonstration
-            // In a real application, you should use a helper method to check against proper masks
-            std::cout << "Output " << i << " status being checked..." << std::endl;
-            
-            // Set another pin to demonstrate
-            if (i == 3) {
-                if (ioManager.setOutput(0, i, true)) {
-                    std::cout << "Set output " << i << " to ON" << std::endl;
-                }
-                
-                // Update output status
-                ioManager.getOutputs(0, outputs, status);
-                std::cout << "Updated outputs: 0x" << std::hex << outputs << std::dec << std::endl;
-            }
-        }
-    }
-    
-
-
-
+	// Create the EziIO UI
+	EziIO_UI ioUI(ioManager);
+	//TODO UI take ioconfigjson information about pin name and show on the status table.
 
 
 
@@ -441,6 +405,10 @@ int main(int argc, char* argv[])
 
 
 
+		// Render the EziIO UI
+		ioUI.RenderUI();
+
+
 		// Rendering
 		ImGui::Render();
 		glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
@@ -453,7 +421,22 @@ int main(int argc, char* argv[])
 	// When exit is triggered:
 	logger->Log("Application shutting down");
 
+	// Stop the polling thread
+	ioManager.stopPolling();
 
+	// Disconnect from all devices
+	ioManager.disconnectAll();
+	pylonCameraTest.GetCamera().StopGrabbing();
+	pylonCameraTest.GetCamera().Disconnect();
+	if (pylonCameraTest.GetCamera().IsCameraDeviceRemoved())
+	{
+		std::cout << "Camera device removed" << std::endl;
+	}
+	else {
+		std::cout << "Camera device not removed" << std::endl;
+	}
+		
+	
 
 	// Cleanup - keep outside try-catch to ensure it always happens
 	ImGui_ImplOpenGL3_Shutdown();
@@ -467,3 +450,5 @@ int main(int argc, char* argv[])
 
 	return 0;
 }
+
+
