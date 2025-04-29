@@ -24,7 +24,11 @@ public:
 
   // Set callback for output pin change events requested through UI
   void SetOutputChangeCallback(std::function<void(const std::string&, int, bool)> callback);
+  // Check if the window is currently visible
+  bool IsVisible() const { return m_showWindow; }
 
+  // Toggle window visibility
+  void ToggleWindow() { m_showWindow = !m_showWindow; }
 private:
   // Reference to the EziIO manager
   EziIOManager& m_ioManager;

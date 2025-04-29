@@ -48,7 +48,10 @@ int main(int argc, char* argv[])
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
-	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+	// OR for borderless fullscreen at desktop resolution (often preferred):
+	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
+		SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_FULLSCREEN_DESKTOP);
+
 	SDL_Window* window = SDL_CreateWindow("Random Number Generator", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600, window_flags);
 	if (window == nullptr)
 	{
@@ -116,10 +119,7 @@ int main(int argc, char* argv[])
 	GraphVisualizer graphVisualizer(configManager);
 	logger->LogInfo("GraphVisualizer initialized");
 
-	// Update toolbar initialization to include the graph visualizer
-	// Replace your existing toolbar initialization with:
-	Toolbar toolbar(configEditor, graphVisualizer);
-	logger->LogInfo("Toolbar initialized with GraphVisualizer support");
+
 
 
 	//create PIController
@@ -248,6 +248,16 @@ int main(int argc, char* argv[])
 
 	// Set the config manager to enable named pins in the UI
 	ioUI.setConfigManager(&ioconfigManager);
+
+
+
+
+
+
+	// Update toolbar initialization to include the graph visualizer
+// Replace your existing toolbar initialization with:
+	Toolbar toolbar(configEditor, graphVisualizer, ioUI);
+	logger->LogInfo("Toolbar initialized with GraphVisualizer support");
 
 
 // Main loop
