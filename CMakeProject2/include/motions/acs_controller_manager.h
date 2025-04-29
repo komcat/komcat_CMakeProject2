@@ -37,4 +37,10 @@ private:
   MotionConfigManager& m_configManager;
   std::map<std::string, std::unique_ptr<ACSController>> m_controllers;
   Logger* m_logger;
+
+  // Helper method to execute position movement without blocking UI
+  bool ExecutePositionMove(ACSController* controller,
+    const std::string& deviceName,
+    const std::string& positionName,
+    const PositionStruct& position);
 };

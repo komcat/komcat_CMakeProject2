@@ -192,6 +192,9 @@ void PIControllerManager::RenderUI() {
     DisconnectAll();
   }
 
+
+
+
   ImGui::Separator();
 
   // List all controllers with their connection status
@@ -214,30 +217,7 @@ void PIControllerManager::RenderUI() {
       controller->SetWindowVisible(true);
     }
 
-    // Add buttons for common positions
-    if (isConnected) {
-      ImGui::SameLine();
-      if (ImGui::Button("Home")) {
-        // Move to the home position
-        MoveToNamedPosition(name, "home", true);
-      }
 
-      // Get all available positions for this device
-      auto positionsOpt = m_configManager.GetDevicePositions(name);
-      if (positionsOpt.has_value()) {
-        const auto& positions = positionsOpt.value().get();
-
-        // Skip the home position as we've already added it
-        for (const auto& [posName, pos] : positions) {
-          if (posName != "home") {
-            ImGui::SameLine();
-            if (ImGui::Button(posName.c_str())) {
-              MoveToNamedPosition(name, posName, true);
-            }
-          }
-        }
-      }
-    }
 
     ImGui::PopID();
     ImGui::Separator();

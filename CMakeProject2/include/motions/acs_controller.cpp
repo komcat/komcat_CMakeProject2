@@ -324,6 +324,11 @@ bool ACSController::MoveToPosition(const std::string& axis, double position, boo
     return false;
   }
 
+  // Start the motion
+  if (!StartMotion(axis)) {
+    return false;
+  }
+
   // If blocking mode, wait for motion to complete
   if (blocking) {
     return WaitForMotionCompletion(axis);
@@ -331,6 +336,8 @@ bool ACSController::MoveToPosition(const std::string& axis, double position, boo
 
   return true;
 }
+
+
 
 bool ACSController::MoveRelative(const std::string& axis, double distance, bool blocking) {
   if (!m_isConnected) {
@@ -703,6 +710,30 @@ bool ACSController::MoveToNamedPosition(const std::string& deviceName, const std
   return true;
 }
 
+bool ACSController::StartMotion(const std::string& axis) {
+  if (!m_isConnected) {
+    m_logger->LogError("ACSController: Cannot start motion - not connected");
+    return false;
+  }
+
+  int axisIndex = GetAxisIndex(axis);
+  if (axisIndex < 0) {
+    m_logger->LogError("ACSController: Invalid axis for starting motion: " + axis);
+    return false;
+  }
+
+  m_logger->LogInfo("ACSController: Starting motion on axis " + axis);
+
+  // Call acsc_Go to start the motion
+  if (!acsc_Go(m_controllerId, axisIndex, NULL)) {
+    int error = acsc_GetLastError();
+    m_logger->LogError("ACSController: Failed to start motion on axis " + axis + ". Error code: " + std::to_string(error));
+    return false;
+  }
+
+  return true;
+}
+
 void ACSController::RenderUI() {
   // Skip rendering if window is hidden
   if (!m_showWindow) {
@@ -748,6 +779,31 @@ void ACSController::RenderUI() {
     float jogDistanceFloat = static_cast<float>(m_jogDistance);
     if (ImGui::SliderFloat("Jog Distance (mm)", &jogDistanceFloat, 0.01f, 10.0f, "%.3f")) {
       m_jogDistance = static_cast<double>(jogDistanceFloat);
+    }
+
+    // Add velocity control slider (integers from 1-100)
+    static int velocityValue = 10; // Default velocity value
+    ImGui::SliderInt("Velocity", &velocityValue, 1, 100);
+
+    // Add velocity axis selector and set button
+    static int selectedAxisIndex = 0;
+    if (ImGui::BeginCombo("Velocity Axis", m_availableAxes[selectedAxisIndex].c_str())) {
+      for (int i = 0; i < m_availableAxes.size(); i++) {
+        bool isSelected = (selectedAxisIndex == i);
+        if (ImGui::Selectable(m_availableAxes[i].c_str(), isSelected)) {
+          selectedAxisIndex = i;
+        }
+        if (isSelected) {
+          ImGui::SetItemDefaultFocus();
+        }
+      }
+      ImGui::EndCombo();
+    }
+
+    // Set velocity button
+    if (ImGui::Button("Set Velocity")) {
+      // Apply the velocity to the selected axis
+      SetVelocity(m_availableAxes[selectedAxisIndex], static_cast<double>(velocityValue));
     }
 
     // Create static variables to persist previous values

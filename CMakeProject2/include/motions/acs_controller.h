@@ -60,6 +60,10 @@ public:
   void SetWindowVisible(bool visible) { m_showWindow = visible; }
   void SetWindowTitle(const std::string& title) { m_windowTitle = title; }
 
+  // Add this method to expose available axes
+  const std::vector<std::string>& GetAvailableAxes() const { return m_availableAxes; }
+
+
 private:
   // Communication thread methods
   void StartCommunicationThread();
@@ -69,7 +73,8 @@ private:
   void ProcessCommandQueue();
   void UpdatePositions();
   void UpdateMotorStatus();
-
+  // Add to public methods section in acs_controller.h
+  bool StartMotion(const std::string& axis);
   // Command queue structure
   struct MotorCommand {
     std::string axis;

@@ -101,6 +101,7 @@ bool ACSControllerManager::HasController(const std::string& deviceName) const {
 }
 
 bool ACSControllerManager::MoveToNamedPosition(const std::string& deviceName, const std::string& positionName, bool blocking) {
+  // Get the controller for this device
   auto controller = GetController(deviceName);
   if (!controller) {
     m_logger->LogError("ACSControllerManager: No controller found for device " + deviceName);
@@ -123,51 +124,58 @@ bool ACSControllerManager::MoveToNamedPosition(const std::string& deviceName, co
 
   m_logger->LogInfo("ACSControllerManager: Moving " + deviceName + " to position " + positionName);
 
-  // Move each axis to its target position
+  // If blocking is requested but we're on the main thread, create a new thread
+  if (blocking && ImGui::GetCurrentContext() != nullptr) {
+    // We're likely on the UI thread, so let's run this asynchronously
+    std::thread moveThread([this, deviceName, positionName, controller, position]() {
+      this->ExecutePositionMove(controller, deviceName, positionName, position);
+    });
+    moveThread.detach(); // Detach the thread to let it run independently
+    return true; // Return immediately to prevent UI freezing
+  }
+  else {
+    // Execute directly if not blocking or not on UI thread
+    return ExecutePositionMove(controller, deviceName, positionName, position);
+  }
+}
+
+// Add this helper method to handle the actual movement
+bool ACSControllerManager::ExecutePositionMove(ACSController* controller,
+  const std::string& deviceName,
+  const std::string& positionName,
+  const PositionStruct& position) {
   bool success = true;
+  const auto& availableAxes = controller->GetAvailableAxes();
 
-  // Move X axis
-  if (!controller->MoveToPosition("X", position.x, false)) {
-    m_logger->LogError("ACSControllerManager: Failed to move X axis");
-    success = false;
+  // Move X axis if available
+  if (std::find(availableAxes.begin(), availableAxes.end(), "X") != availableAxes.end()) {
+    if (!controller->MoveToPosition("X", position.x, false)) {
+      m_logger->LogError("ACSControllerManager: Failed to move X axis");
+      success = false;
+    }
   }
 
-  // Move Y axis
-  if (!controller->MoveToPosition("Y", position.y, false)) {
-    m_logger->LogError("ACSControllerManager: Failed to move Y axis");
-    success = false;
+  // Move Y axis if available
+  if (std::find(availableAxes.begin(), availableAxes.end(), "Y") != availableAxes.end()) {
+    if (!controller->MoveToPosition("Y", position.y, false)) {
+      m_logger->LogError("ACSControllerManager: Failed to move Y axis");
+      success = false;
+    }
   }
 
-  // Move Z axis
-  if (!controller->MoveToPosition("Z", position.z, false)) {
-    m_logger->LogError("ACSControllerManager: Failed to move Z axis");
-    success = false;
+  // Move Z axis if available
+  if (std::find(availableAxes.begin(), availableAxes.end(), "Z") != availableAxes.end()) {
+    if (!controller->MoveToPosition("Z", position.z, false)) {
+      m_logger->LogError("ACSControllerManager: Failed to move Z axis");
+      success = false;
+    }
   }
 
-  // Move U axis (roll)
-  if (!controller->MoveToPosition("U", position.u, false)) {
-    m_logger->LogError("ACSControllerManager: Failed to move U axis");
-    success = false;
-  }
-
-  // Move V axis (pitch)
-  if (!controller->MoveToPosition("V", position.v, false)) {
-    m_logger->LogError("ACSControllerManager: Failed to move V axis");
-    success = false;
-  }
-
-  // Move W axis (yaw)
-  if (!controller->MoveToPosition("W", position.w, false)) {
-    m_logger->LogError("ACSControllerManager: Failed to move W axis");
-    success = false;
-  }
-
-  // If blocking mode requested, wait for all axes to complete motion
-  if (blocking && success) {
-    // Wait for each axis to complete movement
-    for (const auto& axis : { "X", "Y", "Z", "U", "V", "W" }) {
+  // Wait for each axis to complete movement
+  if (success) {
+    for (const auto& axis : availableAxes) {
       if (!controller->WaitForMotionCompletion(axis)) {
-        m_logger->LogError("ACSControllerManager: Timeout waiting for axis " + std::string(axis) + " to complete motion");
+        m_logger->LogError("ACSControllerManager: Timeout waiting for axis " + axis + " to complete motion");
         success = false;
       }
     }
@@ -194,7 +202,78 @@ void ACSControllerManager::RenderUI() {
 
   ImGui::Separator();
 
-  // List all controllers with their connection status
+  // Add a dropdown for controller selection
+  static std::string selectedController;
+  if (selectedController.empty() && !m_controllers.empty()) {
+    selectedController = m_controllers.begin()->first; // Default to first controller
+  }
+
+  if (ImGui::BeginCombo("Select Controller", selectedController.c_str())) {
+    for (const auto& [name, controller] : m_controllers) {
+      bool isSelected = (selectedController == name);
+      if (ImGui::Selectable(name.c_str(), isSelected)) {
+        selectedController = name;
+      }
+      if (isSelected) {
+        ImGui::SetItemDefaultFocus();
+      }
+    }
+    ImGui::EndCombo();
+  }
+
+  // Get the selected controller
+  ACSController* selectedControllerPtr = nullptr;
+  if (!selectedController.empty()) {
+    selectedControllerPtr = GetController(selectedController);
+  }
+
+  ImGui::Separator();
+
+  // Display controls for the selected controller
+  if (selectedControllerPtr) {
+    auto deviceOpt = m_configManager.GetDevice(selectedController);
+    bool isEnabled = deviceOpt.has_value() && deviceOpt.value().get().IsEnabled;
+    bool isConnected = selectedControllerPtr->IsConnected();
+
+    // Display device name and status
+    ImGui::Text("Selected: %s %s %s",
+      selectedController.c_str(),
+      isEnabled ? "(Enabled)" : "(Disabled)",
+      isConnected ? "[Connected]" : "[Disconnected]");
+
+    // Actions for the selected controller
+    if (ImGui::Button("Open Control Panel")) {
+      selectedControllerPtr->SetWindowVisible(true);
+    }
+
+    // Add buttons for common positions if connected
+    if (isConnected) {
+      ImGui::SameLine();
+      if (ImGui::Button("Home")) {
+        MoveToNamedPosition(selectedController, "home", true);
+      }
+
+      // Get all available positions for this device
+      auto positionsOpt = m_configManager.GetDevicePositions(selectedController);
+      if (positionsOpt.has_value()) {
+        const auto& positions = positionsOpt.value().get();
+        for (const auto& position_pair : positions) {
+          const std::string& posName = position_pair.first;
+          if (posName != "home") {
+            ImGui::SameLine();
+            if (ImGui::Button(posName.c_str())) {
+              MoveToNamedPosition(selectedController, posName, true);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  ImGui::Separator();
+
+  // Still list all controllers for reference
+  ImGui::Text("All Controllers:");
   for (const auto& [name, controller] : m_controllers) {
     ImGui::PushID(name.c_str());
 
@@ -203,45 +282,13 @@ void ACSControllerManager::RenderUI() {
     bool isConnected = controller->IsConnected();
 
     // Display device name and status
+    ImGui::Bullet();
     ImGui::Text("%s: %s %s",
       name.c_str(),
       isEnabled ? "(Enabled)" : "(Disabled)",
       isConnected ? "[Connected]" : "[Disconnected]");
 
-    // Allow opening individual controller windows
-    if (ImGui::Button("Open Control Panel")) {
-      // Set the showWindow flag to true explicitly
-      controller->SetWindowVisible(true);
-    }
-
-    // Add buttons for common positions
-    if (isConnected) {
-      ImGui::SameLine();
-      if (ImGui::Button("Home")) {
-        // Move to the home position
-        MoveToNamedPosition(name, "home", true);
-      }
-// Get all available positions for this device
-      auto positionsOpt = m_configManager.GetDevicePositions(name);
-      if (positionsOpt.has_value()) {
-        const auto& positions = positionsOpt.value().get();
-        for (const auto& position_pair : positions) {
-          const std::string& posName = position_pair.first;
-          const PositionStruct& pos = position_pair.second;
-
-          if (posName != "home") {
-            ImGui::SameLine();
-            if (ImGui::Button(posName.c_str())) {
-              MoveToNamedPosition(name, posName, true);
-            }
-          }
-        }
-      }
-      
-    }
-
     ImGui::PopID();
-    ImGui::Separator();
   }
 
   ImGui::End();
