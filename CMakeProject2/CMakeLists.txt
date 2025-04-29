@@ -20,6 +20,7 @@ set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/imgui")
 # Define path to ACSC files
 set(ACSC_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 
+
 # Add PI GCS2 paths
 set(PI_ROOT "C:/Program Files (x86)/Physik Instrumente (PI)/Software Suite/Development/C++/API")
 set(PI_INCLUDE_DIR "${PI_ROOT}")
@@ -33,6 +34,12 @@ set(PYLON_LIB_DIR "${PYLON_ROOT}/Development/lib/x64")
 # Set SDL2 paths directly - using simple direct references
 set(SDL2_INCLUDE_DIR "${SDL2_DIR}/include")
 
+#set eziio
+set(EZIIO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/eziio")
+set(EZIIO_DIR_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/external/eziio/include_x86_CPP")
+set(EZIIO_DIR_INCLUDE_x64 "${CMAKE_CURRENT_SOURCE_DIR}/external/eziio/include_x64_CPP")
+
+
 # Handle different platforms for library files
 if(WIN32)
     # For Windows, directly set library paths
@@ -44,6 +51,7 @@ if(WIN32)
         set(ACSC_LIBRARY "${ACSC_DIR}/ACSCL_x64.LIB")
         # Set PI library for 64-bit
         set(PI_LIBRARY "${PI_LIB_DIR}/PI_GCS2_DLL_x64.lib")
+        set(EZIIO_LIBRARY "${EZIIO_DIR_INCLUDE_x64}/EziMOTIONPlusE.lib")
     else()
         # 32-bit build
         set(SDL2_LIBRARY "${SDL2_DIR}/lib/x86/SDL2.lib")
@@ -52,6 +60,7 @@ if(WIN32)
         set(ACSC_LIBRARY "${ACSC_DIR}/ACSCL_x86.LIB")
         # Set PI library for 32-bit
         set(PI_LIBRARY "${PI_LIB_DIR}/PI_GCS2_DLL.lib")
+        set(EZIIO_LIBRARY "${EZIIO_DIR_INCLUDE}/EziMOTIONPlusE.lib")
     endif()
     
     # For Windows, specify the Pylon library paths manually
@@ -149,7 +158,7 @@ add_executable(CMakeProject2
     "include/motions/acs_controller.cpp" 
     
     
- "include/motions/acs_controller_manager.h" "include/motions/acs_controller_manager.cpp")
+ "include/motions/acs_controller_manager.h" "include/motions/acs_controller_manager.cpp" "include/eziio/EziIO_Manager.h" "include/eziio/EziIO_Manager.cpp")
 
 # Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
 target_include_directories(CMakeProject2 PRIVATE
@@ -158,6 +167,7 @@ target_include_directories(CMakeProject2 PRIVATE
     ${ACSC_DIR}  # Added to include the directory with ACSC.h
     ${PYLON_INCLUDE_DIR}  # Added Pylon include directory
     ${PI_INCLUDE_DIR}  # Added PI GCS2 include directory
+    ${EZIIO_DIR_INCLUDE}
 )
 
 # Link libraries - directly reference libraries
@@ -168,6 +178,7 @@ target_link_libraries(CMakeProject2 PRIVATE
     ${ACSC_LIBRARY}  # ACSC library
     ${PYLON_LIBRARIES}  # Added Pylon libraries
     ${PI_LIBRARY}  # Added PI GCS2 library
+    ${EZIIO_LIBRARY}  # Added EziMOTIONPlusE library
     nlohmann_json::nlohmann_json
 )
 
@@ -203,6 +214,24 @@ if(WIN32)
             $<TARGET_FILE_DIR:CMakeProject2>
         )
     endif()
+
+    # Copy ezimotionipluse.dll to the output directory
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        # 64-bit build
+        add_custom_command(TARGET CMakeProject2 POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${EZIIO_DIR_INCLUDE_x64}/EziMOTIONPlusE.dll"
+            $<TARGET_FILE_DIR:CMakeProject2>
+        )
+    else()
+        # 32-bit build
+        add_custom_command(TARGET CMakeProject2 POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${EZIIO_DIR_INCLUDE}/EziMOTIONPlusE.dll"
+            $<TARGET_FILE_DIR:CMakeProject2>
+        )
+    endif()
+
 endif()
 
 # For Windows, set subsystem

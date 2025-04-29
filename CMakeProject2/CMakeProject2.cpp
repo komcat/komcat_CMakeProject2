@@ -26,7 +26,7 @@
 #include <SDL.h>
 #include <SDL_opengl.h>
 
-
+#include "include/eziio/EziIO_Manager.h"
 
 int main(int argc, char* argv[])
 {
@@ -207,6 +207,78 @@ int main(int argc, char* argv[])
 	// Create our PylonCameraTest instance
 	PylonCameraTest pylonCameraTest;
 	// In CMakeProject2.cpp, add the following in the main loop
+
+
+	//initialize EZIIO
+
+	// Create the EziIO manager
+	EziIOManager ioManager;
+
+	// Initialize the manager
+	if (!ioManager.initialize()) {
+		std::cerr << "Failed to initialize EziIO manager" << std::endl;
+		return 1;
+	}
+
+	// Add your two IO modules
+	ioManager.addDevice(0, "IOBottom", "192.168.0.3", 0, 16);
+	ioManager.addDevice(1, "IOTop", "192.168.0.5", 8, 8);
+
+	// Connect to all devices
+	if (!ioManager.connectAll()) {
+		std::cerr << "Failed to connect to all devices" << std::endl;
+		// Continue anyway to demonstrate other functions
+	}
+
+	// --- Read inputs from the top module ---
+    uint32_t inputs = 0, latch = 0;
+    if (ioManager.readInputs(1, inputs, latch)) {
+        std::cout << "\nTop module inputs: 0x" << std::hex << inputs << std::dec << std::endl;
+        
+        // Print each input status
+        for (int i = 0; i < 8; i++) {
+            bool inputState = (inputs & (1 << i)) != 0;
+            std::cout << "Input " << i << ": " << (inputState ? "ON" : "OFF") << std::endl;
+        }
+    }
+    
+
+    
+    // Wait for a moment
+    std::cout << "Waiting for 1 second..." << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    
+    // Get current output status
+    uint32_t outputs = 0, status = 0;
+    if (ioManager.getOutputs(0, outputs, status)) {
+        std::cout << "Bottom module outputs: 0x" << std::hex << outputs << std::dec << std::endl;
+        
+        // Check each output pin with correct masks
+        EziIODevice* device = ioManager.getDevice(0);
+        for (int i = 0; i < 16; i++) {
+            // Using the hex output value directly for demonstration
+            // In a real application, you should use a helper method to check against proper masks
+            std::cout << "Output " << i << " status being checked..." << std::endl;
+            
+            // Set another pin to demonstrate
+            if (i == 3) {
+                if (ioManager.setOutput(0, i, true)) {
+                    std::cout << "Set output " << i << " to ON" << std::endl;
+                }
+                
+                // Update output status
+                ioManager.getOutputs(0, outputs, status);
+                std::cout << "Updated outputs: 0x" << std::hex << outputs << std::dec << std::endl;
+            }
+        }
+    }
+    
+
+
+
+
+
+
 
 // Main loop
 	bool done = false;

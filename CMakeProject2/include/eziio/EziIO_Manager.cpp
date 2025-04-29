@@ -1,0 +1,398 @@
+#include "EziIO_Manager.h"
+#include <sstream>
+#include <chrono>
+#include <thread>
+
+// Define the output pin masks
+const uint32_t EziIODevice::OUTPUT_PIN_MASKS_16[16] = {
+    0x10000,    // Pin 0
+    0x20000,    // Pin 1
+    0x40000,    // Pin 2
+    0x80000,    // Pin 3
+    0x100000,   // Pin 4
+    0x200000,   // Pin 5
+    0x400000,   // Pin 6
+    0x800000,   // Pin 7
+    0x1000000,  // Pin 8
+    0x2000000,  // Pin 9
+    0x4000000,  // Pin 10
+    0x8000000,  // Pin 11
+    0x10000000, // Pin 12
+    0x20000000, // Pin 13
+    0x40000000, // Pin 14
+    0x80000000  // Pin 15
+};
+
+const uint32_t EziIODevice::OUTPUT_PIN_MASKS_8[8] = {
+    0x100,     // Pin 0
+    0x200,     // Pin 1
+    0x400,     // Pin 2
+    0x800,     // Pin 3
+    0x1000,    // Pin 4
+    0x2000,    // Pin 5
+    0x4000,    // Pin 6
+    0x8000     // Pin 7
+};
+
+// EziIODevice Implementation
+EziIODevice::EziIODevice(int id, const std::string& name, const std::string& ip,
+  int inputCount, int outputCount)
+  : m_deviceId(id),
+  m_name(name),
+  m_ipAddress(ip),
+  m_inputCount(inputCount),
+  m_outputCount(outputCount),
+  m_isConnected(false)
+{
+  // Parse IP address string into bytes
+  std::istringstream iss(ip);
+  std::string token;
+  int i = 0;
+  while (std::getline(iss, token, '.') && i < 4) {
+    m_ipBytes[i++] = static_cast<uint8_t>(std::stoi(token));
+  }
+
+  // Select the appropriate mask array based on output count
+  m_currentOutputMasks = (outputCount <= 8) ? OUTPUT_PIN_MASKS_8 : OUTPUT_PIN_MASKS_16;
+}
+
+EziIODevice::~EziIODevice() {
+  if (m_isConnected) {
+    disconnect();
+  }
+}
+
+uint32_t EziIODevice::getOutputPinMask(int pin) const {
+  if (pin < 0 || pin >= m_outputCount) {
+    std::cerr << "Pin number out of range: " << pin << std::endl;
+    return 0;
+  }
+
+  return m_currentOutputMasks[pin];
+}
+
+bool EziIODevice::connect() {
+  if (m_isConnected) {
+    return true; // Already connected
+  }
+
+  // Connect using TCP protocol
+  if (PE::FAS_ConnectTCP(m_ipBytes[0], m_ipBytes[1], m_ipBytes[2], m_ipBytes[3], m_deviceId)) {
+    m_isConnected = true;
+    std::cout << "Connected to device " << m_name << " (ID: " << m_deviceId
+      << ") at IP " << m_ipAddress << std::endl;
+
+    // Initialize by clearing all outputs
+    if (m_outputCount > 0) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+      // Clear all outputs as initialization
+      uint32_t clearMask = 0;
+
+      // Create a mask to clear all possible output pins
+      for (int i = 0; i < m_outputCount; i++) {
+        clearMask |= getOutputPinMask(i);
+      }
+
+      uint32_t setMask = 0; // Set none
+
+      std::cout << "Initializing outputs with clear mask: 0x" << std::hex << clearMask << std::dec << std::endl;
+      setOutputs(setMask, clearMask);
+    }
+
+    return true;
+  }
+  else {
+    std::cerr << "Failed to connect to device " << m_name << " (ID: " << m_deviceId
+      << ") at IP " << m_ipAddress << std::endl;
+    return false;
+  }
+}
+
+bool EziIODevice::disconnect() {
+  if (!m_isConnected) {
+    return true; // Already disconnected
+  }
+
+  PE::FAS_Close(m_deviceId);
+  m_isConnected = false;
+  std::cout << "Disconnected from device " << m_name << " (ID: " << m_deviceId << ")" << std::endl;
+  return true;
+}
+
+bool EziIODevice::readInputs(uint32_t& inputs, uint32_t& latch) {
+  if (!m_isConnected) {
+    std::cerr << "Device " << m_name << " not connected" << std::endl;
+    return false;
+  }
+
+  // Create temporary unsigned long variables
+  unsigned long temp_inputs = 0;
+  unsigned long temp_latch = 0;
+
+  // Call FAS_GetInput with the correct parameter types
+  int result = PE::FAS_GetInput(m_deviceId, &temp_inputs, &temp_latch);
+
+  // Check return value without namespace
+  if (result == FMM_OK) {
+    // Copy the values back to the uint32_t references
+    inputs = static_cast<uint32_t>(temp_inputs);
+    latch = static_cast<uint32_t>(temp_latch);
+    return true;
+  }
+  else {
+    std::cerr << "Failed to read inputs from device " << m_name << ", error code: " << result << std::endl;
+    return false;
+  }
+}
+
+bool EziIODevice::clearLatch(uint32_t latchMask) {
+  if (!m_isConnected) {
+    std::cerr << "Device " << m_name << " not connected" << std::endl;
+    return false;
+  }
+
+  // Convert to unsigned long for the API call
+  unsigned long temp_latchMask = static_cast<unsigned long>(latchMask);
+
+  int result = PE::FAS_ClearLatch(m_deviceId, temp_latchMask);
+  if (result == FMM_OK) {
+    return true;
+  }
+  else {
+    std::cerr << "Failed to clear latch for device " << m_name << ", error code: " << result << std::endl;
+    return false;
+  }
+}
+
+bool EziIODevice::getOutputs(uint32_t& outputs, uint32_t& status) {
+  if (!m_isConnected) {
+    std::cerr << "Device " << m_name << " not connected" << std::endl;
+    return false;
+  }
+
+  // Create temporary unsigned long variables
+  unsigned long temp_outputs = 0;
+  unsigned long temp_status = 0;
+
+  int result = PE::FAS_GetOutput(m_deviceId, &temp_outputs, &temp_status);
+  if (result == FMM_OK) {
+    // Copy back to the original parameters
+    outputs = static_cast<uint32_t>(temp_outputs);
+    status = static_cast<uint32_t>(temp_status);
+    return true;
+  }
+  else {
+    std::cerr << "Failed to get outputs from device " << m_name << ", error code: " << result << std::endl;
+    return false;
+  }
+}
+
+bool EziIODevice::setOutputs(uint32_t setMask, uint32_t clearMask) {
+  if (!m_isConnected) {
+    std::cerr << "Device " << m_name << " not connected" << std::endl;
+    return false;
+  }
+
+  // Convert to unsigned long for the API call
+  unsigned long temp_setMask = static_cast<unsigned long>(setMask);
+  unsigned long temp_clearMask = static_cast<unsigned long>(clearMask);
+
+  std::cout << "Setting outputs for " << m_name << " - Set mask: 0x" << std::hex
+    << temp_setMask << ", Clear mask: 0x" << temp_clearMask << std::dec << std::endl;
+
+  int result = PE::FAS_SetOutput(m_deviceId, temp_setMask, temp_clearMask);
+  if (result == FMM_OK) {
+    // Add a small delay to ensure the operation completes
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    // Verify the output change
+    unsigned long outputs = 0, status = 0;
+    if (PE::FAS_GetOutput(m_deviceId, &outputs, &status) == FMM_OK) {
+      std::cout << "Output verification: Current outputs = 0x" << std::hex
+        << outputs << std::dec << std::endl;
+    }
+
+    return true;
+  }
+  else {
+    std::cerr << "Failed to set outputs for device " << m_name << ", error code: "
+      << result << std::endl;
+    return false;
+  }
+}
+
+bool EziIODevice::setOutput(int outputPin, bool state) {
+  if (!m_isConnected || outputPin < 0 || outputPin >= m_outputCount) {
+    std::cerr << "Invalid output pin or not connected" << std::endl;
+    return false;
+  }
+
+  uint32_t mask = getOutputPinMask(outputPin);
+
+  std::cout << "Setting output pin " << outputPin << " to " << (state ? "ON" : "OFF")
+    << " with mask 0x" << std::hex << mask << std::dec << std::endl;
+
+  if (state) {
+    // Set the output pin (don't clear any)
+    return setOutputs(mask, 0);
+  }
+  else {
+    // Clear the output pin (don't set any)
+    return setOutputs(0, mask);
+  }
+}
+
+// EziIOManager Implementation
+EziIOManager::EziIOManager() : m_initialized(false) {
+}
+
+EziIOManager::~EziIOManager() {
+  shutdown();
+}
+
+bool EziIOManager::initialize() {
+  if (m_initialized) {
+    return true;
+  }
+
+  // Enable auto-reconnect for better connection stability
+  PE::FAS_SetAutoReconnect(1);
+
+  m_initialized = true;
+  return true;
+}
+
+void EziIOManager::shutdown() {
+  if (!m_initialized) {
+    return;
+  }
+
+  disconnectAll();
+  m_devices.clear();
+  m_deviceMap.clear();
+  m_deviceNameMap.clear();
+  m_initialized = false;
+}
+
+bool EziIOManager::addDevice(int id, const std::string& name, const std::string& ip,
+  int inputCount, int outputCount) {
+  // Check if a device with this ID already exists
+  if (m_deviceMap.find(id) != m_deviceMap.end()) {
+    std::cerr << "Device with ID " << id << " already exists" << std::endl;
+    return false;
+  }
+
+  // Create a new device
+  auto device = std::make_shared<EziIODevice>(id, name, ip, inputCount, outputCount);
+
+  // Add device to collections
+  m_devices.push_back(device);
+  m_deviceMap[id] = device;
+  m_deviceNameMap[name] = device;
+
+  std::cout << "Added device " << name << " (ID: " << id << ") at IP " << ip << std::endl;
+  return true;
+}
+
+bool EziIOManager::connectAll() {
+  bool allConnected = true;
+
+  for (auto& device : m_devices) {
+    if (!device->connect()) {
+      allConnected = false;
+    }
+  }
+
+  return allConnected;
+}
+
+bool EziIOManager::disconnectAll() {
+  bool allDisconnected = true;
+
+  for (auto& device : m_devices) {
+    if (!device->disconnect()) {
+      allDisconnected = false;
+    }
+  }
+
+  return allDisconnected;
+}
+
+bool EziIOManager::connectDevice(int deviceId) {
+  auto device = getDevice(deviceId);
+  if (!device) {
+    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
+    return false;
+  }
+
+  return device->connect();
+}
+
+bool EziIOManager::disconnectDevice(int deviceId) {
+  auto device = getDevice(deviceId);
+  if (!device) {
+    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
+    return false;
+  }
+
+  return device->disconnect();
+}
+
+bool EziIOManager::readInputs(int deviceId, uint32_t& inputs, uint32_t& latch) {
+  auto device = getDevice(deviceId);
+  if (!device) {
+    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
+    return false;
+  }
+
+  return device->readInputs(inputs, latch);
+}
+
+bool EziIOManager::getOutputs(int deviceId, uint32_t& outputs, uint32_t& status) {
+  auto device = getDevice(deviceId);
+  if (!device) {
+    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
+    return false;
+  }
+
+  return device->getOutputs(outputs, status);
+}
+
+bool EziIOManager::setOutputs(int deviceId, uint32_t setMask, uint32_t clearMask) {
+  auto device = getDevice(deviceId);
+  if (!device) {
+    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
+    return false;
+  }
+
+  return device->setOutputs(setMask, clearMask);
+}
+
+bool EziIOManager::setOutput(int deviceId, int outputPin, bool state) {
+  auto device = getDevice(deviceId);
+  if (!device) {
+    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
+    return false;
+  }
+
+  return device->setOutput(outputPin, state);
+}
+
+EziIODevice* EziIOManager::getDevice(int deviceId) {
+  auto it = m_deviceMap.find(deviceId);
+  if (it == m_deviceMap.end()) {
+    return nullptr;
+  }
+
+  return it->second.get();
+}
+
+EziIODevice* EziIOManager::getDeviceByName(const std::string& name) {
+  auto it = m_deviceNameMap.find(name);
+  if (it == m_deviceNameMap.end()) {
+    return nullptr;
+  }
+
+  return it->second.get();
+}
