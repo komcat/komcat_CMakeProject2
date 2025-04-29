@@ -59,7 +59,8 @@ public:
   // Window control
   void SetWindowVisible(bool visible) { m_showWindow = visible; }
   void SetWindowTitle(const std::string& title) { m_windowTitle = title; }
-
+  // Add this to the public section of PIController class
+  bool MoveToPositionAll(double x, double y, double z, double u, double v, double w, bool blocking = true);
 private:
   // Communication thread methods
   void StartCommunicationThread();

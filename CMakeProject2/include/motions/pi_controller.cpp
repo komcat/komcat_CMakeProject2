@@ -690,6 +690,51 @@ bool PIController::GetPosition(const std::string& axis, double& position) {
 	return result;
 }
 
+bool PIController::MoveToPositionAll(double x, double y, double z, double u, double v, double w, bool blocking) {
+	if (!m_isConnected) {
+		m_logger->LogError("PIController: Cannot move axes - not connected");
+		return false;
+	}
+
+	m_logger->LogInfo(
+		"PIController: Moving all axes to position X=" + std::to_string(x) +
+		", Y=" + std::to_string(y) +
+		", Z=" + std::to_string(z) +
+		", U=" + std::to_string(u) +
+		", V=" + std::to_string(v) +
+		", W=" + std::to_string(w)
+	);
+
+	// Define the axes to move
+	//require space between axes
+	const char* szAxes = "X Y Z U V W";
+
+	// Define the target positions in the same order as the axes
+	double pdValueArray[6] = { x, y, z, u, v, w };
+
+	// Call the PI_MOV function directly
+	if (!PI_MOV(m_controllerId, szAxes, pdValueArray)) {
+		int error = PI_GetError(m_controllerId);
+		m_logger->LogError("PIController: Failed to move all axes. Error code: " + std::to_string(error));
+		return false;
+	}
+
+	// If blocking mode, wait for motion to complete on all axes
+	if (blocking) {
+		bool success = true;
+		for (const auto& axis : { "X", "Y", "Z", "U", "V", "W" }) {
+			if (!WaitForMotionCompletion(axis)) {
+				m_logger->LogError("PIController: Timeout waiting for motion completion on axis " + std::string(axis));
+				success = false;
+			}
+		}
+		return success;
+	}
+
+	return true;
+}
+
+
 // Optimize the RenderUI method to use cached values instead of direct queries
 void PIController::RenderUI() {
 	if (!m_showWindow) {
