@@ -7,6 +7,7 @@
 #include <sstream>
 #include <cstring>
 #include <chrono>
+#include <cmath>
 
 // Constructor
 DataClientManager::DataClientManager(const std::string& configFilePath)
@@ -257,7 +258,7 @@ void DataClientManager::UpdateClients() {
 
       // Update the circular buffer with new values
       if (!newValues.empty()) {
-        std::lock_guard<std::mutex> lock(*info.dataMutex);  // Changed to use the shared_ptr mutex
+        std::lock_guard<std::mutex> lock(*info.dataMutex);
 
         for (float val : newValues) {
           // Create a new data point with the current timestamp
@@ -279,11 +280,20 @@ void DataClientManager::UpdateClients() {
         if (info.config.logData && !newValues.empty()) {
           // Just log the latest value to avoid spamming the log
           std::stringstream ss;
-          ss << "Data from " << info.config.id << ": " << info.latestValue;
+          SIValue siValue(info.latestValue, info.config.unit);
+
+          ss << "Data from " << info.config.id << ": ";
+
           if (info.config.displayUnitSuffix) {
-            ss << " " << info.config.unit;
+            ss << siValue.GetDisplayString(info.config.unit);
           }
-          Logger::GetInstance()->LogInfo(ss.str());  // Changed to LogInfo since LogDebug might not be available
+          else {
+            ss << siValue.ToString();
+          }
+
+
+          //TODO debug verbose
+          //Logger::GetInstance()->LogInfo(ss.str());
         }
       }
     }
@@ -364,14 +374,24 @@ void DataClientManager::RenderUI() {
         ImGui::Separator();
 
         // Get a lock to safely access the data
-        std::lock_guard<std::mutex> lock(*info.dataMutex);  // Changed to use the shared_ptr mutex
+        std::lock_guard<std::mutex> lock(*info.dataMutex);
 
-        // Display latest received value with unit
-        std::string valueLabel = "Latest value: " + std::to_string(info.latestValue);
+        // Display latest received value with unit and SI prefix
+        SIValue siValue(info.latestValue, info.config.unit);
+        std::string valueLabel;
+
         if (info.config.displayUnitSuffix) {
-          valueLabel += " " + info.config.unit;
+          valueLabel = "Latest value: " + siValue.GetDisplayString(info.config.unit);
         }
+        else {
+          valueLabel = "Latest value: " + siValue.ToString();
+        }
+
+        // Display with larger font
+        float originalFontSize = ImGui::GetFontSize();
+        ImGui::SetWindowFontScale(1.5f); // Scale up font for this text
         ImGui::Text("%s", valueLabel.c_str());
+        ImGui::SetWindowFontScale(1.0f); // Reset font scale
 
         // Debug info
         ImGui::Text("Data points in buffer: %d", info.dataPointCount);
@@ -387,13 +407,10 @@ void DataClientManager::RenderUI() {
             maxValue = (std::max)(maxValue, info.dataPoints[j].value);
           }
 
-          // Add margins (10% padding)
-          float range = maxValue - minValue;
-          if (range < 0.001f) range = 0.1f;  // Prevent too small ranges
-
-          float margin = range * 0.1f;
-          minValue = (std::min)(0.0f, minValue - margin);
-          maxValue = (std::max)(1.0f, maxValue + margin);
+          // Use improved chart scaling
+          ChartScale chartScale(minValue, maxValue);
+          minValue = chartScale.min;
+          maxValue = chartScale.max;
 
           // Create plot values array - need to copy from circular buffer to linear array
           float plotValues[100];
@@ -413,7 +430,20 @@ void DataClientManager::RenderUI() {
             ImVec2(0, 80),           // Graph size
             sizeof(float));          // Stride
 
-          ImGui::Text("Min: %.6f, Max: %.6f", minValue, maxValue);
+          // Display min/max with SI prefixes
+          SIValue minSI(minValue, info.config.unit);
+          SIValue maxSI(maxValue, info.config.unit);
+
+          if (info.config.displayUnitSuffix) {
+            ImGui::Text("Min: %s, Max: %s",
+              minSI.GetDisplayString(info.config.unit, 4).c_str(),
+              maxSI.GetDisplayString(info.config.unit, 4).c_str());
+          }
+          else {
+            ImGui::Text("Min: %s, Max: %s",
+              minSI.ToString(4).c_str(),
+              maxSI.ToString(4).c_str());
+          }
 
           // Display latest data points with timestamps in a table
           if (ImGui::TreeNode(("Recent Data Points" + idPrefix).c_str())) {
@@ -441,9 +471,15 @@ void DataClientManager::RenderUI() {
               ImGui::TableNextColumn();
               ImGui::Text("%s", FormatTimestamp(info.dataPoints[idx].timestamp).c_str());
 
-              // Value column
+              // Value column with SI prefix
               ImGui::TableNextColumn();
-              ImGui::Text("%.6f", info.dataPoints[idx].value);
+              SIValue rowValue(info.dataPoints[idx].value, info.config.unit);
+              if (info.config.displayUnitSuffix) {
+                ImGui::Text("%s", rowValue.GetDisplayString(info.config.unit).c_str());
+              }
+              else {
+                ImGui::Text("%s", rowValue.ToString().c_str());
+              }
             }
 
             ImGui::EndTable();
