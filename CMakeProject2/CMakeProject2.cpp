@@ -336,44 +336,30 @@ int main(int argc, char* argv[])
 
 		// Add an exit button in a fixed position
 		ImGui::SetNextWindowPos(ImVec2(105, 0), ImGuiCond_Always);
-		ImGui::SetNextWindowSize(ImVec2(120, 60), ImGuiCond_Always);
+		ImGui::SetNextWindowSize(ImVec2(200, 60), ImGuiCond_Always); // Increased width to accommodate both buttons
 		ImGui::SetNextWindowBgAlpha(0.7f); // Semi-transparent background
 		ImGui::Begin("Exit", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
 			ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+
+		// Add minimize button
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.8f, 1.0f)); // Blue button
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.5f, 0.9f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.3f, 0.7f, 1.0f));
+		if (ImGui::Button("Minimize", ImVec2(80, 40))) {
+			// Call SDL function to minimize the window
+			SDL_MinimizeWindow(window);
+		}
+		ImGui::PopStyleColor(3);
+
+		ImGui::SameLine();
+
 		// Style the exit button to be more noticeable
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f)); // Red button
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
 		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.1f, 0.1f, 1.0f));
 		// Make the button fill most of the window
-		if (ImGui::Button("Exit Safely", ImVec2(100, 40))) {
-			// Perform safe shutdown of camera resources
-			std::cout << "Safe exit initiated..." << std::endl;
-
-
-
-			// Access your PylonCameraTest instance
-			// Assuming you have a PylonCameraTest instance in your main loop named pylonCameraTest
-
-			// Safely stop camera operations in PylonCameraTest
-			// This will access the underlying PylonCamera instance and clean up resources
-			if (pylonCameraTest.GetCamera().IsGrabbing()) {
-				std::cout << "Stopping camera grabbing..." << std::endl;
-				pylonCameraTest.GetCamera().StopGrabbing();
-			}
-
-			if (pylonCameraTest.GetCamera().IsConnected()) {
-				std::cout << "Disconnecting camera..." << std::endl;
-				pylonCameraTest.GetCamera().Disconnect();
-			}
-
-			// Add a small delay to ensure camera operations have completed
-			SDL_Delay(200);
-
-			// Finally terminate Pylon library safely
-			// You might need to add a static method in your PylonCamera class for this
-
-
-			// Signal the main loop to exit
+		if (ImGui::Button("Exit", ImVec2(80, 40))) {
+			// Your existing exit code...
 			done = true;
 		}
 		ImGui::PopStyleColor(3); // Remove the 3 style colors we pushed
