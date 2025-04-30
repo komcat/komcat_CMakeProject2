@@ -28,8 +28,12 @@
 
 #include "include/eziio/EziIO_Manager.h"
 #include "include/eziio/EziIO_UI.h"
+#include "include/eziio/PneumaticManager.h"
+#include "include/eziio/PneumaticUI.h"
 #include "IOConfigManager.h"
 #include "include/data/data_client_manager.h"  // Add this at the top with other includes
+
+
 
 int main(int argc, char* argv[])
 {
@@ -231,7 +235,30 @@ int main(int argc, char* argv[])
 
 	// Setup devices from config
 	ioconfigManager.initializeIOManager(ioManager);
+	// 3. Create and configure the Pneumatic Manager
+	PneumaticManager pneumaticManager(ioManager);
+	if (!ioconfigManager.initializePneumaticManager(pneumaticManager)) {
+		logger->LogWarning("Failed to initialize pneumatic manager");
+	}
+	// 4. Initialize the pneumatic manager and start status polling
+	pneumaticManager.initialize();
+	pneumaticManager.startPolling(50); // 50ms polling interval
+	// 5. Create the pneumatic UI
+	PneumaticUI pneumaticUI(pneumaticManager);
+	logger->LogInfo("Pneumatic control system initialized");
 
+	// Optional: Register for state change notifications
+	pneumaticManager.setStateChangeCallback([&logger](const std::string& slideName, SlideState state) {
+		std::string stateStr;
+		switch (state) {
+		case SlideState::EXTENDED: stateStr = "Extended (Down)"; break;
+		case SlideState::RETRACTED: stateStr = "Retracted (Up)"; break;
+		case SlideState::MOVING: stateStr = "Moving"; break;
+		case SlideState::P_ERROR: stateStr = "ERROR"; break;
+		default: stateStr = "Unknown";
+		}
+		logger->LogInfo("Pneumatic slide '" + slideName + "' changed state to: " + stateStr);
+	});
 
 
 	// Connect to all devices
@@ -427,7 +454,8 @@ int main(int argc, char* argv[])
 
 		// Render the EziIO UI
 		ioUI.RenderUI();
-
+		// In the main rendering loop
+		pneumaticUI.RenderUI();
 
 		// In the main loop, add this before your SDL_GL_SwapWindow(window) call:
 // Update the DataClientManager
@@ -445,13 +473,18 @@ int main(int argc, char* argv[])
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		SDL_GL_SwapWindow(window);
 	}
+	piControllerManager.DisconnectAll();
+	acsControllerManager.DisconnectAll();
+
+
 
 	// When exit is triggered:
 	logger->Log("Application shutting down");
 
 	// Stop the polling thread
 	ioManager.stopPolling();
-
+	// Before application exit
+	pneumaticManager.stopPolling();
 	// Disconnect from all devices
 	ioManager.disconnectAll();
 	pylonCameraTest.GetCamera().StopGrabbing();
@@ -465,7 +498,7 @@ int main(int argc, char* argv[])
 	}
 
 
-
+	
 	
 
 	// Cleanup - keep outside try-catch to ensure it always happens
