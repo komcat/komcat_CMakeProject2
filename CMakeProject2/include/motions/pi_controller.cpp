@@ -72,7 +72,10 @@ void PIController::StopCommunicationThread() {
 // 4. Update CommunicationThreadFunc in pi_controller.cpp
 void PIController::CommunicationThreadFunc() {
 	// Reduce update rate from 10Hz to 5Hz
-	const auto updateInterval = std::chrono::milliseconds(200);  // 5Hz update rate
+	// 200 =  5hz
+	// 100 = 10hz
+	// 50 = 20hz
+	const auto updateInterval = std::chrono::milliseconds(50);  // 5Hz update rate
 
 	// Implement frame skipping for less important updates
 	int frameCounter = 0;

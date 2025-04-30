@@ -65,6 +65,8 @@ public:
   bool MoveToPositionAll(double x, double y, double z, double u, double v, double w, bool blocking = true);
 
   void RenderJogDistanceControl();
+
+  int GetControllerId() const { return m_controllerId; }
 private:
   bool m_debugVerbose = false;
 

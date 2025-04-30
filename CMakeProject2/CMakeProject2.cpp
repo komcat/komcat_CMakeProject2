@@ -32,7 +32,8 @@
 #include "include/eziio/PneumaticUI.h"
 #include "IOConfigManager.h"
 #include "include/data/data_client_manager.h"  // Add this at the top with other includes
-
+#include "include/motions/pi_analog_reader.h"
+#include "include/motions/pi_analog_manager.h"
 
 
 int main(int argc, char* argv[])
@@ -140,6 +141,11 @@ int main(int argc, char* argv[])
 	else {
 		logger->LogWarning("Failed to connect to some PI controllers");
 	}
+	PIAnalogManager piAnalogManager(piControllerManager, configManager);
+	logger->LogInfo("PIAnalogManager initialized");
+
+
+
 
 	// Create the ACS Controller Manager
 	ACSControllerManager acsControllerManager(configManager);
@@ -415,7 +421,7 @@ int main(int argc, char* argv[])
 		//PI hexapod
 		//controller.RenderUI();
 		piControllerManager.RenderUI();
-
+		piAnalogManager.RenderUI();
 
 		// Add this to render each controller's individual UI window
 		// This is necessary because they won't render automatically
