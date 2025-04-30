@@ -62,7 +62,10 @@ public:
 
   // Add this method to expose available axes
   const std::vector<std::string>& GetAvailableAxes() const { return m_availableAxes; }
-
+  // In acs_controller.h in the public section:
+  bool MoveToPositionMultiAxis(const std::vector<std::string>& axes,
+    const std::vector<double>& positions,
+    bool blocking = true);
 
 private:
   // Communication thread methods

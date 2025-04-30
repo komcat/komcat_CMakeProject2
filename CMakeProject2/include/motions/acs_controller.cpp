@@ -317,8 +317,12 @@ bool ACSController::MoveToPosition(const std::string& axis, double position, boo
 
   m_logger->LogInfo("ACSController: Moving axis " + axis + " to position " + std::to_string(position));
 
+  // Set up arrays for acsc_ToPointM
+  int axes[2] = { axisIndex, -1 }; // -1 marks the end of the array
+  double points[1] = { position };
+
   // Command the move - using absolute positioning
-  if (!acsc_ToPoint(m_controllerId, ACSC_AMF_WAIT, axisIndex, position, NULL)) {
+  if (!acsc_ToPointM(m_controllerId, ACSC_AMF_WAIT, axes, points, NULL)) {
     int error = acsc_GetLastError();
     m_logger->LogError("ACSController: Failed to move axis. Error code: " + std::to_string(error));
     return false;
@@ -338,7 +342,6 @@ bool ACSController::MoveToPosition(const std::string& axis, double position, boo
 }
 
 
-
 bool ACSController::MoveRelative(const std::string& axis, double distance, bool blocking) {
   if (!m_isConnected) {
     m_logger->LogError("ACSController: Cannot move axis - not connected");
@@ -350,18 +353,32 @@ bool ACSController::MoveRelative(const std::string& axis, double distance, bool 
     return false;
   }
 
-  m_logger->LogInfo("ACSController: Moving axis " + axis + " relative distance " + std::to_string(distance));
+  m_logger->LogInfo("ACSController: Moving axis " + axis + " relative distance " +
+    std::to_string(distance));
 
-  // Log pre-move position
-  double currentPos = 0.0;
-  if (GetPosition(axis, currentPos)) {
-    std::cout << "ACSController: Pre-move position of axis " << axis << " = " << currentPos << std::endl;
+  // Log pre-move position if debugging is enabled
+  if (m_enableDebug) {
+    double currentPos = 0.0;
+    if (GetPosition(axis, currentPos)) {
+      std::cout << "ACSController: Pre-move position of axis " << axis << " = "
+        << currentPos << std::endl;
+    }
   }
 
+  // Set up arrays for acsc_ToPointM with RELATIVE flag
+  int axes[2] = { axisIndex, -1 }; // -1 marks the end of the array
+  double distances[1] = { distance };
+
   // Command the relative move
-  if (!acsc_ToPoint(m_controllerId, ACSC_AMF_RELATIVE, axisIndex, distance, NULL)) {
+  if (!acsc_ToPointM(m_controllerId, ACSC_AMF_WAIT | ACSC_AMF_RELATIVE, axes, distances, NULL)) {
     int error = acsc_GetLastError();
-    m_logger->LogError("ACSController: Failed to move axis relatively. Error code: " + std::to_string(error));
+    m_logger->LogError("ACSController: Failed to move axis relatively. Error code: " +
+      std::to_string(error));
+    return false;
+  }
+
+  // Start the motion
+  if (!StartMotion(axis)) {
     return false;
   }
 
@@ -372,6 +389,8 @@ bool ACSController::MoveRelative(const std::string& axis, double distance, bool 
 
   return true;
 }
+
+
 
 bool ACSController::HomeAxis(const std::string& axis) {
   if (!m_isConnected) {
@@ -724,15 +743,93 @@ bool ACSController::StartMotion(const std::string& axis) {
 
   m_logger->LogInfo("ACSController: Starting motion on axis " + axis);
 
-  // Call acsc_Go to start the motion
-  if (!acsc_Go(m_controllerId, axisIndex, NULL)) {
+  // Set up axis array for GoM (ending with -1)
+  int axes[2] = { axisIndex, -1 };
+
+  // Call acsc_GoM to start the motion
+  if (!acsc_GoM(m_controllerId, axes, NULL)) {
     int error = acsc_GetLastError();
-    m_logger->LogError("ACSController: Failed to start motion on axis " + axis + ". Error code: " + std::to_string(error));
+    m_logger->LogError("ACSController: Failed to start motion on axis " + axis +
+      ". Error code: " + std::to_string(error));
     return false;
   }
 
   return true;
 }
+
+
+bool ACSController::MoveToPositionMultiAxis(const std::vector<std::string>& axes,
+  const std::vector<double>& positions,
+  bool blocking) {
+  if (!m_isConnected) {
+    m_logger->LogError("ACSController: Cannot move axes - not connected");
+    return false;
+  }
+
+  if (axes.size() != positions.size() || axes.empty()) {
+    m_logger->LogError("ACSController: Invalid axes/positions arrays for multi-axis move");
+    return false;
+  }
+
+  // Log the motion command
+  std::stringstream ss;
+  ss << "ACSController: Moving multiple axes to positions: ";
+  for (size_t i = 0; i < axes.size(); i++) {
+    ss << axes[i] << "=" << positions[i] << " ";
+  }
+  m_logger->LogInfo(ss.str());
+
+  // Convert string axes to ACS axis indices
+  std::vector<int> axisIndices;
+  for (const auto& axis : axes) {
+    int axisIndex = GetAxisIndex(axis);
+    if (axisIndex < 0) {
+      m_logger->LogError("ACSController: Invalid axis: " + axis);
+      return false;
+    }
+    axisIndices.push_back(axisIndex);
+  }
+
+  // Set up arrays for acsc_ToPointM
+  std::vector<int> axesArray(axisIndices.size() + 1);  // +1 for the terminating -1
+  for (size_t i = 0; i < axisIndices.size(); i++) {
+    axesArray[i] = axisIndices[i];
+  }
+  axesArray[axisIndices.size()] = -1;  // Mark the end of the array with -1
+
+  // Command the move using acsc_ToPointM
+  if (!acsc_ToPointM(m_controllerId, ACSC_AMF_WAIT, axesArray.data(),
+    const_cast<double*>(positions.data()), NULL)) {
+    int error = acsc_GetLastError();
+    m_logger->LogError("ACSController: Failed to move axes. Error code: " +
+      std::to_string(error));
+    return false;
+  }
+
+  // Start the motion - for multi-axis we'll need to use GoM instead of Go
+  if (!acsc_GoM(m_controllerId, axesArray.data(), NULL)) {
+    int error = acsc_GetLastError();
+    m_logger->LogError("ACSController: Failed to start motion. Error code: " +
+      std::to_string(error));
+    return false;
+  }
+
+  // If blocking mode, wait for motion to complete on all axes
+  if (blocking) {
+    bool allCompleted = true;
+    for (const auto& axis : axes) {
+      if (!WaitForMotionCompletion(axis)) {
+        m_logger->LogError("ACSController: Timeout waiting for motion completion on axis " + axis);
+        allCompleted = false;
+      }
+    }
+    return allCompleted;
+  }
+
+  return true;
+}
+
+
 
 void ACSController::RenderUI() {
   // Skip rendering if window is hidden
