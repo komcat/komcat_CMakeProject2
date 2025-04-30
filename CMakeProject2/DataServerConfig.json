@@ -1,0 +1,45 @@
+{
+  "Servers": [
+    {
+      "Id": "GPIB-Current",
+      "Name": "Current reading",
+      "Host": "127.0.0.44",
+      "Port": 55555,
+      "Unit": "A",
+      "displayUnitSuffix":true,
+      "Description": "Keithley multimeter current readings via GPIB",
+      "AutoConnect": false,
+      "LogData": true
+    },
+    {
+      "Id": "Virtual_1",
+      "Name": "Current reading",
+      "Host": "127.0.0.1",
+      "Port": 8888,
+      "Unit": "unit",
+      "displayUnitSuffix":false,
+      "Description": "random generator1",
+      "AutoConnect": false,
+      "LogData": true
+    },
+    {
+      "Id": "Virtual_2",
+      "Name": "Current reading",
+      "Host": "127.0.0.2",
+      "Port": 8888,
+      "Unit": "unit",
+      "displayUnitSuffix":false,
+      "Description": "random generator2",
+      "AutoConnect": false,
+      "LogData": true
+    }
+
+  ],
+  "Settings": {
+    "DefaultServerId": "GPIB-Current",
+    "MaxLogEntries": 1000,
+    "LogDirectory": "C:\\Data\\Logs",
+    "AutoSaveData": false,
+    "DataSaveInterval": 60
+  }
+}

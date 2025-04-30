@@ -29,6 +29,7 @@
 #include "include/eziio/EziIO_Manager.h"
 #include "include/eziio/EziIO_UI.h"
 #include "IOConfigManager.h"
+#include "include/data/data_client_manager.h"  // Add this at the top with other includes
 
 int main(int argc, char* argv[])
 {
@@ -249,7 +250,10 @@ int main(int argc, char* argv[])
 	// Set the config manager to enable named pins in the UI
 	ioUI.setConfigManager(&ioconfigManager);
 
-
+	// In the main function, after initializing the ClientManager:
+// Create the DataClientManager with the config file path
+	DataClientManager dataClientManager("DataServerConfig.json");
+	logger->LogInfo("DataClientManager initialized");
 
 
 
@@ -425,6 +429,14 @@ int main(int argc, char* argv[])
 		ioUI.RenderUI();
 
 
+		// In the main loop, add this before your SDL_GL_SwapWindow(window) call:
+// Update the DataClientManager
+		dataClientManager.UpdateClients();
+		// Render DataClientManager UI
+		dataClientManager.RenderUI();
+
+
+
 		// Rendering
 		ImGui::Render();
 		glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
@@ -451,7 +463,9 @@ int main(int argc, char* argv[])
 	else {
 		std::cout << "Camera device not removed" << std::endl;
 	}
-		
+
+
+
 	
 
 	// Cleanup - keep outside try-catch to ensure it always happens
