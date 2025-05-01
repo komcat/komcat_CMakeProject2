@@ -5,12 +5,15 @@
 #include "include/motions/MotionTypes.h"  // Add this line - include MotionTypes.h first
 #include "include/motions/MotionConfigEditor.h" // Include our new editor header
 #include "include/motions/MotionConfigManager.h"
-#include "include/ui/toolbar.h" // Include the toolbar header
-
-#include "include/ui/GraphVisualizer.h"
-#include "include/camera/pylon_camera_test.h" // Include the Pylon camera test header
 #include "include/motions/pi_controller.h" // Include the PI controller header
 #include "include/motions/pi_controller_manager.h" // Include the PI controller manager header
+#include "include/ui/toolbar.h" // Include the toolbar header
+#include "include/ui/ToolbarMenu.h"
+#include "include/ui/GraphVisualizer.h"
+#include "include/ui/ToggleableUIAdapter.h" // Basic adapter
+#include "include/ui/ControllerAdapters.h"  // Custom adapters for controllers
+#include "include/camera/pylon_camera_test.h" // Include the Pylon camera test header
+
 
 // Add these includes at the top with the other include statements
 #include "include/motions/acs_controller.h"
@@ -77,8 +80,8 @@ int main(int argc, char* argv[])
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 
 	// Setup Dear ImGui style
-	ImGui::StyleColorsDark();
-	//ImGui::StyleColorsLight();
+	//ImGui::StyleColorsDark();
+	ImGui::StyleColorsLight();
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
@@ -89,8 +92,8 @@ int main(int argc, char* argv[])
 	Logger* logger = Logger::GetInstance();
 	logger->Log("Application started");
 
-
-
+	//set up toolbarmenu
+	ToolbarMenu toolbarMenu;
 
 
 
@@ -328,9 +331,25 @@ int main(int argc, char* argv[])
 
 	// Update toolbar initialization to include the graph visualizer
 // Replace your existing toolbar initialization with:
-	Toolbar toolbar(configEditor, graphVisualizer, ioUI);
-	logger->LogInfo("Toolbar initialized with GraphVisualizer support");
+	//Toolbar toolbar(configEditor, graphVisualizer, ioUI);
+	//logger->LogInfo("Toolbar initialized with GraphVisualizer support");
 
+
+
+	// Add components with standard methods
+	toolbarMenu.AddReference(CreateTogglableUI(configEditor, "Config Editor"));
+	toolbarMenu.AddReference(CreateTogglableUI(graphVisualizer, "Graph Visualizer"));
+	toolbarMenu.AddReference(CreateTogglableUI(ioUI, "IO Control"));
+	toolbarMenu.AddReference(CreateTogglableUI(pneumaticUI, "Pneumatic"));
+	toolbarMenu.AddReference(CreateTogglableUI(dataClientManager, "Data TCP/IP"));
+
+	// Add controller managers using our custom adapters
+	toolbarMenu.AddReference(CreateACSControllerAdapter(acsControllerManager, "Gantry"));
+	toolbarMenu.AddReference(CreatePIControllerAdapter(piControllerManager, "PI"));
+	// Log successful initialization
+	logger->LogInfo("ToolbarMenu initialized with " +
+		std::to_string(toolbarMenu.GetComponentCount()) +
+		" components");
 
 // Main loop
 	bool done = false;
@@ -432,7 +451,10 @@ int main(int argc, char* argv[])
 		clientManager.RenderUI();
 
 		// Add this line before the FPS display window rendering
-		toolbar.RenderUI();
+		//toolbar.RenderUI();
+		// Render in main loop
+		toolbarMenu.RenderUI();
+
 		// Render motion configuration editor UI
 		configEditor.RenderUI();
 		graphVisualizer.RenderUI();

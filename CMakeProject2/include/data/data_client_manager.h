@@ -236,7 +236,7 @@ private:
   std::string m_logDirectory;
   bool m_autoSaveData;
   int m_dataSaveInterval;
-
+  bool m_isVisible = true;
 public:
   // Constructor takes the path to the config file
   DataClientManager(const std::string& configFilePath);
@@ -276,4 +276,8 @@ public:
 
   // Get raw configuration
   const nlohmann::json& GetConfig() const { return m_config; }
+
+  // Add these methods to the public section:
+  bool IsVisible() const { return m_isVisible; }
+  void ToggleWindow() { m_isVisible = !m_isVisible; }
 };

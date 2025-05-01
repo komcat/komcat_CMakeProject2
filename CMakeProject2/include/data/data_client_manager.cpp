@@ -324,6 +324,12 @@ std::string FormatTimestamp(const std::chrono::system_clock::time_point& tp) {
 
 // Render the UI for all clients
 void DataClientManager::RenderUI() {
+  // Skip rendering if not visible
+  if (!m_isVisible) {
+    return;
+  }
+
+
   ImGui::Begin("Data Client Manager");
 
   // Top-level info
