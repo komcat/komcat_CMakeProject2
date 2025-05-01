@@ -22,7 +22,7 @@ public:
 class ToolbarMenu {
 public:
   ToolbarMenu();
-  ~ToolbarMenu() = default;
+  ~ToolbarMenu();
 
   // Add a reference to a UI component
   void AddReference(std::shared_ptr<ITogglableUI> component);

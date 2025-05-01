@@ -25,6 +25,8 @@ PIAnalogManager::~PIAnalogManager() {
   // First cleanup readers in a controlled manner
   cleanupReaders();
 
+
+
   m_logger->LogInfo("PIAnalogManager: Shutting down");
 }
 
@@ -47,15 +49,25 @@ void PIAnalogManager::startPolling(unsigned int intervalMs) {
     std::to_string(m_pollingInterval) + "ms");
 }
 
+// Add this method if you haven't already
 void PIAnalogManager::stopPolling() {
-  m_stopPolling = true;
-  if (m_pollingThread) {
-    if (m_pollingThread->joinable()) {
-      m_pollingThread->join();
-    }
-    delete m_pollingThread;
-    m_pollingThread = nullptr;
+  if (!m_pollingThread) {
+    return;
   }
+
+  // Set the stop flag
+  m_stopPolling = true;
+
+  // Wait for the thread to finish
+  if (m_pollingThread->joinable()) {
+    m_pollingThread->join();
+  }
+
+  // Clean up the thread object
+  delete m_pollingThread;
+  m_pollingThread = nullptr;
+
+  m_logger->LogInfo("PIAnalogManager: Polling stopped");
 }
 
 bool PIAnalogManager::isPolling() const {
@@ -106,24 +118,22 @@ void PIAnalogManager::pollingThreadFunc() {
 }
 
 
-// Add this method to PIAnalogManager
+// In pi_analog_manager.cpp, update the cleanupReaders method:
 void PIAnalogManager::cleanupReaders() {
-  // First stop the polling to make sure no thread is using the readers
+  // First stop polling
   stopPolling();
 
-  // Clear the readers one by one in a controlled manner
-  std::lock_guard<std::mutex> lock(m_readersMutex);
-  for (auto it = m_readers.begin(); it != m_readers.end(); /* no increment */) {
-    // Move the reader out of the map before destroying it
-    std::unique_ptr<PIAnalogReader> reader = std::move(it->second);
-    // Remove the entry from the map
-    it = m_readers.erase(it);
-    // Now let the reader be destroyed outside the map
-    // This happens when 'reader' goes out of scope
-  }
-  // Map should be empty now
-}
+  // Clear the map in a thread-safe way
+  {
+    std::lock_guard<std::mutex> lock(m_readersMutex);
 
+    // Clear the map explicitly (which will destroy all readers)
+    m_readers.clear();
+  }
+
+  // Log after cleanup
+  m_logger->LogInfo("PIAnalogManager: All readers cleared");
+}
 
 std::vector<std::string> PIAnalogManager::GetPIControllerDeviceNames() const {
   std::vector<std::string> deviceNames;

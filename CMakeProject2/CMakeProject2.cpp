@@ -542,8 +542,11 @@ int main(int argc, char* argv[])
 
 	try
 	{
-		//stop polling analog
 		piAnalogManager.stopPolling();
+
+		// Clean up reader resources
+		piAnalogManager.cleanupReaders();
+
 		// Clear the analog manager first (it depends on controller managers)
 				// Give a short delay to ensure all background operations complete
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));

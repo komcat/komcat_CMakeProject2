@@ -8,6 +8,16 @@ ToolbarMenu::ToolbarMenu() {
   m_logger->LogInfo("ToolbarMenu initialized");
 }
 
+ToolbarMenu::~ToolbarMenu() {
+  // First clear all references to UI components
+  m_components.clear();
+
+  // Then log the completion
+  if (m_logger) {
+    m_logger->LogInfo("ToolbarMenu: Destroyed");
+  }
+}
+
 void ToolbarMenu::AddReference(std::shared_ptr<ITogglableUI> component) {
   if (!component) {
     m_logger->LogWarning("Attempted to add null component to ToolbarMenu");

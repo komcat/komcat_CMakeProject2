@@ -27,8 +27,18 @@ PIAnalogReader::PIAnalogReader(PIController& controller, const std::string& devi
 }
 
 PIAnalogReader::~PIAnalogReader() {
-  m_voltageValues.clear();
-  m_rawValues.clear();
+  // Add a try-catch block to prevent exceptions during destruction
+  try {
+    // Only clear the containers, don't try to delete the controller
+    m_rawValues.clear();
+    m_voltageValues.clear();
+
+    // Log the shutdown
+    m_logger->LogInfo("PIAnalogReader: Reader for device " + m_deviceName + " destroyed");
+  }
+  catch (...) {
+    // Swallow exceptions in destructor
+  }
   m_logger->LogInfo("PIAnalogReader: Shutting down analog reader for " + m_deviceName);
 }
 
