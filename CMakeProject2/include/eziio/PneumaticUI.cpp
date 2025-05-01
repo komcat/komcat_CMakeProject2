@@ -103,7 +103,7 @@ void PneumaticUI::RenderSlidePanel(const std::string& slideName)
   ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 2.0f);
 
   // Create a child window for this slide
-  if (ImGui::BeginChild(slideName.c_str(), ImVec2(180, 250), true))
+  if (ImGui::BeginChild(slideName.c_str(), ImVec2(180, 180), true))
   {
     // Slide title
     ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]);

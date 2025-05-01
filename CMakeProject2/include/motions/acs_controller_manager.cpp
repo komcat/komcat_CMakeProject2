@@ -245,6 +245,7 @@ void ACSControllerManager::RenderUI() {
 
     // Actions for the selected controller
     if (ImGui::Button("Open Control Panel")) {
+			//exlicitly does not show the window
       selectedControllerPtr->SetWindowVisible(true);
     }
 
@@ -259,14 +260,59 @@ void ACSControllerManager::RenderUI() {
       auto positionsOpt = m_configManager.GetDevicePositions(selectedController);
       if (positionsOpt.has_value()) {
         const auto& positions = positionsOpt.value().get();
-        for (const auto& position_pair : positions) {
-          const std::string& posName = position_pair.first;
-          if (posName != "home") {
-            ImGui::SameLine();
-            if (ImGui::Button(posName.c_str())) {
-              MoveToNamedPosition(selectedController, posName, true);
+
+        // Skip if no positions besides "home"
+        if (positions.size() <= 1) {
+          ImGui::Text("No additional positions available");
+        }
+        else {
+          // Create a child window with fixed height and scrolling
+          ImGui::Text("Available Positions:");
+          ImGui::BeginChild("PositionButtonsChild", ImVec2(-1, 150), true, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+
+          const int COLUMNS = 3;
+          const float columnWidth = ImGui::GetContentRegionAvail().x / COLUMNS;
+          const float buttonWidth = columnWidth - 8.0f; // Add some padding
+          const float buttonHeight = 30.0f;
+
+          // Count positions (excluding home)
+          int posCount = 0;
+          for (const auto& position_pair : positions) {
+            if (position_pair.first != "home") posCount++;
+          }
+
+          // Calculate number of rows needed
+          int rows = (posCount + COLUMNS - 1) / COLUMNS;
+
+          // Use a grid layout instead of columns
+          int index = 0;
+          for (int row = 0; row < rows; row++) {
+            for (int col = 0; col < COLUMNS; col++) {
+              // Find the next non-home position
+              std::string posName;
+              while (index < positions.size()) {
+                auto it = positions.begin();
+                std::advance(it, index++);
+                if (it->first != "home") {
+                  posName = it->first;
+                  break;
+                }
+              }
+
+              // If we run out of positions, break out
+              if (posName.empty()) break;
+
+              // Position the button
+              if (col > 0) ImGui::SameLine(col * columnWidth);
+
+              // Create the button
+              if (ImGui::Button(posName.c_str(), ImVec2(buttonWidth, buttonHeight))) {
+                MoveToNamedPosition(selectedController, posName, true);
+              }
             }
           }
+
+          ImGui::EndChild();
         }
       }
     }

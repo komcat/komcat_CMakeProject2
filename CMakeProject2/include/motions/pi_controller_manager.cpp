@@ -214,20 +214,7 @@ void PIControllerManager::RenderUI() {
       controller->SetWindowVisible(true);
     }
 
-    // Add specific buttons for the "hex-left" controller
-    if (name == "hex-left" && isConnected) {
-      ImGui::SameLine();
-      if (ImGui::Button("Home")) {
-        // Use the new MoveToPositionAll method for more efficient motion
-        controller->MoveToPositionAll(4.64, 6.5, 0.0, 0.0, 0.0, 0.0, false);
-      }
 
-      ImGui::SameLine();
-      if (ImGui::Button("Test Down")) {
-        // Use the new MoveToPositionAll method for more efficient motion
-        controller->MoveToPositionAll(4.64, 2.5, 0.0, 0.0, 0.0, 0.0, false);
-      }
-    }
 
     ImGui::PopID();
     ImGui::Separator();

@@ -264,6 +264,11 @@ int main(int argc, char* argv[])
 
 	// Setup devices from config
 	ioconfigManager.initializeIOManager(ioManager);
+
+
+
+
+
 	// 3. Create and configure the Pneumatic Manager
 	PneumaticManager pneumaticManager(ioManager);
 	if (!ioconfigManager.initializePneumaticManager(pneumaticManager)) {
@@ -305,6 +310,13 @@ int main(int argc, char* argv[])
 
 	// Set the config manager to enable named pins in the UI
 	ioUI.setConfigManager(&ioconfigManager);
+	if (ioUI.IsVisible())
+	{
+		ioUI.ToggleWindow();  // or similar method to hide the window
+		logger->LogInfo("EziIO UI initialized");
+	}
+
+
 
 	// In the main function, after initializing the ClientManager:
 // Create the DataClientManager with the config file path

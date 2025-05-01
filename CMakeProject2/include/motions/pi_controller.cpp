@@ -225,7 +225,7 @@ void PIController::Disconnect() {
 	if (!m_isConnected) {
 		return;
 	}
-
+	StopCommunicationThread();
 	m_logger->LogInfo("PIController: Disconnecting from controller");
 
 	// Ensure all axes are stopped before disconnecting

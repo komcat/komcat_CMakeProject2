@@ -102,7 +102,7 @@ private:
   Logger* m_logger;
 
   // UI state
-  bool m_showWindow = true;
+  bool m_showWindow = false;
   double m_jogDistance = 1.0;  // Default jog distance in mm
 
   // Performance optimization

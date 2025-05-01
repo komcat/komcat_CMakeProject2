@@ -31,7 +31,7 @@ private:
     Logger* m_logger;
 
     // UI state
-    bool m_showWindow = true;
+    bool m_showWindow = false;
     bool m_showDevicesTab = true;
     bool m_showPositionsTab = false;
     bool m_showGraphsTab = false;
