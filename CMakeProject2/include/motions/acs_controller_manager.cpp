@@ -139,51 +139,53 @@ bool ACSControllerManager::MoveToNamedPosition(const std::string& deviceName, co
   }
 }
 
-// Add this helper method to handle the actual movement
 bool ACSControllerManager::ExecutePositionMove(ACSController* controller,
   const std::string& deviceName,
   const std::string& positionName,
   const PositionStruct& position) {
-  bool success = true;
+
   const auto& availableAxes = controller->GetAvailableAxes();
 
-  // Move X axis if available
+  // Create vectors to hold the axes and positions for multi-axis movement
+  std::vector<std::string> axesToMove;
+  std::vector<double> positionsToMove;
+
+  // Add X axis position if available
   if (std::find(availableAxes.begin(), availableAxes.end(), "X") != availableAxes.end()) {
-    if (!controller->MoveToPosition("X", position.x, false)) {
-      m_logger->LogError("ACSControllerManager: Failed to move X axis");
-      success = false;
-    }
+    axesToMove.push_back("X");
+    positionsToMove.push_back(position.x);
   }
 
-  // Move Y axis if available
+  // Add Y axis position if available
   if (std::find(availableAxes.begin(), availableAxes.end(), "Y") != availableAxes.end()) {
-    if (!controller->MoveToPosition("Y", position.y, false)) {
-      m_logger->LogError("ACSControllerManager: Failed to move Y axis");
-      success = false;
-    }
+    axesToMove.push_back("Y");
+    positionsToMove.push_back(position.y);
   }
 
-  // Move Z axis if available
+  // Add Z axis position if available
   if (std::find(availableAxes.begin(), availableAxes.end(), "Z") != availableAxes.end()) {
-    if (!controller->MoveToPosition("Z", position.z, false)) {
-      m_logger->LogError("ACSControllerManager: Failed to move Z axis");
-      success = false;
-    }
+    axesToMove.push_back("Z");
+    positionsToMove.push_back(position.z);
   }
 
-  // Wait for each axis to complete movement
-  if (success) {
-    for (const auto& axis : availableAxes) {
-      if (!controller->WaitForMotionCompletion(axis)) {
-        m_logger->LogError("ACSControllerManager: Timeout waiting for axis " + axis + " to complete motion");
-        success = false;
-      }
-    }
+  // If no axes to move, return success
+  if (axesToMove.empty()) {
+    return true;
+  }
+
+  // Log the multi-axis movement
+  m_logger->LogInfo("ACSControllerManager: Moving " + deviceName + " to position " +
+    positionName + " with multi-axis movement");
+
+  // Execute multi-axis movement
+  bool success = controller->MoveToPositionMultiAxis(axesToMove, positionsToMove, true);
+
+  if (!success) {
+    m_logger->LogError("ACSControllerManager: Failed multi-axis movement for device " + deviceName);
   }
 
   return success;
 }
-
 void ACSControllerManager::RenderUI() {
   // Create a window to show all controllers
   if (!ImGui::Begin("ACS Controller Manager")) {

@@ -15,7 +15,7 @@
 // Add these includes at the top with the other include statements
 #include "include/motions/acs_controller.h"
 #include "include/motions/acs_controller_manager.h"
-
+#include "include/motions/motion_control_layer.h" // Add this include for the motion control layer
 
 // ImGui and SDL includes
 #include "imgui.h"
@@ -157,9 +157,32 @@ int main(int argc, char* argv[])
 		logger->LogWarning("Failed to connect to some ACS controllers");
 	}
 
+	// Create the Motion Control Layer
+	MotionControlLayer motionControlLayer(configManager, piControllerManager, acsControllerManager);
+	logger->LogInfo("MotionControlLayer initialized");
+
+	// Set up callbacks for the Motion Control Layer
+	motionControlLayer.SetPathCompletionCallback([&logger](bool success) {
+		if (success) {
+			logger->LogInfo("Path execution completed successfully");
+		}
+		else {
+			logger->LogWarning("Path execution failed or was cancelled");
+		}
+	});
 
 
-
+	// Example of planning and executing a path - uncomment to test
+	// This plans a path from the gantry home to the pic position
+	/*
+	if (motionControlLayer.PlanPath("Process_Flow", "node_9069", "node_9098")) {
+		logger->LogInfo("Path planned successfully, starting execution");
+		motionControlLayer.ExecutePath(false); // Non-blocking execution
+	}
+	else {
+		logger->LogError("Failed to plan path");
+	}
+	*/
 
 	// Log the loaded devices
 	const auto& devices = configManager.GetAllDevices();
@@ -436,7 +459,8 @@ int main(int argc, char* argv[])
 			}
 		}
 
-
+		// Render the Motion Control Layer UI
+		motionControlLayer.RenderUI();
 
 
 		// Render Pylon Camera Test UI

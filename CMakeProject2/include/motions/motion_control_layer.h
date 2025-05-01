@@ -1,0 +1,116 @@
+// motion_control_layer.h
+#pragma once
+
+#include "include/motions/MotionConfigManager.h"
+#include "include/motions/pi_controller_manager.h"
+#include "include/motions/acs_controller_manager.h"
+#include "include/logger.h"
+#include <string>
+#include <vector>
+#include <queue>
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <functional>
+#include <condition_variable>
+
+// Class to handle path planning and execution
+class MotionControlLayer {
+public:
+  MotionControlLayer(MotionConfigManager& configManager,
+    PIControllerManager& piControllerManager,
+    ACSControllerManager& acsControllerManager);
+  ~MotionControlLayer();
+
+  // Path planning and execution
+  bool PlanPath(const std::string& graphName, const std::string& startNodeId, const std::string& endNodeId);
+  bool ExecutePath(bool blocking = false);
+  void CancelExecution();
+
+  // Callbacks for completion notifications
+  using CompletionCallback = std::function<void(bool)>;
+  void SetPathCompletionCallback(CompletionCallback callback);
+  void SetSequenceCompletionCallback(CompletionCallback callback);
+
+  // Status information
+  bool IsExecuting() const { return m_isExecuting; }
+  std::string GetCurrentNodeId() const;
+  std::string GetNextNodeId() const;
+  double GetPathProgress() const; // 0.0 to 1.0
+
+  // UI rendering (minimal, can be removed or expanded later)
+  void RenderUI();
+  // New methods to get current position information
+  std::string GetNodeIdFromCurrentPosition(const std::string& graphName, const std::string& deviceName) const;
+  bool IsDeviceAtNode(const std::string& graphName, const std::string& nodeId, double tolerance = 0.01) const;
+  bool GetDeviceCurrentNode(const std::string& graphName, const std::string& deviceName, std::string& nodeId) const;
+  // Helper to compare positions
+
+
+
+private:
+  // References to managers
+  MotionConfigManager& m_configManager;
+  PIControllerManager& m_piControllerManager;
+  ACSControllerManager& m_acsControllerManager;
+  Logger* m_logger;
+
+  // Path execution thread
+  std::thread m_executionThread;
+  std::mutex m_mutex;
+  std::condition_variable m_cv;
+  std::atomic<bool> m_isExecuting;
+  std::atomic<bool> m_cancelRequested;
+  std::atomic<bool> m_threadRunning;
+
+  // Path data
+  std::string m_currentGraphName;
+  std::vector<std::reference_wrapper<const Node>> m_plannedPath;
+  size_t m_currentNodeIndex;
+
+  // Callbacks
+  CompletionCallback m_pathCompletionCallback;
+  CompletionCallback m_sequenceCompletionCallback;
+
+  // Private methods
+  void ExecutionThreadFunc();
+  bool MoveToNode(const Node& node);
+  bool ValidateNodeTransition(const Node& fromNode, const Node& toNode);
+
+  // Helper to determine which controller manager to use for a device
+  bool IsDevicePIController(const std::string& deviceName) const;
+
+  // Helper functions to get node information
+  std::string GetNodeLabel(const std::string& graphName, const std::string& nodeId) const;
+  std::string GetNodeLabelAndId(const std::string& graphName, const std::string& nodeId) const;
+  std::vector<std::pair<std::string, std::string>> GetAllNodesWithLabels(const std::string& graphName) const;
+
+  // Polling helpers
+  bool WaitForPositionReached(const std::string& deviceName, const std::string& positionName,
+    const PositionStruct& targetPosition, double timeoutSeconds = 30.0);
+  bool IsPositionReached(const std::string& deviceName, const PositionStruct& targetPosition,
+    double tolerance = 0.01);
+  bool GetCurrentPosition(const std::string& deviceName, PositionStruct& currentPosition);
+
+  // Current position tracking
+  std::map<std::string, PositionStruct> m_deviceCurrentPositions;
+  void UpdateDevicePosition(const std::string& deviceName);
+
+
+  // Helper to compare positions - add to motion_control_layer.h private section
+  bool IsPositionsEqual(const PositionStruct& pos1, const PositionStruct& pos2, double tolerance) const {
+    // Check if all axes are within tolerance
+    bool xOk = std::abs(pos1.x - pos2.x) <= tolerance;
+    bool yOk = std::abs(pos1.y - pos2.y) <= tolerance;
+    bool zOk = std::abs(pos1.z - pos2.z) <= tolerance;
+
+    // For rotation axes, only check if they are used (non-zero target)
+    bool uOk = (pos2.u == 0) || (std::abs(pos1.u - pos2.u) <= tolerance);
+    bool vOk = (pos2.v == 0) || (std::abs(pos1.v - pos2.v) <= tolerance);
+    bool wOk = (pos2.w == 0) || (std::abs(pos1.w - pos2.w) <= tolerance);
+
+    return xOk && yOk && zOk && uOk && vOk && wOk;
+  }
+
+};
+

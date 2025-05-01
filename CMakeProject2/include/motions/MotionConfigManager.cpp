@@ -245,60 +245,76 @@ std::vector<std::reference_wrapper<const Edge>> MotionConfigManager::GetEdgesByS
     return result;
 }
 
-std::vector<std::reference_wrapper<const Node>> MotionConfigManager::FindPath(const std::string& graphName,
-    const std::string& startNodeId,
-    const std::string& endNodeId) const {
-    std::vector<std::reference_wrapper<const Node>> path;
+std::vector<std::reference_wrapper<const Node>> MotionConfigManager::FindPath(
+  const std::string& graphName,
+  const std::string& startNodeId,
+  const std::string& endNodeId) const {
+  std::vector<std::reference_wrapper<const Node>> path;
 
-    auto graphOpt = GetGraph(graphName);
-    if (!graphOpt.has_value()) {  // Using has_value() for clarity
-        return path;
-    }
-
-    // Breadth-first search for the shortest path
-    std::queue<std::vector<std::string>> nodeQueue;
-    std::set<std::string> visited;
-
-    // Start with the initial node
-    nodeQueue.push({ startNodeId });
-    visited.insert(startNodeId);
-
-    while (!nodeQueue.empty()) {
-        auto currentPath = nodeQueue.front();
-        nodeQueue.pop();
-
-        std::string currentNodeId = currentPath.back();
-
-        // If we've reached the destination, build and return the path
-        if (currentNodeId == endNodeId) {
-            for (const auto& nodeId : currentPath) {
-                const Node* node = GetNodeById(graphName, nodeId);
-                if (node) {
-                    path.emplace_back(std::cref(*node));  // Using emplace_back instead of push_back
-                }
-            }
-            return path;
-        }
-
-        // Explore all edges from the current node
-        auto edges = GetEdgesBySource(graphName, currentNodeId);
-        for (const auto& edge : edges) {
-            std::string targetNodeId = edge.get().Target;
-
-            if (visited.find(targetNodeId) == visited.end()) {
-                visited.insert(targetNodeId);
-
-                // Create a new path with the target node added
-                auto newPath = currentPath;
-                newPath.push_back(targetNodeId);
-                nodeQueue.push(newPath);
-            }
-        }
-    }
-
-    // No path found
+  auto graphOpt = GetGraph(graphName);
+  if (!graphOpt.has_value()) {
     return path;
+  }
+
+  const auto& graph = graphOpt.value().get();
+
+  // Breadth-first search for the shortest path
+  std::queue<std::vector<std::string>> nodeQueue;
+  std::set<std::string> visited;
+
+  // Start with the initial node
+  nodeQueue.push({ startNodeId });
+  visited.insert(startNodeId);
+
+  while (!nodeQueue.empty()) {
+    auto currentPath = nodeQueue.front();
+    nodeQueue.pop();
+
+    std::string currentNodeId = currentPath.back();
+
+    // If we've reached the destination, build and return the path
+    if (currentNodeId == endNodeId) {
+      for (const auto& nodeId : currentPath) {
+        const Node* node = GetNodeById(graphName, nodeId);
+        if (node) {
+          path.emplace_back(std::cref(*node));
+        }
+      }
+      return path;
+    }
+
+    // Explore all edges
+    for (const auto& edge : graph.Edges) {
+      std::string targetNodeId;
+      bool isValidEdge = false;
+
+      // Check for direct and bidirectional connections
+      if (edge.Source == currentNodeId) {
+        targetNodeId = edge.Target;
+        isValidEdge = true;
+      }
+      else if (edge.Conditions.IsBidirectional && edge.Target == currentNodeId) {
+        targetNodeId = edge.Source;
+        isValidEdge = true;
+      }
+
+      if (isValidEdge && visited.find(targetNodeId) == visited.end()) {
+        visited.insert(targetNodeId);
+
+        // Create a new path with the target node added
+        auto newPath = currentPath;
+        newPath.push_back(targetNodeId);
+        nodeQueue.push(newPath);
+      }
+    }
+  }
+
+  // No path found
+  return path;
 }
+
+
+
 
 const Settings& MotionConfigManager::GetSettings() const {
     return m_settings;
