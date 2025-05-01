@@ -38,6 +38,8 @@
 #include "include/motions/pi_analog_reader.h"
 #include "include/motions/pi_analog_manager.h"
 #include "include/data/product_config_manager.h"
+#include "include/eziio/IOControlPanel.h"
+
 
 int main(int argc, char* argv[])
 {
@@ -267,7 +269,9 @@ int main(int argc, char* argv[])
 
 	// Setup devices from config
 	ioconfigManager.initializeIOManager(ioManager);
-
+	// Create our IO Control Panel for quick output control
+	IOControlPanel ioControlPanel(ioManager);
+	logger->LogInfo("IOControlPanel initialized for quick output control");
 
 
 
@@ -347,6 +351,8 @@ int main(int argc, char* argv[])
 	// Add PIAnalogManager as a toggleable UI component
 	toolbarMenu.AddReference(std::shared_ptr<ITogglableUI>(&piAnalogManager));
 	toolbarMenu.AddReference(CreateTogglableUI(productConfigManager, "Products Config"));
+	// Add the IOControlPanel using the same CreateTogglableUI adapter
+	toolbarMenu.AddReference(CreateTogglableUI(ioControlPanel, "IO Quick Control"));
 	// Log successful initialization
 	logger->LogInfo("ToolbarMenu initialized with " +
 		std::to_string(toolbarMenu.GetComponentCount()) +
@@ -516,7 +522,8 @@ int main(int argc, char* argv[])
 
 		//product config manager
 		productConfigManager.RenderUI();
-
+		// Render IO Control Panel UI
+		ioControlPanel.RenderUI();
 
 		// Rendering
 		ImGui::Render();
