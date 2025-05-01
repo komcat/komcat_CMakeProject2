@@ -346,6 +346,8 @@ int main(int argc, char* argv[])
 	// Add controller managers using our custom adapters
 	toolbarMenu.AddReference(CreateACSControllerAdapter(acsControllerManager, "Gantry"));
 	toolbarMenu.AddReference(CreatePIControllerAdapter(piControllerManager, "PI"));
+	// Add PIAnalogManager as a toggleable UI component
+	toolbarMenu.AddReference(std::shared_ptr<ITogglableUI>(&piAnalogManager));
 	// Log successful initialization
 	logger->LogInfo("ToolbarMenu initialized with " +
 		std::to_string(toolbarMenu.GetComponentCount()) +
@@ -523,20 +525,8 @@ int main(int argc, char* argv[])
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		SDL_GL_SwapWindow(window);
 	}
-	piControllerManager.DisconnectAll();
-	acsControllerManager.DisconnectAll();
-
-
-
 	// When exit is triggered:
 	logger->Log("Application shutting down");
-
-	// Stop the polling thread
-	ioManager.stopPolling();
-	// Before application exit
-	pneumaticManager.stopPolling();
-	// Disconnect from all devices
-	ioManager.disconnectAll();
 	pylonCameraTest.GetCamera().StopGrabbing();
 	pylonCameraTest.GetCamera().Disconnect();
 	if (pylonCameraTest.GetCamera().IsCameraDeviceRemoved())
@@ -546,6 +536,24 @@ int main(int argc, char* argv[])
 	else {
 		std::cout << "Camera device not removed" << std::endl;
 	}
+
+	//stop polling analog
+	piAnalogManager.stopPolling();
+	//disconnect controller
+	piControllerManager.DisconnectAll();
+	acsControllerManager.DisconnectAll();
+
+
+
+
+	// Before application exit
+	pneumaticManager.stopPolling();
+	// Stop the polling thread
+	ioManager.stopPolling();
+
+	// Disconnect from all devices
+	ioManager.disconnectAll();
+
 
 
 	

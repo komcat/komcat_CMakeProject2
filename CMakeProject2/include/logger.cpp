@@ -183,6 +183,9 @@ void Logger::RenderUI() {
   ImGui::SetNextWindowPos(ImVec2(0, displaySize.y - logWindowHeight), ImGuiCond_Always);
   ImGui::SetNextWindowSize(ImVec2(displaySize.x, logWindowHeight), ImGuiCond_Always);
 
+  // Set a dark background for the log window
+  ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.1f, 0.1f, 0.1f, 0.9f));
+
   // Remove window decorations and make it non-movable and non-resizable
   ImGuiWindowFlags windowFlags =
     ImGuiWindowFlags_NoMove |
@@ -242,20 +245,20 @@ void Logger::RenderUI() {
         continue;
       }
 
-      // Set text color based on message level
+      // Set text color based on message level - enhanced for better contrast
       ImVec4 textColor;
       switch (logMsg.level) {
       case LogLevel::Debug:
-        textColor = ImVec4(0.7f, 0.7f, 0.7f, 1.0f); // Gray
+        textColor = ImVec4(0.8f, 0.8f, 0.8f, 1.0f); // Lighter Gray for better contrast
         break;
       case LogLevel::Info:
         textColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f); // White
         break;
       case LogLevel::Warning:
-        textColor = ImVec4(1.0f, 0.7f, 0.0f, 1.0f); // Orange
+        textColor = ImVec4(1.0f, 0.8f, 0.0f, 1.0f); // Brighter Orange
         break;
       case LogLevel::Error:
-        textColor = ImVec4(1.0f, 0.2f, 0.2f, 1.0f); // Red
+        textColor = ImVec4(1.0f, 0.4f, 0.4f, 1.0f); // Brighter Red
         break;
       }
 
@@ -276,8 +279,10 @@ void Logger::RenderUI() {
 
   ImGui::EndChild();
   ImGui::End();
-}
 
+  // Pop the window background color
+  ImGui::PopStyleColor();
+}
 bool Logger::SaveLogsToFile(const std::string& filename) {
   std::lock_guard<std::mutex> lock(m_logMutex);
 

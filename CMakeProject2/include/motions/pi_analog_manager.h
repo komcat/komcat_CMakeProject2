@@ -4,12 +4,16 @@
 #include "pi_analog_reader.h"
 #include "pi_controller_manager.h"
 #include "MotionConfigManager.h"
+#include "include/ui/ToolbarMenu.h" // For ITogglableUI interface
 #include <map>
 #include <memory>
 #include <vector>
 #include <string>
+#include <atomic>
+#include <thread>
 
-class PIAnalogManager {
+// Make PIAnalogManager implement ITogglableUI interface
+class PIAnalogManager : public ITogglableUI {
 public:
   PIAnalogManager(PIControllerManager& controllerManager, MotionConfigManager& configManager);
   ~PIAnalogManager();
@@ -23,8 +27,22 @@ public:
   // Update readings for all connected devices
   void UpdateAllReadings();
 
+  // Start polling for analog readings at regular intervals
+  void startPolling(unsigned int intervalMs = 100);
+
+  // Stop polling for analog readings
+  void stopPolling();
+
+  // Check if polling is active
+  bool isPolling() const;
+
   // Render UI
   void RenderUI();
+
+  // ITogglableUI interface implementation
+  bool IsVisible() const override { return m_showWindow; }
+  void ToggleWindow() override { m_showWindow = !m_showWindow; }
+  const std::string& GetName() const override { return m_windowTitle; }
 
 private:
   PIControllerManager& m_controllerManager;
@@ -38,4 +56,13 @@ private:
   // UI state
   bool m_showWindow = true;
   std::string m_windowTitle = "PI Analog Manager";
+
+  // Polling thread
+  std::thread* m_pollingThread = nullptr;
+  std::atomic<bool> m_stopPolling;
+  unsigned int m_pollingInterval;
+  std::mutex m_readersMutex;
+
+  // Thread function for polling
+  void pollingThreadFunc();
 };

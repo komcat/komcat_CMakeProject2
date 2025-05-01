@@ -1,9 +1,15 @@
 // pi_analog_manager.cpp
 #include "../include/motions/pi_analog_manager.h"
 #include "imgui.h"
+#include <chrono>
+#include <iostream>
 
 PIAnalogManager::PIAnalogManager(PIControllerManager& controllerManager, MotionConfigManager& configManager)
-  : m_controllerManager(controllerManager), m_configManager(configManager) {
+  : m_controllerManager(controllerManager),
+  m_configManager(configManager),
+  m_stopPolling(false),
+  m_pollingInterval(100), // Default 100ms polling interval
+  m_pollingThread(nullptr) {
 
   m_logger = Logger::GetInstance();
   m_logger->LogInfo("PIAnalogManager: Initializing");
@@ -13,7 +19,63 @@ PIAnalogManager::PIAnalogManager(PIControllerManager& controllerManager, MotionC
 }
 
 PIAnalogManager::~PIAnalogManager() {
+  // Stop polling thread if active
+  stopPolling();
+
   m_logger->LogInfo("PIAnalogManager: Shutting down");
+}
+
+void PIAnalogManager::startPolling(unsigned int intervalMs) {
+  // Don't start if already running
+  if (m_pollingThread) {
+    return;
+  }
+
+  // Set the polling interval
+  m_pollingInterval = intervalMs;
+
+  // Reset the stop flag
+  m_stopPolling = false;
+
+  // Start the polling thread
+  m_pollingThread = new std::thread(&PIAnalogManager::pollingThreadFunc, this);
+
+  m_logger->LogInfo("PIAnalogManager: Polling thread started with interval " +
+    std::to_string(m_pollingInterval) + "ms");
+}
+
+void PIAnalogManager::stopPolling() {
+  // Signal the thread to stop
+  m_stopPolling = true;
+
+  // Wait for the thread to exit
+  if (m_pollingThread) {
+    if (m_pollingThread->joinable()) {
+      m_pollingThread->join();
+    }
+    delete m_pollingThread;
+    m_pollingThread = nullptr;
+  }
+
+  m_logger->LogInfo("PIAnalogManager: Polling stopped");
+}
+
+bool PIAnalogManager::isPolling() const {
+  return m_pollingThread != nullptr && !m_stopPolling;
+}
+
+void PIAnalogManager::pollingThreadFunc() {
+  m_logger->LogInfo("PIAnalogManager: Polling thread started");
+
+  while (!m_stopPolling) {
+    // Update all readings
+    UpdateAllReadings();
+
+    // Sleep for the specified interval
+    std::this_thread::sleep_for(std::chrono::milliseconds(m_pollingInterval));
+  }
+
+  m_logger->LogInfo("PIAnalogManager: Polling thread stopped");
 }
 
 std::vector<std::string> PIAnalogManager::GetPIControllerDeviceNames() const {
@@ -66,6 +128,8 @@ PIAnalogReader* PIAnalogManager::GetReader(const std::string& deviceName) {
 }
 
 void PIAnalogManager::UpdateAllReadings() {
+  std::lock_guard<std::mutex> lock(m_readersMutex);
+
   for (auto& [deviceName, reader] : m_readers) {
     // Get the controller
     PIController* controller = m_controllerManager.GetController(deviceName);
@@ -78,6 +142,7 @@ void PIAnalogManager::UpdateAllReadings() {
 }
 
 void PIAnalogManager::RenderUI() {
+  // Skip rendering if window is hidden
   if (!m_showWindow) {
     return;
   }
@@ -94,12 +159,28 @@ void PIAnalogManager::RenderUI() {
 
   ImGui::SameLine();
 
+  // Start/stop polling button
+  bool isCurrentlyPolling = isPolling();
+  if (isCurrentlyPolling) {
+    if (ImGui::Button("Stop Auto Updates")) {
+      stopPolling();
+    }
+  }
+  else {
+    if (ImGui::Button("Start Auto Updates")) {
+      startPolling(100); // 100ms polling interval
+    }
+  }
+
+  ImGui::SameLine();
+
   // Show/hide all reader windows button
   static bool showAllReaders = false;
   if (ImGui::Button(showAllReaders ? "Hide All Readers" : "Show All Readers")) {
     showAllReaders = !showAllReaders;
 
     // Set visibility for all readers
+    std::lock_guard<std::mutex> lock(m_readersMutex);
     for (auto& [deviceName, reader] : m_readers) {
       reader->SetWindowVisible(showAllReaders);
     }
@@ -108,6 +189,7 @@ void PIAnalogManager::RenderUI() {
   ImGui::Separator();
 
   // Display controllers and their analog readers
+  std::lock_guard<std::mutex> lock(m_readersMutex);
   for (auto& [deviceName, reader] : m_readers) {
     if (ImGui::CollapsingHeader(deviceName.c_str())) {
       // Get the controller
