@@ -37,7 +37,7 @@
 #include "include/data/data_client_manager.h"  // Add this at the top with other includes
 #include "include/motions/pi_analog_reader.h"
 #include "include/motions/pi_analog_manager.h"
-
+#include "include/data/product_config_manager.h"
 
 int main(int argc, char* argv[])
 {
@@ -329,10 +329,8 @@ int main(int argc, char* argv[])
 
 
 
-	// Update toolbar initialization to include the graph visualizer
-// Replace your existing toolbar initialization with:
-	//Toolbar toolbar(configEditor, graphVisualizer, ioUI);
-	//logger->LogInfo("Toolbar initialized with GraphVisualizer support");
+	// Create the ProductConfigManager instance
+	ProductConfigManager productConfigManager(configManager);
 
 
 
@@ -348,6 +346,7 @@ int main(int argc, char* argv[])
 	toolbarMenu.AddReference(CreatePIControllerAdapter(piControllerManager, "PI"));
 	// Add PIAnalogManager as a toggleable UI component
 	toolbarMenu.AddReference(std::shared_ptr<ITogglableUI>(&piAnalogManager));
+	toolbarMenu.AddReference(CreateTogglableUI(productConfigManager, "Products Config"));
 	// Log successful initialization
 	logger->LogInfo("ToolbarMenu initialized with " +
 		std::to_string(toolbarMenu.GetComponentCount()) +
@@ -515,6 +514,8 @@ int main(int argc, char* argv[])
 		// Render DataClientManager UI
 		dataClientManager.RenderUI();
 
+		//product config manager
+		productConfigManager.RenderUI();
 
 
 		// Rendering
@@ -542,6 +543,7 @@ int main(int argc, char* argv[])
 
 	try
 	{
+		piAnalogManager.ToggleWindow();
 		piAnalogManager.stopPolling();
 
 		// Clean up reader resources

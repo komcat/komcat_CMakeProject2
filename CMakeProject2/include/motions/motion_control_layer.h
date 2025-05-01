@@ -46,7 +46,7 @@ public:
   bool GetDeviceCurrentNode(const std::string& graphName, const std::string& deviceName, std::string& nodeId) const;
   // Helper to compare positions
 
-
+  const Node* MotionControlLayer::GetNodeById(const std::string& graphName, const std::string& nodeId) const;
 
 private:
   // References to managers

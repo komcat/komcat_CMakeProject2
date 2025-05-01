@@ -639,117 +639,271 @@ void MotionConfigEditor::RenderGraphList() {
     }
 }
 
+// In MotionConfigEditor.cpp, update the RenderNodeList function
+
+
+// First, make sure to include the set header at the top of MotionConfigEditor.cpp:
+// Add this with the other includes at the top of the file
+#include <set>
+
+// Add a member variable to MotionConfigEditor.h in the private section:
+// std::string m_deviceFilter = ""; // For filtering nodes/edges by device
+
+// Then update the RenderNodeList function in MotionConfigEditor.cpp:
+
 void MotionConfigEditor::RenderNodeList() {
-    ImGui::Text("Nodes for %s", m_selectedGraph.c_str());
+  ImGui::Text("Nodes for %s", m_selectedGraph.c_str());
 
-    if (ImGui::Button("Add New Node")) {
-        m_isAddingNewNode = true;
-        m_isAddingNewEdge = false;
-        m_selectedNode.clear();
-        m_selectedEdge.clear();
-
-        // Initialize with default values
-        m_editingNode = Node();
-        m_newNodeId = "node_" + std::to_string(time(nullptr) % 10000);
-        m_newNodeLabel = "New Node";
-        m_newNodeDevice = "";
-        m_newNodePosition = "";
-
-        // Update buffers
-        std::strncpy(m_nodeIdBuffer, m_newNodeId.c_str(), sizeof(m_nodeIdBuffer) - 1);
-        std::strncpy(m_nodeLabelBuffer, m_newNodeLabel.c_str(), sizeof(m_nodeLabelBuffer) - 1);
-        std::strncpy(m_nodeDeviceBuffer, m_newNodeDevice.c_str(), sizeof(m_nodeDeviceBuffer) - 1);
-        std::strncpy(m_nodePositionBuffer, m_newNodePosition.c_str(), sizeof(m_nodePositionBuffer) - 1);
+  // Add device filter dropdown
+  if (ImGui::BeginCombo("Filter by Device", m_deviceFilter.empty() ? "All Devices" : m_deviceFilter.c_str())) {
+    // Add "All Devices" option
+    bool isSelected = m_deviceFilter.empty();
+    if (ImGui::Selectable("All Devices", isSelected)) {
+      m_deviceFilter = "";
+    }
+    if (isSelected) {
+      ImGui::SetItemDefaultFocus();
     }
 
-    ImGui::Separator();
-
+    // Get all unique devices from nodes in the current graph
+    std::set<std::string> devices;
     auto graphOpt = m_configManager.GetGraph(m_selectedGraph);
     if (graphOpt.has_value()) {
-        const auto& graph = graphOpt.value().get();
-
-        for (const auto& node : graph.Nodes) {
-            bool isSelected = (m_selectedNode == node.Id);
-
-            // Create a more informative label with device and position
-            std::string displayLabel = node.Id;
-            if (!node.Device.empty() && !node.Position.empty()) {
-                displayLabel += " (" + node.Device + "." + node.Position + ")";
-            }
-
-            if (ImGui::Selectable(displayLabel.c_str(), isSelected)) {
-                m_selectedNode = node.Id;
-                m_selectedEdge.clear();
-                m_isAddingNewNode = false;
-                m_isAddingNewEdge = false;
-
-                // Copy node data
-                m_editingNode = node;
-
-                // Update buffers
-                std::strncpy(m_nodeIdBuffer, node.Id.c_str(), sizeof(m_nodeIdBuffer) - 1);
-                std::strncpy(m_nodeLabelBuffer, node.Label.c_str(), sizeof(m_nodeLabelBuffer) - 1);
-                std::strncpy(m_nodeDeviceBuffer, node.Device.c_str(), sizeof(m_nodeDeviceBuffer) - 1);
-                std::strncpy(m_nodePositionBuffer, node.Position.c_str(), sizeof(m_nodePositionBuffer) - 1);
-            }
+      const auto& graph = graphOpt.value().get();
+      for (const auto& node : graph.Nodes) {
+        if (!node.Device.empty()) {
+          devices.insert(node.Device);
         }
+      }
     }
+
+    // Add each device to the dropdown
+    for (const auto& device : devices) {
+      isSelected = (m_deviceFilter == device);
+      if (ImGui::Selectable(device.c_str(), isSelected)) {
+        m_deviceFilter = device;
+      }
+      if (isSelected) {
+        ImGui::SetItemDefaultFocus();
+      }
+    }
+
+    ImGui::EndCombo();
+  }
+
+  if (ImGui::Button("Add New Node")) {
+    m_isAddingNewNode = true;
+    m_isAddingNewEdge = false;
+    m_selectedNode.clear();
+    m_selectedEdge.clear();
+
+    // Initialize with default values
+    m_editingNode = Node();
+    m_newNodeId = "node_" + std::to_string(time(nullptr) % 10000);
+    m_newNodeLabel = "New Node";
+    m_newNodeDevice = m_deviceFilter; // Use selected device as default if filtering
+    m_newNodePosition = "";
+
+    // Update buffers
+    std::strncpy(m_nodeIdBuffer, m_newNodeId.c_str(), sizeof(m_nodeIdBuffer) - 1);
+    std::strncpy(m_nodeLabelBuffer, m_newNodeLabel.c_str(), sizeof(m_nodeLabelBuffer) - 1);
+    std::strncpy(m_nodeDeviceBuffer, m_newNodeDevice.c_str(), sizeof(m_nodeDeviceBuffer) - 1);
+    std::strncpy(m_nodePositionBuffer, m_newNodePosition.c_str(), sizeof(m_nodePositionBuffer) - 1);
+  }
+
+  ImGui::Separator();
+
+  auto graphOpt = m_configManager.GetGraph(m_selectedGraph);
+  if (graphOpt.has_value()) {
+    const auto& graph = graphOpt.value().get();
+
+    for (const auto& node : graph.Nodes) {
+      // Skip nodes that don't match the device filter
+      if (!m_deviceFilter.empty() && node.Device != m_deviceFilter) {
+        continue;
+      }
+
+      bool isSelected = (m_selectedNode == node.Id);
+
+      // Create a more informative display format: label (id) - device.position
+      // If label is empty, just show the ID
+      std::string displayText;
+      if (!node.Label.empty()) {
+        displayText = node.Label + " (" + node.Id + ")";
+      }
+      else {
+        displayText = node.Id;
+      }
+
+      // Add device and position info if available
+      if (!node.Device.empty() && !node.Position.empty()) {
+        displayText += " - " + node.Device + "." + node.Position;
+      }
+
+      if (ImGui::Selectable(displayText.c_str(), isSelected)) {
+        m_selectedNode = node.Id;
+        m_selectedEdge.clear();
+        m_isAddingNewNode = false;
+        m_isAddingNewEdge = false;
+
+        // Copy node data
+        m_editingNode = node;
+
+        // Update buffers
+        std::strncpy(m_nodeIdBuffer, node.Id.c_str(), sizeof(m_nodeIdBuffer) - 1);
+        std::strncpy(m_nodeLabelBuffer, node.Label.c_str(), sizeof(m_nodeLabelBuffer) - 1);
+        std::strncpy(m_nodeDeviceBuffer, node.Device.c_str(), sizeof(m_nodeDeviceBuffer) - 1);
+        std::strncpy(m_nodePositionBuffer, node.Position.c_str(), sizeof(m_nodePositionBuffer) - 1);
+      }
+    }
+  }
 }
+
+// Now update the RenderEdgeList function in MotionConfigEditor.cpp:
 
 void MotionConfigEditor::RenderEdgeList() {
-    ImGui::Text("Edges for %s", m_selectedGraph.c_str());
+  ImGui::Text("Edges for %s", m_selectedGraph.c_str());
 
-    if (ImGui::Button("Add New Edge")) {
-        m_isAddingNewEdge = true;
-        m_isAddingNewNode = false;
-        m_selectedEdge.clear();
-        m_selectedNode.clear();
-
-        // Initialize with default values
-        m_editingEdge = Edge();
-        m_newEdgeId = "edge_" + std::to_string(time(nullptr) % 10000);
-        m_newEdgeLabel = "New Edge";
-        m_newEdgeSource = "";
-        m_newEdgeTarget = "";
-
-        // Update buffers
-        std::strncpy(m_edgeIdBuffer, m_newEdgeId.c_str(), sizeof(m_edgeIdBuffer) - 1);
-        std::strncpy(m_edgeLabelBuffer, m_newEdgeLabel.c_str(), sizeof(m_edgeLabelBuffer) - 1);
-        std::strncpy(m_edgeSourceBuffer, m_newEdgeSource.c_str(), sizeof(m_edgeSourceBuffer) - 1);
-        std::strncpy(m_edgeTargetBuffer, m_newEdgeTarget.c_str(), sizeof(m_edgeTargetBuffer) - 1);
+  // Add device filter dropdown
+  if (ImGui::BeginCombo("Filter by Device", m_deviceFilter.empty() ? "All Devices" : m_deviceFilter.c_str())) {
+    // Add "All Devices" option
+    bool isSelected = m_deviceFilter.empty();
+    if (ImGui::Selectable("All Devices", isSelected)) {
+      m_deviceFilter = "";
+    }
+    if (isSelected) {
+      ImGui::SetItemDefaultFocus();
     }
 
-    ImGui::Separator();
-
+    // Get all unique devices from nodes in the current graph
+    std::set<std::string> devices;
     auto graphOpt = m_configManager.GetGraph(m_selectedGraph);
     if (graphOpt.has_value()) {
-        const auto& graph = graphOpt.value().get();
-
-        for (const auto& edge : graph.Edges) {
-            bool isSelected = (m_selectedEdge == edge.Id);
-
-            // Create a more informative label that shows if it's bidirectional
-            std::string directionSymbol = edge.Conditions.IsBidirectional ? " <-> " : " -> ";
-            std::string label = edge.Id + " (" + edge.Source + directionSymbol + edge.Target + ")";
-
-            if (ImGui::Selectable(label.c_str(), isSelected)) {
-                m_selectedEdge = edge.Id;
-                m_selectedNode.clear();
-                m_isAddingNewNode = false;
-                m_isAddingNewEdge = false;
-
-                // Copy edge data
-                m_editingEdge = edge;
-
-                // Update buffers
-                std::strncpy(m_edgeIdBuffer, edge.Id.c_str(), sizeof(m_edgeIdBuffer) - 1);
-                std::strncpy(m_edgeLabelBuffer, edge.Label.c_str(), sizeof(m_edgeLabelBuffer) - 1);
-                std::strncpy(m_edgeSourceBuffer, edge.Source.c_str(), sizeof(m_edgeSourceBuffer) - 1);
-                std::strncpy(m_edgeTargetBuffer, edge.Target.c_str(), sizeof(m_edgeTargetBuffer) - 1);
-            }
+      const auto& graph = graphOpt.value().get();
+      for (const auto& node : graph.Nodes) {
+        if (!node.Device.empty()) {
+          devices.insert(node.Device);
         }
+      }
     }
+
+    // Add each device to the dropdown
+    for (const auto& device : devices) {
+      isSelected = (m_deviceFilter == device);
+      if (ImGui::Selectable(device.c_str(), isSelected)) {
+        m_deviceFilter = device;
+      }
+      if (isSelected) {
+        ImGui::SetItemDefaultFocus();
+      }
+    }
+
+    ImGui::EndCombo();
+  }
+
+  if (ImGui::Button("Add New Edge")) {
+    m_isAddingNewEdge = true;
+    m_isAddingNewNode = false;
+    m_selectedEdge.clear();
+    m_selectedNode.clear();
+
+    // Initialize with default values
+    m_editingEdge = Edge();
+    m_newEdgeId = "edge_" + std::to_string(time(nullptr) % 10000);
+    m_newEdgeLabel = "New Edge";
+    m_newEdgeSource = "";
+    m_newEdgeTarget = "";
+
+    // Update buffers
+    std::strncpy(m_edgeIdBuffer, m_newEdgeId.c_str(), sizeof(m_edgeIdBuffer) - 1);
+    std::strncpy(m_edgeLabelBuffer, m_newEdgeLabel.c_str(), sizeof(m_edgeLabelBuffer) - 1);
+    std::strncpy(m_edgeSourceBuffer, m_newEdgeSource.c_str(), sizeof(m_edgeSourceBuffer) - 1);
+    std::strncpy(m_edgeTargetBuffer, m_newEdgeTarget.c_str(), sizeof(m_edgeTargetBuffer) - 1);
+  }
+
+  ImGui::Separator();
+
+  auto graphOpt = m_configManager.GetGraph(m_selectedGraph);
+  if (graphOpt.has_value()) {
+    const auto& graph = graphOpt.value().get();
+
+    // Create a map of node IDs to node info for quick lookup
+    std::map<std::string, const Node*> nodeMap;
+    for (const auto& node : graph.Nodes) {
+      nodeMap[node.Id] = &node;
+    }
+
+    for (const auto& edge : graph.Edges) {
+      // If a device filter is active, check if either the source or target node
+      // belongs to the filtered device
+      if (!m_deviceFilter.empty()) {
+        bool matchesFilter = false;
+
+        // Check source node
+        auto sourceIt = nodeMap.find(edge.Source);
+        if (sourceIt != nodeMap.end() && sourceIt->second->Device == m_deviceFilter) {
+          matchesFilter = true;
+        }
+
+        // Check target node
+        if (!matchesFilter) {
+          auto targetIt = nodeMap.find(edge.Target);
+          if (targetIt != nodeMap.end() && targetIt->second->Device == m_deviceFilter) {
+            matchesFilter = true;
+          }
+        }
+
+        // Skip edges that don't match the filter
+        if (!matchesFilter) {
+          continue;
+        }
+      }
+
+      bool isSelected = (m_selectedEdge == edge.Id);
+
+      // Get source and target node labels
+      std::string sourceLabel = "unknown";
+      std::string targetLabel = "unknown";
+
+      auto sourceIt = nodeMap.find(edge.Source);
+      if (sourceIt != nodeMap.end()) {
+        sourceLabel = sourceIt->second->Label.empty() ? edge.Source : sourceIt->second->Label;
+      }
+
+      auto targetIt = nodeMap.find(edge.Target);
+      if (targetIt != nodeMap.end()) {
+        targetLabel = targetIt->second->Label.empty() ? edge.Target : targetIt->second->Label;
+      }
+
+      // Create direction symbol based on bidirectional property
+      std::string directionSymbol = edge.Conditions.IsBidirectional ? " <-> " : " -> ";
+
+      // Create edge display text: edge_label (source_label direction_symbol target_label)
+      std::string edgeLabel = edge.Label.empty() ? edge.Id : edge.Label;
+      std::string displayText = edgeLabel + " (" + sourceLabel + directionSymbol + targetLabel + ")";
+
+      if (ImGui::Selectable(displayText.c_str(), isSelected)) {
+        m_selectedEdge = edge.Id;
+        m_selectedNode.clear();
+        m_isAddingNewNode = false;
+        m_isAddingNewEdge = false;
+
+        // Copy edge data
+        m_editingEdge = edge;
+
+        // Update buffers
+        std::strncpy(m_edgeIdBuffer, edge.Id.c_str(), sizeof(m_edgeIdBuffer) - 1);
+        std::strncpy(m_edgeLabelBuffer, edge.Label.c_str(), sizeof(m_edgeLabelBuffer) - 1);
+        std::strncpy(m_edgeSourceBuffer, edge.Source.c_str(), sizeof(m_edgeSourceBuffer) - 1);
+        std::strncpy(m_edgeTargetBuffer, edge.Target.c_str(), sizeof(m_edgeTargetBuffer) - 1);
+      }
+    }
+  }
 }
+
+
+
+
 
 void MotionConfigEditor::RenderNodeDetails() {
     if (m_isAddingNewNode) {

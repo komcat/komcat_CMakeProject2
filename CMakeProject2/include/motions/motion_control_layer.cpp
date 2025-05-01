@@ -425,6 +425,7 @@ bool MotionControlLayer::IsDevicePIController(const std::string& deviceName) con
 }
 
 
+// Updated RenderUI method for MotionControlLayer class without using std::set
 void MotionControlLayer::RenderUI() {
   // Simple UI for monitoring and control
   if (!ImGui::Begin("Motion Control")) {
@@ -466,35 +467,92 @@ void MotionControlLayer::RenderUI() {
     ImGui::Text("No path planned");
   }
 
-  // Path Planning section
+  // Path planning controls
   ImGui::Separator();
   ImGui::Text("Path Planning");
 
-  // Declare graphName variable
-  static char graphName[128] = "Process_Flow"; // Default to Process_Flow
+  static char graphName[128] = "Process_Flow";
   static char startNode[128] = "";
   static char endNode[128] = "";
   static bool startNodeInitialized = false;
   static bool endNodeInitialized = false;
+  static char controllerFilter[128] = ""; // Buffer for controller filter
+  static bool controllerFilterInitialized = false;
 
-  // Get all available graphs
-  const auto& allGraphs = m_configManager.GetAllGraphs();
+  // Graph selection with name display
   if (ImGui::BeginCombo("Graph", graphName)) {
+    const auto& allGraphs = m_configManager.GetAllGraphs();
     for (const auto& [name, graph] : allGraphs) {
-      bool isSelected = (strcmp(graphName, name.c_str()) == 0);
+      bool isSelected = (std::string(graphName) == name);
       if (ImGui::Selectable(name.c_str(), isSelected)) {
         strcpy_s(graphName, sizeof(graphName), name.c_str());
-        // Reset node selections when graph changes
+        // Reset filters when changing graphs
         startNodeInitialized = false;
         endNodeInitialized = false;
-        memset(startNode, 0, sizeof(startNode));
-        memset(endNode, 0, sizeof(endNode));
+        controllerFilterInitialized = false;
+        *controllerFilter = 0; // Clear controller filter
       }
       if (isSelected) {
         ImGui::SetItemDefaultFocus();
       }
     }
     ImGui::EndCombo();
+  }
+
+  // Controller filter dropdown - NEW ADDITION USING VECTOR INSTEAD OF SET
+  if (ImGui::BeginCombo("Controller", strlen(controllerFilter) > 0 ? controllerFilter : "All Controllers")) {
+    // Add "All Controllers" option
+    bool isAllSelected = (strlen(controllerFilter) == 0);
+    if (ImGui::Selectable("All Controllers", isAllSelected)) {
+      *controllerFilter = 0; // Clear selection to mean "all controllers"
+      controllerFilterInitialized = true;
+    }
+    if (isAllSelected) {
+      ImGui::SetItemDefaultFocus();
+    }
+
+    // Get all unique controllers from the selected graph
+    std::vector<std::string> controllers;
+    auto graphOpt = m_configManager.GetGraph(graphName);
+    if (graphOpt.has_value()) {
+      const auto& graph = graphOpt.value().get();
+      for (const auto& node : graph.Nodes) {
+        if (!node.Device.empty()) {
+          // Check if this controller is already in our list
+          bool alreadyExists = false;
+          for (const auto& existingController : controllers) {
+            if (existingController == node.Device) {
+              alreadyExists = true;
+              break;
+            }
+          }
+
+          // Add to list if not already there
+          if (!alreadyExists) {
+            controllers.push_back(node.Device);
+          }
+        }
+      }
+    }
+
+    // Create a controller list
+    for (const auto& controller : controllers) {
+      bool isSelected = (strcmp(controllerFilter, controller.c_str()) == 0);
+      if (ImGui::Selectable(controller.c_str(), isSelected)) {
+        strcpy_s(controllerFilter, sizeof(controllerFilter), controller.c_str());
+        controllerFilterInitialized = true;
+      }
+      if (isSelected) {
+        ImGui::SetItemDefaultFocus();
+      }
+    }
+    ImGui::EndCombo();
+  }
+
+  // Initialize default controller if needed
+  if (!controllerFilterInitialized) {
+    *controllerFilter = 0;
+    controllerFilterInitialized = true;
   }
 
   // Try to determine current node position for default
@@ -504,16 +562,29 @@ void MotionControlLayer::RenderUI() {
     if (graphOpt.has_value()) {
       const auto& graph = graphOpt.value().get();
       if (!graph.Nodes.empty()) {
-        const auto& firstNode = graph.Nodes.front();
-        std::string deviceName = firstNode.Device;
+        // Apply controller filter for startNode initialization if available
+        std::string deviceName;
+        if (strlen(controllerFilter) > 0) {
+          deviceName = controllerFilter;
+        }
+        else {
+          // Use first node's device as default
+          deviceName = graph.Nodes.front().Device;
+        }
+
         if (!deviceName.empty()) {
           std::string currentNodeId;
           if (GetDeviceCurrentNode(graphName, deviceName, currentNodeId) && !currentNodeId.empty()) {
             strcpy_s(startNode, sizeof(startNode), currentNodeId.c_str());
           }
           else {
-            // Default to first node if no match
-            strcpy_s(startNode, sizeof(startNode), graph.Nodes.front().Id.c_str());
+            // Default to first node matching the controller filter
+            for (const auto& node : graph.Nodes) {
+              if (strlen(controllerFilter) == 0 || node.Device == controllerFilter) {
+                strcpy_s(startNode, sizeof(startNode), node.Id.c_str());
+                break;
+              }
+            }
           }
           startNodeInitialized = true;
         }
@@ -527,23 +598,36 @@ void MotionControlLayer::RenderUI() {
     if (graphOpt.has_value()) {
       const auto& graph = graphOpt.value().get();
       if (!graph.Nodes.empty()) {
-        if (graph.Nodes.size() > 1) {
-          // Use second node if available
-          strcpy_s(endNode, sizeof(endNode), graph.Nodes[1].Id.c_str());
+        // Try to find a node that's not the start node and matches the controller filter
+        std::string selectedEndNode;
+        for (const auto& node : graph.Nodes) {
+          if (node.Id != startNode && (strlen(controllerFilter) == 0 || node.Device == controllerFilter)) {
+            selectedEndNode = node.Id;
+            break;
+          }
         }
-        else {
-          // Use the first node if only one exists
-          strcpy_s(endNode, sizeof(endNode), graph.Nodes.front().Id.c_str());
+
+        // Fallback to the first node if no suitable node found
+        if (selectedEndNode.empty() && !graph.Nodes.empty()) {
+          selectedEndNode = graph.Nodes[0].Id;
         }
+
+        strcpy_s(endNode, sizeof(endNode), selectedEndNode.c_str());
         endNodeInitialized = true;
       }
     }
   }
 
-  // Start Node dropdown with labels - now with current position highlighting
+  // Start Node dropdown with labels - filtered by selected controller
   if (ImGui::BeginCombo("Start Node", GetNodeLabelAndId(graphName, startNode).c_str())) {
     auto nodes = GetAllNodesWithLabels(graphName);
     for (const auto& [id, label] : nodes) {
+      // Apply controller filter if set
+      const Node* node = GetNodeById(graphName, id);
+      if (!node || (strlen(controllerFilter) > 0 && node->Device != controllerFilter)) {
+        continue; // Skip nodes that don't match the controller filter
+      }
+
       std::string displayText = label + " (" + id + ")";
       bool isSelected = (std::string(startNode) == id);
 
@@ -569,10 +653,16 @@ void MotionControlLayer::RenderUI() {
     ImGui::EndCombo();
   }
 
-  // End Node dropdown with labels - similar highlighting
+  // End Node dropdown with labels - filtered by selected controller
   if (ImGui::BeginCombo("End Node", GetNodeLabelAndId(graphName, endNode).c_str())) {
     auto nodes = GetAllNodesWithLabels(graphName);
     for (const auto& [id, label] : nodes) {
+      // Apply controller filter if set
+      const Node* node = GetNodeById(graphName, id);
+      if (!node || (strlen(controllerFilter) > 0 && node->Device != controllerFilter)) {
+        continue; // Skip nodes that don't match the controller filter
+      }
+
       std::string displayText = label + " (" + id + ")";
       bool isSelected = (std::string(endNode) == id);
 
@@ -598,14 +688,23 @@ void MotionControlLayer::RenderUI() {
     ImGui::EndCombo();
   }
 
-  // Add a "Use Current Position" button
+  // Add a "Use Current Position as Start" button
   if (ImGui::Button("Use Current Position as Start")) {
     auto graphOpt = m_configManager.GetGraph(graphName);
     if (graphOpt.has_value()) {
       const auto& graph = graphOpt.value().get();
       if (!graph.Nodes.empty()) {
-        const auto& firstNode = graph.Nodes.front();
-        std::string deviceName = firstNode.Device;
+        std::string deviceName;
+
+        // Use filtered controller if available
+        if (strlen(controllerFilter) > 0) {
+          deviceName = controllerFilter;
+        }
+        else {
+          // Otherwise use the first node's device
+          deviceName = graph.Nodes.front().Device;
+        }
+
         if (!deviceName.empty()) {
           std::string currentNodeId;
           if (GetDeviceCurrentNode(graphName, deviceName, currentNodeId) && !currentNodeId.empty()) {
@@ -631,6 +730,11 @@ void MotionControlLayer::RenderUI() {
   ImGui::Text("Current Positions:");
 
   for (const auto& [deviceName, position] : m_deviceCurrentPositions) {
+    // Only show positions for the filtered controller if a filter is set
+    if (strlen(controllerFilter) > 0 && deviceName != controllerFilter) {
+      continue;
+    }
+
     ImGui::Text("%s: X:%.3f Y:%.3f Z:%.3f",
       deviceName.c_str(), position.x, position.y, position.z);
 
@@ -645,6 +749,22 @@ void MotionControlLayer::RenderUI() {
   ImGui::End();
 }
 
+// Helper function to get a node by its ID (added as a private member to MotionControlLayer)
+const Node* MotionControlLayer::GetNodeById(const std::string& graphName, const std::string& nodeId) const {
+  auto graphOpt = m_configManager.GetGraph(graphName);
+  if (!graphOpt.has_value()) {
+    return nullptr;
+  }
+
+  const auto& graph = graphOpt.value().get();
+  for (const auto& node : graph.Nodes) {
+    if (node.Id == nodeId) {
+      return &node;
+    }
+  }
+
+  return nullptr;
+}
 
 
 

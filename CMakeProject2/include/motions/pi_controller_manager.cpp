@@ -1,4 +1,4 @@
-// pi_controller_manager.cpp
+﻿// pi_controller_manager.cpp
 #include "pi_controller_manager.h"
 #include "imgui.h"
 #include <iostream>
@@ -176,6 +176,7 @@ bool PIControllerManager::MoveToNamedPosition(const std::string& deviceName, con
 
 // In pi_controller_manager.cpp, modify the RenderUI method:
 
+// pi_controller_manager.cpp - updated RenderUI method
 void PIControllerManager::RenderUI() {
   // Create a window to show all controllers
   if (!ImGui::Begin("PI Controller Manager")) {
@@ -194,7 +195,7 @@ void PIControllerManager::RenderUI() {
 
   ImGui::Separator();
 
-  // List all controllers with their connection status
+  // List all controllers with their connection status and positions
   for (const auto& [name, controller] : m_controllers) {
     ImGui::PushID(name.c_str());
 
@@ -203,6 +204,9 @@ void PIControllerManager::RenderUI() {
     bool isConnected = controller->IsConnected();
 
     // Display device name and status
+    ImVec4 statusColor = isConnected ? ImVec4(0.0f, 0.8f, 0.0f, 1.0f) : ImVec4(0.8f, 0.2f, 0.2f, 1.0f);
+    ImGui::TextColored(statusColor, "%s", isConnected ? "● " : "○ ");
+    ImGui::SameLine();
     ImGui::Text("%s: %s %s",
       name.c_str(),
       isEnabled ? "(Enabled)" : "(Disabled)",
@@ -214,10 +218,77 @@ void PIControllerManager::RenderUI() {
       controller->SetWindowVisible(true);
     }
 
+    // If controller is connected, show available positions
+    if (isConnected) {
+      // Get the positions for this device
+      auto positionsOpt = m_configManager.GetDevicePositions(name);
+      if (positionsOpt.has_value()) {
+        const auto& positions = positionsOpt.value().get();
+        if (!positions.empty()) {
+          // Indent all position buttons to make hierarchy clear
+          ImGui::Indent(20.0f);
 
+          // Display position buttons in a compact layout
+          ImGui::Text("Positions:");
+          ImGui::SameLine();
 
-    ImGui::PopID();
+          // Calculate available width for position buttons
+          float availableWidth = ImGui::GetContentRegionAvail().x;
+          float buttonWidth = 80.0f; // Default button width
+          float spacing = 5.0f;
+          float xPos = ImGui::GetCursorPosX();
+          float initialX = xPos;
+
+          // Add position buttons
+          bool firstButton = true;
+          for (const auto& [posName, position] : positions) {
+            // Check if we need to wrap to next line
+            if (!firstButton && xPos + buttonWidth > initialX + availableWidth) {
+              ImGui::NewLine();
+              xPos = initialX;
+            }
+
+            // Set the next button position
+            ImGui::SetCursorPosX(xPos);
+
+            // Create the button
+            ImVec4 buttonColor = ImVec4(0.3f, 0.5f, 0.7f, 0.7f);
+            ImGui::PushStyleColor(ImGuiCol_Button, buttonColor);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.6f, 0.8f, 0.8f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.5f, 0.7f, 0.9f, 0.9f));
+
+            if (ImGui::Button(posName.c_str(), ImVec2(buttonWidth, 25))) {
+              // When clicked, move to this position
+              MoveToNamedPosition(name, posName, true);
+            }
+
+            ImGui::PopStyleColor(3);
+
+            // If tooltip is required, add it
+            if (ImGui::IsItemHovered()) {
+              ImGui::BeginTooltip();
+              ImGui::Text("X: %.3f, Y: %.3f, Z: %.3f", position.x, position.y, position.z);
+              if (position.u != 0.0 || position.v != 0.0 || position.w != 0.0) {
+                ImGui::Text("U: %.3f, V: %.3f, W: %.3f", position.u, position.v, position.w);
+              }
+              ImGui::EndTooltip();
+            }
+
+            // Stay on same line for next button
+            ImGui::SameLine();
+            xPos = ImGui::GetCursorPosX() + spacing;
+            firstButton = false;
+          }
+
+          // End the line after all buttons
+          ImGui::NewLine();
+          ImGui::Unindent(20.0f);
+        }
+      }
+    }
+
     ImGui::Separator();
+    ImGui::PopID();
   }
 
   ImGui::End();
