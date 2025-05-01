@@ -537,12 +537,30 @@ int main(int argc, char* argv[])
 		std::cout << "Camera device not removed" << std::endl;
 	}
 
-	//stop polling analog
-	piAnalogManager.stopPolling();
-	//disconnect controller
-	piControllerManager.DisconnectAll();
-	acsControllerManager.DisconnectAll();
 
+
+
+	try
+	{
+		//stop polling analog
+		piAnalogManager.stopPolling();
+		// Clear the analog manager first (it depends on controller managers)
+				// Give a short delay to ensure all background operations complete
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		// Or delete piAnalogManager; // If using raw pointer
+		//disconnect controller
+		piControllerManager.DisconnectAll();
+		acsControllerManager.DisconnectAll();
+
+
+	
+	}
+	catch (const std::exception& e) {
+		std::cout << "Exception during shutdown: " << e.what() << std::endl;
+	}
+	catch (...) {
+		std::cout << "Unknown exception during shutdown" << std::endl;
+	}
 
 
 

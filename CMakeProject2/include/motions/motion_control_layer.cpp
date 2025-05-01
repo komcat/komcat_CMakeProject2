@@ -466,18 +466,36 @@ void MotionControlLayer::RenderUI() {
     ImGui::Text("No path planned");
   }
 
-  // Path planning controls
+  // Path Planning section
   ImGui::Separator();
   ImGui::Text("Path Planning");
 
-  static char graphName[128] = "Process_Flow";
+  // Declare graphName variable
+  static char graphName[128] = "Process_Flow"; // Default to Process_Flow
   static char startNode[128] = "";
   static char endNode[128] = "";
   static bool startNodeInitialized = false;
   static bool endNodeInitialized = false;
 
-  // Graph selection with name display
-  ImGui::InputText("Graph", graphName, IM_ARRAYSIZE(graphName));
+  // Get all available graphs
+  const auto& allGraphs = m_configManager.GetAllGraphs();
+  if (ImGui::BeginCombo("Graph", graphName)) {
+    for (const auto& [name, graph] : allGraphs) {
+      bool isSelected = (strcmp(graphName, name.c_str()) == 0);
+      if (ImGui::Selectable(name.c_str(), isSelected)) {
+        strcpy_s(graphName, sizeof(graphName), name.c_str());
+        // Reset node selections when graph changes
+        startNodeInitialized = false;
+        endNodeInitialized = false;
+        memset(startNode, 0, sizeof(startNode));
+        memset(endNode, 0, sizeof(endNode));
+      }
+      if (isSelected) {
+        ImGui::SetItemDefaultFocus();
+      }
+    }
+    ImGui::EndCombo();
+  }
 
   // Try to determine current node position for default
   if (!startNodeInitialized) {

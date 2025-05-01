@@ -27,6 +27,8 @@ PIAnalogReader::PIAnalogReader(PIController& controller, const std::string& devi
 }
 
 PIAnalogReader::~PIAnalogReader() {
+  m_voltageValues.clear();
+  m_rawValues.clear();
   m_logger->LogInfo("PIAnalogReader: Shutting down analog reader for " + m_deviceName);
 }
 

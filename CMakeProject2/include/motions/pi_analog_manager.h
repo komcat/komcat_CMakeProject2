@@ -43,7 +43,7 @@ public:
   bool IsVisible() const override { return m_showWindow; }
   void ToggleWindow() override { m_showWindow = !m_showWindow; }
   const std::string& GetName() const override { return m_windowTitle; }
-
+  void cleanupReaders();
 private:
   PIControllerManager& m_controllerManager;
   MotionConfigManager& m_configManager;

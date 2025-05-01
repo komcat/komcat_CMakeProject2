@@ -22,6 +22,9 @@ PIAnalogManager::~PIAnalogManager() {
   // Stop polling thread if active
   stopPolling();
 
+  // First cleanup readers in a controlled manner
+  cleanupReaders();
+
   m_logger->LogInfo("PIAnalogManager: Shutting down");
 }
 
@@ -45,10 +48,7 @@ void PIAnalogManager::startPolling(unsigned int intervalMs) {
 }
 
 void PIAnalogManager::stopPolling() {
-  // Signal the thread to stop
   m_stopPolling = true;
-
-  // Wait for the thread to exit
   if (m_pollingThread) {
     if (m_pollingThread->joinable()) {
       m_pollingThread->join();
@@ -56,8 +56,6 @@ void PIAnalogManager::stopPolling() {
     delete m_pollingThread;
     m_pollingThread = nullptr;
   }
-
-  m_logger->LogInfo("PIAnalogManager: Polling stopped");
 }
 
 bool PIAnalogManager::isPolling() const {
@@ -65,18 +63,67 @@ bool PIAnalogManager::isPolling() const {
 }
 
 void PIAnalogManager::pollingThreadFunc() {
+  // At the beginning of the function
   m_logger->LogInfo("PIAnalogManager: Polling thread started");
 
+  // During polling, use safe access to readers
   while (!m_stopPolling) {
-    // Update all readings
-    UpdateAllReadings();
+    std::vector<std::string> readerNames;
 
-    // Sleep for the specified interval
+    // First collect the names to avoid holding the lock during update
+    {
+      std::lock_guard<std::mutex> lock(m_readersMutex);
+      for (const auto& pair : m_readers) {
+        readerNames.push_back(pair.first);
+      }
+    }
+
+    // Then update each reader by name
+    for (const auto& name : readerNames) {
+      PIAnalogReader* reader = nullptr;
+      {
+        std::lock_guard<std::mutex> lock(m_readersMutex);
+        auto it = m_readers.find(name);
+        if (it != m_readers.end()) {
+          reader = it->second.get();
+        }
+      }
+
+      if (reader) {
+        try {
+          reader->UpdateAllValues();
+        }
+        catch (...) {
+          m_logger->LogWarning("Exception while updating reader: " + name);
+        }
+      }
+    }
+
     std::this_thread::sleep_for(std::chrono::milliseconds(m_pollingInterval));
   }
 
   m_logger->LogInfo("PIAnalogManager: Polling thread stopped");
 }
+
+
+// Add this method to PIAnalogManager
+void PIAnalogManager::cleanupReaders() {
+  // First stop the polling to make sure no thread is using the readers
+  stopPolling();
+
+  // Clear the readers one by one in a controlled manner
+  std::lock_guard<std::mutex> lock(m_readersMutex);
+  for (auto it = m_readers.begin(); it != m_readers.end(); /* no increment */) {
+    // Move the reader out of the map before destroying it
+    std::unique_ptr<PIAnalogReader> reader = std::move(it->second);
+    // Remove the entry from the map
+    it = m_readers.erase(it);
+    // Now let the reader be destroyed outside the map
+    // This happens when 'reader' goes out of scope
+  }
+  // Map should be empty now
+}
+
 
 std::vector<std::string> PIAnalogManager::GetPIControllerDeviceNames() const {
   std::vector<std::string> deviceNames;
