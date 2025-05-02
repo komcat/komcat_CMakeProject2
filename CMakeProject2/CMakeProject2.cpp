@@ -37,6 +37,7 @@
 #include "include/data/data_client_manager.h"  // Add this at the top with other includes
 #include "include/motions/pi_analog_reader.h"
 #include "include/motions/pi_analog_manager.h"
+#include "include/motions/global_jog_panel.h"
 #include "include/data/product_config_manager.h"
 #include "include/eziio/IOControlPanel.h"
 // Add these includes at the top with the other include statements
@@ -376,7 +377,9 @@ int main(int argc, char* argv[])
 	// Initialize the manager (it will create a default client)
 	cld101xManager.Initialize();
 
-	
+	// Later in the initialization section:
+	GlobalJogPanel globalJogPanel(configManager, piControllerManager, acsControllerManager);
+	logger->LogInfo("GlobalJogPanel initialized");
 
 	// Add components with standard methods
 	toolbarMenu.AddReference(CreateTogglableUI(configEditor, "Config Editor"));
@@ -572,7 +575,8 @@ int main(int argc, char* argv[])
 
 
 
-
+		// In your main loop where you render UIs:
+		globalJogPanel.RenderUI();
 
 
 
