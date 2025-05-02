@@ -42,9 +42,16 @@
 // Add these includes at the top with the other include statements
 #include "include/cld101x_client.h"
 #include "include/cld101x_manager.h"
+#include "include/python_process_managaer.h"
+
+
 
 int main(int argc, char* argv[])
 {
+
+
+
+
 	// Setup SDL
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
 	{
@@ -95,6 +102,30 @@ int main(int argc, char* argv[])
 	// Get the logger instance
 	Logger* logger = Logger::GetInstance();
 	logger->Log("Application started");
+
+
+	// Create Python Process Manager and start scripts
+	PythonProcessManager pythonManager;
+
+	// Start Python scripts
+	if (!pythonManager.StartCLD101xServer()) {
+		logger->LogWarning("Failed to start CLD101x server script, will continue without it");
+	}
+	else {
+		logger->LogInfo("CLD101x server script started successfully");
+	}
+
+	if (!pythonManager.StartKeithleyScript()) {
+		logger->LogWarning("Failed to start Keithley script, will continue without it");
+	}
+	else {
+		logger->LogInfo("Keithley script started successfully");
+	}
+
+
+
+
+
 
 	//set up toolbarmenu
 	ToolbarMenu toolbarMenu;
@@ -557,6 +588,17 @@ int main(int argc, char* argv[])
 	}
 	// When exit is triggered:
 	logger->Log("Application shutting down");
+
+
+
+	// Stop Python scripts before other cleanup
+	logger->LogInfo("Stopping Python processes...");
+	pythonManager.StopAllProcesses();
+
+
+
+
+
 	pylonCameraTest.GetCamera().StopGrabbing();
 	pylonCameraTest.GetCamera().Disconnect();
 	if (pylonCameraTest.GetCamera().IsCameraDeviceRemoved())
