@@ -420,6 +420,16 @@ int main(int argc, char* argv[])
 				done = true;
 		}
 
+		//process key events
+		if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) {
+			globalJogPanel.ProcessKeyInput(
+				event.key.keysym.sym,
+				event.type == SDL_KEYDOWN
+			);
+		}
+
+
+
 		// Calculate delta time and FPS
 		Uint64 currentFrameTime = SDL_GetPerformanceCounter();
 		float deltaTime = (currentFrameTime - lastFrameTime) / (float)SDL_GetPerformanceFrequency();

@@ -55,7 +55,7 @@ public:
     si.wShowWindow = SW_HIDE; // Hide the console window
 
     // Use the exact path from your screenshot
-    std::string command = "python C:\\Windows-SSD\\SOFTWARE\\serverPython\\cld101x_server.py";
+    std::string command = "python C:\\SOFTWARE\\serverPython\\cld101x_server.py";
 
     if (CreateProcess(NULL, const_cast<LPSTR>(command.c_str()), NULL, NULL, FALSE,
       CREATE_NEW_CONSOLE, NULL, NULL, &si, &cld101xProcessInfo)) {
@@ -106,7 +106,7 @@ public:
     si.wShowWindow = SW_HIDE; // Hide the console window
 
     // Use the exact path from your screenshot
-    std::string command = "python C:\\Windows-SSD\\SOFTWARE\\serverPython\\keithley_1stch.py";
+    std::string command = "python C:\\SOFTWARE\\serverPython\\keithley_1stch.py";
 
     if (CreateProcess(NULL, const_cast<LPSTR>(command.c_str()), NULL, NULL, FALSE,
       CREATE_NEW_CONSOLE, NULL, NULL, &si, &keithleyProcessInfo)) {

@@ -1,9 +1,9 @@
 // global_jog_panel.cpp
 #include "include/motions/global_jog_panel.h"
-#include "imgui.h"
 #include <fstream>
 #include <algorithm>
 #include <nlohmann/json.hpp>
+#include <iostream>
 
 using json = nlohmann::json;
 
@@ -16,6 +16,18 @@ GlobalJogPanel::GlobalJogPanel(MotionConfigManager& configManager,
 {
   m_logger = Logger::GetInstance();
   m_logger->LogInfo("GlobalJogPanel: Initializing");
+
+  // Initialize key bindings
+  m_keyBindings = {
+      {"A", 'a', "X-", "Move X axis negative"},
+      {"D", 'd', "X+", "Move X axis positive"},
+      {"W", 'w', "Y-", "Move Y axis negative"},
+      {"S", 's', "Y+", "Move Y axis positive"},
+      {"R", 'r', "Z+", "Move Z axis positive"},
+      {"F", 'f', "Z-", "Move Z axis negative"},
+      {"Q", 'q', "Step-", "Decrease jog step"},
+      {"E", 'e', "Step+", "Increase jog step"}
+  };
 
   // Load transformation matrices
   if (LoadTransformations("transformation_matrix.json")) {
@@ -93,9 +105,11 @@ void GlobalJogPanel::TransformMovement(const std::string& deviceId,
     deviceY = matrix.M21 * globalX + matrix.M22 * globalY + matrix.M23 * globalZ;
     deviceZ = matrix.M31 * globalX + matrix.M32 * globalY + matrix.M33 * globalZ;
 
-    m_logger->LogInfo("GlobalJogPanel: Transformed movement for " + deviceId +
-      ": Global [" + std::to_string(globalX) + "," + std::to_string(globalY) + "," + std::to_string(globalZ) +
-      "] -> Device [" + std::to_string(deviceX) + "," + std::to_string(deviceY) + "," + std::to_string(deviceZ) + "]");
+    if (deviceX != 0.0 || deviceY != 0.0 || deviceZ != 0.0) {
+      m_logger->LogInfo("GlobalJogPanel: Transformed movement for " + deviceId +
+        ": Global [" + std::to_string(globalX) + "," + std::to_string(globalY) + "," + std::to_string(globalZ) +
+        "] -> Device [" + std::to_string(deviceX) + "," + std::to_string(deviceY) + "," + std::to_string(deviceZ) + "]");
+    }
   }
   else {
     // No transformation found, use identity (direct mapping)
@@ -107,7 +121,7 @@ void GlobalJogPanel::TransformMovement(const std::string& deviceId,
   }
 }
 
-void GlobalJogPanel::MoveAxis(const std::string& axis, double distance) {
+void GlobalJogPanel::MoveAxis(const std::string& axis) {
   if (m_selectedDevice.empty()) {
     m_logger->LogWarning("GlobalJogPanel: No device selected for movement");
     return;
@@ -115,19 +129,31 @@ void GlobalJogPanel::MoveAxis(const std::string& axis, double distance) {
 
   // Get current jog step
   double stepSize = m_jogSteps[m_currentStepIndex];
-  double moveDistance = (axis.find("+") != std::string::npos) ? stepSize : -stepSize;
 
-  // Determine which global axis to move
+  // Determine which global axis to move and the direction
   double globalX = 0.0, globalY = 0.0, globalZ = 0.0;
 
-  if (axis == "X+" || axis == "X-") {
-    globalX = moveDistance;
+  if (axis == "X+") {
+    globalX = stepSize;
   }
-  else if (axis == "Y+" || axis == "Y-") {
-    globalY = moveDistance;
+  else if (axis == "X-") {
+    globalX = -stepSize;
   }
-  else if (axis == "Z+" || axis == "Z-") {
-    globalZ = moveDistance;
+  else if (axis == "Y+") {
+    globalY = stepSize;
+  }
+  else if (axis == "Y-") {
+    globalY = -stepSize;
+  }
+  else if (axis == "Z+") {
+    globalZ = stepSize;
+  }
+  else if (axis == "Z-") {
+    globalZ = -stepSize;
+  }
+  else {
+    m_logger->LogError("GlobalJogPanel: Unknown axis: " + axis);
+    return;
   }
 
   // Transform to device coordinates
@@ -148,17 +174,23 @@ void GlobalJogPanel::MoveAxis(const std::string& axis, double distance) {
     PIController* controller = m_piControllerManager.GetController(m_selectedDevice);
     if (controller && controller->IsConnected()) {
       // Move each axis if needed
+      bool moved = false;
       if (deviceX != 0.0) {
         controller->MoveRelative("X", deviceX, false);
+        moved = true;
       }
       if (deviceY != 0.0) {
         controller->MoveRelative("Y", deviceY, false);
+        moved = true;
       }
       if (deviceZ != 0.0) {
         controller->MoveRelative("Z", deviceZ, false);
+        moved = true;
       }
 
-      m_logger->LogInfo("GlobalJogPanel: Moved PI device " + m_selectedDevice);
+      if (moved) {
+        m_logger->LogInfo("GlobalJogPanel: Moved PI device " + m_selectedDevice + " on " + axis);
+      }
     }
     else {
       m_logger->LogError("GlobalJogPanel: PI controller not available/connected for " + m_selectedDevice);
@@ -169,17 +201,23 @@ void GlobalJogPanel::MoveAxis(const std::string& axis, double distance) {
     ACSController* controller = m_acsControllerManager.GetController(m_selectedDevice);
     if (controller && controller->IsConnected()) {
       // Move each axis if needed
+      bool moved = false;
       if (deviceX != 0.0) {
         controller->MoveRelative("X", deviceX, false);
+        moved = true;
       }
       if (deviceY != 0.0) {
         controller->MoveRelative("Y", deviceY, false);
+        moved = true;
       }
       if (deviceZ != 0.0) {
         controller->MoveRelative("Z", deviceZ, false);
+        moved = true;
       }
 
-      m_logger->LogInfo("GlobalJogPanel: Moved ACS device " + m_selectedDevice);
+      if (moved) {
+        m_logger->LogInfo("GlobalJogPanel: Moved ACS device " + m_selectedDevice + " on " + axis);
+      }
     }
     else {
       m_logger->LogError("GlobalJogPanel: ACS controller not available/connected for " + m_selectedDevice);
@@ -201,23 +239,59 @@ void GlobalJogPanel::DecreaseStep() {
   }
 }
 
-void GlobalJogPanel::HandleKeyInput() {
-  // This is a mock function for keyboard input handling
-  // In a real implementation, you would capture keyboard input from ImGui or SDL
-  // and trigger the appropriate movement actions
-
-  m_logger->LogInfo("GlobalJogPanel: Key input handling not implemented yet");
-
-  // Example implementation would look like:
-  /*
-  if (ImGui::IsKeyPressed(ImGuiKey_A)) {
-      MoveAxis("X-", m_jogSteps[m_currentStepIndex]);
+void GlobalJogPanel::ProcessKeyInput(int keyCode, bool keyDown) {
+  if (!m_keyBindingEnabled || !m_showWindow || m_selectedDevice.empty()) {
+    return;
   }
-  else if (ImGui::IsKeyPressed(ImGuiKey_D)) {
-      MoveAxis("X+", m_jogSteps[m_currentStepIndex]);
+
+  // Only process key down events
+  if (!keyDown) {
+    return;
   }
-  // ... and so on for other keys
-  */
+
+  // Check which key was pressed
+  for (const auto& binding : m_keyBindings) {
+    if (binding.keyCode == keyCode) {
+      m_logger->LogInfo("GlobalJogPanel: Key pressed: " + binding.key + " for action: " + binding.action);
+
+      if (binding.action == "X+") {
+        MoveAxis("X+");
+      }
+      else if (binding.action == "X-") {
+        MoveAxis("X-");
+      }
+      else if (binding.action == "Y+") {
+        MoveAxis("Y+");
+      }
+      else if (binding.action == "Y-") {
+        MoveAxis("Y-");
+      }
+      else if (binding.action == "Z+") {
+        MoveAxis("Z+");
+      }
+      else if (binding.action == "Z-") {
+        MoveAxis("Z-");
+      }
+      else if (binding.action == "Step+") {
+        IncreaseStep();
+      }
+      else if (binding.action == "Step-") {
+        DecreaseStep();
+      }
+
+      break;
+    }
+  }
+}
+
+ImVec4 GlobalJogPanel::GetButtonColor(const std::string& key) {
+  // Default button color
+  ImVec4 regularColor = ImVec4(0.5f, 0.5f, 1.0f, 0.8f);
+
+  // When key binding is enabled, use a more alerting color
+  ImVec4 alertColor = ImVec4(0.7f, 0.7f, 1.0f, 1.0f);
+
+  return m_keyBindingEnabled ? alertColor : regularColor;
 }
 
 void GlobalJogPanel::RenderUI() {
@@ -226,7 +300,10 @@ void GlobalJogPanel::RenderUI() {
   ImGui::Begin("Global Jog Control", &m_showWindow);
 
   // Device selection dropdown
-  if (ImGui::BeginCombo("Device", m_selectedDevice.c_str())) {
+  ImGui::Text("Device");
+  ImGui::SameLine();
+
+  if (ImGui::BeginCombo("##Device", m_selectedDevice.c_str())) {
     const auto& allDevices = m_configManager.GetAllDevices();
     for (const auto& [name, device] : allDevices) {
       bool isSelected = (m_selectedDevice == name);
@@ -244,6 +321,7 @@ void GlobalJogPanel::RenderUI() {
       if (device.IsEnabled) {
         if (ImGui::Selectable(displayName.c_str(), isSelected)) {
           m_selectedDevice = name;
+          m_logger->LogInfo("GlobalJogPanel: Selected device: " + name);
         }
         if (isSelected) {
           ImGui::SetItemDefaultFocus();
@@ -259,11 +337,16 @@ void GlobalJogPanel::RenderUI() {
   ImGui::Text("Jog Step Size: %.5f mm", m_jogSteps[m_currentStepIndex]);
 
   // Step size combo box
-  if (ImGui::BeginCombo("Step Size", std::to_string(m_jogSteps[m_currentStepIndex]).c_str())) {
+  ImGui::Text("Step Size");
+  ImGui::SameLine();
+
+  if (ImGui::BeginCombo("##StepSize", std::to_string(m_jogSteps[m_currentStepIndex]).c_str())) {
     for (int i = 0; i < m_jogSteps.size(); i++) {
       bool isSelected = (m_currentStepIndex == i);
-      if (ImGui::Selectable(std::to_string(m_jogSteps[i]).c_str(), isSelected)) {
+      std::string sizeLabel = std::to_string(m_jogSteps[i]);
+      if (ImGui::Selectable(sizeLabel.c_str(), isSelected)) {
         m_currentStepIndex = i;
+        m_logger->LogInfo("GlobalJogPanel: Set jog step to " + std::to_string(m_jogSteps[m_currentStepIndex]));
       }
       if (isSelected) {
         ImGui::SetItemDefaultFocus();
@@ -275,65 +358,95 @@ void GlobalJogPanel::RenderUI() {
   ImGui::SameLine();
 
   // Step increase/decrease buttons
+  ImGui::PushStyleColor(ImGuiCol_Button, GetButtonColor("Q"));
   if (ImGui::Button("Q Step-")) {
     DecreaseStep();
   }
+  ImGui::PopStyleColor();
+
   ImGui::SameLine();
+
+  ImGui::PushStyleColor(ImGuiCol_Button, GetButtonColor("E"));
   if (ImGui::Button("E Step+")) {
     IncreaseStep();
   }
+  ImGui::PopStyleColor();
 
-  ImGui::Separator();
+  // Enable key binding checkbox
+  if (ImGui::Checkbox("Enable Key Binding", &m_keyBindingEnabled)) {
+    m_logger->LogInfo("GlobalJogPanel: Key binding " + std::string(m_keyBindingEnabled ? "enabled" : "disabled"));
+  }
 
-  // 2x4 grid of movement buttons
+  // 2x4 grid of movement buttons with enhanced colors when key binding is enabled
   float buttonWidth = ImGui::GetContentRegionAvail().x / 4.0f;
   float buttonHeight = 50.0f;
 
   // Row 1
+  ImGui::PushStyleColor(ImGuiCol_Button, GetButtonColor("Q"));
   if (ImGui::Button("Q\nDecr Step", ImVec2(buttonWidth, buttonHeight))) {
     DecreaseStep();
   }
+  ImGui::PopStyleColor();
   ImGui::SameLine();
 
+  ImGui::PushStyleColor(ImGuiCol_Button, GetButtonColor("W"));
   if (ImGui::Button("W\nY-", ImVec2(buttonWidth, buttonHeight))) {
-    MoveAxis("Y-", m_jogSteps[m_currentStepIndex]);
+    MoveAxis("Y-");
   }
+  ImGui::PopStyleColor();
   ImGui::SameLine();
 
+  ImGui::PushStyleColor(ImGuiCol_Button, GetButtonColor("E"));
   if (ImGui::Button("E\nIncr Step", ImVec2(buttonWidth, buttonHeight))) {
     IncreaseStep();
   }
+  ImGui::PopStyleColor();
   ImGui::SameLine();
 
+  ImGui::PushStyleColor(ImGuiCol_Button, GetButtonColor("R"));
   if (ImGui::Button("R\nZ+", ImVec2(buttonWidth, buttonHeight))) {
-    MoveAxis("Z+", m_jogSteps[m_currentStepIndex]);
+    MoveAxis("Z+");
   }
+  ImGui::PopStyleColor();
 
   // Row 2
+  ImGui::PushStyleColor(ImGuiCol_Button, GetButtonColor("A"));
   if (ImGui::Button("A\nX-", ImVec2(buttonWidth, buttonHeight))) {
-    MoveAxis("X-", m_jogSteps[m_currentStepIndex]);
+    MoveAxis("X-");
   }
+  ImGui::PopStyleColor();
   ImGui::SameLine();
 
+  ImGui::PushStyleColor(ImGuiCol_Button, GetButtonColor("S"));
   if (ImGui::Button("S\nY+", ImVec2(buttonWidth, buttonHeight))) {
-    MoveAxis("Y+", m_jogSteps[m_currentStepIndex]);
+    MoveAxis("Y+");
   }
+  ImGui::PopStyleColor();
   ImGui::SameLine();
 
+  ImGui::PushStyleColor(ImGuiCol_Button, GetButtonColor("D"));
   if (ImGui::Button("D\nX+", ImVec2(buttonWidth, buttonHeight))) {
-    MoveAxis("X+", m_jogSteps[m_currentStepIndex]);
+    MoveAxis("X+");
   }
+  ImGui::PopStyleColor();
   ImGui::SameLine();
 
+  ImGui::PushStyleColor(ImGuiCol_Button, GetButtonColor("F"));
   if (ImGui::Button("F\nZ-", ImVec2(buttonWidth, buttonHeight))) {
-    MoveAxis("Z-", m_jogSteps[m_currentStepIndex]);
+    MoveAxis("Z-");
   }
+  ImGui::PopStyleColor();
 
   ImGui::Separator();
 
   // Key bindings section
   if (ImGui::CollapsingHeader("Key Bindings")) {
-    ImGui::Text("The following key bindings are available (not implemented yet):");
+    if (m_keyBindingEnabled) {
+      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Key bindings are ACTIVE");
+    }
+    else {
+      ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Key bindings are INACTIVE");
+    }
 
     if (ImGui::BeginTable("KeyBindings", 3, ImGuiTableFlags_Borders)) {
       ImGui::TableSetupColumn("Key");

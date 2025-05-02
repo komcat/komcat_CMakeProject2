@@ -5,6 +5,7 @@
 #include "include/motions/pi_controller_manager.h"
 #include "include/motions/acs_controller_manager.h"
 #include "include/logger.h"
+#include "imgui.h"
 #include <string>
 #include <vector>
 #include <map>
@@ -39,6 +40,9 @@ public:
   bool IsVisible() const { return m_showWindow; }
   const std::string& GetName() const { return m_windowTitle; }
 
+  // Process key input - call this from the main input handling loop
+  void ProcessKeyInput(int keyCode, bool keyDown);
+
 private:
   // References to managers
   MotionConfigManager& m_configManager;
@@ -49,6 +53,7 @@ private:
   // UI state
   bool m_showWindow = true;
   std::string m_windowTitle = "Global Jog Control";
+  bool m_keyBindingEnabled = false;
 
   // Available jog steps in mm
   std::vector<double> m_jogSteps = {
@@ -65,20 +70,12 @@ private:
   // Key bindings
   struct KeyBinding {
     std::string key;
+    int keyCode;  // SDL key code
     std::string action;
     std::string description;
   };
 
-  std::vector<KeyBinding> m_keyBindings = {
-      {"A", "X-", "Move X axis negative"},
-      {"D", "X+", "Move X axis positive"},
-      {"W", "Y-", "Move Y axis negative"},
-      {"S", "Y+", "Move Y axis positive"},
-      {"R", "Z+", "Move Z axis positive"},
-      {"F", "Z-", "Move Z axis negative"},
-      {"Q", "Step-", "Decrease jog step"},
-      {"E", "Step+", "Increase jog step"}
-  };
+  std::vector<KeyBinding> m_keyBindings;
 
   // Selected device for jogging
   std::string m_selectedDevice;
@@ -88,13 +85,15 @@ private:
 
   // Helper methods
   bool LoadTransformations(const std::string& filePath);
-  void MoveAxis(const std::string& axis, double distance);
+  void MoveAxis(const std::string& axis);
   void IncreaseStep();
   void DecreaseStep();
-  void HandleKeyInput(); // Mock function for key binding
 
   // Transform a global movement vector to device-specific coordinates
   void TransformMovement(const std::string& deviceId,
     double globalX, double globalY, double globalZ,
     double& deviceX, double& deviceY, double& deviceZ);
+
+  // Render styles
+  ImVec4 GetButtonColor(const std::string& key);
 };
