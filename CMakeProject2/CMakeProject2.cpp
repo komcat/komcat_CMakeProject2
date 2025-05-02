@@ -39,7 +39,9 @@
 #include "include/motions/pi_analog_manager.h"
 #include "include/data/product_config_manager.h"
 #include "include/eziio/IOControlPanel.h"
-
+// Add these includes at the top with the other include statements
+#include "include/cld101x_client.h"
+#include "include/cld101x_manager.h"
 
 int main(int argc, char* argv[])
 {
@@ -336,7 +338,14 @@ int main(int argc, char* argv[])
 	// Create the ProductConfigManager instance
 	ProductConfigManager productConfigManager(configManager);
 
+	// Create the CLD101x manager
+	CLD101xManager cld101xManager;
+	logger->LogInfo("CLD101xManager initialized");
 
+	// Initialize the manager (it will create a default client)
+	cld101xManager.Initialize();
+
+	
 
 	// Add components with standard methods
 	toolbarMenu.AddReference(CreateTogglableUI(configEditor, "Config Editor"));
@@ -353,6 +362,9 @@ int main(int argc, char* argv[])
 	toolbarMenu.AddReference(CreateTogglableUI(productConfigManager, "Products Config"));
 	// Add the IOControlPanel using the same CreateTogglableUI adapter
 	toolbarMenu.AddReference(CreateTogglableUI(ioControlPanel, "IO Quick Control"));
+	// Add to toolbar menu
+	toolbarMenu.AddReference(CreateTogglableUI(cld101xManager, "CLD101x"));
+
 	// Log successful initialization
 	logger->LogInfo("ToolbarMenu initialized with " +
 		std::to_string(toolbarMenu.GetComponentCount()) +
@@ -524,6 +536,16 @@ int main(int argc, char* argv[])
 		productConfigManager.RenderUI();
 		// Render IO Control Panel UI
 		ioControlPanel.RenderUI();
+		// Render CLD101xManager UI
+		cld101xManager.RenderUI();
+
+
+
+
+
+
+
+
 
 		// Rendering
 		ImGui::Render();
@@ -545,7 +567,8 @@ int main(int argc, char* argv[])
 		std::cout << "Camera device not removed" << std::endl;
 	}
 
-
+	// Disconnect all CLD101x clients
+	cld101xManager.DisconnectAll();
 
 
 	try
