@@ -1,4 +1,5 @@
 #include "include/data/data_client_manager.h"
+#include "include/data/global_data_store.h" // Add this line
 #include "include/logger.h"
 #include "imgui.h"
 #include <fstream>
@@ -274,6 +275,9 @@ void DataClientManager::UpdateClients() {
 
           // Update latest value
           info.latestValue = val;
+
+          // Update the global data store with the latest value
+          GlobalDataStore::GetInstance()->SetValue(info.config.id, val);
         }
 
         // Log data if configured

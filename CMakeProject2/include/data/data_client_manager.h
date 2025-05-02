@@ -158,7 +158,7 @@ struct DataClientInfo {
     dataPointCursor(0),
     latestValue(0.0f),
     dataMutex(std::make_shared<std::mutex>()) {  // Initialize with a shared_ptr
-    strcpy(statusMessage, "Not connected");
+    strcpy_s(statusMessage, sizeof(statusMessage), "Not connected");
 
     // Initialize the data points vector with 100 elements
     dataPoints.resize(100);
@@ -174,7 +174,7 @@ struct DataClientInfo {
     dataPointCursor(other.dataPointCursor),
     latestValue(other.latestValue),
     dataMutex(other.dataMutex) {
-    strcpy(statusMessage, other.statusMessage);
+    strcpy_s(statusMessage, sizeof(statusMessage), other.statusMessage);
   }
 
   // Move constructor
@@ -187,7 +187,7 @@ struct DataClientInfo {
     dataPointCursor(other.dataPointCursor),
     latestValue(other.latestValue),
     dataMutex(std::move(other.dataMutex)) {
-    strcpy(statusMessage, other.statusMessage);
+    strcpy_s(statusMessage, sizeof(statusMessage), other.statusMessage);
   }
 
   // Assignment operator
@@ -201,7 +201,7 @@ struct DataClientInfo {
       dataPointCursor = other.dataPointCursor;
       latestValue = other.latestValue;
       dataMutex = other.dataMutex;
-      strcpy(statusMessage, other.statusMessage);
+      strcpy_s(statusMessage, sizeof(statusMessage), other.statusMessage);
     }
     return *this;
   }
@@ -217,7 +217,7 @@ struct DataClientInfo {
       dataPointCursor = other.dataPointCursor;
       latestValue = other.latestValue;
       dataMutex = std::move(other.dataMutex);
-      strcpy(statusMessage, other.statusMessage);
+      strcpy_s(statusMessage, sizeof(statusMessage), other.statusMessage);
     }
     return *this;
   }

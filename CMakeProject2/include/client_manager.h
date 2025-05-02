@@ -24,7 +24,7 @@ struct ClientInfo {
         connected(false),
         valuesCount(0),
         valuesCursor(0) {
-        strcpy(statusMessage, "Not connected");
+        strcpy_s(statusMessage, sizeof(statusMessage), "Not connected");
 
         // Initialize the received values array
         for (int i = 0; i < 100; i++) {

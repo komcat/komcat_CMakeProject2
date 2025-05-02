@@ -12,3 +12,5 @@
 
 
 bool enableDebug = false;
+// Add this before the main function
+void RenderValueDisplay();

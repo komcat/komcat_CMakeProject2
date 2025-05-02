@@ -44,7 +44,7 @@
 #include "include/cld101x_client.h"
 #include "include/cld101x_manager.h"
 #include "include/python_process_managaer.h"
-
+#include "include/data/global_data_store.h" // Add this with your other includes
 
 
 int main(int argc, char* argv[])
@@ -592,7 +592,7 @@ int main(int argc, char* argv[])
 		// In your main loop where you render UIs:
 		globalJogPanel.RenderUI();
 
-
+		RenderValueDisplay(); // Call the function to render the value display
 
 
 
@@ -686,3 +686,15 @@ int main(int argc, char* argv[])
 }
 
 
+void RenderValueDisplay() {
+	// Access values from the global store
+	float currentValue = GlobalDataStore::GetInstance()->GetValue("GPIB-Current");
+
+	// Create a window to display the value
+	ImGui::Begin("Current Reading");
+
+	// Format and display the value with appropriate unit
+	ImGui::Text("Current: %.4f A", currentValue);
+
+	ImGui::End();
+}
