@@ -397,7 +397,9 @@ int main(int argc, char* argv[])
 	// Add the IOControlPanel using the same CreateTogglableUI adapter
 	toolbarMenu.AddReference(CreateTogglableUI(ioControlPanel, "IO Quick Control"));
 	// Add to toolbar menu
-	toolbarMenu.AddReference(CreateTogglableUI(cld101xManager, "CLD101x"));
+	toolbarMenu.AddReference(CreateTogglableUI(cld101xManager, "Laser TEC Cntrl"));
+	// Add to toolbar menu
+	toolbarMenu.AddReference(CreateTogglableUI(globalJogPanel, "Global Jog Panel"));
 
 	// Log successful initialization
 	logger->LogInfo("ToolbarMenu initialized with " +
@@ -418,15 +420,17 @@ int main(int argc, char* argv[])
 				done = true;
 			if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(window))
 				done = true;
+
+			//process key events
+			if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) {
+				globalJogPanel.ProcessKeyInput(
+					event.key.keysym.sym,
+					event.type == SDL_KEYDOWN
+				);
+			}
 		}
 
-		//process key events
-		if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) {
-			globalJogPanel.ProcessKeyInput(
-				event.key.keysym.sym,
-				event.type == SDL_KEYDOWN
-			);
-		}
+
 
 
 
