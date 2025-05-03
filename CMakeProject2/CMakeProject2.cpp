@@ -392,7 +392,7 @@ int main(int argc, char* argv[])
 	dataChartManager.AddChannel("hex-left-Analog-Ch5", "Voltage L5", "unit", true); 
 	dataChartManager.AddChannel("hex-left-Analog-Ch6", "Voltage L6", "unit", true);
 	dataChartManager.AddChannel("hex-right-Analog-Ch5", "Voltage R5", "unit", true);
-	dataChartManager.AddChannel("hex-right-Analog-Ch6", "Voltage R5", "unit", true);
+	dataChartManager.AddChannel("hex-right-Analog-Ch6", "Voltage R6", "unit", true);
 
 	// Add components with standard methods
 	toolbarMenu.AddReference(CreateTogglableUI(configEditor, "Config Editor"));

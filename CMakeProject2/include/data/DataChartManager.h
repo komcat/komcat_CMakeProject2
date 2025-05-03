@@ -16,10 +16,13 @@ struct ChannelInfo {
   bool displayUnitSuffix;   // Whether to display the unit suffix
   ImVec4 color;             // Color for the chart line
 };
+
+
+
 // Forward declaration for ImPlot (avoid including implot.h in header)
 struct ImPlotContext;
 
-// Structure to hold chart data for each data source
+// In DataChartManager.h, update the ChartDataBuffer struct:
 struct ChartDataBuffer {
   std::string serverId;                // Server identifier
   std::string displayName;             // Display name for the chart
@@ -28,13 +31,17 @@ struct ChartDataBuffer {
   std::deque<float> values;            // Circular buffer of values
   std::deque<double> timestamps;       // Circular buffer of timestamps
   ImVec4 color;                        // Line color
+  bool visible;                        // Whether to display the channel
 
-  // Default constructor needed for std::map::emplace
-  ChartDataBuffer() : displayUnitSuffix(false), color(0, 0, 0, 1) {}
+  // Default constructor with visible set to true
+  ChartDataBuffer() : displayUnitSuffix(false), color(0, 0, 0, 1), visible(true) {}
 
-  // Constructor with proper parameter passing
+  // Updated constructor that includes visibility
   ChartDataBuffer(const std::string& id, const std::string& name, const std::string& unitStr,
-    bool showUnitSuffix, const ImVec4& lineColor);
+    bool showUnitSuffix, const ImVec4& lineColor)
+    : serverId(id), displayName(name), unit(unitStr),
+    displayUnitSuffix(showUnitSuffix), color(lineColor), visible(true) {
+  }
 };
 
 // Class to manage data charts

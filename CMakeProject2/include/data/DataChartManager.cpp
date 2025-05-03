@@ -9,12 +9,12 @@
 #include <iomanip>
 #include <cmath>
 
-// ChartDataBuffer constructor implementation with proper reference parameter
-ChartDataBuffer::ChartDataBuffer(const std::string& id, const std::string& name, const std::string& unitStr,
-  bool showUnitSuffix, const ImVec4& lineColor)
-  : serverId(id), displayName(name), unit(unitStr),
-  displayUnitSuffix(showUnitSuffix), color(lineColor) {
-}
+//// ChartDataBuffer constructor implementation with proper reference parameter
+//ChartDataBuffer::ChartDataBuffer(const std::string& id, const std::string& name, const std::string& unitStr,
+//  bool showUnitSuffix, const ImVec4& lineColor)
+//  : serverId(id), displayName(name), unit(unitStr),
+//  displayUnitSuffix(showUnitSuffix), color(lineColor) {
+//}
 
 // DataChartManager constructor - no longer requires DataClientManager
 DataChartManager::DataChartManager()
@@ -232,6 +232,7 @@ std::string DataChartManager::FormatWithSIPrefix(float value, const std::string&
 }
 
 // Render UI for charts
+// In DataChartManager.cpp, modify the RenderUI method to include channel visibility controls:
 void DataChartManager::RenderUI() {
   // Skip if window is not visible
   if (!m_showWindow) {
@@ -287,44 +288,109 @@ void DataChartManager::RenderUI() {
       pauseUpdates = !pauseUpdates;
     }
 
-    // List active data sources with current values
-    ImGui::Text("Active Data Sources:");
+    // Add channel visibility controls with multi-column layout
     ImGui::Separator();
+    ImGui::Text("Channel Visibility:");
 
-    // Store charts that have data to display
-    std::vector<std::string> activeCharts;
+    // Define number of columns (adjust as needed)
+    const int numColumns = 3;
 
-    // Lock for thread safety while accessing chart data
-    std::lock_guard<std::mutex> lock(m_dataMutex);
-
-    // Display current values for each source
+    // Count channels with data
+    std::vector<std::string> channelsWithData;
     for (const auto& [id, buffer] : m_chartBuffers) {
       if (!buffer.values.empty()) {
-        // Get the latest value
-        float currentValue = buffer.values.back();
+        channelsWithData.push_back(id);
+      }
+    }
 
-        // Format with SI prefix
-        std::string valueStr = FormatWithSIPrefix(
-          currentValue, buffer.unit, buffer.displayUnitSuffix);
+    // Only create table if we have channels with data
+    if (!channelsWithData.empty()) {
+      // Create a table for the checkboxes
+      if (ImGui::BeginTable("##ChannelVisibilityTable", numColumns)) {
+        int col = 0;
 
-        // Display name and value
-        ImGui::TextColored(
-          buffer.color,
-          "%s: %s",
-          buffer.displayName.c_str(),
-          valueStr.c_str()
-        );
+        // Lock for thread safety while accessing chart data
+        std::lock_guard<std::mutex> lock(m_dataMutex);
 
-        // Add to active charts
-        activeCharts.push_back(id);
+        for (const auto& id : channelsWithData) {
+          auto& buffer = m_chartBuffers[id];
+
+          // Start a new row every 'numColumns' columns
+          if (col == 0) {
+            ImGui::TableNextRow();
+          }
+
+          ImGui::TableNextColumn();
+
+          // Checkbox with colored text for the channel
+          ImGui::PushStyleColor(ImGuiCol_Text, buffer.color);
+          if (ImGui::Checkbox(buffer.displayName.c_str(), &buffer.visible)) {
+            // Checkbox was clicked
+          }
+          ImGui::PopStyleColor();
+
+          // Move to the next column
+          col = (col + 1) % numColumns;
+        }
+
+        ImGui::EndTable();
       }
     }
 
     ImGui::Separator();
 
-    // Only try to create the plot if we have active charts
-    if (!activeCharts.empty()) {
+    // Display current values for each visible source
+    ImGui::Text("Current Values:");
 
+    // Store charts that have data to display and are visible
+    std::vector<std::string> activeCharts;
+
+    // Lock for thread safety while accessing chart data
+    std::lock_guard<std::mutex> lock(m_dataMutex);
+
+    // Display current values for each visible source
+    if (ImGui::BeginTable("##CurrentValuesTable", numColumns)) {
+      int col = 0;
+
+      for (const auto& [id, buffer] : m_chartBuffers) {
+        if (!buffer.values.empty() && buffer.visible) {
+          // Start a new row every 'numColumns' columns
+          if (col == 0) {
+            ImGui::TableNextRow();
+          }
+
+          ImGui::TableNextColumn();
+
+          // Get the latest value
+          float currentValue = buffer.values.back();
+
+          // Format with SI prefix
+          std::string valueStr = FormatWithSIPrefix(
+            currentValue, buffer.unit, buffer.displayUnitSuffix);
+
+          // Display name and value with color
+          ImGui::TextColored(
+            buffer.color,
+            "%s: %s",
+            buffer.displayName.c_str(),
+            valueStr.c_str()
+          );
+
+          // Add to active charts list for plotting
+          activeCharts.push_back(id);
+
+          // Move to the next column
+          col = (col + 1) % numColumns;
+        }
+      }
+
+      ImGui::EndTable();
+    }
+
+    ImGui::Separator();
+
+    // Only try to create the plot if we have active and visible charts
+    if (!activeCharts.empty()) {
       // Get the available content area size for the chart
       ImVec2 contentSize = ImGui::GetContentRegionAvail();
 
@@ -348,11 +414,12 @@ void DataChartManager::RenderUI() {
           latestTime,
           ImGuiCond_Always);
 
-        // Plot each data source
+        // Plot each visible data source
         for (const auto& id : activeCharts) {
           auto& buffer = m_chartBuffers[id];
 
-          if (buffer.values.size() > 1) {
+          // Only plot if the buffer is visible
+          if (buffer.visible && buffer.values.size() > 1) {
             try {
               // Convert deques to raw arrays for ImPlot
               size_t dataSize = buffer.values.size();
@@ -415,6 +482,8 @@ void DataChartManager::RenderUI() {
     }
   }
 }
+
+
 
 // Create a toggleable UI adapter for the chart manager
 std::shared_ptr<ITogglableUI> CreateDataChartManagerUI(DataChartManager& manager) {
