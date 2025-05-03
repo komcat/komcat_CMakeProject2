@@ -387,8 +387,12 @@ int main(int argc, char* argv[])
 	dataChartManager.Initialize();
 	// Add the channels you want to monitor
 	dataChartManager.AddChannel("GPIB-Current", "Current Reading", "A", false);
-	dataChartManager.AddChannel("Virtual_1", "Virtual Channel 1", "unit", true);
-	dataChartManager.AddChannel("Virtual_2", "Virtual Channel 2", "unit", true);
+	//dataChartManager.AddChannel("Virtual_1", "Virtual Channel 1", "unit", true);
+	//dataChartManager.AddChannel("Virtual_2", "Virtual Channel 2", "unit", true);
+	dataChartManager.AddChannel("hex-left-Analog-Ch5", "Voltage L5", "unit", true); 
+	dataChartManager.AddChannel("hex-left-Analog-Ch6", "Voltage L6", "unit", true);
+	dataChartManager.AddChannel("hex-right-Analog-Ch5", "Voltage R5", "unit", true);
+	dataChartManager.AddChannel("hex-right-Analog-Ch6", "Voltage R5", "unit", true);
 
 	// Add components with standard methods
 	toolbarMenu.AddReference(CreateTogglableUI(configEditor, "Config Editor"));
