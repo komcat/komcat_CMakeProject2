@@ -16,6 +16,15 @@ add_subdirectory(nlohmann_json)
 
 # Define paths to SDL2 and ImGui - adjust these if needed
 set(SDL2_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/sdl2")
+# Set SDL2 paths directly - using simple direct references
+set(SDL2_INCLUDE_DIR "${SDL2_DIR}/include")
+
+
+
+
+
+
+
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/imgui")
 # Define path to ACSC files
 set(ACSC_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -31,8 +40,9 @@ set(PYLON_ROOT "C:/Program Files/Basler/pylon 8")
 set(PYLON_INCLUDE_DIR "${PYLON_ROOT}/Development/include")
 set(PYLON_LIB_DIR "${PYLON_ROOT}/Development/lib/x64")
 
-# Set SDL2 paths directly - using simple direct references
-set(SDL2_INCLUDE_DIR "${SDL2_DIR}/include")
+
+
+
 
 #set eziio
 set(EZIIO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/eziio")
@@ -199,7 +209,8 @@ target_include_directories(CMakeProject2 PRIVATE
     ${PYLON_INCLUDE_DIR}  # Added Pylon include directory
     ${PI_INCLUDE_DIR}  # Added PI GCS2 include directory
     ${EZIIO_DIR_INCLUDE}
-     ${EZIIO_DIR_INCLUDE_x64}
+    ${EZIIO_DIR_INCLUDE_x64}
+    ${SDL2_TTF_INCLUDE_DIR}
 )
 
 # Link libraries - directly reference libraries
@@ -211,6 +222,7 @@ target_link_libraries(CMakeProject2 PRIVATE
     ${PYLON_LIBRARIES}  # Added Pylon libraries
     ${PI_LIBRARY}  # Added PI GCS2 library
     ${EZIIO_LIBRARY}  # Added EziMOTIONPlusE library
+    ${SDL2_TTF_LIBRARY}  # Added SDL2_ttf library
     nlohmann_json::nlohmann_json
 )
 
@@ -263,6 +275,9 @@ if(WIN32)
             $<TARGET_FILE_DIR:CMakeProject2>
         )
     endif()
+
+    
+
 
 endif()
 
