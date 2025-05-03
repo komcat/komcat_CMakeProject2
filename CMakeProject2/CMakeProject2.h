@@ -14,3 +14,6 @@
 bool enableDebug = false;
 // Add this before the main function
 void RenderValueDisplay();
+void RenderSimpleChart();
+void InitializeImPlot();
+void ShutdownImPlot();

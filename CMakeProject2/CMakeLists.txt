@@ -198,8 +198,20 @@ add_executable(CMakeProject2
  "include/eziio/IOControlPanel.h"
  "include/eziio/IOControlPanel.cpp"
  "include/cld101x_client.h"
-
- "include/cld101x_client.cpp" "include/cld101x_manager.h" "include/cld101x_manager.cpp" "include/python_process_managaer.h" "include/motions/global_jog_panel.h" "include/motions/global_jog_panel.cpp" "include/data/global_data_store.h" "include/data/global_data_store.cpp")
+ "include/cld101x_client.cpp"
+ "include/cld101x_manager.h"
+ "include/cld101x_manager.cpp"
+ "include/python_process_managaer.h"
+ "include/motions/global_jog_panel.h"
+ "include/motions/global_jog_panel.cpp"
+ "include/data/global_data_store.h"
+ "include/data/global_data_store.cpp"
+ "implot/implot.h"
+ "implot/implot_internal.h"
+ "implot/implot.cpp"
+ "implot/implot_items.cpp"
+ "implot/implot_demo.cpp"
+ "include/data/DataChartManager.h" "include/data/DataChartManager.cpp")
 
 # Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
 target_include_directories(CMakeProject2 PRIVATE

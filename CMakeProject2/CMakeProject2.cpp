@@ -45,7 +45,8 @@
 #include "include/cld101x_manager.h"
 #include "include/python_process_managaer.h"
 #include "include/data/global_data_store.h" // Add this with your other includes
-
+#include "implot/implot.h"
+#include "include/data/DataChartManager.h"
 
 int main(int argc, char* argv[])
 {
@@ -98,7 +99,8 @@ int main(int argc, char* argv[])
 	// Setup Platform/Renderer backends
 	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
 	ImGui_ImplOpenGL3_Init("#version 130");
-
+	// ADD THIS LINE RIGHT AFTER:
+	ImPlot::CreateContext();  // Initialize ImPlot
 
 	// Get the logger instance
 	Logger* logger = Logger::GetInstance();
@@ -381,6 +383,13 @@ int main(int argc, char* argv[])
 	GlobalJogPanel globalJogPanel(configManager, piControllerManager, acsControllerManager);
 	logger->LogInfo("GlobalJogPanel initialized");
 
+	DataChartManager dataChartManager;
+	dataChartManager.Initialize();
+	// Add the channels you want to monitor
+	dataChartManager.AddChannel("GPIB-Current", "Current Reading", "A", false);
+	dataChartManager.AddChannel("Virtual_1", "Virtual Channel 1", "unit", true);
+	dataChartManager.AddChannel("Virtual_2", "Virtual Channel 2", "unit", true);
+
 	// Add components with standard methods
 	toolbarMenu.AddReference(CreateTogglableUI(configEditor, "Config Editor"));
 	toolbarMenu.AddReference(CreateTogglableUI(graphVisualizer, "Graph Visualizer"));
@@ -400,6 +409,7 @@ int main(int argc, char* argv[])
 	toolbarMenu.AddReference(CreateTogglableUI(cld101xManager, "Laser TEC Cntrl"));
 	// Add to toolbar menu
 	toolbarMenu.AddReference(CreateTogglableUI(globalJogPanel, "Global Jog Panel"));
+	toolbarMenu.AddReference(CreateTogglableUI(dataChartManager, "Data Chart"));
 
 	// Log successful initialization
 	logger->LogInfo("ToolbarMenu initialized with " +
@@ -592,7 +602,12 @@ int main(int argc, char* argv[])
 		// In your main loop where you render UIs:
 		globalJogPanel.RenderUI();
 
-		RenderValueDisplay(); // Call the function to render the value display
+
+		RenderSimpleChart();
+		
+		dataChartManager.Update();
+		dataChartManager.RenderUI();
+		RenderValueDisplay();
 
 
 
@@ -676,6 +691,8 @@ int main(int argc, char* argv[])
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplSDL2_Shutdown();
 	ImGui::DestroyContext();
+	// ADD THIS LINE RIGHT BEFORE:
+	ImPlot::DestroyContext();  // Clean up ImPlot
 	SDL_GL_DeleteContext(gl_context);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
@@ -698,3 +715,68 @@ void RenderValueDisplay() {
 
 	ImGui::End();
 }
+
+// Simple ImPlot test with 10 data points
+// Add this to your main loop
+// Add this function where ImGui is initialized (before the main loop)
+void InitializeImPlot() {
+	// Create the ImPlot context
+	ImPlot::CreateContext();
+	Logger::GetInstance()->LogInfo("ImPlot context created successfully");
+}
+
+// Add this function where ImGui is shut down
+void ShutdownImPlot() {
+	// Destroy the ImPlot context
+	ImPlot::DestroyContext();
+	Logger::GetInstance()->LogInfo("ImPlot context destroyed");
+}
+void RenderSimpleChart() {
+	try {
+		// Create static data for the chart (only initialize once)
+		static float x_data[10] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+		static float y_data[10] = { 0, 1, 4, 9, 16, 25, 36, 49, 64, 81 }; // y = x^2
+		static bool initialized = false;
+
+		// You could also create animated data that changes each frame
+		static float animated_data[10];
+		static float time = 0.0f;
+
+		// Update the animated data each frame
+		time += ImGui::GetIO().DeltaTime;
+		for (int i = 0; i < 10; i++) {
+			animated_data[i] = sinf(x_data[i] * 0.5f + time) * 5.0f;
+		}
+
+		// Create a window
+		ImGui::Begin("Simple ImPlot Test");
+
+		ImGui::Text("Testing ImPlot with simple arrays");
+
+		// Create a plot inside the window
+		if (ImPlot::BeginPlot("Simple Plot")) {
+			// Plot the static data (x² function)
+			ImPlot::PlotLine("x²", x_data, y_data, 10);
+
+			// Plot the animated data (sine wave)
+			ImPlot::PlotLine("sin(x)", x_data, animated_data, 10);
+
+			ImPlot::EndPlot();
+		}
+
+		ImGui::End();
+	}
+	catch (const std::exception& e) {
+		ImGui::Begin("Error");
+		ImGui::Text("Exception in RenderSimpleChart: %s", e.what());
+		ImGui::End();
+	}
+	catch (...) {
+		ImGui::Begin("Error");
+		ImGui::Text("Unknown exception in RenderSimpleChart");
+		ImGui::End();
+	}
+}
+
+// Then in your main loop, add:
+// RenderSimpleChart();
