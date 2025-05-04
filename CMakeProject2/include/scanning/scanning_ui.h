@@ -1,4 +1,4 @@
-// include/scanning/scanning_ui.h
+// Modified scanning_ui.h with optimizations
 #pragma once
 
 #include "include/scanning/scanning_algorithm.h"
@@ -13,6 +13,7 @@
 #include <memory>
 #include <mutex>
 #include <atomic>
+#include <deque>
 
 class ScanningUI : public ITogglableUI {
 public:
@@ -52,30 +53,37 @@ private:
 
   // Scanning state
   std::unique_ptr<ScanningAlgorithm> m_scanner;
-  std::atomic<bool> m_isScanning = false;
-  double m_scanProgress = 0.0;
+  std::atomic<bool> m_isScanning{ false };
+  std::atomic<double> m_scanProgress{ 0.0 };
+
+  // Status string requires mutex protection
   std::string m_scanStatus = "Ready";
+  std::mutex m_statusMutex;
 
   // Results storage
-  bool m_hasResults = false;
+  std::atomic<bool> m_hasResults{ false };
   std::unique_ptr<ScanResults> m_lastResults;
 
-  // Current measurement
-  double m_currentValue = 0.0;
-  PositionStruct m_currentPosition;
+  // Measurement values - use atomics for thread safety
+  std::atomic<double> m_currentValue{ 0.0 };
+  std::atomic<double> m_peakValue{ 0.0 };
 
-  // Best measurement
-  double m_peakValue = 0.0;
+  // Position structures - need mutex protection
+  PositionStruct m_currentPosition;
   PositionStruct m_peakPosition;
   std::string m_peakContext;
-  std::mutex m_dataMutex;
+
+  // Data batching for measurement updates
+  static constexpr size_t MAX_BATCH_SIZE = 10;
+  std::deque<std::pair<double, PositionStruct>> m_recentMeasurements;
+  std::mutex m_dataMutex; // Renamed from m_dataMutex to be more specific
 
   // Simplified UI sections
   void RenderDeviceSelection();
   void RenderScanControls();
   void RenderScanStatus();
 
-  // Event handlers
+  // Event handlers - optimized for reduced synchronization
   void OnProgressUpdated(const ScanProgressEventArgs& args);
   void OnScanCompleted(const ScanCompletedEventArgs& args);
   void OnErrorOccurred(const ScanErrorEventArgs& args);
@@ -91,4 +99,7 @@ private:
 
   // Get the PI controller for the selected device
   PIController* GetSelectedController() const;
+
+  // Process batched measurements if needed
+  void ProcessMeasurementBatch();
 };

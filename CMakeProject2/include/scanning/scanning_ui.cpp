@@ -4,41 +4,36 @@
 #include <sstream>
 #include <iomanip>
 
-// Simplified constructor without MotionControlLayer
+
+// Constructor - properly initialize atomic variables
 ScanningUI::ScanningUI(PIControllerManager& piControllerManager,
   GlobalDataStore& dataStore)
   : m_piControllerManager(piControllerManager),
   m_dataStore(dataStore),
-  m_isScanning(false)
+  m_isScanning(false),
+  m_scanProgress(0.0),
+  m_currentValue(0.0),
+  m_peakValue(0.0),
+  m_hasResults(false)
 {
   m_logger = Logger::GetInstance();
   m_logger->LogInfo("ScanningUI: Initializing hexapod optimization interface");
 
-  // Refresh available devices and data channels
+  // Standard initialization
   RefreshAvailableDevices();
   RefreshAvailableDataChannels();
 
-  // Set default parameters
+  // Default parameters for hexapod optimization
   m_parameters = ScanningParameters::CreateDefault();
-
-  // Default to Z axis only for hexapods, with X, Y as backup axes
   m_parameters.axesToScan = { "Z", "X", "Y" };
-
-  // Use finer step sizes for precision alignment (0.5, 1, 2 microns)
   m_parameters.stepSizes = { 0.0005, 0.001, 0.002 };
-
-  // Set shorter motion settle time for faster scanning
-  m_parameters.motionSettleTimeMs = 300; // 300ms for hexapods
-
-  // Increase consecutive decreases limit for better peak finding
+  m_parameters.motionSettleTimeMs = 300;
   m_parameters.consecutiveDecreasesLimit = 4;
-
-  // Lower improvement threshold for more sensitivity
-  m_parameters.improvementThreshold = 0.005; // 0.5%
-
-  // Set max travel distance to 2mm
-  m_parameters.maxTotalDistance = 2.0; // 2mm max travel distance
+  m_parameters.improvementThreshold = 0.005;
+  m_parameters.maxTotalDistance = 2.0;
 }
+
+
 
 ScanningUI::~ScanningUI() {
   // Ensure scanning is stopped
@@ -141,8 +136,41 @@ void ScanningUI::RenderDeviceSelection() {
   }
 }
 
+// Optimized RenderScanStatus method
+void ScanningUI::RenderScanStatus() {
+  // Get current progress - atomic access doesn't need lock
+  float progressBarValue = static_cast<float>(m_scanProgress.load());
+
+  // Get status string with minimal lock scope
+  std::string statusCopy;
+  {
+    std::lock_guard<std::mutex> lock(m_statusMutex);
+    statusCopy = m_scanStatus;
+  }
+
+  // Draw progress bar with the copied status
+  ImGui::ProgressBar(progressBarValue, ImVec2(-1, 0), statusCopy.c_str());
+
+  // Display current measurement - atomic access doesn't need lock
+  ImGui::Text("Current: %g", m_currentValue.load());
+
+  // Display peak information if available
+  double peakVal = m_peakValue.load();
+  if (peakVal > 0) {
+    ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "Best Value: %g", peakVal);
+
+    // Get peak position with minimal lock scope
+    PositionStruct peakPosCopy;
+    {
+      std::lock_guard<std::mutex> lock(m_dataMutex);
+      peakPosCopy = m_peakPosition;
+    }
+
+    ImGui::Text("Best Position: %s", FormatPosition(peakPosCopy).c_str());
+  }
+}
 void ScanningUI::RenderScanControls() {
-  ImGui::Text("Step 4: Run Scan");
+  ImGui::Text("Scan Controls");
 
   // Check if we can start a scan
   bool canStartScan = !m_selectedDevice.empty() &&
@@ -152,7 +180,7 @@ void ScanningUI::RenderScanControls() {
     GetSelectedController() != nullptr &&
     GetSelectedController()->IsConnected();
 
-  // Also check if the controller is currently moving
+  // Check if the controller is currently moving - this avoids lock contention
   bool isControllerMoving = false;
   if (canStartScan && GetSelectedController() != nullptr) {
     for (const auto& axis : { "X", "Y", "Z", "U", "V", "W" }) {
@@ -162,6 +190,9 @@ void ScanningUI::RenderScanControls() {
       }
     }
   }
+
+  // Get scan status atomically without locking
+  bool isScanningNow = m_isScanning.load();
 
   // Show reason why scan can't start
   if (!canStartScan) {
@@ -177,16 +208,16 @@ void ScanningUI::RenderScanControls() {
   }
   else if (isControllerMoving) {
     ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "Controller is currently moving");
-	}
-	else {
-		ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Ready");
-	}
+  }
+  else {
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Ready");
+  }
 
   // Create a row with both buttons
   ImGui::BeginGroup();
 
   // Start scan button styling and state
-  if (!m_isScanning && canStartScan && !isControllerMoving) {
+  if (!isScanningNow && canStartScan && !isControllerMoving) {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.7f, 0.1f, 1.0f));
@@ -208,7 +239,7 @@ void ScanningUI::RenderScanControls() {
   ImGui::SameLine();
 
   // Stop scan button styling and state
-  if (m_isScanning) {
+  if (isScanningNow) {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.1f, 0.1f, 1.0f));
@@ -231,24 +262,6 @@ void ScanningUI::RenderScanControls() {
 
   // Add brief instructions
   ImGui::TextWrapped("This tool scans selected axes to find the position that maximizes the selected data channel reading. It's useful for optimizing alignment of optical components.");
-}
-
-void ScanningUI::RenderScanStatus() {
-  // Progress bar with current status - convert double to float explicitly
-  float progressBarValue = static_cast<float>(m_scanProgress);
-  ImGui::ProgressBar(progressBarValue, ImVec2(-1, 0), m_scanStatus.c_str());
-
-  // Display current measurement and peak measurement if available
-  {
-    std::lock_guard<std::mutex> lock(m_dataMutex);
-
-    ImGui::Text("Current: %g", m_currentValue);
-
-    if (m_peakValue > 0) {
-      ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "Best Value: %g", m_peakValue);
-      ImGui::Text("Best Position: %s", FormatPosition(m_peakPosition).c_str());
-    }
-  }
 }
 
 void ScanningUI::RefreshAvailableDevices() {
@@ -297,6 +310,7 @@ void ScanningUI::RefreshAvailableDataChannels() {
   }
 }
 
+// StartScan method - set up callbacks with optimized handlers
 void ScanningUI::StartScan() {
   // Check if already scanning
   if (m_isScanning) {
@@ -304,13 +318,12 @@ void ScanningUI::StartScan() {
     return;
   }
 
-  // Check requirements
+  // Standard validation code...
   if (m_selectedDevice.empty() || m_selectedDataChannel.empty()) {
     m_logger->LogError("ScanningUI: Cannot start scan - missing device or data channel");
     return;
   }
 
-  // Get the PI controller for the selected device
   PIController* controller = GetSelectedController();
   if (!controller || !controller->IsConnected()) {
     m_logger->LogError("ScanningUI: Cannot start scan - controller not connected");
@@ -321,16 +334,16 @@ void ScanningUI::StartScan() {
     // Validate parameters
     m_parameters.Validate();
 
-    // Create scanner with PI controller directly
+    // Create scanner
     m_scanner = std::make_unique<ScanningAlgorithm>(
-      *controller,  // Use the PIController directly
+      *controller,
       m_dataStore,
       m_selectedDevice,
       m_selectedDataChannel,
       m_parameters
     );
 
-    // Set callbacks
+    // Set optimized callbacks
     m_scanner->SetProgressCallback([this](const ScanProgressEventArgs& args) {
       OnProgressUpdated(args);
     });
@@ -351,12 +364,15 @@ void ScanningUI::StartScan() {
       OnPeakUpdated(value, position, context);
     });
 
-    // Start scan
+    // Start the scan
     bool started = m_scanner->StartScan();
     if (started) {
       m_isScanning = true;
       m_scanProgress = 0.0;
-      m_scanStatus = "Starting scan...";
+      {
+        std::lock_guard<std::mutex> lock(m_statusMutex);
+        m_scanStatus = "Starting scan...";
+      }
       m_logger->LogInfo("ScanningUI: Scan started for device " + m_selectedDevice);
     }
     else {
@@ -367,6 +383,7 @@ void ScanningUI::StartScan() {
     m_logger->LogError("ScanningUI: Exception while starting scan - " + std::string(e.what()));
   }
 }
+
 
 void ScanningUI::StopScan() {
   if (!m_isScanning || !m_scanner) {
@@ -380,62 +397,121 @@ void ScanningUI::StopScan() {
 }
 
 void ScanningUI::OnProgressUpdated(const ScanProgressEventArgs& args) {
-  std::lock_guard<std::mutex> lock(m_dataMutex);
+  // Use atomic directly - no lock needed
   m_scanProgress = args.GetProgress();
-  m_scanStatus = args.GetStatus();
+
+  // Use mutex only for the string update
+  {
+    std::lock_guard<std::mutex> lock(m_statusMutex);
+    m_scanStatus = args.GetStatus();
+  }
 }
 
 void ScanningUI::OnScanCompleted(const ScanCompletedEventArgs& args) {
-  std::lock_guard<std::mutex> lock(m_dataMutex);
+  // Update atomic states without locking
   m_isScanning = false;
   m_scanProgress = 1.0;
-  m_scanStatus = "Scan completed";
   m_hasResults = true;
 
-  // Create a copy of the results
-  const ScanResults& srcResults = args.GetResults();
-  m_lastResults = std::make_unique<ScanResults>();
-
-  // Copy the simple members
-  m_lastResults->deviceId = srcResults.deviceId;
-  m_lastResults->scanId = srcResults.scanId;
-  m_lastResults->startTime = srcResults.startTime;
-  m_lastResults->endTime = srcResults.endTime;
-  m_lastResults->totalMeasurements = srcResults.totalMeasurements;
-
-  // Deep copy the unique pointers
-  if (srcResults.baseline) {
-    m_lastResults->baseline = std::make_unique<ScanBaseline>(*srcResults.baseline);
+  // Update status string with protection
+  {
+    std::lock_guard<std::mutex> lock(m_statusMutex);
+    m_scanStatus = "Scan completed";
   }
 
-  if (srcResults.peak) {
-    m_lastResults->peak = std::make_unique<ScanPeak>(*srcResults.peak);
+  // Create a deep copy of the results with a single lock
+  {
+    std::lock_guard<std::mutex> lock(m_dataMutex);
+
+    // Copy the results
+    const ScanResults& srcResults = args.GetResults();
+    m_lastResults = std::make_unique<ScanResults>();
+
+    // Copy simple members
+    m_lastResults->deviceId = srcResults.deviceId;
+    m_lastResults->scanId = srcResults.scanId;
+    m_lastResults->startTime = srcResults.startTime;
+    m_lastResults->endTime = srcResults.endTime;
+    m_lastResults->totalMeasurements = srcResults.totalMeasurements;
+
+    // Deep copy the unique pointers
+    if (srcResults.baseline) {
+      m_lastResults->baseline = std::make_unique<ScanBaseline>(*srcResults.baseline);
+    }
+
+    if (srcResults.peak) {
+      m_lastResults->peak = std::make_unique<ScanPeak>(*srcResults.peak);
+    }
+
+    if (srcResults.statistics) {
+      m_lastResults->statistics = std::make_unique<ScanStatistics>(*srcResults.statistics);
+    }
+  }
+}
+// Process batched measurements if needed - can be called periodically
+void ScanningUI::ProcessMeasurementBatch() {
+  // This method could process the batch of measurements with a single lock
+  // For example, calculating averages, trends, or other statistics
+  std::lock_guard<std::mutex> lock(m_dataMutex);
+
+  if (m_recentMeasurements.empty()) {
+    return;
   }
 
-  if (srcResults.statistics) {
-    m_lastResults->statistics = std::make_unique<ScanStatistics>(*srcResults.statistics);
-  }
+  // Example: Compute statistics on the batch
+  // (implementation depends on specific needs)
+
+  // Clear processed measurements
+  m_recentMeasurements.clear();
 }
 
 void ScanningUI::OnErrorOccurred(const ScanErrorEventArgs& args) {
-  std::lock_guard<std::mutex> lock(m_dataMutex);
+  // Update atomic state without locking
   m_isScanning = false;
-  m_scanStatus = "Error: " + args.GetError();
+
+  // Update status with protection
+  {
+    std::lock_guard<std::mutex> lock(m_statusMutex);
+    m_scanStatus = "Error: " + args.GetError();
+  }
+
   m_logger->LogError("ScanningUI: Scan error - " + args.GetError());
 }
 
+
 void ScanningUI::OnDataPointAcquired(double value, const PositionStruct& position) {
-  std::lock_guard<std::mutex> lock(m_dataMutex);
+  // Atomic update doesn't need mutex
   m_currentValue = value;
-  m_currentPosition = position;
+
+  // Add to measurement batch with minimal lock scope
+  {
+    std::lock_guard<std::mutex> lock(m_dataMutex);
+    m_currentPosition = position;
+
+    // Add to batch queue for potential batch processing
+    m_recentMeasurements.push_front(std::make_pair(value, position));
+    if (m_recentMeasurements.size() > MAX_BATCH_SIZE) {
+      m_recentMeasurements.pop_back();
+    }
+  }
 }
 
 void ScanningUI::OnPeakUpdated(double value, const PositionStruct& position, const std::string& context) {
-  std::lock_guard<std::mutex> lock(m_dataMutex);
+  // Atomic update doesn't need mutex
   m_peakValue = value;
-  m_peakPosition = position;
-  m_peakContext = context;
+
+  // Update position and context with protection
+  {
+    std::lock_guard<std::mutex> lock(m_dataMutex);
+    m_peakPosition = position;
+    m_peakContext = context;
+  }
 }
+
+
+
+
+
 
 std::string ScanningUI::FormatPosition(const PositionStruct& position) const {
   std::stringstream ss;
