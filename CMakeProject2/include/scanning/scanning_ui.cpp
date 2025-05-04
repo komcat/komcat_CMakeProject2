@@ -177,7 +177,10 @@ void ScanningUI::RenderScanControls() {
   }
   else if (isControllerMoving) {
     ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "Controller is currently moving");
-  }
+	}
+	else {
+		ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Ready");
+	}
 
   // Create a row with both buttons
   ImGui::BeginGroup();
