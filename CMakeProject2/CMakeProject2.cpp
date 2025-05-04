@@ -52,6 +52,115 @@
 #include "include/data/global_data_store.h" // Add this with your other includes
 #include "implot/implot.h"
 #include "include/data/DataChartManager.h"
+#include "include/SequenceStep.h"
+#include "include/machine_operations.h"
+#include "InitializationWindow.h"
+
+#include <iostream>
+#include <memory>
+
+// Example of creating and using the initialization process
+void RunInitializationProcess(MachineOperations& machineOps) {
+	// Method 1: Using the dedicated InitializationStep class
+	std::cout << "Running initialization using dedicated class..." << std::endl;
+
+	auto initStep = std::make_unique<InitializationStep>(machineOps);
+
+	// Set completion callback
+	initStep->SetCompletionCallback([](bool success) {
+		std::cout << "Initialization " << (success ? "succeeded" : "failed") << std::endl;
+	});
+
+	// Execute the step
+	initStep->Execute();
+
+	// Method 2: Using the more flexible SequenceStep class
+	std::cout << "\nRunning initialization using sequence step..." << std::endl;
+
+	auto sequenceStep = std::make_unique<SequenceStep>("Initialization", machineOps);
+
+	// Add operations in sequence
+	sequenceStep->AddOperation(std::make_shared<MoveToNodeOperation>(
+		"gantry-main", "Process_Flow", "node_4027"));
+
+	sequenceStep->AddOperation(std::make_shared<MoveToNodeOperation>(
+		"hex-left", "Process_Flow", "node_5480"));
+
+	sequenceStep->AddOperation(std::make_shared<MoveToNodeOperation>(
+		"hex-right", "Process_Flow", "node_5136"));
+
+	sequenceStep->AddOperation(std::make_shared<SetOutputOperation>(
+		"IOBottom", 0, false)); // L_Gripper OFF
+
+	sequenceStep->AddOperation(std::make_shared<SetOutputOperation>(
+		"IOBottom", 2, false)); // R_Gripper OFF
+
+	sequenceStep->AddOperation(std::make_shared<SetOutputOperation>(
+		"IOBottom", 10, true)); // Vacuum_Base ON
+
+	// Set completion callback
+	sequenceStep->SetCompletionCallback([](bool success) {
+		std::cout << "Sequence " << (success ? "succeeded" : "failed") << std::endl;
+	});
+
+	// Execute the step
+	sequenceStep->Execute();
+}
+
+// Example of how to create a custom process step with specific behavior
+class CustomProcessStep : public ProcessStep {
+public:
+	CustomProcessStep(MachineOperations& machineOps)
+		: ProcessStep("CustomProcess", machineOps) {
+	}
+
+	bool Execute() override {
+		LogInfo("Starting custom process");
+
+		// Example of a more complex process with conditional logic
+
+		// 1. Move gantry to safe position
+		if (!m_machineOps.MoveDeviceToNode("gantry-main", "Process_Flow", "node_4027", true)) {
+			LogError("Failed to move gantry to safe position");
+			NotifyCompletion(false);
+			return false;
+		}
+
+		// 2. Read a sensor to determine next step
+		bool sensorState = false;
+		if (!m_machineOps.ReadInput("IOBottom", 5, sensorState)) {
+			LogError("Failed to read sensor");
+			NotifyCompletion(false);
+			return false;
+		}
+
+		// 3. Conditional branching based on sensor state
+		if (sensorState) {
+			LogInfo("Sensor active, moving to position A");
+			if (!m_machineOps.MoveDeviceToNode("hex-left", "Process_Flow", "node_5557", true)) {
+				LogError("Failed to move to position A");
+				NotifyCompletion(false);
+				return false;
+			}
+		}
+		else {
+			LogInfo("Sensor inactive, moving to position B");
+			if (!m_machineOps.MoveDeviceToNode("hex-left", "Process_Flow", "node_5620", true)) {
+				LogError("Failed to move to position B");
+				NotifyCompletion(false);
+				return false;
+			}
+		}
+
+		LogInfo("Custom process completed successfully");
+		NotifyCompletion(true);
+		return true;
+	}
+};
+
+
+
+
 
 int main(int argc, char* argv[])
 {
@@ -427,6 +536,26 @@ int main(int argc, char* argv[])
 		std::to_string(toolbarMenu.GetComponentCount()) +
 		" components");
 
+
+	// Create the machine operations object
+	MachineOperations machineOps(
+		motionControlLayer,
+		piControllerManager,
+		ioManager,
+		pneumaticManager
+	);
+
+
+	// Run the initialization process
+	// Create the initialization window
+	InitializationWindow initWindow(machineOps);
+
+	// Create and run a custom process step
+	//auto customStep = std::make_unique<CustomProcessStep>(machineOps);
+	//customStep->Execute();
+
+
+
 // Main loop
 	bool done = false;
 	bool cameraDisconnectedWarningShown = false;  // To track if we've shown a notification
@@ -620,6 +749,9 @@ int main(int argc, char* argv[])
 		dataChartManager.RenderUI();
 		RenderValueDisplay();
 		hexapodScanningUI.RenderUI();
+
+		// Render our UI windows
+		initWindow.RenderUI();
 
 
 		// Rendering
