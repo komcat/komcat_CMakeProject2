@@ -121,59 +121,13 @@ bool PIControllerManager::MoveToNamedPosition(const std::string& deviceName, con
 
   m_logger->LogInfo("PIControllerManager: Moving " + deviceName + " to position " + positionName);
 
-  // Move each axis to its target position
-  bool success = true;
+  // Prepare axis names and positions for batch move
+  std::vector<std::string> axes = { "X", "Y", "Z", "U", "V", "W" };
+  std::vector<double> positions = { position.x, position.y, position.z, position.u, position.v, position.w };
 
-  // Move X axis
-  if (!controller->MoveToPosition("X", position.x, false)) {
-    m_logger->LogError("PIControllerManager: Failed to move X axis");
-    success = false;
-  }
-
-  // Move Y axis
-  if (!controller->MoveToPosition("Y", position.y, false)) {
-    m_logger->LogError("PIControllerManager: Failed to move Y axis");
-    success = false;
-  }
-
-  // Move Z axis
-  if (!controller->MoveToPosition("Z", position.z, false)) {
-    m_logger->LogError("PIControllerManager: Failed to move Z axis");
-    success = false;
-  }
-
-  // Move U axis (roll)
-  if (!controller->MoveToPosition("U", position.u, false)) {
-    m_logger->LogError("PIControllerManager: Failed to move U axis");
-    success = false;
-  }
-
-  // Move V axis (pitch)
-  if (!controller->MoveToPosition("V", position.v, false)) {
-    m_logger->LogError("PIControllerManager: Failed to move V axis");
-    success = false;
-  }
-
-  // Move W axis (yaw)
-  if (!controller->MoveToPosition("W", position.w, false)) {
-    m_logger->LogError("PIControllerManager: Failed to move W axis");
-    success = false;
-  }
-
-  // If blocking mode requested, wait for all axes to complete motion
-  if (blocking && success) {
-    // Wait for each axis to complete movement
-    for (const auto& axis : { "X", "Y", "Z", "U", "V", "W" }) {
-      if (!controller->WaitForMotionCompletion(axis)) {
-        m_logger->LogError("PIControllerManager: Timeout waiting for axis " + std::string(axis) + " to complete motion");
-        success = false;
-      }
-    }
-  }
-
-  return success;
+  // Use the multi-axis move function that handles all axes at once
+  return controller->MoveToPositionMultiAxis(axes, positions, blocking);
 }
-
 // In pi_controller_manager.cpp, modify the RenderUI method:
 
 // pi_controller_manager.cpp - updated RenderUI method
@@ -205,7 +159,7 @@ void PIControllerManager::RenderUI() {
 
     // Display device name and status
     ImVec4 statusColor = isConnected ? ImVec4(0.0f, 0.8f, 0.0f, 1.0f) : ImVec4(0.8f, 0.2f, 0.2f, 1.0f);
-    ImGui::TextColored(statusColor, "%s", isConnected ? "● " : "○ ");
+    ImGui::TextColored(statusColor, "%s", isConnected ? "Y " : "N ");
     ImGui::SameLine();
     ImGui::Text("%s: %s %s",
       name.c_str(),
@@ -259,7 +213,7 @@ void PIControllerManager::RenderUI() {
 
             if (ImGui::Button(posName.c_str(), ImVec2(buttonWidth, 25))) {
               // When clicked, move to this position
-              MoveToNamedPosition(name, posName, true);
+              MoveToNamedPosition(name, posName, false);
             }
 
             ImGui::PopStyleColor(3);
