@@ -48,6 +48,21 @@ public:
 
   const Node* MotionControlLayer::GetNodeById(const std::string& graphName, const std::string& nodeId) const;
 
+
+  // Get the current position of a device
+  bool GetCurrentPosition(const std::string& deviceName, PositionStruct& position) const;
+
+  // Get a list of available devices
+  std::vector<std::string> GetAvailableDevices() const;
+
+  // Move a device to an absolute position (non-blocking if specified)
+  bool MoveToPosition(const std::string& deviceName, const PositionStruct& position, bool blocking = true);
+
+  // Move a device relative to its current position (non-blocking if specified)
+  bool MoveRelative(const std::string& deviceName, const std::string& axis, double distance, bool blocking = true);
+  // In motion_control_layer.h, add this to the public section:
+  bool GetCurrentPosition(const std::string& deviceName, PositionStruct& currentPosition);
+
 private:
   // References to managers
   MotionConfigManager& m_configManager;
@@ -90,7 +105,6 @@ private:
     const PositionStruct& targetPosition, double timeoutSeconds = 30.0);
   bool IsPositionReached(const std::string& deviceName, const PositionStruct& targetPosition,
     double tolerance = 0.01);
-  bool GetCurrentPosition(const std::string& deviceName, PositionStruct& currentPosition);
 
   // Current position tracking
   std::map<std::string, PositionStruct> m_deviceCurrentPositions;

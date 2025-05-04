@@ -211,7 +211,9 @@ add_executable(CMakeProject2
  "implot/implot.cpp"
  "implot/implot_items.cpp"
  "implot/implot_demo.cpp"
- "include/data/DataChartManager.h" "include/data/DataChartManager.cpp")
+ "include/data/DataChartManager.h" 
+ "include/data/DataChartManager.cpp"
+ "include/scanning/scanning_algorithm.h" "include/scanning/scanning_parameters.h" "include/scanning/scan_data_collector.h" "include/scanning/scanning_ui.h" "include/scanning/scanning_algorithm.cpp" "include/scanning/scan_data_collector.cpp" "include/scanning/scanning_ui.cpp")
 
 # Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
 target_include_directories(CMakeProject2 PRIVATE

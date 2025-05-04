@@ -44,6 +44,11 @@
 #include "include/cld101x_client.h"
 #include "include/cld101x_manager.h"
 #include "include/python_process_managaer.h"
+// Add these includes at the top with the other include statements
+#include "include/scanning/scanning_ui.h"
+#include "include/scanning/scanning_algorithm.h"
+#include "include/scanning/scanning_parameters.h"
+#include "include/scanning/scan_data_collector.h"
 #include "include/data/global_data_store.h" // Add this with your other includes
 #include "implot/implot.h"
 #include "include/data/DataChartManager.h"
@@ -118,12 +123,12 @@ int main(int argc, char* argv[])
 		logger->LogInfo("CLD101x server script started successfully");
 	}
 
-	if (!pythonManager.StartKeithleyScript()) {
-		logger->LogWarning("Failed to start Keithley script, will continue without it");
-	}
-	else {
-		logger->LogInfo("Keithley script started successfully");
-	}
+	//if (!pythonManager.StartKeithleyScript()) {
+	//	logger->LogWarning("Failed to start Keithley script, will continue without it");
+	//}
+	//else {
+	//	logger->LogInfo("Keithley script started successfully");
+	//}
 
 
 
@@ -212,18 +217,14 @@ int main(int argc, char* argv[])
 		}
 	});
 
+	// Create the Global Data Store if not already created
+	GlobalDataStore& dataStore = *GlobalDataStore::GetInstance();
+	logger->LogInfo("GlobalDataStore initialized");
 
-	// Example of planning and executing a path - uncomment to test
-	// This plans a path from the gantry home to the pic position
-	/*
-	if (motionControlLayer.PlanPath("Process_Flow", "node_9069", "node_9098")) {
-		logger->LogInfo("Path planned successfully, starting execution");
-		motionControlLayer.ExecutePath(false); // Non-blocking execution
-	}
-	else {
-		logger->LogError("Failed to plan path");
-	}
-	*/
+	// Create the Scanning UI
+// Create the Hexapod Optimization UI
+	ScanningUI hexapodScanningUI(piControllerManager, dataStore);
+	logger->LogInfo("Hexapod Scanning UI initialized");
 
 	// Log the loaded devices
 	const auto& devices = configManager.GetAllDevices();
@@ -395,25 +396,31 @@ int main(int argc, char* argv[])
 	dataChartManager.AddChannel("hex-right-Analog-Ch6", "Voltage R6", "unit", true);
 
 	// Add components with standard methods
-	toolbarMenu.AddReference(CreateTogglableUI(configEditor, "Config Editor"));
-	toolbarMenu.AddReference(CreateTogglableUI(graphVisualizer, "Graph Visualizer"));
-	toolbarMenu.AddReference(CreateTogglableUI(ioUI, "IO Control"));
-	toolbarMenu.AddReference(CreateTogglableUI(pneumaticUI, "Pneumatic"));
+
+	toolbarMenu.AddReference(CreateTogglableUI(hexapodScanningUI, "Scanning Optimizer"));
+	toolbarMenu.AddReference(CreateTogglableUI(globalJogPanel, "Global Jog Panel"));
+	toolbarMenu.AddReference(CreateTogglableUI(dataChartManager, "Data Chart"));
 	toolbarMenu.AddReference(CreateTogglableUI(dataClientManager, "Data TCP/IP"));
+	toolbarMenu.AddReference(CreateTogglableUI(ioControlPanel, "IO Quick Control"));
+	// Add to toolbar menu
+	toolbarMenu.AddReference(CreateTogglableUI(cld101xManager, "Laser TEC Cntrl"));
+	toolbarMenu.AddReference(CreateTogglableUI(pneumaticUI, "Pneumatic"));
+
 
 	// Add controller managers using our custom adapters
 	toolbarMenu.AddReference(CreateACSControllerAdapter(acsControllerManager, "Gantry"));
 	toolbarMenu.AddReference(CreatePIControllerAdapter(piControllerManager, "PI"));
 	// Add PIAnalogManager as a toggleable UI component
 	toolbarMenu.AddReference(std::shared_ptr<ITogglableUI>(&piAnalogManager));
-	toolbarMenu.AddReference(CreateTogglableUI(productConfigManager, "Products Config"));
+
 	// Add the IOControlPanel using the same CreateTogglableUI adapter
-	toolbarMenu.AddReference(CreateTogglableUI(ioControlPanel, "IO Quick Control"));
+
 	// Add to toolbar menu
-	toolbarMenu.AddReference(CreateTogglableUI(cld101xManager, "Laser TEC Cntrl"));
-	// Add to toolbar menu
-	toolbarMenu.AddReference(CreateTogglableUI(globalJogPanel, "Global Jog Panel"));
-	toolbarMenu.AddReference(CreateTogglableUI(dataChartManager, "Data Chart"));
+
+	toolbarMenu.AddReference(CreateTogglableUI(ioUI, "IO Control"));
+	toolbarMenu.AddReference(CreateTogglableUI(configEditor, "Config Editor"));
+	toolbarMenu.AddReference(CreateTogglableUI(graphVisualizer, "Graph Visualizer"));
+	toolbarMenu.AddReference(CreateTogglableUI(productConfigManager, "Products Config"));
 
 	// Log successful initialization
 	logger->LogInfo("ToolbarMenu initialized with " +
@@ -612,7 +619,7 @@ int main(int argc, char* argv[])
 		dataChartManager.Update();
 		dataChartManager.RenderUI();
 		RenderValueDisplay();
-
+		hexapodScanningUI.RenderUI();
 
 
 		// Rendering

@@ -1222,5 +1222,62 @@ void PIController::RenderUI() {
 	ImGui::End();
 }
 
+bool PIController::MoveToPositionMultiAxis(const std::vector<std::string>& axes,
+	const std::vector<double>& positions,
+	bool blocking) {
+	if (!m_isConnected) {
+		m_logger->LogError("PIController: Cannot move axes - not connected");
+		return false;
+	}
 
+	// Validate input arrays
+	if (axes.size() != positions.size() || axes.empty()) {
+		m_logger->LogError("PIController: Invalid axes/positions arrays for multi-axis move");
+		return false;
+	}
+
+	// Log the motion command
+	std::stringstream ss;
+	ss << "PIController: Moving multiple axes to positions: ";
+	for (size_t i = 0; i < axes.size(); i++) {
+		ss << axes[i] << "=" << positions[i] << " ";
+	}
+	m_logger->LogInfo(ss.str());
+
+	// Create space-separated string of axes (e.g., "X Y Z")
+	std::string axesStr;
+	for (size_t i = 0; i < axes.size(); i++) {
+		axesStr += axes[i];
+		if (i < axes.size() - 1) {
+			axesStr += " "; // Add space between axes
+		}
+	}
+
+	// Convert to C-style arrays for PI API
+	const char* szAxes = axesStr.c_str();
+
+	// Create a copy of the positions array that can be modified by the PI API
+	std::vector<double> posArray = positions;
+
+	// Call the PI_MOV function to move to the specified positions
+	if (!PI_MOV(m_controllerId, szAxes, posArray.data())) {
+		int error = PI_GetError(m_controllerId);
+		m_logger->LogError("PIController: Failed to move axes. Error code: " + std::to_string(error));
+		return false;
+	}
+
+	// If blocking, wait for motion to complete on all axes
+	if (blocking) {
+		bool success = true;
+		for (const auto& axis : axes) {
+			if (!WaitForMotionCompletion(axis)) {
+				m_logger->LogError("PIController: Timeout waiting for motion completion on axis " + axis);
+				success = false;
+			}
+		}
+		return success;
+	}
+
+	return true;
+}
 

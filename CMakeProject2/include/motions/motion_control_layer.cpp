@@ -1043,3 +1043,160 @@ void MotionControlLayer::UpdateDevicePosition(const std::string& deviceName) {
   }
 }
 
+// Add to motion_control_layer.cpp
+
+bool MotionControlLayer::GetCurrentPosition(const std::string& deviceName, PositionStruct& position) const {
+  // Try to get the position from cached positions
+  auto it = m_deviceCurrentPositions.find(deviceName);
+  if (it != m_deviceCurrentPositions.end()) {
+    position = it->second;
+    return true;
+  }
+
+  // If not cached, get it directly
+  // This is a non-const operation, so we need to cast away const
+  const_cast<MotionControlLayer*>(this)->UpdateDevicePosition(deviceName);
+
+  // After updating, check if the position exists in the map
+  if (m_deviceCurrentPositions.find(deviceName) != m_deviceCurrentPositions.end()) {
+    position = m_deviceCurrentPositions.at(deviceName);
+    return true;
+  }
+
+  return false;
+}
+
+std::vector<std::string> MotionControlLayer::GetAvailableDevices() const {
+  std::vector<std::string> devices;
+
+  // Get all devices from configuration
+  const auto& allDevices = m_configManager.GetAllDevices();
+
+  // Add enabled devices to the list
+  for (const auto& [name, device] : allDevices) {
+    if (device.IsEnabled) {
+      devices.push_back(name);
+    }
+  }
+
+  return devices;
+}
+
+bool MotionControlLayer::MoveToPosition(const std::string& deviceName, const PositionStruct& position, bool blocking) {
+  // Check if device exists and what type it is
+  auto deviceOpt = m_configManager.GetDevice(deviceName);
+  if (!deviceOpt.has_value()) {
+    m_logger->LogError("MotionControlLayer: Device not found: " + deviceName);
+    return false;
+  }
+
+  const auto& device = deviceOpt.value().get();
+
+  // Determine which controller manager to use
+  if (IsDevicePIController(deviceName)) {
+    // Use PI controller
+    PIController* controller = m_piControllerManager.GetController(deviceName);
+    if (!controller || !controller->IsConnected()) {
+      m_logger->LogError("MotionControlLayer: PI controller not available for " + deviceName);
+      return false;
+    }
+
+    // For PI controllers, we need to move multiple axes at once
+    std::vector<std::string> axes = { "X", "Y", "Z", "U", "V", "W" };
+    std::vector<double> positions = { position.x, position.y, position.z, position.u, position.v, position.w };
+
+    // Use the MoveToPositionMultiAxis method if available, otherwise move each axis individually
+    bool success = true;
+    try {
+      // Directly call the multi-axis method
+      success = controller->MoveToPositionMultiAxis(axes, positions, blocking);
+    }
+    catch (const std::exception& e) {
+      // Method doesn't exist or failed, fall back to individual axis movement
+      m_logger->LogWarning("MoveToPositionMultiAxis failed, falling back: " + std::string(e.what()));
+
+      // Move each axis individually
+      for (size_t i = 0; i < axes.size(); ++i) {
+        if (!controller->MoveToPosition(axes[i], positions[i], false)) {
+          success = false;
+          break;
+        }
+      }
+
+      // If blocking, wait for all axes to complete
+      if (blocking && success) {
+        for (const auto& axis : axes) {
+          if (!controller->WaitForMotionCompletion(axis)) {
+            success = false;
+            break;
+          }
+        }
+      }
+    }
+
+    return success;
+  }
+  else {
+    // Use ACS controller
+    ACSController* controller = m_acsControllerManager.GetController(deviceName);
+    if (!controller || !controller->IsConnected()) {
+      m_logger->LogError("MotionControlLayer: ACS controller not available for " + deviceName);
+      return false;
+    }
+
+    // For ACS controllers, we need to move each axis individually
+    bool success = true;
+
+    // Only move axes with non-zero values
+    if (position.x != 0 && !controller->MoveToPosition("X", position.x, false)) success = false;
+    if (position.y != 0 && !controller->MoveToPosition("Y", position.y, false)) success = false;
+    if (position.z != 0 && !controller->MoveToPosition("Z", position.z, false)) success = false;
+
+    // If blocking, wait for all axes to complete
+    if (blocking && success) {
+      for (const auto& axis : { "X", "Y", "Z" }) {
+        if (!controller->WaitForMotionCompletion(axis)) {
+          success = false;
+          break;
+        }
+      }
+    }
+
+    return success;
+  }
+}
+
+bool MotionControlLayer::MoveRelative(const std::string& deviceName, const std::string& axis,
+  double distance, bool blocking) {
+  // Check if device exists and what type it is
+  auto deviceOpt = m_configManager.GetDevice(deviceName);
+  if (!deviceOpt.has_value()) {
+    m_logger->LogError("MotionControlLayer: Device not found: " + deviceName);
+    return false;
+  }
+
+  const auto& device = deviceOpt.value().get();
+
+  // Determine which controller manager to use
+  if (IsDevicePIController(deviceName)) {
+    // Use PI controller
+    PIController* controller = m_piControllerManager.GetController(deviceName);
+    if (!controller || !controller->IsConnected()) {
+      m_logger->LogError("MotionControlLayer: PI controller not available for " + deviceName);
+      return false;
+    }
+
+    return controller->MoveRelative(axis, distance, blocking);
+  }
+  else {
+    // Use ACS controller
+    ACSController* controller = m_acsControllerManager.GetController(deviceName);
+    if (!controller || !controller->IsConnected()) {
+      m_logger->LogError("MotionControlLayer: ACS controller not available for " + deviceName);
+      return false;
+    }
+
+    return controller->MoveRelative(axis, distance, blocking);
+  }
+}
+

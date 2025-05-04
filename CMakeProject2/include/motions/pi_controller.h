@@ -67,6 +67,11 @@ public:
   void RenderJogDistanceControl();
 
   int GetControllerId() const { return m_controllerId; }
+  // Add this to the public section of the PIController class in pi_controller.h
+  bool MoveToPositionMultiAxis(const std::vector<std::string>& axes,
+    const std::vector<double>& positions,
+    bool blocking = true);
+
 private:
   bool m_debugVerbose = false;
 
