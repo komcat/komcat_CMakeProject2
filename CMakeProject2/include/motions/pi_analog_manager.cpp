@@ -1,178 +1,38 @@
-// pi_analog_manager.cpp - Simplified implementation
+// pi_analog_manager.cpp
 #include "../include/motions/pi_analog_manager.h"
 #include "imgui.h"
-#include <chrono>
-#include <iostream>
-#include <sstream>
+#include "include/data/global_data_store.h" // Add this include
 
 PIAnalogManager::PIAnalogManager(PIControllerManager& controllerManager, MotionConfigManager& configManager)
-  : m_controllerManager(controllerManager),
-  m_configManager(configManager),
-  m_stopPolling(false),
-  m_pollingInterval(100) { // Default 100ms polling interval
+  : m_controllerManager(controllerManager), m_configManager(configManager) {
 
   m_logger = Logger::GetInstance();
   m_logger->LogInfo("PIAnalogManager: Initializing");
 
+  // Get the Global Data Store instance
   m_dataStore = GlobalDataStore::GetInstance();
 
   // Initialize readers for all available controllers
   InitializeReaders();
 
-  // Start polling automatically
-  startPolling();
+  // Start polling by default
+  startPolling(100); // 100ms refresh rate
 }
 
 PIAnalogManager::~PIAnalogManager() {
-  m_logger->LogInfo("PIAnalogManager: Beginning shutdown");
+  m_logger->LogInfo("PIAnalogManager: Shutting down");
 
-  // First stop polling thread if active
-  if (isPolling()) {
-    m_logger->LogInfo("PIAnalogManager: Stopping polling thread");
-    stopPolling();
-    m_logger->LogInfo("PIAnalogManager: Polling thread stopped");
-  }
+  // Stop polling thread if active
+  stopPolling();
 
-  // Add a short delay to ensure thread is fully stopped
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-  // Clear readers with a simple approach - avoid complex iteration
-  m_logger->LogInfo("PIAnalogManager: Clearing readers");
-  {
-    std::lock_guard<std::mutex> lock(m_readersMutex);
-    m_readers.clear();
-  }
-
-  m_logger->LogInfo("PIAnalogManager: Shutdown complete");
-}
-
-
-void PIAnalogManager::startPolling(unsigned int intervalMs) {
-  // Don't start if already running
-  if (m_pollingThread) {
-    return;
-  }
-
-  // Set the polling interval
-  m_pollingInterval = intervalMs;
-
-  // Reset the stop flag
-  m_stopPolling = false;
-
-  // Start the polling thread
-  m_pollingThread = new std::thread(&PIAnalogManager::pollingThreadFunc, this);
-
-  m_logger->LogInfo("PIAnalogManager: Polling thread started with interval " +
-    std::to_string(m_pollingInterval) + "ms");
-}
-
-void PIAnalogManager::stopPolling() {
-  if (!m_pollingThread) {
-    return;
-  }
-
-  // Set the stop flag
-  m_stopPolling = true;
-
-  // Wait for the thread to finish
-  if (m_pollingThread->joinable()) {
-    m_pollingThread->join();
-  }
-
-  // Clean up the thread object
-  delete m_pollingThread;
-  m_pollingThread = nullptr;
-
-  m_logger->LogInfo("PIAnalogManager: Polling stopped");
-}
-
-bool PIAnalogManager::isPolling() const {
-  return m_pollingThread != nullptr && !m_stopPolling;
-}
-
-void PIAnalogManager::pollingThreadFunc() {
-  m_logger->LogInfo("PIAnalogManager: Polling thread started");
-
-  // During polling, use safe access to readers
-  while (!m_stopPolling) {
-    std::vector<std::string> readerNames;
-
-    // First collect the names to avoid holding the lock during update
-    {
-      std::lock_guard<std::mutex> lock(m_readersMutex);
-      for (const auto& pair : m_readers) {
-        readerNames.push_back(pair.first);
-      }
-    }
-
-    // Then update each reader by name
-    for (const auto& name : readerNames) {
-      PIAnalogReader* reader = nullptr;
-      {
-        std::lock_guard<std::mutex> lock(m_readersMutex);
-        auto it = m_readers.find(name);
-        if (it != m_readers.end()) {
-          reader = it->second.get();
-        }
-      }
-
-      if (reader) {
-        try {
-          reader->UpdateAllValues();
-        }
-        catch (...) {
-          m_logger->LogWarning("Exception while updating reader: " + name);
-        }
-      }
-    }
-
-    // Store the readings in the global data store
-    StoreReadingsInGlobalStore();
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(m_pollingInterval));
-  }
-
-  m_logger->LogInfo("PIAnalogManager: Polling thread stopped");
-}
-
-void PIAnalogManager::StoreReadingsInGlobalStore() {
-  std::lock_guard<std::mutex> lock(m_readersMutex);
-
-  // Store each reader's voltage values in the global data store
-  for (const auto& [deviceName, reader] : m_readers) {
-    const auto& voltageValues = reader->GetLatestVoltageValues();
-
-    for (const auto& [channel, voltage] : voltageValues) {
-      // Create a unique key for each device and channel
-      std::string key = deviceName + "-Analog-Ch" + std::to_string(channel);
-
-      // Store the voltage value
-      m_dataStore->SetValue(key, static_cast<float>(voltage));
-    }
-  }
+  // Cleanup readers
+  cleanupReaders();
 }
 
 void PIAnalogManager::cleanupReaders() {
-  m_logger->LogInfo("PIAnalogManager: Starting reader cleanup");
-
-  // First stop polling if active
-  if (isPolling()) {
-    m_logger->LogInfo("PIAnalogManager: Stopping polling as part of cleanup");
-    stopPolling();
-  }
-
-  // Small delay
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-  // Simple clear approach
-  {
-    std::lock_guard<std::mutex> lock(m_readersMutex);
-    m_readers.clear();
-  }
-
-  m_logger->LogInfo("PIAnalogManager: All readers cleared");
+  m_readers.clear();
+  m_logger->LogInfo("PIAnalogManager: Readers cleared");
 }
-
 
 std::vector<std::string> PIAnalogManager::GetPIControllerDeviceNames() const {
   std::vector<std::string> deviceNames;
@@ -223,121 +83,305 @@ PIAnalogReader* PIAnalogManager::GetReader(const std::string& deviceName) {
   return nullptr;
 }
 
-void PIAnalogManager::RenderUI() {
-  // Skip rendering if window is hidden
-  if (!m_showWindow) {
-    return;
-  }
+void PIAnalogManager::UpdateAllReadings() {
+  // Focus only on target devices and channels
+  const std::vector<std::string> targetDevices = { "hex-left", "hex-right" };
+  const int targetChannels[] = { 5, 6 };
+  const int numTargetChannels = 2;
 
-  if (!ImGui::Begin(m_windowTitle.c_str(), &m_showWindow, ImGuiWindowFlags_AlwaysAutoResize)) {
-    ImGui::End();
-    return;
-  }
+  for (const auto& deviceName : targetDevices) {
+    auto it = m_readers.find(deviceName);
+    if (it != m_readers.end() && it->second.get() != nullptr) {
+      auto reader = it->second.get();
+      PIController* controller = m_controllerManager.GetController(deviceName);
 
-  // Polling status and controls
-  bool isCurrentlyPolling = isPolling();
-  if (isCurrentlyPolling) {
-    ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "Auto-Update: Running (%d ms interval)", m_pollingInterval);
-    if (ImGui::Button("Stop Auto Updates")) {
-      stopPolling();
-    }
-  }
-  else {
-    ImGui::TextColored(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), "Auto-Update: Stopped");
-    if (ImGui::Button("Start Auto Updates")) {
-      startPolling(100); // 100ms polling interval
-    }
-  }
+      // Only update readings for connected controllers
+      if (controller && controller->IsConnected()) {
+        // First update all values in the reader
+        reader->UpdateAllValues();
 
-  // Interval slider
-  if (isCurrentlyPolling) {
-    int interval = m_pollingInterval;
-    if (ImGui::SliderInt("Polling Interval (ms)", &interval, 50, 1000)) {
-      // Only update if changed
-      if (interval != m_pollingInterval) {
-        stopPolling();
-        startPolling(interval);
-      }
-    }
-  }
+        // Then get just the voltage values we need
+        std::map<int, double> voltageValues;
+        if (reader->GetVoltageValues(voltageValues)) {
+          // Store values for specific channels in global data store
+          for (int i = 0; i < numTargetChannels; i++) {
+            int channel = targetChannels[i];
+            auto voltIt = voltageValues.find(channel);
 
-  ImGui::Separator();
+            if (voltIt != voltageValues.end()) {
+              // Create a server ID based on device and channel
+              std::string serverId = deviceName + "-A-" + std::to_string(channel);
 
-  // Simple array-based structures for rendering
-  struct AnalogValue {
-    std::string deviceName;
-    int channel;
-    double voltage;
-  };
+              // Store the voltage value in the global data store
+              if (m_dataStore) {
+                m_dataStore->SetValue(serverId, static_cast<float>(voltIt->second));
 
-  // Pre-allocate array with maximum expected size (assume 10 devices with 2 channels each)
-  const int MAX_VALUES = 20;
-  AnalogValue values[MAX_VALUES];
-  int valueCount = 0;
+                char logBuffer[128];
+                snprintf(logBuffer, sizeof(logBuffer),
+                  "Updated global data store: %s = %.4f V",
+                  serverId.c_str(), voltIt->second);
 
-  // Fill the array with data while holding the lock
-  {
-    std::lock_guard<std::mutex> lock(m_readersMutex);
-
-    for (const auto& entry : m_readers) {
-      const std::string& deviceName = entry.first;
-      PIAnalogReader* reader = entry.second.get();
-
-      if (reader) {
-        // Get a reference to the voltage values
-        const auto& voltageValues = reader->GetLatestVoltageValues();
-
-        // Copy each value to our simple array
-        for (const auto& volt : voltageValues) {
-          if (valueCount < MAX_VALUES) {
-            values[valueCount].deviceName = deviceName;
-            values[valueCount].channel = volt.first;  // Channel number
-            values[valueCount].voltage = volt.second; // Voltage value
-            valueCount++;
+                if (m_enableDebugLogging) {
+                  m_logger->LogInfo(logBuffer);
+                }
+              }
+            }
           }
         }
       }
     }
   }
+}
 
-  // Display the values in a table
-  if (ImGui::BeginTable("AllAnalogReadingsTable", 3, ImGuiTableFlags_Borders)) {
+void PIAnalogManager::RenderUI() {
+  if (!m_showWindow) return;
+
+  ImGui::Begin("PI Analog Monitor", &m_showWindow);
+
+  ImGui::Text("Monitoring analog inputs from PI controllers");
+
+  // Show polling status and controls
+  bool pollingActive = this->isPolling();
+  if (ImGui::Checkbox("Auto-Update", &pollingActive)) {
+    if (pollingActive) {
+      startPolling(100); // 100ms refresh rate
+    }
+    else {
+      stopPolling();
+    }
+  }
+
+  ImGui::SameLine();
+
+  // Manual update button
+  if (ImGui::Button("Update Now")) {
+    UpdateAllReadings();
+  }
+
+  ImGui::SameLine();
+
+  // Debug logging toggle
+  if (ImGui::Checkbox("Debug Logging", &m_enableDebugLogging)) {
+    m_logger->LogInfo(m_enableDebugLogging ?
+      "PIAnalogManager: Debug logging enabled" :
+      "PIAnalogManager: Debug logging disabled");
+  }
+
+  ImGui::Separator();
+
+  // Create a table to display the hardcoded channels for hex-left and hex-right
+  if (ImGui::BeginTable("AnalogChannelsTable", 4, ImGuiTableFlags_Borders)) {
     ImGui::TableSetupColumn("Device");
     ImGui::TableSetupColumn("Channel");
     ImGui::TableSetupColumn("Voltage (V)");
+    ImGui::TableSetupColumn("DataStore ID");
     ImGui::TableHeadersRow();
 
-    if (valueCount == 0) {
-      // No data case
-      ImGui::TableNextRow();
-      ImGui::TableNextColumn();
-      ImGui::Text("No data");
-      ImGui::TableNextColumn();
-      ImGui::Text("--");
-      ImGui::TableNextColumn();
-      ImGui::Text("--");
-    }
-    else {
-      // Display each value from our array
-      for (int i = 0; i < valueCount; i++) {
-        ImGui::TableNextRow();
+    // Hardcoded channels to display (5 and 6)
+    const int targetChannels[] = { 5, 6 };
+    const int numTargetChannels = 2;
 
-        // Device
-        ImGui::TableNextColumn();
-        ImGui::Text("%s", values[i].deviceName.c_str());
+    // Only display these specific devices
+    const std::vector<std::string> targetDevices = { "hex-left", "hex-right" };
 
-        // Channel
-        ImGui::TableNextColumn();
-        ImGui::Text("%d", values[i].channel);
+    for (const auto& deviceName : targetDevices) {
+      auto it = m_readers.find(deviceName);
+      if (it != m_readers.end() && it->second.get() != nullptr) {
+        auto reader = it->second.get();
+        PIController* controller = m_controllerManager.GetController(deviceName);
 
-        // Voltage
-        ImGui::TableNextColumn();
-        ImGui::Text("%.4f V", values[i].voltage);
+        if (controller && controller->IsConnected()) {
+          // Get all voltage values
+          std::map<int, double> voltageValues;
+          if (reader->GetVoltageValues(voltageValues)) {
+            // Display only the target channels
+            for (int i = 0; i < numTargetChannels; i++) {
+              int channel = targetChannels[i];
+
+              auto voltIt = voltageValues.find(channel);
+              if (voltIt != voltageValues.end()) {
+                ImGui::TableNextRow();
+
+                // Column 1: Device name
+                ImGui::TableNextColumn();
+                ImGui::Text("%s", deviceName.c_str());
+
+                // Column 2: Channel number
+                ImGui::TableNextColumn();
+                ImGui::Text("Channel #%d", channel);
+
+                // Column 3: Voltage value
+                ImGui::TableNextColumn();
+                ImGui::Text("%.4f V", voltIt->second);
+
+                // Column 4: Data Store ID
+                ImGui::TableNextColumn();
+                std::string serverId = deviceName + "_channel_" + std::to_string(channel);
+                ImGui::Text("%s", serverId.c_str());
+
+                // Also display the data store value if debug logging is enabled
+                if (m_enableDebugLogging && m_dataStore && m_dataStore->HasValue(serverId)) {
+                  ImGui::SameLine();
+                  float storedValue = m_dataStore->GetValue(serverId);
+                  ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "(%.4f V)", storedValue);
+                }
+              }
+            }
+          }
+          else {
+            // If failed to get values, display error for this device
+            for (int i = 0; i < numTargetChannels; i++) {
+              ImGui::TableNextRow();
+
+              ImGui::TableNextColumn();
+              ImGui::Text("%s", deviceName.c_str());
+
+              ImGui::TableNextColumn();
+              ImGui::Text("Channel #%d", targetChannels[i]);
+
+              ImGui::TableNextColumn();
+              ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error reading channel");
+
+              ImGui::TableNextColumn();
+              ImGui::Text("%s_channel_%d", deviceName.c_str(), targetChannels[i]);
+            }
+          }
+        }
+        else {
+          // If controller not connected, display "Not connected" for this device
+          for (int i = 0; i < numTargetChannels; i++) {
+            ImGui::TableNextRow();
+
+            ImGui::TableNextColumn();
+            ImGui::Text("%s", deviceName.c_str());
+
+            ImGui::TableNextColumn();
+            ImGui::Text("Channel #%d", targetChannels[i]);
+
+            ImGui::TableNextColumn();
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Not connected");
+
+            ImGui::TableNextColumn();
+            ImGui::Text("%s_channel_%d", deviceName.c_str(), targetChannels[i]);
+          }
+        }
       }
     }
 
     ImGui::EndTable();
   }
 
+  // Add a simple bar graph visualization for the voltages
+  ImGui::Separator();
+  ImGui::Text("Voltage Visualization");
+
+  for (const auto& deviceName : { "hex-left", "hex-right" }) {
+    auto it = m_readers.find(deviceName);
+    if (it != m_readers.end() && it->second.get() != nullptr) {
+      auto reader = it->second.get();
+      PIController* controller = m_controllerManager.GetController(deviceName);
+
+      if (controller && controller->IsConnected()) {
+        // Get all voltage values
+        std::map<int, double> voltageValues;
+        if (reader->GetVoltageValues(voltageValues)) {
+          // Display only channels 5 and 6
+          for (int channel : {5, 6}) {
+            auto voltIt = voltageValues.find(channel);
+            if (voltIt != voltageValues.end()) {
+              char buffer[64];
+              snprintf(buffer, sizeof(buffer), "%s - Channel #%d", deviceName, channel);
+              ImGui::Text("%s", buffer);
+
+              // Normalize the voltage for the bar (0-5V typical range for analog inputs)
+              float normalizedVoltage = static_cast<float>(voltIt->second) / 5.0f;
+              normalizedVoltage = (std::min)(1.0f, (std::max)(0.0f, normalizedVoltage)); // Clamp to 0-1
+
+              // Choose color based on device
+              ImVec4 barColor;
+              if (strcmp(deviceName, "hex-left") == 0) {
+                barColor = ImVec4(0.2f, 0.6f, 1.0f, 0.8f); // Blue for hex-left
+              }
+              else {
+                barColor = ImVec4(0.8f, 0.2f, 0.6f, 0.8f); // Purple for hex-right
+              }
+
+              // Convert voltage to string for display in progress bar
+              char voltageStr[16];
+              snprintf(voltageStr, sizeof(voltageStr), "%.4f V", voltIt->second);
+
+              // Draw the bar
+              ImGui::PushStyleColor(ImGuiCol_PlotHistogram, barColor);
+              ImGui::ProgressBar(normalizedVoltage, ImVec2(-1.0f, 0.0f), voltageStr);
+              ImGui::PopStyleColor();
+            }
+          }
+        }
+      }
+    }
+  }
+
   ImGui::End();
+}
+
+void PIAnalogManager::startPolling(unsigned int intervalMs) {
+  // Don't start if already running
+  if (m_pollingThread) {
+    return;
+  }
+
+  // Set the polling interval
+  m_pollingInterval = intervalMs;
+
+  // Reset the stop flag
+  m_stopPolling = false;
+
+  // Start the polling thread
+  m_pollingThread = new std::thread(&PIAnalogManager::pollingThreadFunc, this);
+
+  m_logger->LogInfo("PIAnalogManager: Polling thread started with interval " +
+    std::to_string(m_pollingInterval) + "ms");
+}
+
+void PIAnalogManager::stopPolling() {
+  // Signal the thread to stop
+  m_stopPolling = true;
+
+  // Wait for the thread to exit
+  if (m_pollingThread) {
+    if (m_pollingThread->joinable()) {
+      m_pollingThread->join();
+    }
+    delete m_pollingThread;
+    m_pollingThread = nullptr;
+  }
+
+  m_logger->LogInfo("PIAnalogManager: Polling stopped");
+}
+
+bool PIAnalogManager::isPolling() const {
+  return m_pollingThread != nullptr && !m_stopPolling;
+}
+
+void PIAnalogManager::pollingThreadFunc() {
+  m_logger->LogInfo("PIAnalogManager: Polling thread started");
+
+  while (!m_stopPolling) {
+    try {
+      // Update all analog readings
+      std::lock_guard<std::mutex> lock(m_readersMutex);
+      UpdateAllReadings();
+    }
+    catch (const std::exception& e) {
+      m_logger->LogError("PIAnalogManager: Error in polling thread: " + std::string(e.what()));
+    }
+    catch (...) {
+      m_logger->LogError("PIAnalogManager: Unknown error in polling thread");
+    }
+
+    // Sleep for the specified interval
+    std::this_thread::sleep_for(std::chrono::milliseconds(m_pollingInterval));
+  }
+
+  m_logger->LogInfo("PIAnalogManager: Polling thread stopped");
 }

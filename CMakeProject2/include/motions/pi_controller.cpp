@@ -1281,3 +1281,142 @@ bool PIController::MoveToPositionMultiAxis(const std::vector<std::string>& axes,
 	return true;
 }
 
+
+// Add to pi_controller.cpp:
+
+/**
+ * Starts a scanning procedure to determine the maximum intensity of an analog input signal in a plane.
+ * The search consists of two subprocedures:
+ * - "Coarse portion" (similar to FSC function)
+ * - "Fine portion" (similar to AAP function)
+ * The fine portion is only executed when the coarse portion has previously been successfully completed.
+ *
+ * @param axis1 First axis that defines scanning area (X, Y, or Z). During the coarse portion,
+ *              the platform moves in this axis from scanning line to scanning line by the distance given by distance.
+ * @param length1 Length of scanning area along axis1 in mm
+ * @param axis2 Second axis that defines scanning area (X, Y, or Z). During the coarse portion,
+ *              the scanning lines are in this axis.
+ * @param length2 Length of scanning area along axis2 in mm
+ * @param threshold Intensity threshold of the analog input signal, in V
+ * @param distance Distance between the scanning lines in mm, used only during the coarse portion
+ * @param alignStep Starting value for the step size in mm, used only during the fine portion
+ * @param analogInput Identifier of the analog input signal whose maximum intensity is sought
+ * @return TRUE if scan started successfully, FALSE otherwise
+ */
+bool PIController::FSA(const std::string& axis1, double length1,
+	const std::string& axis2, double length2,
+	double threshold, double distance,
+	double alignStep, int analogInput) {
+	// Check if controller is connected
+	if (!m_isConnected) {
+		m_logger->LogError("PIController: Cannot perform FSA scan - not connected");
+		return false;
+	}
+
+	m_logger->LogInfo("PIController: Starting FSA scan");
+
+	// Call the PI GCS2 function
+	bool result = PI_FSA(m_controllerId,
+		axis1.c_str(), length1,
+		axis2.c_str(), length2,
+		threshold, distance,
+		alignStep, analogInput);
+
+	if (!result) {
+		int error = PI_GetError(m_controllerId);
+		m_logger->LogError("PIController: FSA scan failed. Error code: " + std::to_string(error));
+		return false;
+	}
+
+	m_logger->LogInfo("PIController: FSA scan started successfully");
+	return true;
+}
+
+/**
+ * Starts a scanning procedure which scans a specified area ("scanning area") until the analog
+ * input signal reaches a specified intensity threshold.
+ * The scanning procedure corresponds to the "coarse portion" of the scanning procedure
+ * that is started with the FSA function.
+ *
+ * @param axis1 The axis in which the platform moves from scanning line to scanning line
+ *              by the distance given by distance (X, Y, or Z).
+ * @param length1 Length of scanning area along axis1 in mm
+ * @param axis2 The axis in which the scanning lines are located (X, Y, or Z)
+ * @param length2 Length of scanning area along axis2 in mm
+ * @param threshold Intensity threshold of the analog input signal, in V
+ * @param distance Distance between the scanning lines in mm
+ * @param analogInput Identifier of the analog input signal whose maximum intensity is sought
+ * @return TRUE if scan started successfully, FALSE otherwise
+ */
+bool PIController::FSC(const std::string& axis1, double length1,
+	const std::string& axis2, double length2,
+	double threshold, double distance,
+	int analogInput) {
+	// Check if controller is connected
+	if (!m_isConnected) {
+		m_logger->LogError("PIController: Cannot perform FSC scan - not connected");
+		return false;
+	}
+
+	m_logger->LogInfo("PIController: Starting FSC scan");
+
+	// Call the PI GCS2 function
+	bool result = PI_FSC(m_controllerId,
+		axis1.c_str(), length1,
+		axis2.c_str(), length2,
+		threshold, distance,
+		analogInput);
+
+	if (!result) {
+		int error = PI_GetError(m_controllerId);
+		m_logger->LogError("PIController: FSC scan failed. Error code: " + std::to_string(error));
+		return false;
+	}
+
+	m_logger->LogInfo("PIController: FSC scan started successfully");
+	return true;
+}
+
+/**
+ * Starts a scanning procedure to determine the global maximum intensity of an analog
+ * input signal in a plane. Unlike FSC, this method scans the entire area to find the
+ * global maximum rather than stopping when a threshold is reached.
+ *
+ * @param axis1 The axis in which the platform moves from scanning line to scanning line
+ *              by the distance given by distance (X, Y, or Z).
+ * @param length1 Length of scanning area along axis1 in mm
+ * @param axis2 The axis in which the scanning lines are located (X, Y, or Z)
+ * @param length2 Length of scanning area along axis2 in mm
+ * @param threshold Intensity threshold of the analog input signal, in V
+ * @param distance Distance between the scanning lines in mm
+ * @param analogInput Identifier of the analog input signal whose maximum intensity is sought
+ * @return TRUE if scan started successfully, FALSE otherwise
+ */
+bool PIController::FSM(const std::string& axis1, double length1,
+	const std::string& axis2, double length2,
+	double threshold, double distance,
+	int analogInput) {
+	// Check if controller is connected
+	if (!m_isConnected) {
+		m_logger->LogError("PIController: Cannot perform FSM scan - not connected");
+		return false;
+	}
+
+	m_logger->LogInfo("PIController: Starting FSM scan");
+
+	// Call the PI GCS2 function
+	bool result = PI_FSM(m_controllerId,
+		axis1.c_str(), length1,
+		axis2.c_str(), length2,
+		threshold, distance,
+		analogInput);
+
+	if (!result) {
+		int error = PI_GetError(m_controllerId);
+		m_logger->LogError("PIController: FSM scan failed. Error code: " + std::to_string(error));
+		return false;
+	}
+
+	m_logger->LogInfo("PIController: FSM scan started successfully");
+	return true;
+}

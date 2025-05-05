@@ -72,6 +72,75 @@ public:
     const std::vector<double>& positions,
     bool blocking = true);
 
+
+
+  // Add to pi_controller.h in the public section:
+
+/**
+ * Starts a scanning procedure to determine the maximum intensity of an analog input signal in a plane.
+ * The search consists of two subprocedures:
+ * - "Coarse portion" (similar to FSC function)
+ * - "Fine portion" (similar to AAP function)
+ * The fine portion is only executed when the coarse portion has previously been successfully completed.
+ *
+ * @param axis1 First axis that defines scanning area (X, Y, or Z). During the coarse portion,
+ *              the platform moves in this axis from scanning line to scanning line by the distance given by distance.
+ * @param length1 Length of scanning area along axis1 in mm
+ * @param axis2 Second axis that defines scanning area (X, Y, or Z). During the coarse portion,
+ *              the scanning lines are in this axis.
+ * @param length2 Length of scanning area along axis2 in mm
+ * @param threshold Intensity threshold of the analog input signal, in V
+ * @param distance Distance between the scanning lines in mm, used only during the coarse portion
+ * @param alignStep Starting value for the step size in mm, used only during the fine portion
+ * @param analogInput Identifier of the analog input signal whose maximum intensity is sought
+ * @return TRUE if scan started successfully, FALSE otherwise
+ */
+  bool FSA(const std::string& axis1, double length1,
+    const std::string& axis2, double length2,
+    double threshold, double distance,
+    double alignStep, int analogInput);
+
+  /**
+   * Starts a scanning procedure which scans a specified area ("scanning area") until the analog
+   * input signal reaches a specified intensity threshold.
+   * The scanning procedure corresponds to the "coarse portion" of the scanning procedure
+   * that is started with the FSA function.
+   *
+   * @param axis1 The axis in which the platform moves from scanning line to scanning line
+   *              by the distance given by distance (X, Y, or Z).
+   * @param length1 Length of scanning area along axis1 in mm
+   * @param axis2 The axis in which the scanning lines are located (X, Y, or Z)
+   * @param length2 Length of scanning area along axis2 in mm
+   * @param threshold Intensity threshold of the analog input signal, in V
+   * @param distance Distance between the scanning lines in mm
+   * @param analogInput Identifier of the analog input signal whose maximum intensity is sought
+   * @return TRUE if scan started successfully, FALSE otherwise
+   */
+  bool FSC(const std::string& axis1, double length1,
+    const std::string& axis2, double length2,
+    double threshold, double distance,
+    int analogInput);
+
+  /**
+   * Starts a scanning procedure to determine the global maximum intensity of an analog
+   * input signal in a plane. Unlike FSC, this method scans the entire area to find the
+   * global maximum rather than stopping when a threshold is reached.
+   *
+   * @param axis1 The axis in which the platform moves from scanning line to scanning line
+   *              by the distance given by distance (X, Y, or Z).
+   * @param length1 Length of scanning area along axis1 in mm
+   * @param axis2 The axis in which the scanning lines are located (X, Y, or Z)
+   * @param length2 Length of scanning area along axis2 in mm
+   * @param threshold Intensity threshold of the analog input signal, in V
+   * @param distance Distance between the scanning lines in mm
+   * @param analogInput Identifier of the analog input signal whose maximum intensity is sought
+   * @return TRUE if scan started successfully, FALSE otherwise
+   */
+  bool FSM(const std::string& axis1, double length1,
+    const std::string& axis2, double length2,
+    double threshold, double distance,
+    int analogInput);
+
 private:
   bool m_debugVerbose = false;
 
