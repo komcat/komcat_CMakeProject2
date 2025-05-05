@@ -26,9 +26,9 @@ ScanningUI::ScanningUI(PIControllerManager& piControllerManager,
   // Default parameters for hexapod optimization
   m_parameters = ScanningParameters::CreateDefault();
   m_parameters.axesToScan = { "Z", "X", "Y" };
-  m_parameters.stepSizes = { 0.0005, 0.001, 0.002 };
+  m_parameters.stepSizes = { 0.002, 0.001, 0.0005, 0.0002 };
   m_parameters.motionSettleTimeMs = 300;
-  m_parameters.consecutiveDecreasesLimit = 4;
+  m_parameters.consecutiveDecreasesLimit = 2;
   m_parameters.improvementThreshold = 0.005;
   m_parameters.maxTotalDistance = 2.0;
 }

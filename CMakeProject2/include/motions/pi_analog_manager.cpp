@@ -30,7 +30,7 @@ PIAnalogManager::~PIAnalogManager() {
 }
 
 void PIAnalogManager::cleanupReaders() {
-  m_readers.clear();
+  //m_readers.clear();
   m_logger->LogInfo("PIAnalogManager: Readers cleared");
 }
 

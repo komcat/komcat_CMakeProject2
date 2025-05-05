@@ -55,7 +55,8 @@
 #include "include/SequenceStep.h"
 #include "include/machine_operations.h"
 #include "InitializationWindow.h"
-
+//#include "include/HexRightControllerWindow.h"
+#include "include/HexControllerWindow.h"
 #include <iostream>
 #include <memory>
 
@@ -493,16 +494,28 @@ int main(int argc, char* argv[])
 	GlobalJogPanel globalJogPanel(configManager, piControllerManager, acsControllerManager);
 	logger->LogInfo("GlobalJogPanel initialized");
 
+
+
+	// Then in the initialization section, add:
+
 	DataChartManager dataChartManager;
 	dataChartManager.Initialize();
+
+	// Create the window with a reference to the controller manager
+	//HexRightControllerWindow hexRightWindow(piControllerManager);
+	//logger->LogInfo("HexRightControllerWindow created");
+	// Create the window with a reference to the controller manager
+	HexControllerWindow hexControllerWindow(piControllerManager);
+	logger->LogInfo("HexControllerWindow created");
+
 	// Add the channels you want to monitor
 	dataChartManager.AddChannel("GPIB-Current", "Current Reading", "A", false);
 	//dataChartManager.AddChannel("Virtual_1", "Virtual Channel 1", "unit", true);
 	//dataChartManager.AddChannel("Virtual_2", "Virtual Channel 2", "unit", true);
-	dataChartManager.AddChannel("hex-left-A-5", "Voltage L5", "unit", true); 
-	dataChartManager.AddChannel("hex-left-A-6", "Voltage L6", "unit", true);
+	//dataChartManager.AddChannel("hex-left-A-5", "Voltage L5", "unit", true); 
+	//dataChartManager.AddChannel("hex-left-A-6", "Voltage L6", "unit", true);
 	dataChartManager.AddChannel("hex-right-A-5", "Voltage R5", "unit", true);
-	dataChartManager.AddChannel("hex-right-A-6", "Voltage R6", "unit", true);
+	//dataChartManager.AddChannel("hex-right-A-6", "Voltage R6", "unit", true);
 
 	// Add components with standard methods
 
@@ -530,7 +543,12 @@ int main(int argc, char* argv[])
 	toolbarMenu.AddReference(CreateTogglableUI(configEditor, "Config Editor"));
 	toolbarMenu.AddReference(CreateTogglableUI(graphVisualizer, "Graph Visualizer"));
 	toolbarMenu.AddReference(CreateTogglableUI(productConfigManager, "Products Config"));
+	// Add it to the toolbar menu
+	//toolbarMenu.AddReference(CreateTogglableUI(hexRightWindow, "Hex-Right"));
 
+
+	// Add it to the toolbar menu
+	toolbarMenu.AddReference(CreateTogglableUI(hexControllerWindow, "Hex Controllers"));
 	// Log successful initialization
 	logger->LogInfo("ToolbarMenu initialized with " +
 		std::to_string(toolbarMenu.GetComponentCount()) +
@@ -752,7 +770,8 @@ int main(int argc, char* argv[])
 
 		// Render our UI windows
 		initWindow.RenderUI();
-
+		//hexRightWindow.RenderUI();
+		hexControllerWindow.RenderUI();
 
 		// Rendering
 		ImGui::Render();

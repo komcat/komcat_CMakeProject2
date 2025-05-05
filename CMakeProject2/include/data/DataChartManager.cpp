@@ -112,23 +112,23 @@ void DataChartManager::Initialize() {
   };
 
   // Create chart buffers for each channel
-  for (size_t i = 0; i < channels.size(); i++) {
-    const auto& info = channels[i];
+  //for (size_t i = 0; i < channels.size(); i++) {
+  //  const auto& info = channels[i];
 
-    // Create a chart buffer for this channel
-    m_chartBuffers.insert(std::make_pair(
-      info.id,
-      ChartDataBuffer(
-        info.id,
-        info.displayName,
-        info.unit,
-        info.displayUnitSuffix,
-        info.color
-      )
-    ));
+  //  // Create a chart buffer for this channel
+  //  m_chartBuffers.insert(std::make_pair(
+  //    info.id,
+  //    ChartDataBuffer(
+  //      info.id,
+  //      info.displayName,
+  //      info.unit,
+  //      info.displayUnitSuffix,
+  //      info.color
+  //    )
+  //  ));
 
-    logger->LogInfo("DataChartManager: Created chart for " + info.displayName);
-  }
+  //  logger->LogInfo("DataChartManager: Created chart for " + info.displayName);
+  //}
 
   m_initialized = true;
   logger->LogInfo("DataChartManager: Initialization complete with " +

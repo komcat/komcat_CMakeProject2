@@ -90,23 +90,27 @@ bool EziIODevice::connect() {
     std::cout << "Connected to device " << m_name << " (ID: " << m_deviceId
       << ") at IP " << m_ipAddress << std::endl;
 
-    // Initialize by clearing all outputs
-    if (m_outputCount > 0) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    //DO NOT CLEAR output when connect for safety
+		if (false) {
+      // Initialize by clearing all outputs
+      if (m_outputCount > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-      // Clear all outputs as initialization
-      uint32_t clearMask = 0;
+        // Clear all outputs as initialization
+        uint32_t clearMask = 0;
 
-      // Create a mask to clear all possible output pins
-      for (int i = 0; i < m_outputCount; i++) {
-        clearMask |= getOutputPinMask(i);
+        // Create a mask to clear all possible output pins
+        for (int i = 0; i < m_outputCount; i++) {
+          clearMask |= getOutputPinMask(i);
+        }
+
+        uint32_t setMask = 0; // Set none
+
+        std::cout << "Initializing outputs with clear mask: 0x" << std::hex << clearMask << std::dec << std::endl;
+        setOutputs(setMask, clearMask);
       }
+		}
 
-      uint32_t setMask = 0; // Set none
-
-      std::cout << "Initializing outputs with clear mask: 0x" << std::hex << clearMask << std::dec << std::endl;
-      setOutputs(setMask, clearMask);
-    }
 
     return true;
   }
