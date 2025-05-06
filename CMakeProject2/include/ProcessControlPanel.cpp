@@ -229,42 +229,42 @@ void ProcessControlPanel::RenderUI() {
     ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
     ImGui::Text("Releases grippers and returns to safe position");
   }
-  else if (m_selectedProcess == "CompleteProcess") {
-    ImGui::TextWrapped("Performs the complete end-to-end assembly process, including all the steps above in sequence.");
-    ImGui::Spacing();
+  //else if (m_selectedProcess == "CompleteProcess") {
+  //  ImGui::TextWrapped("Performs the complete end-to-end assembly process, including all the steps above in sequence.");
+  //  ImGui::Spacing();
 
-    float bulletSpacing = 24.0f;
-    float indent = 10.0f;
+  //  float bulletSpacing = 24.0f;
+  //  float indent = 10.0f;
 
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-    ImGui::Text("System initialization");
+  //  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+  //  ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+  //  ImGui::Text("System initialization");
 
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-    ImGui::Text("Component probing and inspection");
+  //  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+  //  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+  //  ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+  //  ImGui::Text("Component probing and inspection");
 
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-    ImGui::Text("Left lens pick and placement");
+  //  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+  //  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+  //  ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+  //  ImGui::Text("Left lens pick and placement");
 
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-    ImGui::Text("Right lens pick and placement");
+  //  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+  //  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+  //  ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+  //  ImGui::Text("Right lens pick and placement");
 
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-    ImGui::Text("UV curing");
+  //  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+  //  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+  //  ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+  //  ImGui::Text("UV curing");
 
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-    ImGui::Text("Return to safe positions");
-  }
+  //  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+  //  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+  //  ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+  //  ImGui::Text("Return to safe positions");
+  //}
 
   ImGui::EndChild();
 

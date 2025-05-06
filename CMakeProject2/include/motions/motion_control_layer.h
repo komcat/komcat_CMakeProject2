@@ -63,6 +63,12 @@ public:
   // In motion_control_layer.h, add this to the public section:
   bool GetCurrentPosition(const std::string& deviceName, PositionStruct& currentPosition);
 
+  // Helper to determine which controller manager to use for a device
+  bool IsDevicePIController(const std::string& deviceName) const;
+
+  const MotionConfigManager& GetConfigManager() const {
+    return m_configManager;
+  }
 private:
   // References to managers
   MotionConfigManager& m_configManager;
@@ -92,8 +98,7 @@ private:
   bool MoveToNode(const Node& node);
   bool ValidateNodeTransition(const Node& fromNode, const Node& toNode);
 
-  // Helper to determine which controller manager to use for a device
-  bool IsDevicePIController(const std::string& deviceName) const;
+
 
   // Helper functions to get node information
   std::string GetNodeLabel(const std::string& graphName, const std::string& nodeId) const;

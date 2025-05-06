@@ -36,26 +36,35 @@ private:
   std::string m_nodeId;
 };
 
-// Set output operation
+// Set output operation with configurable delay
 class SetOutputOperation : public SequenceOperation {
 public:
-  SetOutputOperation(const std::string& deviceName, int pin, bool state)
-    : m_deviceName(deviceName), m_pin(pin), m_state(state) {
+  SetOutputOperation(const std::string& deviceName, int pin, bool state, int delayMs = 200)
+    : m_deviceName(deviceName), m_pin(pin), m_state(state), m_delayMs(delayMs) {
   }
 
   bool Execute(MachineOperations& ops) override {
-    return ops.SetOutput(m_deviceName, m_pin, m_state);
+    bool result = ops.SetOutput(m_deviceName, m_pin, m_state);
+
+    // Add a delay after setting the output
+    if (result && m_delayMs > 0) {
+      ops.Wait(m_delayMs);
+    }
+
+    return result;
   }
 
   std::string GetDescription() const override {
     return "Set output " + m_deviceName + " pin " + std::to_string(m_pin) +
-      " to " + (m_state ? "ON" : "OFF");
+      " to " + (m_state ? "ON" : "OFF") +
+      " (delay: " + std::to_string(m_delayMs) + "ms)";
   }
 
 private:
   std::string m_deviceName;
   int m_pin;
   bool m_state;
+  int m_delayMs;
 };
 
 // Sequence step - executes a sequence of operations
@@ -241,4 +250,24 @@ private:
   float m_tolerance;
   int m_timeoutMs;
   std::string m_laserName;
+};
+
+// Add this to SequenceStep.h with the other operation classes
+class MoveToPointNameOperation : public SequenceOperation {
+public:
+  MoveToPointNameOperation(const std::string& deviceName, const std::string& positionName)
+    : m_deviceName(deviceName), m_positionName(positionName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.MoveToPointName(m_deviceName, m_positionName, true);
+  }
+
+  std::string GetDescription() const override {
+    return "Move " + m_deviceName + " to named position " + m_positionName;
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_positionName;
 };

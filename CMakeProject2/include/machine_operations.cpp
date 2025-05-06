@@ -1,7 +1,7 @@
 // machine_operations.cpp
 #include "machine_operations.h"
 #include "include/cld101x_operations.h"  // Include it here, not in the header
-
+#include <sstream>
 
 
 MachineOperations::MachineOperations(
@@ -78,7 +78,68 @@ bool MachineOperations::MovePathFromTo(const std::string& deviceName, const std:
   return success;
 }
 
-// Set an output state by device name
+bool MachineOperations::MoveToPointName(const std::string& deviceName, const std::string& positionName, bool blocking) {
+  m_logger->LogInfo("MachineOperations: Moving device " + deviceName + " to named position " + positionName);
+
+  // Check if the device is connected
+  if (!IsDeviceConnected(deviceName)) {
+    m_logger->LogError("MachineOperations: Device not connected: " + deviceName);
+    return false;
+  }
+
+  // Get the named position from the motion layer configuration
+  auto posOpt = m_motionLayer.GetConfigManager().GetNamedPosition(deviceName, positionName);
+  if (!posOpt.has_value()) {
+    m_logger->LogError("MachineOperations: Position " + positionName + " not found for device " + deviceName);
+    return false;
+  }
+
+  const auto& targetPosition = posOpt.value().get();
+
+  // Log detailed position information
+  std::stringstream positionLog;
+  positionLog << "MachineOperations: Moving device " << deviceName
+    << " to position " << positionName
+    << " - Coordinates: "
+    << "X:" << targetPosition.x << ", "
+    << "Y:" << targetPosition.y << ", "
+    << "Z:" << targetPosition.z;
+
+  // Include rotation values if any are non-zero
+  if (targetPosition.u != 0.0 || targetPosition.v != 0.0 || targetPosition.w != 0.0) {
+    positionLog << ", U:" << targetPosition.u << ", "
+      << "V:" << targetPosition.v << ", "
+      << "W:" << targetPosition.w;
+  }
+
+  m_logger->LogInfo(positionLog.str());
+
+  // Determine which controller to use and move to position
+  bool success = false;
+
+  // Use the motion layer to perform the movement instead of direct controller calls
+  // This avoids the need to access the controller managers directly
+  if (blocking) {
+    // For blocking moves, use direct position coordinates
+    success = m_motionLayer.MoveToPosition(deviceName, targetPosition, true);
+  }
+  else {
+    // For non-blocking moves, use direct position coordinates
+    success = m_motionLayer.MoveToPosition(deviceName, targetPosition, false);
+  }
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully moved device " + deviceName + " to position " + positionName);
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to move device " + deviceName + " to position " + positionName);
+  }
+
+  return success;
+}
+
+
+
 bool MachineOperations::SetOutput(const std::string& deviceName, int outputPin, bool state) {
   m_logger->LogInfo("MachineOperations: Setting output pin " + std::to_string(outputPin) +
     " on device " + deviceName + " to " + (state ? "ON" : "OFF"));

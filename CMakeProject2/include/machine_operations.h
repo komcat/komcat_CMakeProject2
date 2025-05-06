@@ -37,6 +37,9 @@ public:
     const std::string& startNodeId, const std::string& endNodeId,
     bool blocking = true);
 
+  // In the public section of MachineOperations class in machine_operations.h
+  bool MoveToPointName(const std::string& deviceName, const std::string& positionName, bool blocking = true);
+
   // IO control methods
   bool SetOutput(const std::string& deviceName, int outputPin, bool state);
   bool SetOutput(int deviceId, int outputPin, bool state);
