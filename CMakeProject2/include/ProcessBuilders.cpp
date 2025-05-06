@@ -191,7 +191,7 @@ namespace ProcessBuilders {
     sequence->AddOperation(std::make_shared<WaitOperation>(150));
 
     // 7. Wait for curing (200 seconds)
-    sequence->AddOperation(std::make_shared<WaitOperation>(200000));
+    sequence->AddOperation(std::make_shared<WaitOperation>(210000));
 
     // 8. Retract UV_Head
     sequence->AddOperation(std::make_shared<RetractSlideOperation>("UV_Head"));
@@ -199,8 +199,12 @@ namespace ProcessBuilders {
     // 9. Clear left and right grippers
     sequence->AddOperation(std::make_shared<SetOutputOperation>(
       "IOBottom", 0, false)); // Left gripper
+
     sequence->AddOperation(std::make_shared<SetOutputOperation>(
       "IOBottom", 2, false)); // Right gripper
+
+    // 6. Wait 150ms
+    sequence->AddOperation(std::make_shared<WaitOperation>(1500));
 
     // 10. Move hex-left to approach position
     sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
