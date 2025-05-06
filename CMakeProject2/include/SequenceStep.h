@@ -72,3 +72,22 @@ public:
 private:
   std::vector<std::shared_ptr<SequenceOperation>> m_operations;
 };
+
+// Retract slide operation
+class RetractSlideOperation : public SequenceOperation {
+public:
+  RetractSlideOperation(const std::string& slideName)
+    : m_slideName(slideName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.RetractSlide(m_slideName, true);
+  }
+
+  std::string GetDescription() const override {
+    return "Retract pneumatic slide " + m_slideName;
+  }
+
+private:
+  std::string m_slideName;
+};

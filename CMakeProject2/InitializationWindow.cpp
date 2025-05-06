@@ -2,6 +2,7 @@
 #include "imgui.h"
 #include <iostream>
 
+// In InitializationWindow.cpp - modify the constructor
 InitializationWindow::InitializationWindow(MachineOperations& machineOps)
   : m_machineOps(machineOps)
 {
@@ -29,7 +30,19 @@ InitializationWindow::InitializationWindow(MachineOperations& machineOps)
   m_initStep->AddOperation(std::make_shared<SetOutputOperation>(
     "IOBottom", 2, false));
 
-  // 6. Set output Vacuum_Base (pin 10)
+  // 6. Retract UV_Head pneumatic
+  m_initStep->AddOperation(std::make_shared<RetractSlideOperation>(
+    "UV_Head"));
+
+  // 7. Retract Dispenser_Head pneumatic
+  m_initStep->AddOperation(std::make_shared<RetractSlideOperation>(
+    "Dispenser_Head"));
+
+  // 8. Retract Pick_Up_Tool pneumatic
+  m_initStep->AddOperation(std::make_shared<RetractSlideOperation>(
+    "Pick_Up_Tool"));
+
+  // 9. Set output Vacuum_Base (pin 10)
   m_initStep->AddOperation(std::make_shared<SetOutputOperation>(
     "IOBottom", 10, true));
 
@@ -44,7 +57,6 @@ InitializationWindow::InitializationWindow(MachineOperations& machineOps)
     }
   });
 }
-
 void InitializationWindow::RenderUI() {
   // Skip if window is not visible
   if (!m_showWindow) return;
@@ -90,11 +102,13 @@ void InitializationWindow::RenderUI() {
   ImGui::BulletText("Move hex-right to home position");
   ImGui::BulletText("Release left gripper");
   ImGui::BulletText("Release right gripper");
+  ImGui::BulletText("Retract UV head");
+  ImGui::BulletText("Retract dispenser head");
+  ImGui::BulletText("Retract pick-up tool");
   ImGui::BulletText("Activate base vacuum");
 
   ImGui::End();
 }
-
 void InitializationWindow::RunInitializationProcess() {
   if (m_isInitializing) {
     return; // Already initializing

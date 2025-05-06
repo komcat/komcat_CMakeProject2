@@ -1,0 +1,211 @@
+{
+  "metadata": {
+    "version": "2.0",
+    "lastUpdated": "2025-02-02T12:00:00Z"
+  },
+  "pneumaticSlides": [
+    {
+      "name": "UV_Head",
+      "output": {
+        "deviceName": "IOBottom",
+        "pinName": "UV_Head"
+      },
+      "extendedInput": {
+        "deviceName": "IOTop",
+        "pinName": "UV_Head_Down"
+      },
+      "retractedInput": {
+        "deviceName": "IOTop",
+        "pinName": "UV_Head_Up"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "name": "Dispenser_Head",
+      "output": {
+        "deviceName": "IOBottom",
+        "pinName": "Dispenser_Head"
+      },
+      "extendedInput": {
+        "deviceName": "IOTop",
+        "pinName": "Dispenser_Head_Down"
+      },
+      "retractedInput": {
+        "deviceName": "IOTop",
+        "pinName": "Dispenser_Head_Up"
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "name": "Pick_Up_Tool",
+      "output": {
+        "deviceName": "IOBottom",
+        "pinName": "Pick_Up_Tool"
+      },
+      "extendedInput": {
+        "deviceName": "IOTop",
+        "pinName": "Pick_Up_Tool_Down"
+      },
+      "retractedInput": {
+        "deviceName": "IOTop",
+        "pinName": "Pick_Up_Tool_Up"
+      },
+      "timeoutMs": 5000
+    }
+  ],
+  "eziio": [
+    {
+      "deviceId": 0,
+      "name": "IOBottom",
+      "IP": "192.168.0.3",
+      "inputCount": 0,
+      "outputCount": 16,
+      "ioConfig": {
+        "outputs": [
+          {
+            "pin": 0,
+            "name": "L_Gripper"
+          },
+          {
+            "pin": 1,
+            "name": "P1"
+          },
+          {
+            "pin": 2,
+            "name": "R_Gripper"
+          },
+          {
+            "pin": 3,
+            "name": "R_Safety"
+          },
+          {
+            "pin": 4,
+            "name": "UV_Head"
+          },
+          {
+            "pin": 5,
+            "name": "Dispenser_Head"
+          },
+          {
+            "pin": 6,
+            "name": "Pick_Up_Tool"
+          },
+          {
+            "pin": 7,
+            "name": "P7"
+          },
+          {
+            "pin": 8,
+            "name": "P8"
+          },
+          {
+            "pin": 9,
+            "name": "P9"
+          },
+          {
+            "pin": 10,
+            "name": "Vacuum_Base"
+          },
+          {
+            "pin": 11,
+            "name": "P11"
+          },
+          {
+            "pin": 12,
+            "name": "Reserve_UV_PLC3"
+          },
+          {
+            "pin": 13,
+            "name": "UV_PLC2"
+          },
+          {
+            "pin": 14,
+            "name": "UV_PLC1"
+          },
+          {
+            "pin": 15,
+            "name": "Dispenser_Shot"
+          }
+        ],
+        "inputs": []
+      }
+    },
+    {
+      "deviceId": 1,
+      "name": "IOTop",
+      "IP": "192.168.0.5",
+      "inputCount": 8,
+      "outputCount": 8,
+      "ioConfig": {
+        "outputs": [
+          {
+            "pin": 0,
+            "name": "Output0"
+          },
+          {
+            "pin": 1,
+            "name": "Output1"
+          },
+          {
+            "pin": 2,
+            "name": "Output2"
+          },
+          {
+            "pin": 3,
+            "name": "Output3"
+          },
+          {
+            "pin": 4,
+            "name": "Output4"
+          },
+          {
+            "pin": 5,
+            "name": "Output5"
+          },
+          {
+            "pin": 6,
+            "name": "Output6"
+          },
+          {
+            "pin": 7,
+            "name": "Output7"
+          }
+        ],
+        "inputs": [
+          {
+            "pin": 0,
+            "name": "Input0"
+          },
+          {
+            "pin": 1,
+            "name": "UV_Head_Up"
+          },
+          {
+            "pin": 2,
+            "name": "UV_Head_Down"
+          },
+          {
+            "pin": 3,
+            "name": "Dispenser_Head_Up"
+          },
+          {
+            "pin": 4,
+            "name": "Dispenser_Head_Down"
+          },
+          {
+            "pin": 5,
+            "name": "Pick_Up_Tool_Up"
+          },
+          {
+            "pin": 6,
+            "name": "Pick_Up_Tool_Down"
+          },
+          {
+            "pin": 7,
+            "name": "Input7"
+          }
+        ]
+      }
+    }
+  ]
+}
