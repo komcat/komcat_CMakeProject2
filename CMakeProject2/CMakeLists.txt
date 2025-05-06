@@ -228,7 +228,7 @@ add_executable(CMakeProject2
  "include/SequenceStep.cpp"
  "InitializationWindow.h"
  "InitializationWindow.cpp"
- "include/HexRightControllerWindow.h" "include/HexRightControllerWindow.cpp" "include/HexControllerWindow.h" "include/HexControllerWindow.cpp" "include/ProcessBuilders.h" "include/ProcessBuilders.cpp" "include/MockUserInteractionManager.h" "include/ProcessRunner.cpp" "include/ProcessControlPanel.h" "include/ProcessControlPanel.cpp")
+ "include/HexRightControllerWindow.h" "include/HexRightControllerWindow.cpp" "include/HexControllerWindow.h" "include/HexControllerWindow.cpp" "include/ProcessBuilders.h" "include/ProcessBuilders.cpp" "include/MockUserInteractionManager.h" "include/ProcessRunner.cpp" "include/ProcessControlPanel.h" "include/ProcessControlPanel.cpp" "include/cld101x_operations.h" "include/cld101x_operations.cpp")
 
 # Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
 target_include_directories(CMakeProject2 PRIVATE

@@ -1,19 +1,25 @@
 // machine_operations.cpp
 #include "machine_operations.h"
+#include "include/cld101x_operations.h"  // Include it here, not in the header
+
+
 
 MachineOperations::MachineOperations(
   MotionControlLayer& motionLayer,
   PIControllerManager& piControllerManager,
   EziIOManager& ioManager,
-  PneumaticManager& pneumaticManager
+  PneumaticManager& pneumaticManager,
+  CLD101xOperations* laserOps  // New parameter
 ) : m_motionLayer(motionLayer),
 m_piControllerManager(piControllerManager),
 m_ioManager(ioManager),
-m_pneumaticManager(pneumaticManager)
+m_pneumaticManager(pneumaticManager),
+m_laserOps(laserOps)
 {
   m_logger = Logger::GetInstance();
   m_logger->LogInfo("MachineOperations: Initialized");
 }
+
 
 MachineOperations::~MachineOperations() {
   m_logger->LogInfo("MachineOperations: Shutting down");
@@ -383,4 +389,78 @@ int MachineOperations::GetDeviceId(const std::string& deviceName) {
 bool MachineOperations::ConvertPinStateToBoolean(uint32_t inputs, int pin) {
   // Check if the specific pin is high
   return (inputs & (1 << pin)) != 0;
+}
+
+// Add implementations for the new methods:
+bool MachineOperations::LaserOn(const std::string& laserName) {
+  if (!m_laserOps) {
+    m_logger->LogError("MachineOperations: No laser operations module available");
+    return false;
+  }
+  return m_laserOps->LaserOn(laserName);
+}
+
+bool MachineOperations::LaserOff(const std::string& laserName) {
+  if (!m_laserOps) {
+    m_logger->LogError("MachineOperations: No laser operations module available");
+    return false;
+  }
+  return m_laserOps->LaserOff(laserName);
+}
+
+bool MachineOperations::TECOn(const std::string& laserName) {
+  if (!m_laserOps) {
+    m_logger->LogError("MachineOperations: No laser operations module available");
+    return false;
+  }
+  return m_laserOps->TECOn(laserName);
+}
+
+bool MachineOperations::TECOff(const std::string& laserName) {
+  if (!m_laserOps) {
+    m_logger->LogError("MachineOperations: No laser operations module available");
+    return false;
+  }
+  return m_laserOps->TECOff(laserName);
+}
+
+bool MachineOperations::SetLaserCurrent(float current, const std::string& laserName) {
+  if (!m_laserOps) {
+    m_logger->LogError("MachineOperations: No laser operations module available");
+    return false;
+  }
+  return m_laserOps->SetLaserCurrent(current, laserName);
+}
+
+bool MachineOperations::SetTECTemperature(float temperature, const std::string& laserName) {
+  if (!m_laserOps) {
+    m_logger->LogError("MachineOperations: No laser operations module available");
+    return false;
+  }
+  return m_laserOps->SetTECTemperature(temperature, laserName);
+}
+
+float MachineOperations::GetLaserTemperature(const std::string& laserName) {
+  if (!m_laserOps) {
+    m_logger->LogError("MachineOperations: No laser operations module available");
+    return 0.0f;
+  }
+  return m_laserOps->GetTemperature(laserName);
+}
+
+float MachineOperations::GetLaserCurrent(const std::string& laserName) {
+  if (!m_laserOps) {
+    m_logger->LogError("MachineOperations: No laser operations module available");
+    return 0.0f;
+  }
+  return m_laserOps->GetLaserCurrent(laserName);
+}
+
+bool MachineOperations::WaitForLaserTemperature(float targetTemp, float tolerance,
+  int timeoutMs, const std::string& laserName) {
+  if (!m_laserOps) {
+    m_logger->LogError("MachineOperations: No laser operations module available");
+    return false;
+  }
+  return m_laserOps->WaitForTemperatureStabilization(targetTemp, tolerance, timeoutMs, laserName);
 }

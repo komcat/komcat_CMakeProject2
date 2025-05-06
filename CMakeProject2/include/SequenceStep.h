@@ -96,3 +96,149 @@ public:
 private:
   std::string m_slideName;
 };
+
+// Add these to SequenceStep.h
+
+// Laser On operation
+class LaserOnOperation : public SequenceOperation {
+public:
+  LaserOnOperation(const std::string& laserName = "")
+    : m_laserName(laserName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.LaserOn(m_laserName);
+  }
+
+  std::string GetDescription() const override {
+    return "Turn laser ON" + (m_laserName.empty() ? "" : " for " + m_laserName);
+  }
+
+private:
+  std::string m_laserName;
+};
+
+// Laser Off operation
+class LaserOffOperation : public SequenceOperation {
+public:
+  LaserOffOperation(const std::string& laserName = "")
+    : m_laserName(laserName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.LaserOff(m_laserName);
+  }
+
+  std::string GetDescription() const override {
+    return "Turn laser OFF" + (m_laserName.empty() ? "" : " for " + m_laserName);
+  }
+
+private:
+  std::string m_laserName;
+};
+
+// TEC On operation
+class TECOnOperation : public SequenceOperation {
+public:
+  TECOnOperation(const std::string& laserName = "")
+    : m_laserName(laserName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.TECOn(m_laserName);
+  }
+
+  std::string GetDescription() const override {
+    return "Turn TEC ON" + (m_laserName.empty() ? "" : " for " + m_laserName);
+  }
+
+private:
+  std::string m_laserName;
+};
+
+// TEC Off operation
+class TECOffOperation : public SequenceOperation {
+public:
+  TECOffOperation(const std::string& laserName = "")
+    : m_laserName(laserName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.TECOff(m_laserName);
+  }
+
+  std::string GetDescription() const override {
+    return "Turn TEC OFF" + (m_laserName.empty() ? "" : " for " + m_laserName);
+  }
+
+private:
+  std::string m_laserName;
+};
+
+// Set Laser Current operation
+class SetLaserCurrentOperation : public SequenceOperation {
+public:
+  SetLaserCurrentOperation(float current, const std::string& laserName = "")
+    : m_current(current), m_laserName(laserName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.SetLaserCurrent(m_current, m_laserName);
+  }
+
+  std::string GetDescription() const override {
+    return "Set laser current to " + std::to_string(m_current) + "A" +
+      (m_laserName.empty() ? "" : " for " + m_laserName);
+  }
+
+private:
+  float m_current;
+  std::string m_laserName;
+};
+
+// Set TEC Temperature operation
+class SetTECTemperatureOperation : public SequenceOperation {
+public:
+  SetTECTemperatureOperation(float temperature, const std::string& laserName = "")
+    : m_temperature(temperature), m_laserName(laserName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.SetTECTemperature(m_temperature, m_laserName);
+  }
+
+  std::string GetDescription() const override {
+    return "Set TEC temperature to " + std::to_string(m_temperature) + "C" +
+      (m_laserName.empty() ? "" : " for " + m_laserName);
+  }
+
+private:
+  float m_temperature;
+  std::string m_laserName;
+};
+
+// Wait for Temperature operation
+class WaitForLaserTemperatureOperation : public SequenceOperation {
+public:
+  WaitForLaserTemperatureOperation(float targetTemp, float tolerance = 0.5f,
+    int timeoutMs = 30000, const std::string& laserName = "")
+    : m_targetTemp(targetTemp), m_tolerance(tolerance),
+    m_timeoutMs(timeoutMs), m_laserName(laserName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.WaitForLaserTemperature(m_targetTemp, m_tolerance, m_timeoutMs, m_laserName);
+  }
+
+  std::string GetDescription() const override {
+    return "Wait for laser temperature to stabilize at " + std::to_string(m_targetTemp) + "C (±" +
+      std::to_string(m_tolerance) + "C)" +
+      (m_laserName.empty() ? "" : " for " + m_laserName);
+  }
+
+private:
+  float m_targetTemp;
+  float m_tolerance;
+  int m_timeoutMs;
+  std::string m_laserName;
+};

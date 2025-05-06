@@ -13,6 +13,9 @@
 #include <chrono>
 #include <thread>
 #include <memory>
+// Forward declare CLD101xOperations instead of including the header
+class CLD101xOperations;  // Forward declaration
+
 
 class MachineOperations {
 public:
@@ -20,7 +23,8 @@ public:
     MotionControlLayer& motionLayer,
     PIControllerManager& piControllerManager,
     EziIOManager& ioManager,
-    PneumaticManager& pneumaticManager
+    PneumaticManager& pneumaticManager,
+    CLD101xOperations* laserOps = nullptr // Make it optional with default nullptr
   );
 
   ~MachineOperations();
@@ -67,12 +71,25 @@ public:
   // Helper method to get EziIO device ID from name
   int GetDeviceId(const std::string& deviceName);
 
+  // Laser and TEC control methods - add these new methods
+  bool LaserOn(const std::string& laserName = "");
+  bool LaserOff(const std::string& laserName = "");
+  bool TECOn(const std::string& laserName = "");
+  bool TECOff(const std::string& laserName = "");
+  bool SetLaserCurrent(float current, const std::string& laserName = "");
+  bool SetTECTemperature(float temperature, const std::string& laserName = "");
+  float GetLaserTemperature(const std::string& laserName = "");
+  float GetLaserCurrent(const std::string& laserName = "");
+  bool WaitForLaserTemperature(float targetTemp, float tolerance = 0.5f,
+    int timeoutMs = 30000, const std::string& laserName = "");
+
 private:
   MotionControlLayer& m_motionLayer;
   PIControllerManager& m_piControllerManager;
   EziIOManager& m_ioManager;
   PneumaticManager& m_pneumaticManager;
   Logger* m_logger;
+  CLD101xOperations* m_laserOps; // Add this member variable
 
   // Helper methods
   bool ConvertPinStateToBoolean(uint32_t inputs, int pin);

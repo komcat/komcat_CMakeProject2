@@ -57,6 +57,26 @@ namespace ProcessBuilders {
     sequence->AddOperation(std::make_shared<UserConfirmOperation>(
       "Please check sled position and confirm to continue", uiManager));
 
+
+    // 1. Turn on TEC and set temperature
+    sequence->AddOperation(std::make_shared<TECOnOperation>());
+    sequence->AddOperation(std::make_shared<SetTECTemperatureOperation>(25.0f));
+
+    // 2. Wait for temperature to stabilize
+    sequence->AddOperation(std::make_shared<WaitForLaserTemperatureOperation>(
+      25.0f, 1.0f, 5000)); //100ms
+
+    // 3. Set laser current and turn on laser
+    sequence->AddOperation(std::make_shared<SetLaserCurrentOperation>(0.250f)); // 150mA
+    sequence->AddOperation(std::make_shared<LaserOnOperation>());
+
+    // 4. Wait for processing time
+    sequence->AddOperation(std::make_shared<WaitOperation>(5000)); // 100ms
+
+    // 5. Turn off laser and TEC
+    //sequence->AddOperation(std::make_shared<LaserOffOperation>());
+    //sequence->AddOperation(std::make_shared<TECOffOperation>());
+
     // 3. Move gantry to see PIC position
     sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
       "gantry-main", "Process_Flow", "node_4107"));

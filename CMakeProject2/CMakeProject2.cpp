@@ -58,6 +58,7 @@
 //#include "include/HexRightControllerWindow.h"
 #include "include/HexControllerWindow.h"
 #include "include/ProcessControlPanel.h"
+#include "include/cld101x_operations.h"
 #include <iostream>
 #include <memory>
 
@@ -487,7 +488,10 @@ int main(int argc, char* argv[])
 	// Create the CLD101x manager
 	CLD101xManager cld101xManager;
 	logger->LogInfo("CLD101xManager initialized");
+	// Create the CLD101xOperations instance
+	CLD101xOperations laserOps(cld101xManager);
 
+	logger->LogInfo("CLD101xOperations initialized");
 	// Initialize the manager (it will create a default client)
 	cld101xManager.Initialize();
 
@@ -523,12 +527,13 @@ int main(int argc, char* argv[])
 
 
 
-	// Create the machine operations object
+// Update the MachineOperations construction to include the laser operations:
 	MachineOperations machineOps(
 		motionControlLayer,
 		piControllerManager,
 		ioManager,
-		pneumaticManager
+		pneumaticManager,
+		&laserOps  // Pass the laser operations object
 	);
 
 
