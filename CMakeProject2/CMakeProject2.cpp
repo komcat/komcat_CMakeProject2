@@ -57,6 +57,7 @@
 #include "InitializationWindow.h"
 //#include "include/HexRightControllerWindow.h"
 #include "include/HexControllerWindow.h"
+#include "include/ProcessControlPanel.h"
 #include <iostream>
 #include <memory>
 
@@ -517,6 +518,33 @@ int main(int argc, char* argv[])
 	dataChartManager.AddChannel("hex-right-A-5", "Voltage R5", "unit", true);
 	//dataChartManager.AddChannel("hex-right-A-6", "Voltage R6", "unit", true);
 
+
+
+
+
+
+	// Create the machine operations object
+	MachineOperations machineOps(
+		motionControlLayer,
+		piControllerManager,
+		ioManager,
+		pneumaticManager
+	);
+
+
+	// Run the initialization process
+	// Create the initialization window
+	InitializationWindow initWindow(machineOps);
+
+	// Create and run a custom process step
+	//auto customStep = std::make_unique<CustomProcessStep>(machineOps);
+	//customStep->Execute();
+		// Create the process control panel
+	ProcessControlPanel processControlPanel(machineOps);
+	logger->LogInfo("ProcessControlPanel initialized");
+
+	// Add it to the toolbar menu
+	toolbarMenu.AddReference(CreateTogglableUI(processControlPanel, "Process Control"));
 	// Add components with standard methods
 
 	toolbarMenu.AddReference(CreateTogglableUI(hexapodScanningUI, "Scanning Optimizer"));
@@ -527,8 +555,6 @@ int main(int argc, char* argv[])
 	// Add to toolbar menu
 	toolbarMenu.AddReference(CreateTogglableUI(cld101xManager, "Laser TEC Cntrl"));
 	toolbarMenu.AddReference(CreateTogglableUI(pneumaticUI, "Pneumatic"));
-
-
 	// Add controller managers using our custom adapters
 	toolbarMenu.AddReference(CreateACSControllerAdapter(acsControllerManager, "Gantry"));
 	toolbarMenu.AddReference(CreatePIControllerAdapter(piControllerManager, "PI"));
@@ -548,30 +574,11 @@ int main(int argc, char* argv[])
 
 
 	// Add it to the toolbar menu
-	toolbarMenu.AddReference(CreateTogglableUI(hexControllerWindow, "Hex Controllers"));
+	toolbarMenu.AddReference(CreateTogglableUI(hexControllerWindow, "Hex Aligner"));
 	// Log successful initialization
 	logger->LogInfo("ToolbarMenu initialized with " +
 		std::to_string(toolbarMenu.GetComponentCount()) +
 		" components");
-
-
-	// Create the machine operations object
-	MachineOperations machineOps(
-		motionControlLayer,
-		piControllerManager,
-		ioManager,
-		pneumaticManager
-	);
-
-
-	// Run the initialization process
-	// Create the initialization window
-	InitializationWindow initWindow(machineOps);
-
-	// Create and run a custom process step
-	//auto customStep = std::make_unique<CustomProcessStep>(machineOps);
-	//customStep->Execute();
-
 
 
 // Main loop
@@ -772,7 +779,7 @@ int main(int argc, char* argv[])
 		initWindow.RenderUI();
 		//hexRightWindow.RenderUI();
 		hexControllerWindow.RenderUI();
-
+		processControlPanel.RenderUI();
 		// Rendering
 		ImGui::Render();
 		glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);

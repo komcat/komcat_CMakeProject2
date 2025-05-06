@@ -69,6 +69,11 @@ public:
   // Execute the sequence
   bool Execute() override;
 
+  // Get the operations for this sequence (added for ProcessBuilder)
+  const std::vector<std::shared_ptr<SequenceOperation>>& GetOperations() const {
+    return m_operations;
+  }
+
 private:
   std::vector<std::shared_ptr<SequenceOperation>> m_operations;
 };
