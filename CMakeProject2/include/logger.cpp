@@ -8,7 +8,7 @@
 // Initialize static instance
 std::unique_ptr<Logger> Logger::s_instance = nullptr;
 
-Logger::Logger() {
+Logger::Logger() : m_isMinimized(false), m_unreadMessages(0), m_unreadWarnings(0), m_unreadErrors(0) {
   // Get current date and open initial log file
   auto now = std::chrono::system_clock::now();
   auto time = std::chrono::system_clock::to_time_t(now);
@@ -137,10 +137,17 @@ void Logger::Log(const std::string& message, LogLevel level) {
     break;
   case LogLevel::Warning:
     levelString = "WARNING";
+    m_unreadWarnings++;
     break;
   case LogLevel::Error:
     levelString = "ERROR";
+    m_unreadErrors++;
     break;
+  }
+
+  // Increment unread counter if minimized
+  if (m_isMinimized) {
+    m_unreadMessages++;
   }
 
   std::string fileLogMessage = "[" + timestamp + "] [" + levelString + "] " + message;
@@ -174,115 +181,227 @@ void Logger::Clear() {
   m_logMessages.clear();
 }
 
+void Logger::ToggleMinimize() {
+  m_isMinimized = !m_isMinimized;
+
+  // Reset unread counters when expanding
+  if (!m_isMinimized) {
+    ResetUnreadCounters();
+  }
+}
+
+void Logger::ResetUnreadCounters() {
+  m_unreadMessages = 0;
+  m_unreadWarnings = 0;
+  m_unreadErrors = 0;
+}
+
 void Logger::RenderUI() {
   // Get the display size to position the window at the bottom
   ImVec2 displaySize = ImGui::GetIO().DisplaySize;
-  float logWindowHeight = 150.0f; // Fixed height for the log window
 
-  // Set the window position and size (full width, fixed height at bottom)
-  ImGui::SetNextWindowPos(ImVec2(0, displaySize.y - logWindowHeight), ImGuiCond_Always);
-  ImGui::SetNextWindowSize(ImVec2(displaySize.x, logWindowHeight), ImGuiCond_Always);
+  if (m_isMinimized) {
+    // Height for the minimized status bar
+    float statusBarHeight = 30.0f;
 
-  // Set a dark background for the log window
-  ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.1f, 0.1f, 0.1f, 0.9f));
+    // Set the window position and size (full width, minimal height at bottom)
+    ImGui::SetNextWindowPos(ImVec2(0, displaySize.y - statusBarHeight), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(displaySize.x, statusBarHeight), ImGuiCond_Always);
 
-  // Remove window decorations and make it non-movable and non-resizable
-  ImGuiWindowFlags windowFlags =
-    ImGuiWindowFlags_NoMove |
-    ImGuiWindowFlags_NoResize |
-    ImGuiWindowFlags_NoCollapse;
+    // Set a dark background for the status bar
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.1f, 0.1f, 0.1f, 0.9f));
 
-  // Create ImGui window
-  ImGui::Begin("Log Window", nullptr, windowFlags);
+    // Remove window decorations and make it non-movable and non-resizable
+    ImGuiWindowFlags windowFlags =
+      ImGuiWindowFlags_NoMove |
+      ImGuiWindowFlags_NoResize |
+      ImGuiWindowFlags_NoCollapse |
+      ImGuiWindowFlags_NoTitleBar;
 
-  // Add Clear button
-  if (ImGui::Button("Clear")) {
-    Clear();
-  }
+    // Create ImGui window
+    ImGui::Begin("Log Status", nullptr, windowFlags);
 
-  ImGui::SameLine();
+    // Add expand button
+    if (ImGui::Button("Expand Log")) {
+      ToggleMinimize();
+    }
 
-  // Add Save button
-  if (ImGui::Button("Save")) {
-    SaveLogsToFile("logs/saved_log.txt");
-  }
+    ImGui::SameLine();
 
-  // Add filter buttons
-  ImGui::SameLine();
-  static bool showDebug = true;
-  static bool showInfo = true;
-  static bool showWarning = true;
-  static bool showError = true;
+    // Show message counters in different colors based on severity
+    ImGui::Text("Messages: ");
 
-  ImGui::SameLine(ImGui::GetWindowWidth() - 480);
-  ImGui::Checkbox("Debug", &showDebug);
+    // Show unread message count if there are any
+    if (m_unreadMessages > 0) {
+      ImGui::SameLine();
+      ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%d", m_unreadMessages);
+    }
 
-  ImGui::SameLine();
-  ImGui::Checkbox("Info", &showInfo);
+    // Show unread warnings count if there are any
+    if (m_unreadWarnings > 0) {
+      ImGui::SameLine();
+      ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Warnings: %d", m_unreadWarnings);
+    }
 
-  ImGui::SameLine();
-  ImGui::Checkbox("Warning", &showWarning);
+    // Show unread errors count if there are any
+    if (m_unreadErrors > 0) {
+      ImGui::SameLine();
+      ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Errors: %d", m_unreadErrors);
+    }
 
-  ImGui::SameLine();
-  ImGui::Checkbox("Error", &showError);
+    // Show the latest log message
+    if (!m_logMessages.empty()) {
+      ImGui::SameLine(ImGui::GetWindowWidth() - 400);
 
-  ImGui::Separator();
+      // Get the latest message
+      const auto& latestMsg = m_logMessages.back();
 
-  // Create a child window for the scrollable log area
-  ImGui::BeginChild("ScrollingRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
-
-  // Lock mutex for thread safety when reading logs
-  {
-    std::lock_guard<std::mutex> lock(m_logMutex);
-
-    // Display each log message with appropriate color based on level
-    for (const auto& logMsg : m_logMessages) {
-      // Skip messages based on filter settings
-      if ((logMsg.level == LogLevel::Debug && !showDebug) ||
-        (logMsg.level == LogLevel::Info && !showInfo) ||
-        (logMsg.level == LogLevel::Warning && !showWarning) ||
-        (logMsg.level == LogLevel::Error && !showError)) {
-        continue;
-      }
-
-      // Set text color based on message level - enhanced for better contrast
+      // Set text color based on message level
       ImVec4 textColor;
-      switch (logMsg.level) {
+      switch (latestMsg.level) {
       case LogLevel::Debug:
-        textColor = ImVec4(0.8f, 0.8f, 0.8f, 1.0f); // Lighter Gray for better contrast
+        textColor = ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
         break;
       case LogLevel::Info:
-        textColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f); // White
+        textColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
         break;
       case LogLevel::Warning:
-        textColor = ImVec4(1.0f, 0.8f, 0.0f, 1.0f); // Brighter Orange
+        textColor = ImVec4(1.0f, 0.8f, 0.0f, 1.0f);
         break;
       case LogLevel::Error:
-        textColor = ImVec4(1.0f, 0.4f, 0.4f, 1.0f); // Brighter Red
+        textColor = ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
         break;
       }
 
-      // Format message with timestamp
-      std::string displayText = "[" + logMsg.timestamp + "] " + logMsg.text;
+      // Display the latest message with ellipsis if too long
+      std::string latestText = latestMsg.text;
+      if (latestText.length() > 50) {
+        latestText = latestText.substr(0, 47) + "...";
+      }
 
-      // Set text color and display message
-      ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-      ImGui::TextWrapped("%s", displayText.c_str());
-      ImGui::PopStyleColor();
+      ImGui::TextColored(textColor, "%s", latestText.c_str());
     }
+
+    ImGui::End();
+    ImGui::PopStyleColor();
   }
+  else {
+    // Height for the expanded log window
+    float logWindowHeight = 150.0f;
 
-  // Auto-scroll to the bottom
-  if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
-    ImGui::SetScrollHereY(1.0f);
+    // Set the window position and size (full width, fixed height at bottom)
+    ImGui::SetNextWindowPos(ImVec2(0, displaySize.y - logWindowHeight), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(displaySize.x, logWindowHeight), ImGuiCond_Always);
+
+    // Set a dark background for the log window
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.1f, 0.1f, 0.1f, 0.9f));
+
+    // Remove window decorations and make it non-movable and non-resizable
+    ImGuiWindowFlags windowFlags =
+      ImGuiWindowFlags_NoMove |
+      ImGuiWindowFlags_NoResize |
+      ImGuiWindowFlags_NoCollapse;
+
+    // Create ImGui window
+    ImGui::Begin("Log Window", nullptr, windowFlags);
+
+    // Add Minimize button
+    if (ImGui::Button("Minimize")) {
+      ToggleMinimize();
+    }
+
+    ImGui::SameLine();
+
+    // Add Clear button
+    if (ImGui::Button("Clear")) {
+      Clear();
+    }
+
+    ImGui::SameLine();
+
+    // Add Save button
+    if (ImGui::Button("Save")) {
+      SaveLogsToFile("logs/saved_log.txt");
+    }
+
+    // Add filter buttons
+    ImGui::SameLine();
+    static bool showDebug = true;
+    static bool showInfo = true;
+    static bool showWarning = true;
+    static bool showError = true;
+
+    ImGui::SameLine(ImGui::GetWindowWidth() - 480);
+    ImGui::Checkbox("Debug", &showDebug);
+
+    ImGui::SameLine();
+    ImGui::Checkbox("Info", &showInfo);
+
+    ImGui::SameLine();
+    ImGui::Checkbox("Warning", &showWarning);
+
+    ImGui::SameLine();
+    ImGui::Checkbox("Error", &showError);
+
+    ImGui::Separator();
+
+    // Create a child window for the scrollable log area
+    ImGui::BeginChild("ScrollingRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+
+    // Lock mutex for thread safety when reading logs
+    {
+      std::lock_guard<std::mutex> lock(m_logMutex);
+
+      // Display each log message with appropriate color based on level
+      for (const auto& logMsg : m_logMessages) {
+        // Skip messages based on filter settings
+        if ((logMsg.level == LogLevel::Debug && !showDebug) ||
+          (logMsg.level == LogLevel::Info && !showInfo) ||
+          (logMsg.level == LogLevel::Warning && !showWarning) ||
+          (logMsg.level == LogLevel::Error && !showError)) {
+          continue;
+        }
+
+        // Set text color based on message level - enhanced for better contrast
+        ImVec4 textColor;
+        switch (logMsg.level) {
+        case LogLevel::Debug:
+          textColor = ImVec4(0.8f, 0.8f, 0.8f, 1.0f); // Lighter Gray for better contrast
+          break;
+        case LogLevel::Info:
+          textColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f); // White
+          break;
+        case LogLevel::Warning:
+          textColor = ImVec4(1.0f, 0.8f, 0.0f, 1.0f); // Brighter Orange
+          break;
+        case LogLevel::Error:
+          textColor = ImVec4(1.0f, 0.4f, 0.4f, 1.0f); // Brighter Red
+          break;
+        }
+
+        // Format message with timestamp
+        std::string displayText = "[" + logMsg.timestamp + "] " + logMsg.text;
+
+        // Set text color and display message
+        ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+        ImGui::TextWrapped("%s", displayText.c_str());
+        ImGui::PopStyleColor();
+      }
+    }
+
+    // Auto-scroll to the bottom
+    if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+      ImGui::SetScrollHereY(1.0f);
+    }
+
+    ImGui::EndChild();
+    ImGui::End();
+
+    // Pop the window background color
+    ImGui::PopStyleColor();
   }
-
-  ImGui::EndChild();
-  ImGui::End();
-
-  // Pop the window background color
-  ImGui::PopStyleColor();
 }
+
 bool Logger::SaveLogsToFile(const std::string& filename) {
   std::lock_guard<std::mutex> lock(m_logMutex);
 

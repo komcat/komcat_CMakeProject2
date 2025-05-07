@@ -43,6 +43,16 @@ private:
   // Current date string
   std::string m_currentDate;
 
+  // Is logger window minimized?
+  bool m_isMinimized = false;
+
+  // Number of unread messages (when minimized)
+  int m_unreadMessages = 0;
+
+  // Number of unread notifications by type
+  int m_unreadWarnings = 0;
+  int m_unreadErrors = 0;
+
   // Constructor is private (singleton pattern)
   Logger();
 
@@ -73,6 +83,12 @@ public:
 
   // Clear all logs
   void Clear();
+
+  // Toggle minimized state
+  void ToggleMinimize();
+
+  // Reset unread message counters
+  void ResetUnreadCounters();
 
   // Render ImGui window for logs
   void RenderUI();

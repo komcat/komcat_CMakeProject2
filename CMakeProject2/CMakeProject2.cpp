@@ -116,7 +116,7 @@ void RenderClockOverlay(int corner) {
 	// Calculate position based on the selected corner
 	// 0: top-left, 1: top-right, 2: bottom-left, 3: bottom-right
 	ImVec2 pos;
-	float padding = 10;
+	float padding = 30;
 	float clockWidth = 150.0f;
 	float clockHeight = 60.0f;
 
@@ -131,7 +131,7 @@ void RenderClockOverlay(int corner) {
 		pos = ImVec2(padding, screenSize.y - clockHeight - padding);
 		break;
 	case 3: // Bottom-right
-		pos = ImVec2(screenSize.x - clockWidth - padding, screenSize.y - clockHeight - padding);
+		pos = ImVec2(screenSize.x - clockWidth - 0/*padding*/, screenSize.y - clockHeight - padding);
 		break;
 	default: // Default to top-right
 		pos = ImVec2(screenSize.x - clockWidth - padding, padding);
