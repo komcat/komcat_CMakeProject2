@@ -1,6 +1,10 @@
 ﻿#include <algorithm> // For std::min and std::max 
 #include "CMakeProject2.h"
-#include "include/client_manager.h" // Replace tcp_client.h with our new manager
+//#include "include/client_manager.h" // Replace tcp_client.h with our new manager
+#include "include/cld101x_client.h"
+#include "include/cld101x_manager.h"
+#include "include/data/data_client_manager.h"  // Add this at the top with other includes
+
 #include "include/logger.h" // Include our new logger header
 #include "include/motions/MotionTypes.h"  // Add this line - include MotionTypes.h first
 #include "include/motions/MotionConfigEditor.h" // Include our new editor header
@@ -34,15 +38,13 @@
 #include "include/eziio/PneumaticManager.h"
 #include "include/eziio/PneumaticUI.h"
 #include "IOConfigManager.h"
-#include "include/data/data_client_manager.h"  // Add this at the top with other includes
 #include "include/motions/pi_analog_reader.h"
 #include "include/motions/pi_analog_manager.h"
 #include "include/motions/global_jog_panel.h"
 #include "include/data/product_config_manager.h"
 #include "include/eziio/IOControlPanel.h"
 // Add these includes at the top with the other include statements
-#include "include/cld101x_client.h"
-#include "include/cld101x_manager.h"
+
 #include "include/python_process_managaer.h"
 // Add these includes at the top with the other include statements
 #include "include/scanning/scanning_ui.h"
@@ -56,12 +58,557 @@
 #include "include/machine_operations.h"
 #include "InitializationWindow.h"
 //#include "include/HexRightControllerWindow.h"
-#include "include/HexControllerWindow.h"
+
 #include "include/ProcessControlPanel.h"
 #include "include/cld101x_operations.h"
 #include <iostream>
 #include <memory>
 
+#pragma region header functions
+
+
+
+
+void RenderDraggableOverlay() {
+	// Set window position and style
+	ImGui::SetNextWindowPos(ImVec2(50, 50), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowBgAlpha(0.7f); // Semi-transparent background
+
+	// Create a window with minimal decorations but allowing movement
+	ImGui::Begin("DraggableOverlay", nullptr,
+		ImGuiWindowFlags_NoTitleBar |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoScrollbar |
+		ImGuiWindowFlags_NoSavedSettings |
+		ImGuiWindowFlags_AlwaysAutoResize);
+
+	// Your overlay content here
+	ImGui::Text("Drag me!");
+	ImGui::Text("Status: Connected");
+
+	ImGui::End();
+}
+
+void RenderClockOverlay(int corner) {
+	// Get current time
+	time_t rawtime;
+	struct tm timeinfo;
+	char timeBuffer[80];
+	char dateBuffer[80];
+
+	time(&rawtime);
+
+#ifdef _WIN32
+	localtime_s(&timeinfo, &rawtime);
+#else
+	timeinfo = *localtime(&rawtime);
+#endif
+
+	// Format time (HH:MM:SS)
+	strftime(timeBuffer, sizeof(timeBuffer), "%H:%M:%S", &timeinfo);
+
+	// Format date (Day Month Year)
+	strftime(dateBuffer, sizeof(dateBuffer), "%d %b %Y", &timeinfo);
+
+	// Get screen dimensions
+	ImVec2 screenSize = ImGui::GetIO().DisplaySize;
+
+	// Calculate position based on the selected corner
+	// 0: top-left, 1: top-right, 2: bottom-left, 3: bottom-right
+	ImVec2 pos;
+	float padding = 10;
+	float clockWidth = 150.0f;
+	float clockHeight = 60.0f;
+
+	switch (corner) {
+	case 0: // Top-left
+		pos = ImVec2(padding, padding);
+		break;
+	case 1: // Top-right
+		pos = ImVec2(screenSize.x - clockWidth - padding, padding);
+		break;
+	case 2: // Bottom-left
+		pos = ImVec2(padding, screenSize.y - clockHeight - padding);
+		break;
+	case 3: // Bottom-right
+		pos = ImVec2(screenSize.x - clockWidth - padding, screenSize.y - clockHeight - padding);
+		break;
+	default: // Default to top-right
+		pos = ImVec2(screenSize.x - clockWidth - padding, padding);
+	}
+
+	// Set window position and style
+	ImGui::SetNextWindowPos(pos);
+	ImGui::SetNextWindowBgAlpha(0.7f); // Semi-transparent background
+
+	// Custom colors for the clock
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.05f, 0.1f, 0.7f)); // Dark blue background
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 1.0f, 1.0f)); // Light text
+
+	// Create a window with no decorations and no movement
+	ImGui::Begin("ClockOverlay", nullptr,
+		ImGuiWindowFlags_NoTitleBar |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoMove | // Prevent moving
+		ImGuiWindowFlags_NoScrollbar |
+		ImGuiWindowFlags_NoSavedSettings |
+		ImGuiWindowFlags_AlwaysAutoResize|
+		ImGuiWindowFlags_NoBringToFrontOnFocus // Keeps it from being pushed back in z-order
+	);
+
+	// Add some padding and styling
+	ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Use default font
+
+	// Display time in a larger font
+	ImGui::SetWindowFontScale(1.5f);
+	ImGui::Text("%s", timeBuffer);
+
+	// Reset font scale for date
+	ImGui::SetWindowFontScale(1.0f);
+	ImGui::Text("%s", dateBuffer);
+
+	// Pop font
+	ImGui::PopFont();
+
+	ImGui::End();
+
+	// Pop style colors
+	ImGui::PopStyleColor(2);
+}
+void RenderGlobalDataValue(const std::string& dataName) {
+	// Get the value from the global data store
+	float value = GlobalDataStore::GetInstance()->GetValue(dataName);
+
+	// Get the display name and unit (assuming you have a way to get these)
+	std::string displayName = dataName;
+	std::string unit = ""; // You might want to add a way to get the unit for each data name
+
+	// If you have a mapping for prettier display names:
+	std::map<std::string, std::pair<std::string, std::string>> displayMap = {
+			{"GPIB-Current", {"Current", "A"}},
+			{"hex-right-A-5", {"Voltage R5", "V"}},
+			// Add more mappings as needed
+	};
+
+	// Look up display name and unit if available
+	auto it = displayMap.find(dataName);
+	if (it != displayMap.end()) {
+		displayName = it->second.first;
+		unit = it->second.second;
+	}
+
+	// Create a unique window name using the data name
+	std::string windowName = "GlobalData_" + dataName;
+
+	// Set window position and style
+	ImGui::SetNextWindowPos(ImVec2(50, 150), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowBgAlpha(0.7f); // Semi-transparent background
+
+	// Custom styling for the window
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.05f, 0.1f, 0.7f)); // Dark blue background
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 1.0f, 1.0f)); // Light text
+
+	// Create a window with minimal decorations but allowing movement
+	ImGui::Begin(windowName.c_str(), nullptr,
+		ImGuiWindowFlags_NoTitleBar |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoScrollbar |
+		ImGuiWindowFlags_NoSavedSettings |
+		ImGuiWindowFlags_AlwaysAutoResize);
+
+	// Show the name of the data
+	ImGui::Text("%s", displayName.c_str());
+
+	// Set larger font scale (5x) for the value
+	float originalFontScale = ImGui::GetFontSize();
+	ImGui::SetWindowFontScale(5.0f);
+
+	// Format the value based on its magnitude
+	char valueBuffer[32];
+	if (std::abs(value) < 0.01) {
+		snprintf(valueBuffer, sizeof(valueBuffer), "%.5f", value);
+	}
+	else if (std::abs(value) < 1.0) {
+		snprintf(valueBuffer, sizeof(valueBuffer), "%.4f", value);
+	}
+	else if (std::abs(value) < 10.0) {
+		snprintf(valueBuffer, sizeof(valueBuffer), "%.3f", value);
+	}
+	else if (std::abs(value) < 100.0) {
+		snprintf(valueBuffer, sizeof(valueBuffer), "%.2f", value);
+	}
+	else {
+		snprintf(valueBuffer, sizeof(valueBuffer), "%.1f", value);
+	}
+
+	// Display the value
+	ImGui::Text("%s", valueBuffer);
+
+	// Reset font scale and display the unit
+	ImGui::SetWindowFontScale(1.0f);
+	ImGui::SameLine();
+	ImGui::Text("%s", unit.c_str());
+
+	ImGui::End();
+
+	// Pop style colors
+	ImGui::PopStyleColor(2);
+}
+void RenderGlobalDataValueSI(const std::string& dataName) {
+	// Get the value from the global data store
+	float value = GlobalDataStore::GetInstance()->GetValue(dataName);
+
+	// Display name mapping
+	std::string displayName = dataName;
+	std::map<std::string, std::string> displayMap = {
+			{"GPIB-Current", "Current"},
+			{"hex-right-A-5", "Voltage R5"},
+			// Add more mappings as needed
+	};
+
+	// Look up display name if available
+	auto nameIt = displayMap.find(dataName);
+	if (nameIt != displayMap.end()) {
+		displayName = nameIt->second;
+	}
+
+	// Units and prefixes mapping - fixed to use proper float literals
+	std::map<std::string, std::pair<std::string, std::vector<std::pair<float, std::string>>>> unitsMap = {
+			{"GPIB-Current", {"A", {
+					{1.0e-12f, "pA"},
+					{1.0e-9f, "nA"},
+					{1.0e-6f, "µA"},
+					{1.0e-3f, "mA"},
+					{1.0f, "A"}
+			}}},
+			{"hex-right-A-5", {"V", {
+					{1.0e-12f, "pV"},
+					{1.0e-9f, "nV"},
+					{1.0e-6f, "µV"},
+					{1.0e-3f, "mV"},
+					{1.0f, "V"}
+			}}},
+		// Add more units as needed
+	};
+	// Get unit info
+	std::string baseUnit = "";
+	std::string unitPrefix = "";
+	float scaledValue = value;
+
+	auto unitIt = unitsMap.find(dataName);
+	if (unitIt != unitsMap.end()) {
+		baseUnit = unitIt->second.first;
+
+		// Find the appropriate SI prefix
+		for (const auto& prefix : unitIt->second.second) {
+			if (std::abs(value) < prefix.first * 1000 ||
+				prefix.first == unitIt->second.second.back().first) {
+				unitPrefix = prefix.second;
+				scaledValue = value / prefix.first;
+				break;
+			}
+		}
+	}
+
+	// Create a unique window name
+	std::string windowName = "SI_" + dataName;
+
+	// Set window position and style
+	ImGui::SetNextWindowPos(ImVec2(50, 150), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(200, 80), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowBgAlpha(0.7f); // Semi-transparent background
+
+	// Custom styling
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.1f, 0.1f, 0.15f, 0.7f)); // Dark background
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 1.0f, 1.0f)); // Light text
+
+	// Create a window with minimal decorations but allowing movement
+	ImGui::Begin(windowName.c_str(), nullptr,
+		ImGuiWindowFlags_NoTitleBar |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoScrollbar |
+		ImGuiWindowFlags_NoSavedSettings);
+
+	// Display the name with normal font
+	ImGui::Text("%s", displayName.c_str());
+
+	// Display the unit on the right side
+	float windowWidth = ImGui::GetWindowSize().x;
+	ImGui::SameLine(windowWidth - ImGui::CalcTextSize(unitPrefix.c_str()).x - 20);
+	ImGui::Text("%s", unitPrefix.c_str());
+
+	// Display value with larger font in monospaced style
+	ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Assume monospace font is available
+
+	// Format value based on magnitude (always showing leading zero for values < 1)
+	char valueBuffer[32];
+	if (std::abs(scaledValue) < 1.0) {
+		// Format like "0.000000" - with appropriate number of decimal places
+		// For small values, show more decimal places to maintain precision
+		if (std::abs(scaledValue) < 0.01) {
+			snprintf(valueBuffer, sizeof(valueBuffer), "0.%06d",
+				static_cast<int>(std::abs(scaledValue) * 1000000));
+		}
+		else if (std::abs(scaledValue) < 0.1) {
+			snprintf(valueBuffer, sizeof(valueBuffer), "0.%05d",
+				static_cast<int>(std::abs(scaledValue) * 100000));
+		}
+		else {
+			snprintf(valueBuffer, sizeof(valueBuffer), "0.%04d",
+				static_cast<int>(std::abs(scaledValue) * 10000));
+		}
+	}
+	else {
+		// Format value with 5 digits total (combined whole number and decimal)
+		int intPart = static_cast<int>(scaledValue);
+		int decimalDigits = 5 - (intPart == 0 ? 1 :
+			(intPart < 10 ? 1 :
+				(intPart < 100 ? 2 :
+					(intPart < 1000 ? 3 :
+						(intPart < 10000 ? 4 : 5)))));
+
+		if (decimalDigits <= 0) {
+			snprintf(valueBuffer, sizeof(valueBuffer), "%d", intPart);
+		}
+		else {
+			char formatStr[16];
+			snprintf(formatStr, sizeof(formatStr), "%%.%df", decimalDigits);
+			snprintf(valueBuffer, sizeof(valueBuffer), formatStr, scaledValue);
+		}
+	}
+
+	// Set larger font for the value
+	ImGui::SetWindowFontScale(3.0f);
+	ImGui::Text("%s", valueBuffer);
+	ImGui::SetWindowFontScale(1.0f);
+
+	ImGui::PopFont();
+	ImGui::End();
+
+	// Pop style colors
+	ImGui::PopStyleColor(2);
+}
+
+void RenderDigitalDisplaySI(const std::string& dataName) {
+	// Get the value from the global data store
+	float value = GlobalDataStore::GetInstance()->GetValue(dataName);
+	bool isNegative = (value < 0);
+	float absValue = std::abs(value);
+
+	// Name and unit mapping with SI prefixes
+	std::string displayName = dataName;
+
+	// Units and prefixes mapping
+	struct UnitInfo {
+		std::string baseUnit;
+		std::vector<std::pair<float, std::string>> prefixes;
+	};
+
+	std::map<std::string, UnitInfo> unitsMap = {
+			{"GPIB-Current", {"A", {
+					{1e-12, "pA"},
+					{1e-9, "nA"},
+					{1e-6, "µA"},
+					{1e-3, "mA"},
+					{1, "A"}
+			}}},
+			{"hex-right-A-5", {"V", {
+					{1e-12, "pV"},
+					{1e-9, "nV"},
+					{1e-6, "µV"},
+					{1e-3, "mV"},
+					{1, "V"}
+			}}},
+			{"gantry", {"", {
+					{1, ""}  // No unit for gantry
+			}}},
+		// Add more units as needed
+	};
+
+	// Display name mapping
+	std::map<std::string, std::string> displayMap = {
+			{"GPIB-Current", "Current"},
+			{"hex-right-A-5", "Voltage R5"},
+			{"gantry", "gantry"},
+			// Add more mappings as needed
+	};
+
+	// Look up display name if available
+	auto nameIt = displayMap.find(dataName);
+	if (nameIt != displayMap.end()) {
+		displayName = nameIt->second;
+	}
+
+	// Get unit info and scale value
+	std::string unitDisplay = "";
+	float scaledValue = absValue;
+
+	auto unitIt = unitsMap.find(dataName);
+	if (unitIt != unitsMap.end()) {
+		auto& prefixes = unitIt->second.prefixes;
+
+		// Find the appropriate SI prefix
+		for (const auto& prefix : prefixes) {
+			if (absValue < prefix.first * 1000 ||
+				prefix.first == prefixes.back().first) {
+				unitDisplay = prefix.second;
+				scaledValue = absValue / prefix.first;
+				break;
+			}
+		}
+	}
+
+	// Create window name
+	std::string windowName = "Digital_" + dataName;
+
+	// Set window appearance
+	ImGui::SetNextWindowPos(ImVec2(50, 50), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(280, 90), ImGuiCond_FirstUseEver);
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.2f, 0.95f)); // Dark blue/gray
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f); // Sharp corners
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f); // Thin border
+
+	// Create window
+	ImGui::Begin(windowName.c_str(), nullptr,
+		ImGuiWindowFlags_NoTitleBar |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoScrollbar |
+		ImGuiWindowFlags_NoCollapse);
+
+	// Display name on left
+	ImGui::Text("%s", displayName.c_str());
+
+	// Display unit on right (if any)
+	if (!unitDisplay.empty()) {
+		float windowWidth = ImGui::GetWindowSize().x;
+		ImGui::SameLine(windowWidth - ImGui::CalcTextSize(unitDisplay.c_str()).x - 20);
+		ImGui::Text("%s", unitDisplay.c_str());
+	}
+
+	// Add separator line
+	ImGui::Separator();
+
+	// Format value with only 1 decimal place
+	char valueStr[32];
+	snprintf(valueStr, sizeof(valueStr), "%.1f", scaledValue);
+
+	// Set a monospaced font and large size for the digital display look
+	ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Assume monospace font
+	ImGui::SetWindowFontScale(3.5f); // Make it larger
+
+	// Calculate width for right alignment of the value
+	float windowWidth = ImGui::GetWindowSize().x;
+	float valueWidth = ImGui::CalcTextSize(valueStr).x;
+	float signWidth = ImGui::CalcTextSize("-").x;
+
+	// Display negative sign separately if needed
+	if (isNegative) {
+		// Position for the negative sign
+		ImGui::SetCursorPosX((windowWidth - valueWidth - signWidth) * 0.5f);
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f)); // Red for negative
+		ImGui::Text("-");
+		ImGui::PopStyleColor();
+
+		// Position for the value (aligned right after the sign)
+		ImGui::SameLine(0, 0);
+	}
+	else {
+		// Position for positive value (centered, with space for a potential sign)
+		ImGui::SetCursorPosX((windowWidth - valueWidth) * 0.5f + (signWidth * 0.5f));
+	}
+
+	// Draw the digital-style text in white
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f)); // Bright white text
+	ImGui::Text("%s", valueStr);
+	ImGui::PopStyleColor();
+
+	// Reset font settings
+	ImGui::SetWindowFontScale(1.0f);
+	ImGui::PopFont();
+
+	ImGui::End();
+
+	// Pop styles
+	ImGui::PopStyleVar(2);
+	ImGui::PopStyleColor();
+}
+
+void RenderDigitalDisplay(const std::string& dataName) {
+	// Get the value from the global data store
+	float value = GlobalDataStore::GetInstance()->GetValue(dataName);
+
+	// Name and unit mapping
+	std::string displayName = dataName;
+	std::string unit = "";
+
+	std::map<std::string, std::pair<std::string, std::string>> displayMap = {
+			{"GPIB-Current", {"Current", "A"}},
+			{"gantry", {"gantry", ""}},
+			// Add more mappings as needed
+	};
+
+	// Look up display name and unit if available
+	auto it = displayMap.find(dataName);
+	if (it != displayMap.end()) {
+		displayName = it->second.first;
+		unit = it->second.second;
+	}
+
+	// Create window name
+	std::string windowName = "Digital_" + dataName;
+
+	// Set window appearance
+	ImGui::SetNextWindowPos(ImVec2(50, 50), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(280, 90), ImGuiCond_FirstUseEver);
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.2f, 0.95f)); // Dark blue/gray
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f); // Sharp corners
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f); // Thin border
+
+	// Create window
+	ImGui::Begin(windowName.c_str(), nullptr,
+		ImGuiWindowFlags_NoTitleBar |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoScrollbar |
+		ImGuiWindowFlags_NoCollapse);
+
+	// Display name on left
+	ImGui::Text("%s", displayName.c_str());
+
+	// Display unit on right
+	float windowWidth = ImGui::GetWindowSize().x;
+	ImGui::SameLine(windowWidth - ImGui::CalcTextSize(unit.c_str()).x - 20);
+	ImGui::Text("%s", unit.c_str());
+
+	// Add separator line
+	ImGui::Separator();
+
+	// Format value string (for display like "0.000000")
+	char valueStr[32];
+	snprintf(valueStr, sizeof(valueStr), "%.6f", value);
+
+	// Calculate position for centered text - the digital display should be centered
+	float textWidth = ImGui::CalcTextSize(valueStr).x * 2.5f; // Accounting for larger font
+	ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
+
+	// Set a monospaced font and large size for the digital display look
+	ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Assume monospace font
+	ImGui::SetWindowFontScale(2.5f);
+
+	// Draw the digital-style text
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f)); // Bright white text
+	ImGui::Text("%s", valueStr);
+	ImGui::PopStyleColor();
+
+	// Reset font settings
+	ImGui::SetWindowFontScale(1.0f);
+	ImGui::PopFont();
+
+	ImGui::End();
+
+	// Pop styles
+	ImGui::PopStyleVar(2);
+	ImGui::PopStyleColor();
+}
 // Example of creating and using the initialization process
 void RunInitializationProcess(MachineOperations& machineOps) {
 	// Method 1: Using the dedicated InitializationStep class
@@ -110,6 +657,65 @@ void RunInitializationProcess(MachineOperations& machineOps) {
 	sequenceStep->Execute();
 }
 
+void RenderMinimizeExitButtons(SDL_Window* window, bool& done) {
+	// Set window position to top-right corner
+	ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 210, 0), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(200, 60), ImGuiCond_Always);
+	ImGui::SetNextWindowBgAlpha(0.8f); // Slightly more opaque background
+
+	// Create window with specific flags to keep it on top and prevent user from moving it
+	ImGuiWindowFlags window_flags =
+		ImGuiWindowFlags_NoTitleBar |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoScrollbar |
+		ImGuiWindowFlags_NoCollapse |
+		ImGuiWindowFlags_NoFocusOnAppearing |
+		ImGuiWindowFlags_NoBringToFrontOnFocus; // Keeps it from being pushed back in z-order
+
+	// Start the window
+	ImGui::Begin("Controls", nullptr, window_flags);
+
+	// Add minimize button
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.8f, 1.0f)); // Blue button
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.5f, 0.9f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.3f, 0.7f, 1.0f));
+
+	if (ImGui::Button("Minimize", ImVec2(80, 40))) {
+		// Call SDL function to minimize the window
+		SDL_MinimizeWindow(window);
+	}
+	ImGui::PopStyleColor(3);
+
+	ImGui::SameLine();
+
+	// Style the exit button to be more noticeable
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f)); // Red button
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.1f, 0.1f, 1.0f));
+
+	// Make the button fill most of the window
+	if (ImGui::Button("Exit", ImVec2(80, 40))) {
+		// Set the done flag to true to exit the application
+		done = true;
+	}
+	ImGui::PopStyleColor(3); // Remove the 3 style colors we pushed
+
+	ImGui::End();
+}
+
+void RenderFPSoverlay(float m_fps)
+{
+	// Create a performance overlay
+	ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver); // Only set position once
+	ImGui::SetNextWindowBgAlpha(0.35f); // Transparent background
+	ImGui::Begin("Performance", nullptr,
+		ImGuiWindowFlags_NoDecoration |
+		ImGuiWindowFlags_AlwaysAutoResize
+	);
+	ImGui::Text("FPS: %.1f", m_fps);
+
+	ImGui::End();
+}
 // Example of how to create a custom process step with specific behavior
 class CustomProcessStep : public ProcessStep {
 public:
@@ -162,7 +768,7 @@ public:
 };
 
 
-
+#pragma endregion
 
 
 int main(int argc, char* argv[])
@@ -235,26 +841,11 @@ int main(int argc, char* argv[])
 		logger->LogInfo("CLD101x server script started successfully");
 	}
 
-	//if (!pythonManager.StartKeithleyScript()) {
-	//	logger->LogWarning("Failed to start Keithley script, will continue without it");
-	//}
-	//else {
-	//	logger->LogInfo("Keithley script started successfully");
-	//}
 
 
 
 
 
-
-	//set up toolbarmenu
-	ToolbarMenu toolbarMenu;
-
-
-
-	// Create our ClientManager instead of a single TcpClient
-	ClientManager clientManager;
-	logger->Log("ClientManager initialized");
 
 	// For FPS calculation
 	float frameTime = 0.0f;
@@ -283,14 +874,6 @@ int main(int argc, char* argv[])
 	GraphVisualizer graphVisualizer(configManager);
 	logger->LogInfo("GraphVisualizer initialized");
 
-
-
-
-	//create PIController
-	// Create a controller instance
-	//PIController controller;
-
-	// Create the PI Controller Manager
 	PIControllerManager piControllerManager(configManager);
 	// Connect to all enabled controllers
 	if (piControllerManager.ConnectAll()) {
@@ -299,11 +882,6 @@ int main(int argc, char* argv[])
 	else {
 		logger->LogWarning("Failed to connect to some PI controllers");
 	}
-	//PIAnalogManager piAnalogManager(piControllerManager, configManager);
-	//logger->LogInfo("PIAnalogManager initialized");
-
-
-
 
 	// Create the ACS Controller Manager
 	ACSControllerManager acsControllerManager(configManager);
@@ -478,7 +1056,7 @@ int main(int argc, char* argv[])
 // Create the DataClientManager with the config file path
 	DataClientManager dataClientManager("DataServerConfig.json");
 	logger->LogInfo("DataClientManager initialized");
-
+	dataClientManager.ConnectAutoClients();
 
 
 
@@ -506,12 +1084,7 @@ int main(int argc, char* argv[])
 	DataChartManager dataChartManager;
 	dataChartManager.Initialize();
 
-	// Create the window with a reference to the controller manager
-	//HexRightControllerWindow hexRightWindow(piControllerManager);
-	//logger->LogInfo("HexRightControllerWindow created");
-	// Create the window with a reference to the controller manager
-	HexControllerWindow hexControllerWindow(piControllerManager);
-	logger->LogInfo("HexControllerWindow created");
+
 
 	// Add the channels you want to monitor
 	dataChartManager.AddChannel("GPIB-Current", "Current Reading", "A", false);
@@ -536,19 +1109,14 @@ int main(int argc, char* argv[])
 		&laserOps  // Pass the laser operations object
 	);
 
-
-	// Run the initialization process
-	// Create the initialization window
 	InitializationWindow initWindow(machineOps);
 
-	// Create and run a custom process step
-	//auto customStep = std::make_unique<CustomProcessStep>(machineOps);
-	//customStep->Execute();
-		// Create the process control panel
 	ProcessControlPanel processControlPanel(machineOps);
 	logger->LogInfo("ProcessControlPanel initialized");
 
 	// Add it to the toolbar menu
+		//set up toolbarmenu
+	ToolbarMenu toolbarMenu;
 	toolbarMenu.AddReference(CreateTogglableUI(processControlPanel, "Process Control"));
 	// Add components with standard methods
 
@@ -566,10 +1134,6 @@ int main(int argc, char* argv[])
 	// Add PIAnalogManager as a toggleable UI component
 	//toolbarMenu.AddReference(std::shared_ptr<ITogglableUI>(&piAnalogManager));
 
-	// Add the IOControlPanel using the same CreateTogglableUI adapter
-
-	// Add to toolbar menu
-
 	toolbarMenu.AddReference(CreateTogglableUI(ioUI, "IO Control"));
 	toolbarMenu.AddReference(CreateTogglableUI(configEditor, "Config Editor"));
 	toolbarMenu.AddReference(CreateTogglableUI(graphVisualizer, "Graph Visualizer"));
@@ -577,9 +1141,6 @@ int main(int argc, char* argv[])
 	// Add it to the toolbar menu
 	//toolbarMenu.AddReference(CreateTogglableUI(hexRightWindow, "Hex-Right"));
 
-
-	// Add it to the toolbar menu
-	toolbarMenu.AddReference(CreateTogglableUI(hexControllerWindow, "Hex Aligner"));
 	// Log successful initialization
 	logger->LogInfo("ToolbarMenu initialized with " +
 		std::to_string(toolbarMenu.GetComponentCount()) +
@@ -611,9 +1172,6 @@ int main(int argc, char* argv[])
 		}
 
 
-
-
-
 		// Calculate delta time and FPS
 		Uint64 currentFrameTime = SDL_GetPerformanceCounter();
 		float deltaTime = (currentFrameTime - lastFrameTime) / (float)SDL_GetPerformanceFrequency();
@@ -630,72 +1188,32 @@ int main(int argc, char* argv[])
 			fpsTimer = 0;
 		}
 
+
+
+
 		// Start the Dear ImGui frame
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL2_NewFrame();
 		ImGui::NewFrame();
 
-		// Add an exit button in a fixed position
-		ImGui::SetNextWindowPos(ImVec2(105, 0), ImGuiCond_Always);
-		ImGui::SetNextWindowSize(ImVec2(200, 60), ImGuiCond_Always); // Increased width to accommodate both buttons
-		ImGui::SetNextWindowBgAlpha(0.7f); // Semi-transparent background
-		ImGui::Begin("Exit", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-			ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
 
-		// Add minimize button
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.8f, 1.0f)); // Blue button
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.5f, 0.9f, 1.0f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.3f, 0.7f, 1.0f));
-		if (ImGui::Button("Minimize", ImVec2(80, 40))) {
-			// Call SDL function to minimize the window
-			SDL_MinimizeWindow(window);
-		}
-		ImGui::PopStyleColor(3);
+		RenderFPSoverlay(fps);
 
-		ImGui::SameLine();
-
-		// Style the exit button to be more noticeable
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f)); // Red button
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.1f, 0.1f, 1.0f));
-		// Make the button fill most of the window
-		if (ImGui::Button("Exit", ImVec2(80, 40))) {
-			// Your existing exit code...
-			done = true;
-		}
-		ImGui::PopStyleColor(3); // Remove the 3 style colors we pushed
-		ImGui::End();
+		RenderMinimizeExitButtons(window, done);
 
 
-		// Create a performance overlay
-		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
-		ImGui::SetNextWindowBgAlpha(0.35f); // Transparent background
-		ImGui::Begin("Performance", nullptr,
-			ImGuiWindowFlags_NoDecoration |
-			ImGuiWindowFlags_AlwaysAutoResize |
-			ImGuiWindowFlags_NoSavedSettings |
-			ImGuiWindowFlags_NoFocusOnAppearing |
-			ImGuiWindowFlags_NoMove);
-		ImGui::Text("FPS: %.1f", fps);
 
-		if (enableDebug)	logger->LogInfo("FPS: " + std::to_string(fps));
-
-		ImGui::End();
-
+		// Corner parameter: 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right
+		RenderClockOverlay(3);
+		RenderDigitalDisplaySI("GPIB-Current");
 		// Render logger UI
 		logger->RenderUI();
 
+		//// Update all TCP clients
+		//clientManager.UpdateClients();
 
-
-
-
-
-
-		// Update all TCP clients
-		clientManager.UpdateClients();
-
-		// Render TCP client manager UI
-		clientManager.RenderUI();
+		//// Render TCP client manager UI
+		//clientManager.RenderUI();
 
 		// Add this line before the FPS display window rendering
 		//toolbar.RenderUI();
@@ -783,8 +1301,15 @@ int main(int argc, char* argv[])
 		// Render our UI windows
 		initWindow.RenderUI();
 		//hexRightWindow.RenderUI();
-		hexControllerWindow.RenderUI();
+		//hexControllerWindow.RenderUI();
 		processControlPanel.RenderUI();
+
+
+
+	
+
+
+
 		// Rendering
 		ImGui::Render();
 		glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
