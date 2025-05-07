@@ -86,6 +86,25 @@ public:
   bool WaitForLaserTemperature(float targetTemp, float tolerance = 0.5f,
     int timeoutMs = 30000, const std::string& laserName = "");
 
+
+  // Add these to the public section of MachineOperations class:
+
+// Scanning methods
+  bool StartScan(const std::string& deviceName, const std::string& dataChannel,
+    const std::vector<double>& stepSizes, int settlingTimeMs,
+    const std::vector<std::string>& axesToScan = { "Z", "X", "Y" });
+
+  bool StopScan(const std::string& deviceName);
+
+  // Get scan status
+  bool IsScanActive(const std::string& deviceName) const;
+  double GetScanProgress(const std::string& deviceName) const;
+  std::string GetScanStatus(const std::string& deviceName) const;
+
+  // Get scan results
+  bool GetScanPeak(const std::string& deviceName, double& value, PositionStruct& position) const;
+
+  bool MachineOperations::SafelyCleanupScanner(const std::string& deviceName);
 private:
   MotionControlLayer& m_motionLayer;
   PIControllerManager& m_piControllerManager;
@@ -96,4 +115,19 @@ private:
 
   // Helper methods
   bool ConvertPinStateToBoolean(uint32_t inputs, int pin);
+
+  std::map<std::string, std::unique_ptr<ScanningAlgorithm>> m_activeScans;
+  std::mutex m_scanMutex; // For thread safety
+
+  // Scan status information (tracked per device)
+  struct ScanInfo {
+    std::atomic<bool> isActive{ false };
+    std::atomic<double> progress{ 0.0 };
+    std::string status;
+    mutable std::mutex statusMutex;  // Add mutable here
+    double peakValue{ 0.0 };
+    PositionStruct peakPosition;
+    mutable std::mutex peakMutex;    // Add mutable here
+  };
+  std::map<std::string, ScanInfo> m_scanInfo;
 };

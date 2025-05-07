@@ -98,7 +98,7 @@ namespace ProcessBuilders {
     MachineOperations& machineOps, UserInteractionManager& uiManager);
 
   // Build a UV curing sequence
-  std::unique_ptr<SequenceStep> BuildUVCuringSequence(MachineOperations& machineOps);
+  std::unique_ptr<SequenceStep> BuildUVCuringSequence(MachineOperations& machineOps, UserInteractionManager& uiManager);
 
   // Build a complete process sequence (combines all steps)
   std::unique_ptr<SequenceStep> BuildCompleteProcessSequence(

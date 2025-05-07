@@ -299,8 +299,8 @@ int main(int argc, char* argv[])
 	else {
 		logger->LogWarning("Failed to connect to some PI controllers");
 	}
-	PIAnalogManager piAnalogManager(piControllerManager, configManager);
-	logger->LogInfo("PIAnalogManager initialized");
+	//PIAnalogManager piAnalogManager(piControllerManager, configManager);
+	//logger->LogInfo("PIAnalogManager initialized");
 
 
 
@@ -564,7 +564,7 @@ int main(int argc, char* argv[])
 	toolbarMenu.AddReference(CreateACSControllerAdapter(acsControllerManager, "Gantry"));
 	toolbarMenu.AddReference(CreatePIControllerAdapter(piControllerManager, "PI"));
 	// Add PIAnalogManager as a toggleable UI component
-	toolbarMenu.AddReference(std::shared_ptr<ITogglableUI>(&piAnalogManager));
+	//toolbarMenu.AddReference(std::shared_ptr<ITogglableUI>(&piAnalogManager));
 
 	// Add the IOControlPanel using the same CreateTogglableUI adapter
 
@@ -711,7 +711,7 @@ int main(int argc, char* argv[])
 		//PI hexapod
 		//controller.RenderUI();
 		piControllerManager.RenderUI();
-		piAnalogManager.RenderUI();
+		//piAnalogManager.RenderUI();
 
 		// Add this to render each controller's individual UI window
 		// This is necessary because they won't render automatically
@@ -822,11 +822,11 @@ int main(int argc, char* argv[])
 
 	try
 	{
-		piAnalogManager.ToggleWindow();
-		piAnalogManager.stopPolling();
+		//piAnalogManager.ToggleWindow();
+		//piAnalogManager.stopPolling();
 
-		// Clean up reader resources
-		piAnalogManager.cleanupReaders();
+		//// Clean up reader resources
+		//piAnalogManager.cleanupReaders();
 
 		// Clear the analog manager first (it depends on controller managers)
 				// Give a short delay to ensure all background operations complete

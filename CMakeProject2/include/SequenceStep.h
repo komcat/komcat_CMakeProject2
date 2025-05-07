@@ -271,3 +271,173 @@ private:
   std::string m_deviceName;
   std::string m_positionName;
 };
+
+
+// SCANNING OPERATIONS - NEW ADDITIONS
+
+// Start Scan operation
+class StartScanOperation : public SequenceOperation {
+public:
+  StartScanOperation(const std::string& deviceName, const std::string& dataChannel,
+    const std::vector<double>& stepSizes, int settlingTimeMs,
+    const std::vector<std::string>& axesToScan = { "Z", "X", "Y" })
+    : m_deviceName(deviceName), m_dataChannel(dataChannel),
+    m_stepSizes(stepSizes), m_settlingTimeMs(settlingTimeMs),
+    m_axesToScan(axesToScan) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.StartScan(m_deviceName, m_dataChannel, m_stepSizes, m_settlingTimeMs, m_axesToScan);
+  }
+
+  std::string GetDescription() const override {
+    std::string axesStr;
+    for (size_t i = 0; i < m_axesToScan.size(); ++i) {
+      axesStr += m_axesToScan[i];
+      if (i < m_axesToScan.size() - 1) axesStr += ", ";
+    }
+
+    std::string stepsStr;
+    for (size_t i = 0; i < m_stepSizes.size(); ++i) {
+      stepsStr += std::to_string(m_stepSizes[i] * 1000) + " µm";
+      if (i < m_stepSizes.size() - 1) stepsStr += ", ";
+    }
+
+    return "Start scan on " + m_deviceName + " using " + m_dataChannel +
+      " channel, scanning " + axesStr + " axes with steps " + stepsStr;
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_dataChannel;
+  std::vector<double> m_stepSizes;
+  int m_settlingTimeMs;
+  std::vector<std::string> m_axesToScan;
+};
+
+// Stop Scan operation
+class StopScanOperation : public SequenceOperation {
+public:
+  StopScanOperation(const std::string& deviceName)
+    : m_deviceName(deviceName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.StopScan(m_deviceName);
+  }
+
+  std::string GetDescription() const override {
+    return "Stop scan on " + m_deviceName;
+  }
+
+private:
+  std::string m_deviceName;
+};
+
+// Wait For Scan Completion operation
+class WaitForScanCompletionOperation : public SequenceOperation {
+public:
+  WaitForScanCompletionOperation(const std::string& deviceName, int timeoutMs = 1800000)
+    : m_deviceName(deviceName), m_timeoutMs(timeoutMs) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    auto startTime = std::chrono::steady_clock::now();
+    auto endTime = startTime + std::chrono::milliseconds(m_timeoutMs);
+
+    // Wait until the scan is no longer active or timeout
+    while (ops.IsScanActive(m_deviceName)) {
+      // Check if we've exceeded the timeout
+      if (std::chrono::steady_clock::now() > endTime) {
+        // Timeout occurred, stop the scan
+        ops.StopScan(m_deviceName);
+        return false;
+      }
+
+      // Sleep to avoid high CPU usage
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    return true;
+  }
+
+  std::string GetDescription() const override {
+    return "Wait for scan completion on " + m_deviceName +
+      " (timeout: " + std::to_string(m_timeoutMs / 1000) + " seconds)";
+  }
+
+private:
+  std::string m_deviceName;
+  int m_timeoutMs;
+};
+
+
+
+
+// Scan operation with automatic wait for completion
+class RunScanOperation : public SequenceOperation {
+public:
+  RunScanOperation(
+    const std::string& deviceName,
+    const std::string& dataChannel,
+    const std::vector<double>& stepSizes = { 0.002, 0.001, 0.0005 },
+    int settlingTimeMs = 300,
+    const std::vector<std::string>& axesToScan = { "Z", "X", "Y" },
+    int timeoutMs = 1800000)
+    : m_deviceName(deviceName),
+    m_dataChannel(dataChannel),
+    m_stepSizes(stepSizes),
+    m_settlingTimeMs(settlingTimeMs),
+    m_axesToScan(axesToScan),
+    m_timeoutMs(timeoutMs) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // 1. Start the scan
+    if (!ops.StartScan(m_deviceName, m_dataChannel, m_stepSizes, m_settlingTimeMs, m_axesToScan)) {
+      return false;
+    }
+
+    // 2. Wait for completion
+    auto startTime = std::chrono::steady_clock::now();
+    auto endTime = startTime + std::chrono::milliseconds(m_timeoutMs);
+
+    while (ops.IsScanActive(m_deviceName)) {
+      if (std::chrono::steady_clock::now() > endTime) {
+        ops.StopScan(m_deviceName);
+        return false;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    // Note: The scanning algorithm automatically moves to the peak position,
+    // so we don't need to do that explicitly here.
+    return true;
+  }
+
+  std::string GetDescription() const override {
+    std::string axesStr;
+    for (size_t i = 0; i < m_axesToScan.size(); ++i) {
+      axesStr += m_axesToScan[i];
+      if (i < m_axesToScan.size() - 1) axesStr += ", ";
+    }
+
+    std::string stepsStr;
+    for (size_t i = 0; i < m_stepSizes.size(); ++i) {
+      stepsStr += std::to_string(m_stepSizes[i] * 1000) + " µm";
+      if (i < m_stepSizes.size() - 1) stepsStr += ", ";
+    }
+
+    return "Run scan on " + m_deviceName + " using " + m_dataChannel +
+      " over " + axesStr + " axes with " + stepsStr +
+      " steps (auto-moves to peak)";
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_dataChannel;
+  std::vector<double> m_stepSizes;
+  int m_settlingTimeMs;
+  std::vector<std::string> m_axesToScan;
+  int m_timeoutMs;
+};

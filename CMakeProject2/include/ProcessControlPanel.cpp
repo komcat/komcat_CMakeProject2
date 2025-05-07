@@ -400,7 +400,7 @@ std::unique_ptr<SequenceStep> ProcessControlPanel::BuildSelectedProcess() {
     return ProcessBuilders::BuildPickPlaceRightLensSequence(m_machineOps, *m_uiManager);
   }
   else if (m_selectedProcess == "UVCuring") {
-    return ProcessBuilders::BuildUVCuringSequence(m_machineOps);
+    return ProcessBuilders::BuildUVCuringSequence(m_machineOps, *m_uiManager);
   }
   else if (m_selectedProcess == "CompleteProcess") {
     return ProcessBuilders::BuildCompleteProcessSequence(m_machineOps, *m_uiManager);

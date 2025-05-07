@@ -48,7 +48,7 @@ public:
       sequence = ProcessBuilders::BuildPickPlaceRightLensSequence(m_machineOps, *m_uiManager);
     }
     else if (processName == "UVCuring") {
-      sequence = ProcessBuilders::BuildUVCuringSequence(m_machineOps);
+      sequence = ProcessBuilders::BuildUVCuringSequence(m_machineOps, *m_uiManager);
     }
     else if (processName == "CompleteProcess") {
       sequence = ProcessBuilders::BuildCompleteProcessSequence(m_machineOps, *m_uiManager);

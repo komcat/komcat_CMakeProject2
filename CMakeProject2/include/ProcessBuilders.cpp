@@ -81,6 +81,9 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"gantry-main", "Process_Flow", "node_4107"));
 
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"hex-right", "Process_Flow", "node_5211"));
+
 		// 4. Wait for user to confirm PIC position
 		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
 			"Please check PIC position and confirm to continue", uiManager));
@@ -186,15 +189,44 @@ namespace ProcessBuilders {
 		return sequence;
 	}
 
-	std::unique_ptr<SequenceStep> BuildUVCuringSequence(MachineOperations& machineOps) {
+	std::unique_ptr<SequenceStep> BuildUVCuringSequence(MachineOperations& machineOps,
+		UserInteractionManager& uiManager) {
 		auto sequence = std::make_unique<SequenceStep>("UV Curing", machineOps);
 
 		// 1. Move gantry to UV position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"gantry-main", "Process_Flow", "node_4426"));
 
+		sequence->AddOperation(std::make_shared<SetLaserCurrentOperation>(0.150f)); // 150mA
+
+
+
 		// 2. Extend UV_Head pneumatic
 		sequence->AddOperation(std::make_shared<ExtendSlideOperation>("UV_Head"));
+
+
+		// 4. Wait for user confirmation that grip is successful
+		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
+			"Confirm to fine align lens again (um steps =0.5, 0.2, 0.1) ", uiManager));
+
+		// 2. Perform scan (will automatically move to peak)
+		sequence->AddOperation(std::make_shared<RunScanOperation>(
+			"hex-left", "GPIB-Current",
+			std::vector<double>{0.0005, 0.0002, 0.0001},
+			300, // settling time in ms
+			std::vector<std::string>{"Z", "X", "Y"}));
+
+		// 2. Perform scan (will automatically move to peak)
+		sequence->AddOperation(std::make_shared<RunScanOperation>(
+			"hex-right", "GPIB-Current",
+			std::vector<double>{0.0005, 0.0002, 0.0001},
+			300, // settling time in ms
+			std::vector<std::string>{"Z", "X", "Y"}));
+
+		// 4. Wait for user confirmation that grip is successful
+		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
+			"Confirm start UV curing (take 210 seconds)", uiManager));
+
 
 		// 3. Toggle UV_PLC1 (pin 14) - Clear output
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
@@ -253,6 +285,8 @@ namespace ProcessBuilders {
 		return sequence;
 	}
 
+
+	//complete process for automation
 	std::unique_ptr<SequenceStep> BuildCompleteProcessSequence(
 		MachineOperations& machineOps, UserInteractionManager& uiManager) {
 
@@ -285,7 +319,7 @@ namespace ProcessBuilders {
 		}
 
 		// 5. UV Curing
-		auto uvCuringSequence = BuildUVCuringSequence(machineOps);
+		auto uvCuringSequence = BuildUVCuringSequence(machineOps, uiManager);
 		for (const auto& op : uvCuringSequence->GetOperations()) {
 			sequence->AddOperation(op);
 		}
