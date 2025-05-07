@@ -1081,19 +1081,22 @@ int main(int argc, char* argv[])
 
 	// Then in the initialization section, add:
 
-	DataChartManager dataChartManager;
-	dataChartManager.Initialize();
+// Create a DataChartManager with the config file path
+	DataChartManager dataChartManager("data_display_config.json");
+
+	//dataChartManager.Initialize();
 
 
 
 	// Add the channels you want to monitor
-	dataChartManager.AddChannel("GPIB-Current", "Current Reading", "A", false);
-	//dataChartManager.AddChannel("Virtual_1", "Virtual Channel 1", "unit", true);
-	//dataChartManager.AddChannel("Virtual_2", "Virtual Channel 2", "unit", true);
-	//dataChartManager.AddChannel("hex-left-A-5", "Voltage L5", "unit", true); 
-	//dataChartManager.AddChannel("hex-left-A-6", "Voltage L6", "unit", true);
-	dataChartManager.AddChannel("hex-right-A-5", "Voltage R5", "unit", true);
-	//dataChartManager.AddChannel("hex-right-A-6", "Voltage R6", "unit", true);
+	//dataChartManager.AddChannel("GPIB-Current", "Current Reading", "A", false);
+	////dataChartManager.AddChannel("Virtual_1", "Virtual Channel 1", "unit", true);
+	////dataChartManager.AddChannel("Virtual_2", "Virtual Channel 2", "unit", true);
+	////dataChartManager.AddChannel("hex-left-A-5", "Voltage L5", "unit", true); 
+	////dataChartManager.AddChannel("hex-left-A-6", "Voltage L6", "unit", true);
+	//dataChartManager.AddChannel("hex-right-A-5", "Voltage R5", "unit", true);
+	////dataChartManager.AddChannel("hex-right-A-6", "Voltage R6", "unit", true);
+	//dataChartManager.AddChannel("SagnacV", "SagnacV", "V", true);
 
 
 

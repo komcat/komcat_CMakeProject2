@@ -8,16 +8,17 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <nlohmann/json.hpp> // Add JSON support
+
 // Structure to define a channel to monitor
 struct ChannelInfo {
   std::string id;           // Channel identifier in GlobalDataStore
   std::string displayName;  // Display name for the UI
   std::string unit;         // Unit for display
   bool displayUnitSuffix;   // Whether to display the unit suffix
+  bool enable;              // Whether the channel is enabled
   ImVec4 color;             // Color for the chart line
 };
-
-
 
 // Forward declaration for ImPlot (avoid including implot.h in header)
 struct ImPlotContext;
@@ -31,16 +32,17 @@ struct ChartDataBuffer {
   std::deque<float> values;            // Circular buffer of values
   std::deque<double> timestamps;       // Circular buffer of timestamps
   ImVec4 color;                        // Line color
-  bool visible;                        // Whether to display the channel
+  bool visible;                        // Whether the channel is visible in UI
+  bool enabled;                        // Whether the channel is enabled for data collection
 
-  // Default constructor with visible set to true
-  ChartDataBuffer() : displayUnitSuffix(false), color(0, 0, 0, 1), visible(true) {}
+  // Default constructor with visible and enabled set to true
+  ChartDataBuffer() : displayUnitSuffix(false), color(0, 0, 0, 1), visible(true), enabled(true) {}
 
-  // Updated constructor that includes visibility
+  // Updated constructor that includes visibility and enabled state
   ChartDataBuffer(const std::string& id, const std::string& name, const std::string& unitStr,
-    bool showUnitSuffix, const ImVec4& lineColor)
+    bool showUnitSuffix, const ImVec4& lineColor, bool isEnabled = true)
     : serverId(id), displayName(name), unit(unitStr),
-    displayUnitSuffix(showUnitSuffix), color(lineColor), visible(true) {
+    displayUnitSuffix(showUnitSuffix), color(lineColor), visible(true), enabled(isEnabled) {
   }
 };
 
@@ -49,10 +51,15 @@ class DataChartManager : public ITogglableUI {
 public:
   // Constructor and destructor - no longer requires DataClientManager
   DataChartManager();
+  // Constructor that takes a config file path
+  DataChartManager(const std::string& configFilePath);
   ~DataChartManager();
 
   // Initialize chart data
   void Initialize();
+
+  // Load channels from config file
+  bool LoadConfig(const std::string& configFilePath);
 
   // Update chart data from data sources
   void Update();
@@ -68,7 +75,7 @@ public:
   // Settings
   void SetMaxPoints(int maxPoints) { m_maxPoints = maxPoints; }
   void SetTimeWindow(float seconds) { m_timeWindow = seconds; }
-  void DataChartManager::AddChannel(const std::string& id, const std::string& displayName,
+  void AddChannel(const std::string& id, const std::string& displayName,
     const std::string& unit, bool displayUnitSuffix);
 private:
   // Helper methods
@@ -88,6 +95,7 @@ private:
   float m_timeWindow;
   bool m_showWindow;
   std::string m_windowTitle;
+  std::string m_configFilePath;  // Added for config file path
   std::mutex m_dataMutex; // For thread safety
 };
 
