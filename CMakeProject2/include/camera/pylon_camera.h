@@ -112,6 +112,10 @@ private:
     std::atomic<bool> m_threadRunning;
     std::mutex m_cameraMutex;
 
+    // Frame acquisition
+    Pylon::CGrabResultPtr m_ptrGrabResult;
+    std::atomic<bool> m_newFrameReady;
+
     // Device removal handler
     PylonDeviceRemovalHandler* m_pDeviceRemovalHandler;
 
@@ -119,7 +123,9 @@ private:
     DeviceRemovalCallback m_deviceRemovalCallback;
     NewFrameCallback m_newFrameCallback;
 
+    // Frame rate control
+    int m_targetFPS;
+
     // Friend the handler so it can access private members
     friend class PylonDeviceRemovalHandler;
 };
-

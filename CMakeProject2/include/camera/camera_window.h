@@ -8,6 +8,33 @@
 #include <mutex>
 #include <atomic>
 #include <SDL.h>  // For SDL_Delay
+#include <memory>
+#include <vector>
+
+// Structure for double buffering
+struct ImageBuffer {
+    std::vector<uint8_t> data;
+    uint32_t width;
+    uint32_t height;
+    bool isValid;
+
+    // Resize the buffer if needed
+    void Resize(uint32_t newWidth, uint32_t newHeight) {
+        if (newWidth != width || newHeight != height) {
+            data.resize(newWidth * newHeight * 3);
+            width = newWidth;
+            height = newHeight;
+        }
+    }
+
+    // Clear the buffer
+    void Clear() {
+        data.clear();
+        width = 0;
+        height = 0;
+        isValid = false;
+    }
+};
 
 // Configuration event handler for device removal handling
 class CameraDeviceRemovalHandler : public Pylon::CConfigurationEventHandler
@@ -67,8 +94,20 @@ private:
     std::atomic<bool> threadRunning;
     std::atomic<bool> newFrameReady;
 
+    // Frame rate control
+    int m_targetFPS;
+
+    // Double buffering
+    std::unique_ptr<ImageBuffer> m_frontBuffer;
+    std::unique_ptr<ImageBuffer> m_backBuffer;
+    std::mutex m_bufferMutex;
+    bool m_useDoubleBuffering;
+
     // Creates an OpenGL texture from the grabbed image
     void UpdateTexture();
+
+    // Creates an OpenGL texture from buffer data
+    void UpdateTextureFromBuffer(const uint8_t* pImageBuffer, uint32_t width, uint32_t height);
 
     // Save captured image to disk
     bool SaveImageToDisk(const std::string& filename);
@@ -78,6 +117,11 @@ private:
 
     // Try to reconnect to the previously connected camera
     bool TryReconnectCamera();
+
+    // Double buffering methods
+    void InitializeDoubleBuffering();
+    void SwapBuffers();
+    void UpdateBackBuffer(const uint8_t* imageData, uint32_t width, uint32_t height);
 
 public:
     // Constructor
@@ -111,7 +155,6 @@ public:
     bool IsDone() const;
 
     // Safely terminate Pylon runtime
-    // Static method to safely terminate Pylon
     static void SafeTerminatePylon() {
         try {
             // Add a small delay to ensure all resources are released
@@ -125,10 +168,14 @@ public:
         }
     }
 
-    // In camera_window.h, add these methods to public section:
+    // Public methods
     bool IsGrabbing() const;
     void StopCapture();
     void LogResourceState() const; // For debugging
+
+    // Set target FPS for the grab thread
+    void SetTargetFPS(int fps) { m_targetFPS = fps; }
+    int GetTargetFPS() const { return m_targetFPS; }
 
     // Check if the camera device has been removed
     bool IsCameraDeviceRemoved() const;

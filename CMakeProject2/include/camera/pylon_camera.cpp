@@ -33,9 +33,11 @@ PylonCamera::PylonCamera()
     , m_deviceRemoved(false)
     , m_reconnecting(false)
     , m_threadRunning(false)
+    , m_newFrameReady(false)
     , m_pDeviceRemovalHandler(nullptr)
     , m_deviceRemovalCallback(nullptr)
     , m_newFrameCallback(nullptr)
+    , m_targetFPS(30) // Default to 30fps - adjust as needed
 {
     // Initialize Pylon runtime
     Pylon::PylonInitialize();
@@ -289,7 +291,6 @@ bool PylonCamera::ConnectToSerial(const std::string& serialNumber)
     }
 }
 
-
 void PylonCamera::Disconnect()
 {
     std::lock_guard<std::mutex> lock(m_cameraMutex);
@@ -429,8 +430,7 @@ bool PylonCamera::StartGrabbing()
         }
 
         // Start grabbing (continuous mode)
-        // Use NewestOnly strategy to ensure we always get the latest image
-// In pylon_camera.cpp, update the StartGrabbing method
+        // Use LatestImageOnly strategy to ensure we always get the latest image
         m_camera.StartGrabbing(Pylon::GrabStrategy_LatestImageOnly, Pylon::GrabLoop_ProvidedByUser);
         std::cout << "Started continuous grabbing" << std::endl;
 
@@ -446,7 +446,6 @@ bool PylonCamera::StartGrabbing()
         return false;
     }
 }
-
 
 void PylonCamera::StopGrabbing()
 {
@@ -641,31 +640,34 @@ void PylonCamera::GrabThreadFunction()
     std::cout << "Grab thread started" << std::endl;
     int frameCounter = 0;
 
+    // Frame rate control variables
+    const std::chrono::microseconds frameDuration(1000000 / m_targetFPS);
+
     while (m_threadRunning.load() && m_camera.IsGrabbing())
     {
+        // Record start time for frame rate control
+        auto frameStart = std::chrono::steady_clock::now();
+
         try
         {
-            // Wait for an image and grab it (timeout 1000ms)
+            // Retrieve with minimal timeout for responsiveness
             Pylon::CGrabResultPtr grabResult;
 
-            // Use WaitForFrameTriggerReady instead of RetrieveResult to avoid contention
-            if (m_camera.WaitForFrameTriggerReady(1000, Pylon::TimeoutHandling_Return))
+            if (m_camera.RetrieveResult(50, grabResult, Pylon::TimeoutHandling_Return) &&
+                grabResult && grabResult->GrabSucceeded())
             {
-                // Now trigger the frame
-                m_camera.ExecuteSoftwareTrigger();
-
-                // Retrieve the result
-                if (m_camera.RetrieveResult(5000, grabResult, Pylon::TimeoutHandling_Return) &&
-                    grabResult && grabResult->GrabSucceeded())
+                // Lock only when we have a valid frame
                 {
-                    // Increment frame counter
+                    std::lock_guard<std::mutex> lock(m_cameraMutex);
+                    m_ptrGrabResult = grabResult;
                     frameCounter++;
+                    m_newFrameReady.store(true);
+                }
 
-                    // Call the new frame callback if registered
-                    if (m_newFrameCallback)
-                    {
-                        m_newFrameCallback(grabResult);
-                    }
+                // Call the new frame callback if registered, outside the lock
+                if (m_newFrameCallback)
+                {
+                    m_newFrameCallback(grabResult);
                 }
             }
         }
@@ -680,12 +682,23 @@ void PylonCamera::GrabThreadFunction()
                 break;
             }
 
-            // Add a delay to prevent rapid error messages
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            // Add a short delay after errors to prevent busy looping
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
-        // Small sleep to avoid tight loop
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        // Calculate time spent in this frame
+        auto frameEnd = std::chrono::steady_clock::now();
+        auto frameTime = std::chrono::duration_cast<std::chrono::microseconds>(frameEnd - frameStart);
+
+        // Sleep to maintain target frame rate (if we processed faster than target)
+        if (frameTime < frameDuration)
+        {
+            std::this_thread::sleep_for(frameDuration - frameTime);
+        }
+        else {
+            // Still yield to prevent tight CPU loop when we can't meet target framerate
+            std::this_thread::yield();
+        }
     }
 
     std::cout << "Grab thread exiting after grabbing " << frameCounter << " frames" << std::endl;

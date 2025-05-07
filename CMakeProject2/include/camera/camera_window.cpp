@@ -4,9 +4,9 @@
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
+#include <iostream>
 
 // Implementation of the event handler's OnCameraDeviceRemoved method
-// In camera_window.cpp
 void CameraDeviceRemovalHandler::OnCameraDeviceRemoved(Pylon::CInstantCamera& /*camera*/)
 {
     std::cout << "\n\nCameraDeviceRemovalHandler::OnCameraDeviceRemoved called." << std::endl;
@@ -28,25 +28,29 @@ CameraWindow::CameraWindow()
     , isDeviceRemoved(false)
     , attemptReconnect(true)
     , reconnectionInProgress(false)
+    , m_targetFPS(30) // Default target FPS
+    , m_useDoubleBuffering(true) // Enable double buffering by default
 {
     // Initialize Pylon runtime before using any Pylon methods
     Pylon::PylonInitialize();
 
     // Set up format converter for display - try RGB format
     formatConverter.OutputPixelFormat = Pylon::PixelType_RGB8packed;
-    // Add only the bit alignment which seems available in your SDK
     formatConverter.OutputBitAlignment = Pylon::OutputBitAlignment_MsbAligned;
 
     // Create the device removal handler and register it
     pDeviceRemovalHandler = new CameraDeviceRemovalHandler(this);
+
+    // Initialize double buffering
+    InitializeDoubleBuffering();
 }
 
-// Update CameraWindow::~CameraWindow()
 CameraWindow::~CameraWindow()
 {
     try {
         // First, stop the grabbing thread if it's running
         if (threadRunning.exchange(false) && grabThread.joinable()) {
+            std::cout << "Joining grab thread..." << std::endl;
             grabThread.join();
         }
 
@@ -94,6 +98,48 @@ CameraWindow::~CameraWindow()
     catch (...) {
         // Catch any exceptions to ensure destruction completes
     }
+}
+
+void CameraWindow::InitializeDoubleBuffering()
+{
+    // Create two buffer objects
+    m_frontBuffer = std::make_unique<ImageBuffer>();
+    m_backBuffer = std::make_unique<ImageBuffer>();
+
+    // Initialize buffer properties
+    m_frontBuffer->width = 0;
+    m_frontBuffer->height = 0;
+    m_frontBuffer->isValid = false;
+
+    m_backBuffer->width = 0;
+    m_backBuffer->height = 0;
+    m_backBuffer->isValid = false;
+}
+
+void CameraWindow::SwapBuffers()
+{
+    if (!m_useDoubleBuffering) return;
+
+    std::lock_guard<std::mutex> lock(m_bufferMutex);
+
+    if (m_backBuffer->isValid) {
+        // Swap the buffers
+        std::swap(m_frontBuffer, m_backBuffer);
+    }
+}
+
+void CameraWindow::UpdateBackBuffer(const uint8_t* imageData, uint32_t width, uint32_t height)
+{
+    if (!m_useDoubleBuffering || !imageData) return;
+
+    std::lock_guard<std::mutex> lock(m_bufferMutex);
+
+    // Resize the buffer if needed
+    m_backBuffer->Resize(width, height);
+
+    // Copy the image data
+    std::memcpy(m_backBuffer->data.data(), imageData, width * height * 3);
+    m_backBuffer->isValid = true;
 }
 
 bool CameraWindow::Initialize()
@@ -155,6 +201,22 @@ bool CameraWindow::Connect()
             // Ignore if not available for this camera
         }
 
+        // Try to optimize GigE packet size if available
+        try {
+            // Check if this is a GigE camera
+            if (camera.GetTLNodeMap().GetNode("GevSCPSPacketSize")) {
+                Pylon::CIntegerParameter packetSize(camera.GetTLNodeMap(), "GevSCPSPacketSize");
+                // Get the maximum allowed packet size
+                int64_t maxPacketSize = packetSize.GetMax();
+                // Set to maximum value for optimal performance
+                packetSize.SetValue(maxPacketSize);
+                std::cout << "Set GigE packet size to maximum: " << packetSize.GetValue() << std::endl;
+            }
+        }
+        catch (...) {
+            // Ignore if not available
+        }
+
         // Start grabbing (continuous mode)
         camera.StartGrabbing(Pylon::GrabStrategy_LatestImageOnly);
 
@@ -173,8 +235,6 @@ bool CameraWindow::Connect()
     }
 }
 
-
-// Update the CameraWindow::Disconnect() method in camera_window.cpp
 void CameraWindow::Disconnect()
 {
     LogResourceState(); // Log state before disconnection
@@ -263,8 +323,6 @@ void CameraWindow::HandleDeviceRemoval()
     }
 }
 
-
-
 bool CameraWindow::IsCameraDeviceRemoved() const
 {
     return isDeviceRemoved || (isConnected && camera.IsCameraDeviceRemoved());
@@ -327,35 +385,50 @@ bool CameraWindow::TryReconnectCamera()
     return result;
 }
 
-// Thread function for continuous frame grabbing
 void CameraWindow::GrabThreadFunction()
 {
+    std::cout << "Grab thread started" << std::endl;
+    int frameCounter = 0;
+
+    // Frame rate control variables
+    const std::chrono::microseconds frameDuration(1000000 / m_targetFPS);
+
     while (threadRunning.load() && camera.IsGrabbing())
     {
+        // Record start time for frame rate control
+        auto frameStart = std::chrono::steady_clock::now();
+
         try {
-            // Wait for an image and grab it (timeout 1000ms)
+            // Wait for an image (use shorter timeout for better responsiveness)
             Pylon::CGrabResultPtr localGrabResult;
-            if (camera.RetrieveResult(1000, localGrabResult, Pylon::TimeoutHandling_Return))
+            if (camera.RetrieveResult(50, localGrabResult, Pylon::TimeoutHandling_Return))
             {
                 if (localGrabResult->GrabSucceeded())
                 {
-                    // Lock mutex while updating the image
-                    std::lock_guard<std::mutex> lock(imageMutex);
+                    // Process the image with minimal locking
+                    {
+                        std::lock_guard<std::mutex> lock(imageMutex);
 
-                    // Update the grab result
-                    ptrGrabResult = localGrabResult;
+                        // Update the grab result
+                        ptrGrabResult = localGrabResult;
 
-                    // Get pixel format to see what we're dealing with
-                    Pylon::EPixelType pixelType = ptrGrabResult->GetPixelType();
+                        // Convert the grabbed buffer to a pylon image
+                        pylonImage.AttachGrabResultBuffer(ptrGrabResult);
 
-                    // Convert the grabbed buffer to a pylon image
-                    pylonImage.AttachGrabResultBuffer(ptrGrabResult);
+                        // Convert to a format suitable for display
+                        formatConverter.Convert(formatConverterOutput, pylonImage);
 
-                    // Print info about the image
-                    //printf("Grabbed image: %d x %d, PixelType: %d\n", pylonImage.GetWidth(), pylonImage.GetHeight(), pixelType);
+                        frameCounter++;
+                    }
 
-                    // Convert to a format suitable for display
-                    formatConverter.Convert(formatConverterOutput, pylonImage);
+                    // Update back buffer for double buffering if enabled
+                    if (m_useDoubleBuffering) {
+                        const uint8_t* pImageBuffer = static_cast<uint8_t*>(formatConverterOutput.GetBuffer());
+                        uint32_t width = formatConverterOutput.GetWidth();
+                        uint32_t height = formatConverterOutput.GetHeight();
+
+                        UpdateBackBuffer(pImageBuffer, width, height);
+                    }
 
                     // Signal that a new frame is ready
                     newFrameReady.store(true);
@@ -371,11 +444,25 @@ void CameraWindow::GrabThreadFunction()
                 HandleDeviceRemoval();
                 break; // Exit the thread loop
             }
+
+            // Add a short delay after errors
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
-        // Small sleep to avoid maxing out CPU
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        // Calculate time spent and sleep to maintain target frame rate
+        auto frameEnd = std::chrono::steady_clock::now();
+        auto frameTime = std::chrono::duration_cast<std::chrono::microseconds>(frameEnd - frameStart);
+
+        if (frameTime < frameDuration) {
+            std::this_thread::sleep_for(frameDuration - frameTime);
+        }
+        else {
+            // Still yield to prevent tight CPU loop
+            std::this_thread::yield();
+        }
     }
+
+    std::cout << "Grab thread exiting after grabbing " << frameCounter << " frames" << std::endl;
 }
 
 bool CameraWindow::GrabFrame()
@@ -386,11 +473,24 @@ bool CameraWindow::GrabFrame()
         return false;
     }
 
-    // Lock mutex while accessing the image
-    std::lock_guard<std::mutex> lock(imageMutex);
+    if (m_useDoubleBuffering) {
+        // Swap buffers to get the latest frame
+        SwapBuffers();
 
-    // Update OpenGL texture with new image data
-    UpdateTexture();
+        // Update texture from the front buffer
+        if (m_frontBuffer->isValid) {
+            UpdateTextureFromBuffer(
+                m_frontBuffer->data.data(),
+                m_frontBuffer->width,
+                m_frontBuffer->height
+            );
+        }
+    }
+    else {
+        // Use traditional update method
+        std::lock_guard<std::mutex> lock(imageMutex);
+        UpdateTexture();
+    }
 
     // Reset the new frame flag
     newFrameReady.store(false);
@@ -437,6 +537,7 @@ bool CameraWindow::SaveImageToDisk(const std::string& filename)
         return true;
     }
     catch (const Pylon::GenericException& e) {
+        std::cerr << "Error saving image: " << e.GetDescription() << std::endl;
         return false;
     }
 }
@@ -478,6 +579,7 @@ void CameraWindow::StopCapture()
         }
     }
 }
+
 void CameraWindow::LogResourceState() const
 {
     std::cout << "Camera resource state:" << std::endl;
@@ -486,8 +588,8 @@ void CameraWindow::LogResourceState() const
     std::cout << "  Is grabbing: " << (isConnected && camera.IsGrabbing() ? "Yes" : "No") << std::endl;
     std::cout << "  Texture initialized: " << (textureInitialized ? "Yes" : "No") << std::endl;
     std::cout << "  Device removed: " << (isDeviceRemoved ? "Yes" : "No") << std::endl;
+    std::cout << "  Double buffering: " << (m_useDoubleBuffering ? "Enabled" : "Disabled") << std::endl;
 }
-
 
 void CameraWindow::UpdateTexture()
 {
@@ -495,15 +597,29 @@ void CameraWindow::UpdateTexture()
     uint32_t width = formatConverterOutput.GetWidth();
     uint32_t height = formatConverterOutput.GetHeight();
 
-    if (width == 0 || height == 0) {
+    if (width == 0 || height == 0 || !formatConverterOutput.IsValid()) {
         return;
     }
 
     // Get pointer to image data
     const uint8_t* pImageBuffer = static_cast<uint8_t*>(formatConverterOutput.GetBuffer());
+    if (!pImageBuffer) {
+        return;
+    }
 
-    // Debug output - just use dimensions
-    //printf("Image dimensions: %d x %d\n", width, height);
+    // Use the common method to update texture
+    UpdateTextureFromBuffer(pImageBuffer, width, height);
+}
+
+void CameraWindow::UpdateTextureFromBuffer(const uint8_t* pImageBuffer, uint32_t width, uint32_t height)
+{
+    if (!pImageBuffer || width == 0 || height == 0) {
+        return;
+    }
+
+    // Static variables to track texture size
+    static uint32_t lastWidth = 0;
+    static uint32_t lastHeight = 0;
 
     // Create texture if not already created
     if (!textureInitialized) {
@@ -514,17 +630,28 @@ void CameraWindow::UpdateTexture()
     // Bind the texture
     glBindTexture(GL_TEXTURE_2D, textureID);
 
-    // Set texture parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    // Set texture parameters only once
+    if (lastWidth == 0 && lastHeight == 0) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
 
-    // Set proper alignment for pixel data - use 1-byte alignment
+    // Set proper alignment for pixel data
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-    // Upload the image data to GPU
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
+    // Only recreate texture if dimensions have changed
+    if (width != lastWidth || height != lastHeight) {
+        // Allocate new texture with new dimensions
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
+        lastWidth = width;
+        lastHeight = height;
+    }
+    else {
+        // Update existing texture (more efficient)
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
+    }
 
     // Unbind the texture
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -535,7 +662,7 @@ void CameraWindow::RenderUI()
     // Creating ImGui window for the camera
     ImGui::Begin("Basler Camera");
 
-    // Check if the device was removed and try to reconnect if requested
+    // Camera device removal handling
     if (isDeviceRemoved && attemptReconnect) {
         ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Camera disconnected!");
 
@@ -552,11 +679,11 @@ void CameraWindow::RenderUI()
         return;
     }
 
+    // Camera initialization and connection controls
     if (!isInitialized) {
         if (ImGui::Button("Initialize Camera")) {
             Initialize();
         }
-
         ImGui::Text("Camera not initialized");
     }
     else {
@@ -583,13 +710,14 @@ void CameraWindow::RenderUI()
                 }
             }
             else {
+                // Normal camera controls when connected
                 if (ImGui::Button("Disconnect")) {
                     Disconnect();
                 }
 
                 ImGui::SameLine();
 
-                // Add capture image button
+                // Capture image button
                 if (ImGui::Button("Capture Image")) {
                     CaptureImage();
                 }
@@ -608,30 +736,55 @@ void CameraWindow::RenderUI()
                     }
                 }
 
-                // We don't call GrabFrame() here anymore, we just check if a new frame is ready
-                // Render the latest captured frame
-                bool hasValidFrame = false;
+                // Rate-limit UI updates for better performance
+                static float lastFrameUpdateTime = 0.0f;
+                float currentTime = ImGui::GetTime();
+                static const float TARGET_FRAME_UPDATE_INTERVAL = 1.0f / 30.0f; // 30 FPS for UI updates
 
-                // Use a scoped lock to minimize lock time during UI rendering
-                {
+                bool hasValidFrame = false;
+                bool shouldUpdateFrame = (currentTime - lastFrameUpdateTime) >= TARGET_FRAME_UPDATE_INTERVAL;
+
+                // Check if we have a valid frame
+                if (m_useDoubleBuffering) {
+                    hasValidFrame = m_frontBuffer->isValid;
+                }
+                else {
+                    // Use a scoped lock with minimal scope to check frame status
                     std::lock_guard<std::mutex> lock(imageMutex);
-                    if (ptrGrabResult && ptrGrabResult->GrabSucceeded()) {
-                        hasValidFrame = true;
-                    }
+                    hasValidFrame = ptrGrabResult && ptrGrabResult->GrabSucceeded();
                 }
 
                 if (hasValidFrame) {
-                    // GrabFrame now just updates the texture if a new frame is available
-                    GrabFrame();
+                    // Only update the frame if it's time
+                    if (shouldUpdateFrame && newFrameReady.load()) {
+                        // Update the frame
+                        GrabFrame();
+                        lastFrameUpdateTime = currentTime;
+                    }
 
-                    // Lock mutex for accessing image dimensions
-                    std::lock_guard<std::mutex> lock(imageMutex);
+                    // Get image dimensions for display
+                    uint32_t width = 0;
+                    uint32_t height = 0;
+
+                    if (m_useDoubleBuffering) {
+                        if (m_frontBuffer->isValid) {
+                            width = m_frontBuffer->width;
+                            height = m_frontBuffer->height;
+                        }
+                    }
+                    else {
+                        // Brief lock to get dimensions
+                        std::lock_guard<std::mutex> lock(imageMutex);
+                        if (formatConverterOutput.IsValid()) {
+                            width = formatConverterOutput.GetWidth();
+                            height = formatConverterOutput.GetHeight();
+                        }
+                    }
 
                     // Display image dimensions
-                    uint32_t width = formatConverterOutput.GetWidth();
-                    uint32_t height = formatConverterOutput.GetHeight();
-
-                    ImGui::Text("Image: %d x %d", width, height);
+                    if (width > 0 && height > 0) {
+                        ImGui::Text("Image: %d x %d", width, height);
+                    }
 
                     // Display the texture with ImGui
                     if (textureInitialized) {
@@ -639,7 +792,9 @@ void CameraWindow::RenderUI()
                         float availWidth = ImGui::GetContentRegionAvail().x;
 
                         // Calculate aspect ratio to maintain proportions
-                        float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
+                        float aspectRatio = (width > 0 && height > 0) ?
+                            static_cast<float>(width) / static_cast<float>(height) :
+                            16.0f / 9.0f; // default to 16:9 if no valid dimensions
 
                         // Calculate height based on width to maintain aspect ratio
                         float displayWidth = (std::min)(availWidth, 800.0f); // Limit max width
@@ -651,6 +806,22 @@ void CameraWindow::RenderUI()
                             ImVec2(0, 0),        // UV coordinates of the top-left corner
                             ImVec2(1, 1));       // UV coordinates of the bottom-right corner
                     }
+                }
+
+                // Add frame rate control settings
+                if (ImGui::CollapsingHeader("Performance Settings")) {
+                    int fps = m_targetFPS;
+                    ImGui::Text("Frame Rate Control");
+                    if (ImGui::SliderInt("Target FPS", &fps, 10, 60)) {
+                        m_targetFPS = fps;
+                    }
+
+                    bool useDoubleBuffering = m_useDoubleBuffering;
+                    if (ImGui::Checkbox("Use Double Buffering", &useDoubleBuffering)) {
+                        m_useDoubleBuffering = useDoubleBuffering;
+                    }
+
+                    ImGui::Text("Double buffering reduces UI thread blocking");
                 }
             }
         }
@@ -665,4 +836,3 @@ bool CameraWindow::IsDone() const
     // For now, we always return false since we handle window closing in main
     return false;
 }
-
