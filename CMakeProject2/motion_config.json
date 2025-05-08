@@ -162,7 +162,7 @@
         },
         {
           "Conditions": {
-            "IsBidirectional": false,
+            "IsBidirectional": true,
             "RequiresOperatorApproval": false,
             "TimeoutSeconds": 0
           },
