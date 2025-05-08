@@ -466,26 +466,35 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
 
 	// Set window appearance
 	ImGui::SetNextWindowPos(ImVec2(50, 50), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowSize(ImVec2(280, 90), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(280, 120), ImGuiCond_FirstUseEver);
 	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.2f, 0.95f)); // Dark blue/gray
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f); // Sharp corners
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f); // Thin border
 
-	// Create window
+	// Create window - WITHOUT the ImGuiWindowFlags_NoResize flag
 	ImGui::Begin(windowName.c_str(), nullptr,
 		ImGuiWindowFlags_NoTitleBar |
-		ImGuiWindowFlags_NoResize |
+		// ImGuiWindowFlags_NoResize | <- REMOVE THIS LINE to make it resizable
 		ImGuiWindowFlags_NoScrollbar |
 		ImGuiWindowFlags_NoCollapse);
 
 	// Display name on left
+	// Push custom color for display name
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.7f, 1.0f, 1.0f)); // Blue color
+	// Display name on left
+	ImGui::SetWindowFontScale(2.0f); // Make it larger
 	ImGui::Text("%s", displayName.c_str());
+	// Pop color
+	ImGui::PopStyleColor();
 
 	// Display unit on right (if any)
 	if (!unitDisplay.empty()) {
 		float windowWidth = ImGui::GetWindowSize().x;
 		ImGui::SameLine(windowWidth - ImGui::CalcTextSize(unitDisplay.c_str()).x - 20);
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.7f, 1.0f, 1.0f)); // Blue color
+		ImGui::SetWindowFontScale(2.0f); // Make it larger
 		ImGui::Text("%s", unitDisplay.c_str());
+		ImGui::PopStyleColor();
 	}
 
 	// Add separator line
@@ -497,7 +506,7 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
 
 	// Set a monospaced font and large size for the digital display look
 	ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Assume monospace font
-	ImGui::SetWindowFontScale(3.5f); // Make it larger
+	ImGui::SetWindowFontScale(5.0f); // Make it larger
 
 	// Calculate width for right alignment of the value
 	float windowWidth = ImGui::GetWindowSize().x;

@@ -100,13 +100,15 @@ namespace ProcessBuilders {
 
 		auto sequence = std::make_unique<SequenceStep>("Pick and Place Left Lens", machineOps);
 
-		// 1. Move hex-left to pick lens approach position
-		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"hex-left", "Process_Flow", "node_5557"));
+
 
 		// 2. Move hex-left to pick lens position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"hex-left", "Process_Flow", "node_5647"));
+
+
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4186"));	//see pick collimate lens
 
 		// 3. Set output L-gripper (pin 0) to grab the lens
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
@@ -127,13 +129,10 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
 			"IOBottom", 0, true, 500));
 
-		// 8. Move back to approach position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"hex-left", "Process_Flow", "node_5557"));
+			"gantry-main", "Process_Flow", "node_4137"));	//see collimate lens
 
-		// 9. Move to placement approach position
-		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"hex-left", "Process_Flow", "node_5620"));
+
 
 		// 10. Move to placement position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
@@ -147,13 +146,15 @@ namespace ProcessBuilders {
 
 		auto sequence = std::make_unique<SequenceStep>("Pick and Place Right Lens", machineOps);
 
-		// 1. Move hex-right to pick lens approach position
-		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"hex-right", "Process_Flow", "node_5211"));
+
 
 		// 2. Move hex-right to pick lens position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"hex-right", "Process_Flow", "node_5245"));
+
+
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4209"));	//see pick focus lens
 
 		// 3. Set output R-gripper (pin 2) to grab the lens
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
@@ -174,13 +175,10 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
 			"IOBottom", 2, true, 500));
 
-		// 8. Move back to approach position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"hex-right", "Process_Flow", "node_5211"));
+			"gantry-main", "Process_Flow", "node_4156"));	//see focus lens
 
-		// 9. Move to placement approach position
-		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"hex-right", "Process_Flow", "node_5235"));
+
 
 		// 10. Move to placement position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
