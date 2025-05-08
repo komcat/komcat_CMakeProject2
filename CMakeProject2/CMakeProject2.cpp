@@ -63,6 +63,8 @@
 #include "include/cld101x_operations.h"
 #include <iostream>
 #include <memory>
+#include "include/ui/VerticalToolbarMenu.h"
+#include "include/ui/HierarchicalControllerAdapters.h" // Include the new adapter file
 
 #pragma region header functions
 
@@ -1117,37 +1119,90 @@ int main(int argc, char* argv[])
 	ProcessControlPanel processControlPanel(machineOps);
 	logger->LogInfo("ProcessControlPanel initialized");
 
-	// Add it to the toolbar menu
-		//set up toolbarmenu
-	ToolbarMenu toolbarMenu;
-	toolbarMenu.AddReference(CreateTogglableUI(processControlPanel, "Process Control"));
-	// Add components with standard methods
+	//// Add it to the toolbar menu
+	//	//set up toolbarmenu
+	//ToolbarMenu toolbarMenu;
+	//toolbarMenu.AddReference(CreateTogglableUI(processControlPanel, "Process Control"));
+	//// Add components with standard methods
 
-	toolbarMenu.AddReference(CreateTogglableUI(hexapodScanningUI, "Scanning Optimizer"));
-	toolbarMenu.AddReference(CreateTogglableUI(globalJogPanel, "Global Jog Panel"));
-	toolbarMenu.AddReference(CreateTogglableUI(dataChartManager, "Data Chart"));
-	toolbarMenu.AddReference(CreateTogglableUI(dataClientManager, "Data TCP/IP"));
-	toolbarMenu.AddReference(CreateTogglableUI(ioControlPanel, "IO Quick Control"));
-	// Add to toolbar menu
-	toolbarMenu.AddReference(CreateTogglableUI(cld101xManager, "Laser TEC Cntrl"));
-	toolbarMenu.AddReference(CreateTogglableUI(pneumaticUI, "Pneumatic"));
-	// Add controller managers using our custom adapters
-	toolbarMenu.AddReference(CreateACSControllerAdapter(acsControllerManager, "Gantry"));
-	toolbarMenu.AddReference(CreatePIControllerAdapter(piControllerManager, "PI"));
-	// Add PIAnalogManager as a toggleable UI component
-	//toolbarMenu.AddReference(std::shared_ptr<ITogglableUI>(&piAnalogManager));
+	//toolbarMenu.AddReference(CreateTogglableUI(hexapodScanningUI, "Scanning Optimizer"));
+	//toolbarMenu.AddReference(CreateTogglableUI(globalJogPanel, "Global Jog Panel"));
+	//toolbarMenu.AddReference(CreateTogglableUI(dataChartManager, "Data Chart"));
+	//toolbarMenu.AddReference(CreateTogglableUI(dataClientManager, "Data TCP/IP"));
+	//toolbarMenu.AddReference(CreateTogglableUI(ioControlPanel, "IO Quick Control"));
+	//// Add to toolbar menu
+	//toolbarMenu.AddReference(CreateTogglableUI(cld101xManager, "Laser TEC Cntrl"));
+	//toolbarMenu.AddReference(CreateTogglableUI(pneumaticUI, "Pneumatic"));
+	//// Add controller managers using our custom adapters
+	//toolbarMenu.AddReference(CreateACSControllerAdapter(acsControllerManager, "Gantry"));
+	//toolbarMenu.AddReference(CreatePIControllerAdapter(piControllerManager, "PI"));
+	//// Add PIAnalogManager as a toggleable UI component
+	////toolbarMenu.AddReference(std::shared_ptr<ITogglableUI>(&piAnalogManager));
 
-	toolbarMenu.AddReference(CreateTogglableUI(ioUI, "IO Control"));
-	toolbarMenu.AddReference(CreateTogglableUI(configEditor, "Config Editor"));
-	toolbarMenu.AddReference(CreateTogglableUI(graphVisualizer, "Graph Visualizer"));
-	toolbarMenu.AddReference(CreateTogglableUI(productConfigManager, "Products Config"));
-	// Add it to the toolbar menu
-	//toolbarMenu.AddReference(CreateTogglableUI(hexRightWindow, "Hex-Right"));
+	//toolbarMenu.AddReference(CreateTogglableUI(ioUI, "IO Control"));
+	//toolbarMenu.AddReference(CreateTogglableUI(configEditor, "Config Editor"));
+	//toolbarMenu.AddReference(CreateTogglableUI(graphVisualizer, "Graph Visualizer"));
+	//toolbarMenu.AddReference(CreateTogglableUI(productConfigManager, "Products Config"));
+	//// Add it to the toolbar menu
+	////toolbarMenu.AddReference(CreateTogglableUI(hexRightWindow, "Hex-Right"));
+
+	//// Log successful initialization
+	//logger->LogInfo("ToolbarMenu initialized with " +
+	//	std::to_string(toolbarMenu.GetComponentCount()) +
+	//	" components");
+
+
+
+
+// Create the vertical toolbar
+	auto toolbarVertical = std::make_unique<VerticalToolbarMenu>();
+	toolbarVertical->SetWidth(200); // Set toolbar width
+
+	// Create categories
+	auto motorsCategory = toolbarVertical->CreateCategory("Motors");
+	auto manualCategory = toolbarVertical->CreateCategory("Manual");
+	auto dataCategory = toolbarVertical->CreateCategory("Data");
+	auto productsCategory = toolbarVertical->CreateCategory("Products");
+	auto miscCategory = toolbarVertical->CreateCategory("General");
+
+	// Add direct access components to root level
+	toolbarVertical->AddReference(CreateHierarchicalUI(processControlPanel, "Process Control"));
+	toolbarVertical->AddReference(CreateHierarchicalUI(hexapodScanningUI, "Scanning Optimizer"));
+	toolbarVertical->AddReference(CreateHierarchicalUI(globalJogPanel, "Global Jog Panel"));
+
+	// Add components to Motors category
+	// Now using the renamed hierarchical adapter functions with unique names
+	toolbarVertical->AddReferenceToCategory("Motors", CreateHierarchicalPIControllerAdapter(piControllerManager, "PI"));
+	toolbarVertical->AddReferenceToCategory("Motors", CreateHierarchicalACSControllerAdapter(acsControllerManager, "Gantry"));
+
+	// Add components to Manual category
+	toolbarVertical->AddReferenceToCategory("Manual", CreateHierarchicalUI(ioUI, "IO Control"));
+	toolbarVertical->AddReferenceToCategory("Manual", CreateHierarchicalUI(pneumaticUI, "Pneumatic"));
+	toolbarVertical->AddReferenceToCategory("Manual", CreateHierarchicalUI(ioControlPanel, "IO Quick Control"));
+
+	// Add components to Data category
+	toolbarVertical->AddReferenceToCategory("Data", CreateHierarchicalUI(dataChartManager, "Data Chart"));
+	toolbarVertical->AddReferenceToCategory("Data", CreateHierarchicalUI(dataClientManager, "Data TCP/IP"));
+
+	// Add components to Products category
+	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(productConfigManager, "Products Config"));
+	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(configEditor, "Config Editor"));
+	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(graphVisualizer, "Graph Visualizer"));
+
+	// Add remaining components to the misc category
+	toolbarVertical->AddReferenceToCategory("General", CreateHierarchicalUI(cld101xManager, "Laser TEC Cntrl"));
 
 	// Log successful initialization
-	logger->LogInfo("ToolbarMenu initialized with " +
-		std::to_string(toolbarMenu.GetComponentCount()) +
-		" components");
+	logger->LogInfo("VerticalToolbarMenu initialized with " +
+		std::to_string(toolbarVertical->GetComponentCount()) +
+		" components");	
+	
+	// In your main render loop:
+	// toolbarVertical->RenderUI();
+
+
+
+
 
 
 // Main loop
@@ -1221,7 +1276,7 @@ int main(int argc, char* argv[])
 		// Add this line before the FPS display window rendering
 		//toolbar.RenderUI();
 		// Render in main loop
-		toolbarMenu.RenderUI();
+		//toolbarMenu.RenderUI();
 
 		// Render motion configuration editor UI
 		configEditor.RenderUI();
@@ -1294,11 +1349,11 @@ int main(int argc, char* argv[])
 		globalJogPanel.RenderUI();
 
 
-		RenderSimpleChart();
+		//RenderSimpleChart();
 		
 		dataChartManager.Update();
 		dataChartManager.RenderUI();
-		RenderValueDisplay();
+		//RenderValueDisplay();
 		hexapodScanningUI.RenderUI();
 
 		// Render our UI windows
@@ -1307,7 +1362,7 @@ int main(int argc, char* argv[])
 		//hexControllerWindow.RenderUI();
 		processControlPanel.RenderUI();
 
-
+		toolbarVertical->RenderUI();
 
 	
 

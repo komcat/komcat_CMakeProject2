@@ -186,9 +186,25 @@ bool ACSControllerManager::ExecutePositionMove(ACSController* controller,
 
   return success;
 }
+
+// Modified ACSControllerManager::RenderUI method with X button support
+
 void ACSControllerManager::RenderUI() {
-  // Create a window to show all controllers
-  if (!ImGui::Begin("ACS Controller Manager")) {
+  // Only render if the window is visible
+  if (!m_isWindowVisible) {
+    return;
+  }
+
+  // Create a window to show all controllers - with a close button
+  bool windowOpen = m_isWindowVisible;
+  if (!ImGui::Begin("ACS Controller Manager", &windowOpen, ImGuiWindowFlags_None)) {
+    ImGui::End();
+    return;
+  }
+
+  // Check if window was closed via the X button
+  if (!windowOpen) {
+    m_isWindowVisible = false;
     ImGui::End();
     return;
   }
@@ -245,7 +261,6 @@ void ACSControllerManager::RenderUI() {
 
     // Actions for the selected controller
     if (ImGui::Button("Open Control Panel")) {
-			//exlicitly does not show the window
       selectedControllerPtr->SetWindowVisible(true);
     }
 

@@ -38,9 +38,38 @@ public:
 
   // Render UI for all controllers
   void RenderUI();
+  // Add these new methods for UI toggling
+ // Add these methods for UI visibility control if they don't exist
+  bool IsVisible() const { return m_isWindowVisible; }
+  void ToggleWindow() {
+    m_isWindowVisible = !m_isWindowVisible;
+    // Update the visibility of all controllers
+    for (auto& [name, controller] : m_controllers) {
+      controller->SetWindowVisible(m_isWindowVisible);
+    }
+  }
 
+  // Method to directly set window visibility
+  void SetWindowVisible(bool visible) {
+    m_isWindowVisible = visible;
+    // Update the visibility of all controllers if window is visible
+    if (m_isWindowVisible) {
+      for (auto& [name, controller] : m_controllers) {
+        controller->SetWindowVisible(visible);
+      }
+    }
+  }
+  //void ToggleWindow() {
+  //  m_isWindowVisible = !m_isWindowVisible;
+  //  // Update the visibility of all controllers
+  //  for (auto& [name, controller] : m_controllers) {
+  //    controller->SetWindowVisible(m_isWindowVisible);
+  //  }
+  //}
 private:
   MotionConfigManager& m_configManager;
   std::map<std::string, std::unique_ptr<PIController>> m_controllers;
   Logger* m_logger;
+  // Add this member to track window visibility
+  bool m_isWindowVisible = false;
 };

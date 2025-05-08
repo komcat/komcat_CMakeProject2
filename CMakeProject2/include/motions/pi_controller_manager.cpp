@@ -131,9 +131,24 @@ bool PIControllerManager::MoveToNamedPosition(const std::string& deviceName, con
 // In pi_controller_manager.cpp, modify the RenderUI method:
 
 // pi_controller_manager.cpp - updated RenderUI method
+// Modified PIControllerManager::RenderUI method with X button support
+
 void PIControllerManager::RenderUI() {
-  // Create a window to show all controllers
-  if (!ImGui::Begin("PI Controller Manager")) {
+  // Only render if the window is visible
+  if (!m_isWindowVisible) {
+    return;
+  }
+
+  // Create a window with a close button
+  bool windowOpen = m_isWindowVisible;
+  if (!ImGui::Begin("PI Controller Manager", &windowOpen, ImGuiWindowFlags_None)) {
+    ImGui::End();
+    return;
+  }
+
+  // Check if window was closed via the X button
+  if (!windowOpen) {
+    m_isWindowVisible = false;
     ImGui::End();
     return;
   }
