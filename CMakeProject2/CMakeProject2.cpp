@@ -65,7 +65,8 @@
 #include <memory>
 #include "include/ui/VerticalToolbarMenu.h"
 #include "include/ui/HierarchicalControllerAdapters.h" // Include the new adapter file
-
+#include "include/ui/MotionControlHierarchicalAdapter.h"
+#include "include/camera/PylonCameraAdapter.h"
 #pragma region header functions
 
 
@@ -1119,37 +1120,7 @@ int main(int argc, char* argv[])
 	ProcessControlPanel processControlPanel(machineOps);
 	logger->LogInfo("ProcessControlPanel initialized");
 
-	//// Add it to the toolbar menu
-	//	//set up toolbarmenu
-	//ToolbarMenu toolbarMenu;
-	//toolbarMenu.AddReference(CreateTogglableUI(processControlPanel, "Process Control"));
-	//// Add components with standard methods
 
-	//toolbarMenu.AddReference(CreateTogglableUI(hexapodScanningUI, "Scanning Optimizer"));
-	//toolbarMenu.AddReference(CreateTogglableUI(globalJogPanel, "Global Jog Panel"));
-	//toolbarMenu.AddReference(CreateTogglableUI(dataChartManager, "Data Chart"));
-	//toolbarMenu.AddReference(CreateTogglableUI(dataClientManager, "Data TCP/IP"));
-	//toolbarMenu.AddReference(CreateTogglableUI(ioControlPanel, "IO Quick Control"));
-	//// Add to toolbar menu
-	//toolbarMenu.AddReference(CreateTogglableUI(cld101xManager, "Laser TEC Cntrl"));
-	//toolbarMenu.AddReference(CreateTogglableUI(pneumaticUI, "Pneumatic"));
-	//// Add controller managers using our custom adapters
-	//toolbarMenu.AddReference(CreateACSControllerAdapter(acsControllerManager, "Gantry"));
-	//toolbarMenu.AddReference(CreatePIControllerAdapter(piControllerManager, "PI"));
-	//// Add PIAnalogManager as a toggleable UI component
-	////toolbarMenu.AddReference(std::shared_ptr<ITogglableUI>(&piAnalogManager));
-
-	//toolbarMenu.AddReference(CreateTogglableUI(ioUI, "IO Control"));
-	//toolbarMenu.AddReference(CreateTogglableUI(configEditor, "Config Editor"));
-	//toolbarMenu.AddReference(CreateTogglableUI(graphVisualizer, "Graph Visualizer"));
-	//toolbarMenu.AddReference(CreateTogglableUI(productConfigManager, "Products Config"));
-	//// Add it to the toolbar menu
-	////toolbarMenu.AddReference(CreateTogglableUI(hexRightWindow, "Hex-Right"));
-
-	//// Log successful initialization
-	//logger->LogInfo("ToolbarMenu initialized with " +
-	//	std::to_string(toolbarMenu.GetComponentCount()) +
-	//	" components");
 
 
 
@@ -1169,11 +1140,13 @@ int main(int argc, char* argv[])
 	toolbarVertical->AddReference(CreateHierarchicalUI(processControlPanel, "Process Control"));
 	toolbarVertical->AddReference(CreateHierarchicalUI(hexapodScanningUI, "Scanning Optimizer"));
 	toolbarVertical->AddReference(CreateHierarchicalUI(globalJogPanel, "Global Jog Panel"));
+	toolbarVertical->AddReference(CreatePylonCameraAdapter(pylonCameraTest, "Top Camera"));
 
 	// Add components to Motors category
 	// Now using the renamed hierarchical adapter functions with unique names
 	toolbarVertical->AddReferenceToCategory("Motors", CreateHierarchicalPIControllerAdapter(piControllerManager, "PI"));
 	toolbarVertical->AddReferenceToCategory("Motors", CreateHierarchicalACSControllerAdapter(acsControllerManager, "Gantry"));
+	toolbarVertical->AddReferenceToCategory("Motors", CreateHierarchicalMotionControlAdapter(motionControlLayer, "Motion Control"));
 
 	// Add components to Manual category
 	toolbarVertical->AddReferenceToCategory("Manual", CreateHierarchicalUI(ioUI, "IO Control"));
@@ -1267,16 +1240,7 @@ int main(int argc, char* argv[])
 		// Render logger UI
 		logger->RenderUI();
 
-		//// Update all TCP clients
-		//clientManager.UpdateClients();
-
-		//// Render TCP client manager UI
-		//clientManager.RenderUI();
-
-		// Add this line before the FPS display window rendering
-		//toolbar.RenderUI();
-		// Render in main loop
-		//toolbarMenu.RenderUI();
+		toolbarVertical->RenderUI();
 
 		// Render motion configuration editor UI
 		configEditor.RenderUI();
@@ -1362,7 +1326,6 @@ int main(int argc, char* argv[])
 		//hexControllerWindow.RenderUI();
 		processControlPanel.RenderUI();
 
-		toolbarVertical->RenderUI();
 
 	
 

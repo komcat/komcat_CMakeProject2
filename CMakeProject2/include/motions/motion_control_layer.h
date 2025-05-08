@@ -14,6 +14,9 @@
 #include <functional>
 #include <condition_variable>
 
+// Forward declaration of the adapter class
+class MotionControlHierarchicalAdapter;
+
 // Class to handle path planning and execution
 class MotionControlLayer {
 public:
@@ -38,16 +41,21 @@ public:
   std::string GetNextNodeId() const;
   double GetPathProgress() const; // 0.0 to 1.0
 
-  // UI rendering (minimal, can be removed or expanded later)
+  // UI visibility control for integration with VerticalToolbarMenu
+  bool IsVisible() const { return m_isWindowVisible; }
+  void ToggleWindow() { m_isWindowVisible = !m_isWindowVisible; }
+  void SetWindowVisible(bool visible) { m_isWindowVisible = visible; }
+
+  // UI rendering
   void RenderUI();
+
   // New methods to get current position information
   std::string GetNodeIdFromCurrentPosition(const std::string& graphName, const std::string& deviceName) const;
   bool IsDeviceAtNode(const std::string& graphName, const std::string& nodeId, double tolerance = 0.01) const;
   bool GetDeviceCurrentNode(const std::string& graphName, const std::string& deviceName, std::string& nodeId) const;
-  // Helper to compare positions
 
-  const Node* MotionControlLayer::GetNodeById(const std::string& graphName, const std::string& nodeId) const;
-
+  // Helper to get node by ID
+  const Node* GetNodeById(const std::string& graphName, const std::string& nodeId) const;
 
   // Get the current position of a device
   bool GetCurrentPosition(const std::string& deviceName, PositionStruct& position) const;
@@ -60,7 +68,7 @@ public:
 
   // Move a device relative to its current position (non-blocking if specified)
   bool MoveRelative(const std::string& deviceName, const std::string& axis, double distance, bool blocking = true);
-  // In motion_control_layer.h, add this to the public section:
+  // Get current position
   bool GetCurrentPosition(const std::string& deviceName, PositionStruct& currentPosition);
 
   // Helper to determine which controller manager to use for a device
@@ -69,6 +77,7 @@ public:
   const MotionConfigManager& GetConfigManager() const {
     return m_configManager;
   }
+
 private:
   // References to managers
   MotionConfigManager& m_configManager;
@@ -93,12 +102,13 @@ private:
   CompletionCallback m_pathCompletionCallback;
   CompletionCallback m_sequenceCompletionCallback;
 
+  // UI state
+  bool m_isWindowVisible = false;
+
   // Private methods
   void ExecutionThreadFunc();
   bool MoveToNode(const Node& node);
   bool ValidateNodeTransition(const Node& fromNode, const Node& toNode);
-
-
 
   // Helper functions to get node information
   std::string GetNodeLabel(const std::string& graphName, const std::string& nodeId) const;
@@ -115,8 +125,7 @@ private:
   std::map<std::string, PositionStruct> m_deviceCurrentPositions;
   void UpdateDevicePosition(const std::string& deviceName);
 
-
-  // Helper to compare positions - add to motion_control_layer.h private section
+  // Helper to compare positions
   bool IsPositionsEqual(const PositionStruct& pos1, const PositionStruct& pos2, double tolerance) const {
     // Check if all axes are within tolerance
     bool xOk = std::abs(pos1.x - pos2.x) <= tolerance;
@@ -131,5 +140,6 @@ private:
     return xOk && yOk && zOk && uOk && vOk && wOk;
   }
 
+  // Friend declaration for the adapter class
+  friend class MotionControlHierarchicalAdapter;
 };
-

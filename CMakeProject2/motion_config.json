@@ -247,6 +247,17 @@
           "Label": "New Edge",
           "Source": "node_5620",
           "Target": "node_5557"
+        },
+        {
+          "Conditions": {
+            "IsBidirectional": true,
+            "RequiresOperatorApproval": false,
+            "TimeoutSeconds": 0
+          },
+          "Id": "edge_3452",
+          "Label": "Sled to PIC",
+          "Source": "node_4083",
+          "Target": "node_4107"
         }
       ],
       "Nodes": [

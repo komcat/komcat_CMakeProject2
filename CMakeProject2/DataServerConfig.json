@@ -8,7 +8,7 @@
       "Unit": "A",
       "displayUnitSuffix":true,
       "Description": "Keithley multimeter current readings via GPIB",
-      "AutoConnect": false,
+      "AutoConnect": true,
       "LogData": true
     },
     {

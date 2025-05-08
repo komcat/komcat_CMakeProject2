@@ -426,9 +426,17 @@ bool MotionControlLayer::IsDevicePIController(const std::string& deviceName) con
 
 
 // Updated RenderUI method for MotionControlLayer class without using std::set
+// Updated RenderUI method for motion_control_layer.cpp
+// This is just the RenderUI method - the rest of the file remains unchanged
+
 void MotionControlLayer::RenderUI() {
+  // Only render if the window is visible
+  if (!m_isWindowVisible) {
+    return;
+  }
+
   // Simple UI for monitoring and control
-  if (!ImGui::Begin("Motion Control")) {
+  if (!ImGui::Begin("Motion Control", &m_isWindowVisible, ImGuiWindowFlags_None)) {
     ImGui::End();
     return;
   }
@@ -499,7 +507,7 @@ void MotionControlLayer::RenderUI() {
     ImGui::EndCombo();
   }
 
-  // Controller filter dropdown - NEW ADDITION USING VECTOR INSTEAD OF SET
+  // Controller filter dropdown
   if (ImGui::BeginCombo("Controller", strlen(controllerFilter) > 0 ? controllerFilter : "All Controllers")) {
     // Add "All Controllers" option
     bool isAllSelected = (strlen(controllerFilter) == 0);
@@ -748,6 +756,8 @@ void MotionControlLayer::RenderUI() {
 
   ImGui::End();
 }
+
+
 
 // Helper function to get a node by its ID (added as a private member to MotionControlLayer)
 const Node* MotionControlLayer::GetNodeById(const std::string& graphName, const std::string& nodeId) const {
