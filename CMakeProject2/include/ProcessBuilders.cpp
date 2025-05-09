@@ -2,6 +2,43 @@
 
 namespace ProcessBuilders {
 
+
+	std::unique_ptr<SequenceStep> BuildInitializationSequenceParallel(MachineOperations& machineOps) {
+		auto sequence = std::make_unique<SequenceStep>("Initialization", machineOps);
+
+		// Define device positions for parallel movement
+		std::vector<std::pair<std::string, std::string>> initialPositions = {
+				{"gantry-main", "safe"},      // Move gantry to safe position
+				{"hex-left", "home"},         // Move left hexapod to home
+				{"hex-right", "home"}         // Move right hexapod to home
+		};
+
+		// Add parallel movement operation
+		sequence->AddOperation(std::make_shared<ParallelDeviceMovementOperation>(
+			initialPositions, "Move all devices to initial positions"));
+
+		// Add the remaining operations to be executed sequentially
+		sequence->AddOperation(std::make_shared<SetOutputOperation>(
+			"IOBottom", 0, false));  // Clear output L_Gripper (pin 0)
+
+		sequence->AddOperation(std::make_shared<SetOutputOperation>(
+			"IOBottom", 2, false));  // Clear output R_Gripper (pin 2)
+
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>(
+			"UV_Head"));  // Retract UV_Head pneumatic
+
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>(
+			"Dispenser_Head"));  // Retract Dispenser_Head pneumatic
+
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>(
+			"Pick_Up_Tool"));  // Retract Pick_Up_Tool pneumatic
+
+		sequence->AddOperation(std::make_shared<SetOutputOperation>(
+			"IOBottom", 10, true));  // Set output Vacuum_Base (pin 10)
+
+		return sequence;
+	}
+
 	std::unique_ptr<SequenceStep> BuildInitializationSequence(MachineOperations& machineOps) {
 		auto sequence = std::make_unique<SequenceStep>("Initialization", machineOps);
 

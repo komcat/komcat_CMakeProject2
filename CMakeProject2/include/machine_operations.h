@@ -105,6 +105,31 @@ public:
   bool GetScanPeak(const std::string& deviceName, double& value, PositionStruct& position) const;
 
   bool MachineOperations::SafelyCleanupScanner(const std::string& deviceName);
+
+  bool MachineOperations::WaitForDeviceMotionCompletion(const std::string& deviceName, int timeoutMs);
+  bool MachineOperations::IsDeviceMoving(const std::string& deviceName);
+
+  bool MachineOperations::IsDevicePIController(const std::string& deviceName) const;
+
+  // Public logging methods for operation classes to use
+  void LogInfo(const std::string& message) const {
+    if (m_logger) {
+      m_logger->LogInfo("MachineOperations: " + message);
+    }
+  }
+
+  void LogWarning(const std::string& message) const {
+    if (m_logger) {
+      m_logger->LogWarning("MachineOperations: " + message);
+    }
+  }
+
+  void LogError(const std::string& message) const {
+    if (m_logger) {
+      m_logger->LogError("MachineOperations: " + message);
+    }
+  }
+
 private:
   MotionControlLayer& m_motionLayer;
   PIControllerManager& m_piControllerManager;

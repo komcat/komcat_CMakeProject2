@@ -78,6 +78,23 @@ public:
     return m_configManager;
   }
 
+
+  const PIControllerManager& GetPIControllerManager() const {
+    return m_piControllerManager;
+  }
+
+  const ACSControllerManager& GetACSControllerManager() const {
+    return m_acsControllerManager;
+  }
+
+  // Non-const versions if needed for operations that modify the managers
+  PIControllerManager& GetPIControllerManager() {
+    return m_piControllerManager;
+  }
+
+  ACSControllerManager& GetACSControllerManager() {
+    return m_acsControllerManager;
+  }
 private:
   // References to managers
   MotionConfigManager& m_configManager;

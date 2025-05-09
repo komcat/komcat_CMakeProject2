@@ -441,3 +441,47 @@ private:
   std::vector<std::string> m_axesToScan;
   int m_timeoutMs;
 };
+
+
+// Add this to SequenceStep.h after the other operation classes
+class ParallelDeviceMovementOperation : public SequenceOperation {
+public:
+  // Constructor for named position movements
+  ParallelDeviceMovementOperation(
+    std::vector<std::pair<std::string, std::string>> devicePositions,
+    const std::string& description = "Parallel Device Movement")
+    : m_devicePositions(std::move(devicePositions)), m_description(description) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Start all movements in non-blocking mode
+    for (const auto& [deviceName, positionName] : m_devicePositions) {
+      ops.LogInfo("Starting movement of " + deviceName + " to position " + positionName);
+      if (!ops.MoveToPointName(deviceName, positionName, false)) {
+        ops.LogError("Failed to start movement for device " + deviceName);
+        return false;
+      }
+    }
+
+    // Wait for all devices to complete their movements
+    bool allSucceeded = true;
+    for (const auto& [deviceName, positionName] : m_devicePositions) {
+      ops.LogInfo("Waiting for " + deviceName + " to complete movement");
+      if (!ops.WaitForDeviceMotionCompletion(deviceName,30000)) {
+        ops.LogError("Timeout waiting for device " + deviceName + " to complete movement");
+        allSucceeded = false;
+        // Continue waiting for other devices even if one fails
+      }
+    }
+
+    return allSucceeded;
+  }
+
+  std::string GetDescription() const override {
+    return m_description;
+  }
+
+private:
+  std::vector<std::pair<std::string, std::string>> m_devicePositions;
+  std::string m_description;
+};

@@ -115,6 +115,38 @@ void ProcessControlPanel::RenderUI() {
     ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
     ImGui::Text("Activates base vacuum");
   }
+  else if (m_selectedProcess == "InitializationParallel") {
+    ImGui::TextWrapped("Initializes all hardware with optimized parallel movements. This version moves multiple devices simultaneously for faster startup.");
+    ImGui::Spacing();
+
+    float bulletSpacing = 24.0f; // Increased spacing for better readability
+    float indent = 10.0f;
+
+    // Styled bullets
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+    ImGui::Text("Moves all devices (gantry, hex-left, hex-right) simultaneously");
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+    ImGui::Text("Releases left and right grippers");
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+    ImGui::Text("Retracts pneumatic slides");
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+    ImGui::Text("Activates base vacuum");
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+    ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+    ImGui::Text("Improves initialization speed through parallel execution");
+  }
   else if (m_selectedProcess == "Probing") {
     ImGui::TextWrapped("Positions the gantry to inspect key components and waits for user confirmation at each step.");
     ImGui::Spacing();
@@ -328,7 +360,17 @@ void ProcessControlPanel::RenderUI() {
 
     ImGui::PopStyleColor(3);
   }
+  // Add a debug section to show device connection status
+  if (ImGui::CollapsingHeader("Device Connection Status")) {
+    // For each device, show the connection status
+    std::vector<std::string> devices = { "gantry-main", "hex-left", "hex-right" };
 
+    for (const auto& deviceName : devices) {
+      bool isConnected = m_machineOps.IsDeviceConnected(deviceName);
+      ImGui::Text("%s: %s", deviceName.c_str(),
+        isConnected ? "Connected" : "Not Connected");
+    }
+  }
   ImGui::End();
 }
 
@@ -389,6 +431,9 @@ void ProcessControlPanel::UpdateStatus(const std::string& message, bool isError)
 std::unique_ptr<SequenceStep> ProcessControlPanel::BuildSelectedProcess() {
   if (m_selectedProcess == "Initialization") {
     return ProcessBuilders::BuildInitializationSequence(m_machineOps);
+  }
+  else if (m_selectedProcess == "InitializationParallel") {
+    return ProcessBuilders::BuildInitializationSequenceParallel(m_machineOps);
   }
   else if (m_selectedProcess == "Probing") {
     return ProcessBuilders::BuildProbingSequence(m_machineOps, *m_uiManager);

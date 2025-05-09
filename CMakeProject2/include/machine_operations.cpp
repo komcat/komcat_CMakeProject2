@@ -401,16 +401,34 @@ bool MachineOperations::IsDeviceConnected(const std::string& deviceName) {
     return piController->IsConnected();
   }
 
-  // Check if it's an EziIO device
+  // If not a PI controller, check if it's an ACS controller
+  auto deviceOpt = m_motionLayer.GetConfigManager().GetDevice(deviceName);
+  if (!deviceOpt.has_value()) {
+    m_logger->LogWarning("Device " + deviceName + " not found in configuration");
+    return false;
+  }
+
+  const auto& device = deviceOpt.value().get();
+  if (device.Port == 701) { // ACS controller typically uses port 701
+    // Access the ACS controller manager through motion layer
+    ACSController* acsController = m_motionLayer.GetACSControllerManager().GetController(deviceName);
+    if (acsController) {
+      return acsController->IsConnected();
+    }
+  }
+
+  // Check if it's an EziIO device as a fallback
   EziIODevice* eziioDevice = m_ioManager.getDeviceByName(deviceName);
   if (eziioDevice) {
     return eziioDevice->isConnected();
   }
 
-  // Device not found
-  m_logger->LogWarning("MachineOperations: Device not found: " + deviceName);
+  // Device not found in any controller manager
+  m_logger->LogWarning("Device " + deviceName + " not found in any controller manager");
   return false;
 }
+
+
 
 // Check if slide is extended
 bool MachineOperations::IsSlideExtended(const std::string& slideName) {
@@ -749,4 +767,143 @@ bool MachineOperations::SafelyCleanupScanner(const std::string& deviceName) {
   }
 
   return false;
+}
+
+
+bool MachineOperations::IsDevicePIController(const std::string& deviceName) const {
+  // Get the device info from configuration (using motion layer, which has access to config)
+  auto deviceOpt = m_motionLayer.GetConfigManager().GetDevice(deviceName);
+  if (!deviceOpt.has_value()) {
+    m_logger->LogError("MachineOperations: Device " + deviceName + " not found in configuration");
+    return false;
+  }
+
+  const auto& device = deviceOpt.value().get();
+
+  // PI controllers use port 50000, ACS uses different ports (like 701)
+  return (device.Port == 50000);
+}
+
+bool MachineOperations::IsDeviceMoving(const std::string& deviceName) {
+  // Determine which controller manager to use
+  if (IsDevicePIController(deviceName)) {
+    PIController* controller = m_piControllerManager.GetController(deviceName);
+    if (!controller || !controller->IsConnected()) {
+      m_logger->LogError("MachineOperations: No connected PI controller for device " + deviceName);
+      return false;
+    }
+
+    // Check all axes for motion using the existing IsMoving method
+    for (const auto& axis : { "X", "Y", "Z", "U", "V", "W" }) {
+      if (controller->IsMoving(axis)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+  else {
+    // For ACS controllers or other devices
+    // Fall back to position change detection if we can't check directly
+
+    PositionStruct currentPos;
+    if (!m_motionLayer.GetCurrentPosition(deviceName, currentPos)) {
+      // Can't determine position
+      return false;
+    }
+
+    // Store last positions and check times
+    static std::map<std::string, PositionStruct> lastPositions;
+    static std::map<std::string, std::chrono::steady_clock::time_point> lastCheckTimes;
+
+    auto now = std::chrono::steady_clock::now();
+
+    // First time checking this device
+    if (lastPositions.find(deviceName) == lastPositions.end()) {
+      lastPositions[deviceName] = currentPos;
+      lastCheckTimes[deviceName] = now;
+      return false; // Assume not moving on first check
+    }
+
+    // Get time since last check
+    auto lastTime = lastCheckTimes[deviceName];
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTime).count();
+
+    // Only check if enough time has passed
+    if (elapsed < 100) { // Less than 100ms since last check
+      return false;
+    }
+
+    // Compare positions
+    const auto& lastPos = lastPositions[deviceName];
+    double tolerance = 0.0001; // 0.1 micron position change detection threshold
+
+    bool posChanged =
+      std::abs(currentPos.x - lastPos.x) > tolerance ||
+      std::abs(currentPos.y - lastPos.y) > tolerance ||
+      std::abs(currentPos.z - lastPos.z) > tolerance ||
+      std::abs(currentPos.u - lastPos.u) > tolerance ||
+      std::abs(currentPos.v - lastPos.v) > tolerance ||
+      std::abs(currentPos.w - lastPos.w) > tolerance;
+
+    // Update stored values
+    lastPositions[deviceName] = currentPos;
+    lastCheckTimes[deviceName] = now;
+
+    return posChanged;
+  }
+}
+
+
+bool MachineOperations::WaitForDeviceMotionCompletion(const std::string& deviceName, int timeoutMs) {
+  m_logger->LogInfo("MachineOperations: Waiting for device " + deviceName + " motion to complete");
+
+  auto startTime = std::chrono::steady_clock::now();
+  auto endTime = startTime + std::chrono::milliseconds(timeoutMs);
+
+  // First, wait a small amount of time to ensure motion has actually started
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  // Keep track of position stability
+  bool wasMoving = false;
+  int stableCount = 0;
+
+  while (true) {
+    bool isMoving = IsDeviceMoving(deviceName);
+
+    if (isMoving) {
+      wasMoving = true;
+      stableCount = 0; // Reset stability counter
+    }
+    else if (wasMoving) {
+      // Device has stopped moving, increment stability counter
+      stableCount++;
+
+      // If stable for 5 consecutive checks (about 250ms with 50ms sleep)
+      if (stableCount >= 5) {
+        m_logger->LogInfo("MachineOperations: Motion completed for device " + deviceName);
+        return true;
+      }
+    }
+    else {
+      // Never detected any movement
+      auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - startTime).count();
+
+      // If we've waited reasonably long and never saw movement, assume it was quick or unnecessary
+      if (elapsed > 1000) {
+        m_logger->LogInfo("MachineOperations: No motion detected for device " + deviceName);
+        return true;
+      }
+    }
+
+    // Check for timeout
+    if (std::chrono::steady_clock::now() > endTime) {
+      m_logger->LogError("MachineOperations: Timeout waiting for motion completion of device " + deviceName);
+      return false;
+    }
+
+    // Sleep to avoid CPU spinning
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
 }

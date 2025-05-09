@@ -82,6 +82,11 @@ private:
 
 // Process builder namespace - contains factory functions to build sequence steps for specific processes
 namespace ProcessBuilders {
+
+  // Build an initialization sequence Parallel move to point motion
+  std::unique_ptr<SequenceStep> BuildInitializationSequenceParallel(MachineOperations& machineOps);
+
+
   // Build an initialization sequence
   std::unique_ptr<SequenceStep> BuildInitializationSequence(MachineOperations& machineOps);
 

@@ -49,6 +49,7 @@ private:
   // Available processes list
   std::vector<std::string> m_availableProcesses = {
       "Initialization",
+      "InitializationParallel",
       "Probing",
       "PickPlaceLeftLens",
       "PickPlaceRightLens",
