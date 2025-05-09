@@ -203,7 +203,7 @@ void PIControllerManager::RenderUI() {
 
           // Calculate available width for position buttons
           float availableWidth = ImGui::GetContentRegionAvail().x;
-          float buttonWidth = 80.0f; // Default button width
+          float buttonWidth = 150.0f; // Default button width
           float spacing = 5.0f;
           float xPos = ImGui::GetCursorPosX();
           float initialX = xPos;
@@ -226,7 +226,7 @@ void PIControllerManager::RenderUI() {
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.6f, 0.8f, 0.8f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.5f, 0.7f, 0.9f, 0.9f));
 
-            if (ImGui::Button(posName.c_str(), ImVec2(buttonWidth, 25))) {
+            if (ImGui::Button(posName.c_str(), ImVec2(buttonWidth, 40))) {
               // When clicked, move to this position
               MoveToNamedPosition(name, posName, false);
             }

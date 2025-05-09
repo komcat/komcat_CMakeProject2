@@ -1146,7 +1146,24 @@ void PIController::RenderUI() {
 						{"V", "V (Pitch)"},
 						{"W", "W (Yaw)"}
 		};
+		// Position copy controls
+		ImGui::Separator();
+		ImGui::TextColored(ImVec4(0.2f, 0.5f, 0.8f, 1.0f), "Position Data");
 
+		// Button with consistent styling
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.6f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
+		if (ImGui::Button("Copy Position as JSON", ImVec2(ImGui::GetContentRegionAvail().x * 0.5f, 30))) {
+			if (CopyPositionToClipboard()) {
+				// Success message
+				m_logger->LogInfo("Position copied to clipboard as JSON");
+			}
+			else {
+				// Error message
+				m_logger->LogWarning("Failed to copy position to clipboard");
+			}
+		}
+		ImGui::PopStyleColor(2);
 		// Use the correct axis names directly
 		for (const auto& axisPair : axisLabels) {
 			const std::string& axis = axisPair.first;
@@ -1418,5 +1435,60 @@ bool PIController::FSM(const std::string& axis1, double length1,
 	}
 
 	m_logger->LogInfo("PIController: FSM scan started successfully");
+	return true;
+}
+
+// Then implement the method in pi_controller.cpp:
+bool PIController::CopyPositionToClipboard() {
+	// Create a copy of current positions to avoid locking the mutex for too long
+	std::map<std::string, double> positions;
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		positions = m_axisPositions;
+	}
+
+	// Check if we have any positions to copy
+	if (positions.empty()) {
+		return false;
+	}
+
+	// Extract just the device name without the "Controller:" prefix
+	std::string deviceName = m_windowTitle;
+	// Remove "Controller: " if present
+	size_t prefixPos = deviceName.find("Controller: ");
+	if (prefixPos != std::string::npos) {
+		deviceName = deviceName.substr(prefixPos + 12); // Length of "Controller: " is 12
+	}
+
+	// Format as JSON with proper indentation
+	std::stringstream jsonStr;
+
+	// Start JSON object with device name
+	jsonStr << "{" << std::endl;
+	jsonStr << "  \"device\": \"" << deviceName << "\"," << std::endl;
+	jsonStr << "  \"positions\": {" << std::endl;
+
+	// Use iterator to handle the comma placement
+	auto it = positions.begin();
+	auto end = positions.end();
+
+	while (it != end) {
+		// Format with 6 decimal places precision
+		jsonStr << "    \"" << it->first << "\": " << std::fixed << std::setprecision(6) << it->second;
+
+		// Add comma if not the last element
+		++it;
+		if (it != end) {
+			jsonStr << ",";
+		}
+		jsonStr << std::endl;
+	}
+
+	jsonStr << "  }" << std::endl;
+	jsonStr << "}";
+
+	// Copy to clipboard using ImGui
+	ImGui::SetClipboardText(jsonStr.str().c_str());
+
 	return true;
 }

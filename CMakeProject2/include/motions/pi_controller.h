@@ -10,6 +10,8 @@
 #include <map>
 #include "../logger.h"
 #include "../motions/MotionTypes.h"
+#include <iomanip>  // For std::setprecision
+
 
 // Include PI GCS2 library
 #include "PI_GCS2_DLL.h"
@@ -140,6 +142,9 @@ public:
     const std::string& axis2, double length2,
     double threshold, double distance,
     int analogInput);
+
+
+  bool CopyPositionToClipboard(); // Method to copy current position as JSON
 
 private:
   bool m_debugVerbose = false;
