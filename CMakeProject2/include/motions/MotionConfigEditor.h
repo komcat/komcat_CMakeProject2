@@ -49,6 +49,13 @@ private:
 	PositionStruct m_editingPosition;
 	bool m_isAddingNewPosition = false;
 
+	// Clipboard position paste functionality
+	bool m_showClipboardConfirmation = false;
+	PositionStruct m_oldPosition; // Original position before clipboard update
+	PositionStruct m_newPosition; // New position from clipboard
+	void ProcessClipboardData(); // Process clipboard data into position values
+	void RenderClipboardConfirmationPopup(); // Show confirmation popup with value comparison
+
 	// Graph editing
 	std::string m_selectedGraph;
 	std::string m_newGraphName;

@@ -8,16 +8,17 @@
 class MotionControlHierarchicalAdapter : public IHierarchicalTogglableUI {
 public:
   MotionControlHierarchicalAdapter(MotionControlLayer& motionControl, const std::string& name)
-    : m_motionControl(motionControl), m_name(name), m_children(), m_isVisible(false) {
+    : m_motionControl(motionControl), m_name(name), m_children() {
   }
 
   bool IsVisible() const override {
-    return m_isVisible;
+    return m_motionControl.IsVisible();  // Use MotionControlLayer's visibility
   }
 
   void ToggleWindow() override {
-    m_isVisible = !m_isVisible;
+    m_motionControl.ToggleWindow();  // Delegate toggle to MotionControlLayer
   }
+
 
   const std::string& GetName() const override {
     return m_name;

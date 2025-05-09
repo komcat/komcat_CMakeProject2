@@ -5,6 +5,7 @@
 #include <chrono>
 #include <sstream>
 #include <algorithm>
+#include <iomanip>  // For std::setprecision
 
 // Constructor - initialize with correct axis identifiers
 ACSController::ACSController()
@@ -705,7 +706,7 @@ bool ACSController::ConfigureFromDevice(const MotionDevice& device) {
     m_logger->LogWarning("ACSController: Cannot configure from device while connected");
     return false;
   }
-
+  m_deviceName = device.Name;
   m_logger->LogInfo("ACSController: Configuring from device: " + device.Name);
 
   // Store the IP address and port from the device configuration
@@ -1040,11 +1041,14 @@ void ACSController::RenderUI() {
         ImGui::PopStyleColor();
 
         ImGui::PopID();
+
       }
 
       ImGui::EndTable();
     }
     ImGui::PopStyleVar(); // Pop the spacing style
+
+
 
     ImGui::Separator();
 
@@ -1064,7 +1068,42 @@ void ACSController::RenderUI() {
     ImGui::Text("Motion Status: %s", anyAxisMoving ? "Moving" : "Idle");
 
     ImGui::Separator();
+    
 
+    // Position copy controls
+    ImGui::TextColored(ImVec4(0.2f, 0.5f, 0.8f, 1.0f), "Position Data");
+
+    // Button with consistent styling
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.6f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
+    if (ImGui::Button("Copy Position as JSON", ImVec2(ImGui::GetContentRegionAvail().x * 0.5f, 30))) {
+      if (CopyPositionToClipboard()) {
+        m_statusMessage = "Position copied to clipboard as JSON";
+        m_statusMessageTime = 3.0f; // Show message for 3 seconds
+      }
+      else {
+        m_statusMessage = "Failed to copy position";
+        m_statusMessageTime = 3.0f;
+      }
+    }
+    ImGui::PopStyleColor(2);
+
+    // Show status message with animation effect
+    if (!m_statusMessage.empty() && m_statusMessageTime > 0) {
+      ImGui::SameLine();
+
+      // Fade out the status message as it approaches expiration
+      float alpha = (std::min)(1.0f, m_statusMessageTime / 0.5f);
+      ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, alpha), "%s", m_statusMessage.c_str());
+
+      // Update time
+      float deltaTime = ImGui::GetIO().DeltaTime;
+      m_statusMessageTime -= deltaTime;
+      if (m_statusMessageTime <= 0) {
+        m_statusMessage.clear();
+      }
+    }
+    ImGui::Separator();
     // Stop all axes button with red theme
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.1f, 0.1f, 1.0f)); // Red for emergency stop
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.2f, 0.2f, 1.0f)); // Lighter red on hover
@@ -1076,4 +1115,51 @@ void ACSController::RenderUI() {
   }
 
   ImGui::End();
+}
+
+// Add this implementation to acs_controller.cpp
+bool ACSController::CopyPositionToClipboard() {
+  // Create a copy of current positions to avoid locking the mutex for too long
+  std::map<std::string, double> positions;
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    positions = m_axisPositions;
+  }
+
+  // Check if we have any positions to copy
+  if (positions.empty()) {
+    return false;
+  }
+
+  // Format as JSON with proper indentation
+  std::stringstream jsonStr;
+
+  // Start JSON object with device name
+  jsonStr << "{" << std::endl;
+  jsonStr << "  \"device\": \"" << m_deviceName << "\"," << std::endl;
+  jsonStr << "  \"positions\": {" << std::endl;
+
+  // Use iterator to handle the comma placement
+  auto it = positions.begin();
+  auto end = positions.end();
+
+  while (it != end) {
+    // Format with 6 decimal places precision
+    jsonStr << "    \"" << it->first << "\": " << std::fixed << std::setprecision(6) << it->second;
+
+    // Add comma if not the last element
+    ++it;
+    if (it != end) {
+      jsonStr << ",";
+    }
+    jsonStr << std::endl;
+  }
+
+  jsonStr << "  }" << std::endl;
+  jsonStr << "}";
+
+  // Copy to clipboard using ImGui
+  ImGui::SetClipboardText(jsonStr.str().c_str());
+
+  return true;
 }

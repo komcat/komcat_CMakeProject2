@@ -46,6 +46,12 @@ private:
   // Is logger window minimized?
   bool m_isMinimized = false;
 
+  // Is logger window maximized (full screen)?
+  bool m_isMaximized = false;
+
+  // Font size scale factor
+  float m_fontSize = 1.0f;
+
   // Number of unread messages (when minimized)
   int m_unreadMessages = 0;
 
@@ -86,6 +92,13 @@ public:
 
   // Toggle minimized state
   void ToggleMinimize();
+
+  // Toggle maximized state (full screen)
+  void ToggleMaximize();
+
+  // Font size controls
+  void IncreaseFontSize();
+  void DecreaseFontSize();
 
   // Reset unread message counters
   void ResetUnreadCounters();

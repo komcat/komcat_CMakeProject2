@@ -8,7 +8,8 @@
 // Initialize static instance
 std::unique_ptr<Logger> Logger::s_instance = nullptr;
 
-Logger::Logger() : m_isMinimized(false), m_unreadMessages(0), m_unreadWarnings(0), m_unreadErrors(0) {
+Logger::Logger() : m_isMinimized(false), m_isMaximized(false), m_fontSize(1.0f),
+m_unreadMessages(0), m_unreadWarnings(0), m_unreadErrors(0) {
   // Get current date and open initial log file
   auto now = std::chrono::system_clock::now();
   auto time = std::chrono::system_clock::to_time_t(now);
@@ -182,12 +183,37 @@ void Logger::Clear() {
 }
 
 void Logger::ToggleMinimize() {
+  // Can't minimize if maximized - must return to normal state first
+  if (m_isMaximized) {
+    m_isMaximized = false;
+  }
+
   m_isMinimized = !m_isMinimized;
 
   // Reset unread counters when expanding
   if (!m_isMinimized) {
     ResetUnreadCounters();
   }
+}
+
+void Logger::ToggleMaximize() {
+  // Can't maximize if minimized - must return to normal state first
+  if (m_isMinimized) {
+    m_isMinimized = false;
+    ResetUnreadCounters();
+  }
+
+  m_isMaximized = !m_isMaximized;
+}
+
+void Logger::IncreaseFontSize() {
+  // Increase font size with upper limit (3.0x)
+  m_fontSize = std::min(m_fontSize + 0.1f, 3.0f);
+}
+
+void Logger::DecreaseFontSize() {
+  // Decrease font size with lower limit (0.5x)
+  m_fontSize = std::max(m_fontSize - 0.1f, 0.5f);
 }
 
 void Logger::ResetUnreadCounters() {
@@ -197,7 +223,7 @@ void Logger::ResetUnreadCounters() {
 }
 
 void Logger::RenderUI() {
-  // Get the display size to position the window at the bottom
+  // Get the display size for window positioning
   ImVec2 displaySize = ImGui::GetIO().DisplaySize;
 
   if (m_isMinimized) {
@@ -286,11 +312,12 @@ void Logger::RenderUI() {
     ImGui::PopStyleColor();
   }
   else {
-    // Height for the expanded log window
-    float logWindowHeight = 150.0f;
+    // Calculate window height based on the current state (normal vs maximized)
+    float logWindowHeight = m_isMaximized ? displaySize.y : 150.0f;
+    float logWindowYPos = m_isMaximized ? 0 : (displaySize.y - logWindowHeight);
 
-    // Set the window position and size (full width, fixed height at bottom)
-    ImGui::SetNextWindowPos(ImVec2(0, displaySize.y - logWindowHeight), ImGuiCond_Always);
+    // Set the window position and size
+    ImGui::SetNextWindowPos(ImVec2(0, logWindowYPos), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(displaySize.x, logWindowHeight), ImGuiCond_Always);
 
     // Set a dark background for the log window
@@ -305,9 +332,23 @@ void Logger::RenderUI() {
     // Create ImGui window
     ImGui::Begin("Log Window", nullptr, windowFlags);
 
-    // Add Minimize button
+    // Add buttons for window control (Minimize, Maximize, Clear, Save)
     if (ImGui::Button("Minimize")) {
       ToggleMinimize();
+    }
+
+    ImGui::SameLine();
+
+    // Toggle between Maximize and Restore based on current state
+    if (m_isMaximized) {
+      if (ImGui::Button("Restore")) {
+        ToggleMaximize();
+      }
+    }
+    else {
+      if (ImGui::Button("Maximize")) {
+        ToggleMaximize();
+      }
     }
 
     ImGui::SameLine();
@@ -323,6 +364,22 @@ void Logger::RenderUI() {
     if (ImGui::Button("Save")) {
       SaveLogsToFile("logs/saved_log.txt");
     }
+
+    // Font size controls
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 20); // Add some spacing
+
+    if (ImGui::Button("F-")) {
+      DecreaseFontSize();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("F+")) {
+      IncreaseFontSize();
+    }
+
+    ImGui::SameLine();
+    ImGui::Text("Font: %.1fx", m_fontSize);
 
     // Add filter buttons
     ImGui::SameLine();
@@ -347,6 +404,9 @@ void Logger::RenderUI() {
 
     // Create a child window for the scrollable log area
     ImGui::BeginChild("ScrollingRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+
+    // Set the font scale factor for all text in the log area
+    ImGui::SetWindowFontScale(m_fontSize);
 
     // Lock mutex for thread safety when reading logs
     {
@@ -393,6 +453,9 @@ void Logger::RenderUI() {
     if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
       ImGui::SetScrollHereY(1.0f);
     }
+
+    // Reset the font scale at the end of the child window
+    ImGui::SetWindowFontScale(1.0f);
 
     ImGui::EndChild();
     ImGui::End();

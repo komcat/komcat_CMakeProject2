@@ -6,65 +6,92 @@
 #include <cstring>
 
 MotionConfigEditor::MotionConfigEditor(MotionConfigManager& configManager)
-    : m_configManager(configManager)
-    , m_logger(Logger::GetInstance())
+  : m_configManager(configManager)
+  , m_logger(Logger::GetInstance())
 {
-    m_logger->LogInfo("MotionConfigEditor initialized");
+  m_logger->LogInfo("MotionConfigEditor initialized");
 }
 
 void MotionConfigEditor::RenderUI() {
-    if (!m_showWindow) return;
+  if (!m_showWindow) return;
 
-    ImGui::Begin("Motion Configuration Editor", &m_showWindow);
+  ImGui::Begin("Motion Configuration Editor", &m_showWindow);
 
-    // Tabs for different config sections
-    if (ImGui::BeginTabBar("ConfigTabs")) {
-        if (ImGui::BeginTabItem("Devices")) {
-            m_showDevicesTab = true;
-            m_showPositionsTab = false;
-            m_showGraphsTab = false;
-            m_showSettingsTab = false;
-            RenderDevicesTab();
-            ImGui::EndTabItem();
-        }
-
-        if (ImGui::BeginTabItem("Positions")) {
-            m_showDevicesTab = false;
-            m_showPositionsTab = true;
-            m_showGraphsTab = false;
-            m_showSettingsTab = false;
-            RenderPositionsTab();
-            ImGui::EndTabItem();
-        }
-
-        if (ImGui::BeginTabItem("Graphs")) {
-            m_showDevicesTab = false;
-            m_showPositionsTab = false;
-            m_showGraphsTab = true;
-            m_showSettingsTab = false;
-            RenderGraphsTab();
-            ImGui::EndTabItem();
-        }
-
-        if (ImGui::BeginTabItem("Settings")) {
-            m_showDevicesTab = false;
-            m_showPositionsTab = false;
-            m_showGraphsTab = false;
-            m_showSettingsTab = true;
-            RenderSettingsTab();
-            ImGui::EndTabItem();
-        }
-
-        ImGui::EndTabBar();
+  // Tabs for different config sections
+  if (ImGui::BeginTabBar("ConfigTabs")) {
+    if (ImGui::BeginTabItem("Devices")) {
+      m_showDevicesTab = true;
+      m_showPositionsTab = false;
+      m_showGraphsTab = false;
+      m_showSettingsTab = false;
+      RenderDevicesTab();
+      ImGui::EndTabItem();
     }
 
-    // Save button at the bottom
-    ImGui::Separator();
-    if (ImGui::Button("Save Changes")) {
-        SaveChanges();
+    if (ImGui::BeginTabItem("Positions")) {
+      m_showDevicesTab = false;
+      m_showPositionsTab = true;
+      m_showGraphsTab = false;
+      m_showSettingsTab = false;
+      RenderPositionsTab();
+      ImGui::EndTabItem();
     }
 
-    ImGui::End();
+    if (ImGui::BeginTabItem("Graphs")) {
+      m_showDevicesTab = false;
+      m_showPositionsTab = false;
+      m_showGraphsTab = true;
+      m_showSettingsTab = false;
+      RenderGraphsTab();
+      ImGui::EndTabItem();
+    }
+
+    if (ImGui::BeginTabItem("Settings")) {
+      m_showDevicesTab = false;
+      m_showPositionsTab = false;
+      m_showGraphsTab = false;
+      m_showSettingsTab = true;
+      RenderSettingsTab();
+      ImGui::EndTabItem();
+    }
+
+    ImGui::EndTabBar();
+  }
+
+  // Save button at the bottom
+  ImGui::Separator();
+  if (ImGui::Button("Save Changes")) {
+    SaveChanges();
+  }
+
+  // Debug section for clipboard content
+  if (ImGui::CollapsingHeader("Debug Clipboard")) {
+    if (ImGui::Button("Show Clipboard Content")) {
+      std::string clipboardText = ImGui::GetClipboardText();
+      m_logger->LogInfo("Current clipboard content: " + clipboardText);
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Test Position JSON")) {
+      // Set a test JSON to the clipboard (platform-dependent)
+      const char* testJson = R"({
+  "device": "gantry-main",
+  "positions": {
+    "X": 143.200000,
+    "Y": 75.700000,
+    "Z": 8.244764
+  }
+})";
+      ImGui::SetClipboardText(testJson);
+      m_logger->LogInfo("Set test JSON to clipboard");
+    }
+  }
+
+  ImGui::End();
+
+  // Handle the confirmation popup
+  RenderClipboardConfirmationPopup();
 }
 
 void MotionConfigEditor::RenderDevicesTab() {  
@@ -210,174 +237,463 @@ void MotionConfigEditor::RenderDevicesTab() {
    ImGui::EndChild();  
 }
 
-void MotionConfigEditor::RenderPositionsTab() {  
-   // Left panel - Device selection  
-   ImGui::BeginChild("PositionsDeviceList", ImVec2(200, 0), true);  
+void MotionConfigEditor::RenderPositionsTab() {
+  // Left panel - Device selection  
+  ImGui::BeginChild("PositionsDeviceList", ImVec2(200, 0), true);
 
-   ImGui::Text("Select a Device:");  
-   ImGui::Separator();  
+  ImGui::Text("Select a Device:");
+  ImGui::Separator();
 
-   const auto& allDevices = m_configManager.GetAllDevices();  
+  const auto& allDevices = m_configManager.GetAllDevices();
 
-   for (const auto& [name, device] : allDevices) {  
-       bool isSelected = (m_selectedDevice == name);  
-       if (ImGui::Selectable(name.c_str(), isSelected)) {  
-           m_selectedDevice = name;  
-           m_selectedPosition.clear();  
-           m_isAddingNewPosition = false;  
-       }  
-   }  
+  for (const auto& [name, device] : allDevices) {
+    bool isSelected = (m_selectedDevice == name);
+    if (ImGui::Selectable(name.c_str(), isSelected)) {
+      m_selectedDevice = name;
+      m_selectedPosition.clear();
+      m_isAddingNewPosition = false;
+    }
+  }
 
-   ImGui::EndChild();  
+  ImGui::EndChild();
 
-   ImGui::SameLine();  
+  ImGui::SameLine();
 
-   // Middle panel - Position list for selected device  
-   ImGui::BeginChild("PositionsList", ImVec2(200, 0), true);  
+  // Middle panel - Position list for selected device  
+  ImGui::BeginChild("PositionsList", ImVec2(200, 0), true);
 
-   if (!m_selectedDevice.empty()) {  
-       ImGui::Text("Positions for %s:", m_selectedDevice.c_str());  
+  if (!m_selectedDevice.empty()) {
+    ImGui::Text("Positions for %s:", m_selectedDevice.c_str());
 
-       if (ImGui::Button("Add New Position")) {  
-           m_isAddingNewPosition = true;  
-           m_newPositionName = "new_position";  
+    if (ImGui::Button("Add New Position")) {
+      m_isAddingNewPosition = true;
+      m_newPositionName = "new_position";
 
-           // Initialize with default values  
-           m_editingPosition = PositionStruct();
-       }  
+      // Initialize with default values  
+      m_editingPosition = PositionStruct();
+    }
 
-       ImGui::Separator();  
+    ImGui::Separator();
 
-       auto positionsOpt = m_configManager.GetDevicePositions(m_selectedDevice);  
-       if (positionsOpt.has_value()) {  
-           const auto& positions = positionsOpt.value().get();  
+    auto positionsOpt = m_configManager.GetDevicePositions(m_selectedDevice);
+    if (positionsOpt.has_value()) {
+      const auto& positions = positionsOpt.value().get();
 
-           for (const auto& [name, position] : positions) {  
-               bool isSelected = (m_selectedPosition == name);  
-               if (ImGui::Selectable(name.c_str(), isSelected)) {  
-                   m_selectedPosition = name;  
-                   m_isAddingNewPosition = false;  
+      for (const auto& [name, position] : positions) {
+        bool isSelected = (m_selectedPosition == name);
+        if (ImGui::Selectable(name.c_str(), isSelected)) {
+          m_selectedPosition = name;
+          m_isAddingNewPosition = false;
 
-                   // Copy position data  
-                   m_editingPosition = position;  
-               }  
-           }  
-       }  
-   }  
-   else {  
-       ImGui::Text("Select a device first.");  
-   }  
+          // Copy position data  
+          m_editingPosition = position;
+        }
+      }
+    }
+  }
+  else {
+    ImGui::Text("Select a device first.");
+  }
 
-   ImGui::EndChild();  
+  ImGui::EndChild();
 
-   ImGui::SameLine();  
+  ImGui::SameLine();
 
-   // Right panel - Position details  
-   ImGui::BeginChild("PositionDetails", ImVec2(0, 0), true);  
+  // Right panel - Position details  
+  ImGui::BeginChild("PositionDetails", ImVec2(0, 0), true);
 
-   if (!m_selectedDevice.empty()) {  
-       if (m_isAddingNewPosition) {  
-           ImGui::Text("Adding New Position for %s", m_selectedDevice.c_str());  
-           ImGui::Separator();  
+  if (!m_selectedDevice.empty()) {
+    if (m_isAddingNewPosition) {
+      ImGui::Text("Adding New Position for %s", m_selectedDevice.c_str());
+      ImGui::Separator();
 
-           // Fix for E0167: Use a char buffer instead of std::string directly  
-           char positionNameBuffer[64];  
-           std::strncpy(positionNameBuffer, m_newPositionName.c_str(), sizeof(positionNameBuffer) - 1);  
-           positionNameBuffer[sizeof(positionNameBuffer) - 1] = '\0';  
+      // Fix for E0167: Use a char buffer instead of std::string directly  
+      char positionNameBuffer[64];
+      std::strncpy(positionNameBuffer, m_newPositionName.c_str(), sizeof(positionNameBuffer) - 1);
+      positionNameBuffer[sizeof(positionNameBuffer) - 1] = '\0';
 
-           if (ImGui::InputText("Position Name", positionNameBuffer, sizeof(positionNameBuffer))) {  
-               m_newPositionName = positionNameBuffer;  
-           }  
+      if (ImGui::InputText("Position Name", positionNameBuffer, sizeof(positionNameBuffer))) {
+        m_newPositionName = positionNameBuffer;
+      }
 
-           // Position coordinates  
-           ImGui::Text("Coordinates:");  
-           ImGui::DragScalar("X", ImGuiDataType_Double, &m_editingPosition.x, 0.1);  
-           ImGui::DragScalar("Y", ImGuiDataType_Double, &m_editingPosition.y, 0.1);  
-           ImGui::DragScalar("Z", ImGuiDataType_Double, &m_editingPosition.z, 0.1);  
-           ImGui::DragScalar("U", ImGuiDataType_Double, &m_editingPosition.u, 0.1);  
-           ImGui::DragScalar("V", ImGuiDataType_Double, &m_editingPosition.v, 0.1);  
-           ImGui::DragScalar("W", ImGuiDataType_Double, &m_editingPosition.w, 0.1);  
+      // Position coordinates  
+      ImGui::Text("Coordinates:");
 
-           ImGui::Separator();  
+      // Add "Paste from Clipboard" button for new positions
+      if (ImGui::Button("Paste from Clipboard")) {
+        ProcessClipboardData();
+      }
 
-           // Add or Cancel buttons  
-           if (ImGui::Button("Add Position")) {  
-               AddNewPosition();  
-           }  
-           ImGui::SameLine();  
-           if (ImGui::Button("Cancel")) {  
-               m_isAddingNewPosition = false;  
-               m_editingPosition = PositionStruct();
-           }  
-       }  
-       else if (!m_selectedPosition.empty()) {  
-           // Get the position data  
-           auto posOpt = m_configManager.GetNamedPosition(m_selectedDevice, m_selectedPosition);  
-           if (posOpt.has_value()) {  
-               ImGui::Text("Editing Position: %s", m_selectedPosition.c_str());  
-               ImGui::Separator();  
+      ImGui::DragScalar("X", ImGuiDataType_Double, &m_editingPosition.x, 0.1);
+      ImGui::DragScalar("Y", ImGuiDataType_Double, &m_editingPosition.y, 0.1);
+      ImGui::DragScalar("Z", ImGuiDataType_Double, &m_editingPosition.z, 0.1);
 
-               // Position name (read-only for now)  
-               ImGui::Text("Position Name: %s", m_selectedPosition.c_str());  
+      // Only show U, V, W for hex devices
+      if (m_selectedDevice.find("hex") != std::string::npos) {
+        ImGui::DragScalar("U", ImGuiDataType_Double, &m_editingPosition.u, 0.1);
+        ImGui::DragScalar("V", ImGuiDataType_Double, &m_editingPosition.v, 0.1);
+        ImGui::DragScalar("W", ImGuiDataType_Double, &m_editingPosition.w, 0.1);
+      }
 
-               // Position coordinates  
-               ImGui::Text("Coordinates:");  
-               bool changed = false;  
-               changed |= ImGui::DragScalar("X", ImGuiDataType_Double, &m_editingPosition.x, 0.1);  
-               changed |= ImGui::DragScalar("Y", ImGuiDataType_Double, &m_editingPosition.y, 0.1);  
-               changed |= ImGui::DragScalar("Z", ImGuiDataType_Double, &m_editingPosition.z, 0.1);  
-               changed |= ImGui::DragScalar("U", ImGuiDataType_Double, &m_editingPosition.u, 0.1);  
-               changed |= ImGui::DragScalar("V", ImGuiDataType_Double, &m_editingPosition.v, 0.1);  
-               changed |= ImGui::DragScalar("W", ImGuiDataType_Double, &m_editingPosition.w, 0.1);  
+      ImGui::Separator();
 
-               ImGui::Separator();  
+      // Add or Cancel buttons  
+      if (ImGui::Button("Add Position")) {
+        AddNewPosition();
+      }
+      ImGui::SameLine();
+      if (ImGui::Button("Cancel")) {
+        m_isAddingNewPosition = false;
+        m_editingPosition = PositionStruct();
+      }
+    }
+    else if (!m_selectedPosition.empty()) {
+      // Get the position data  
+      auto posOpt = m_configManager.GetNamedPosition(m_selectedDevice, m_selectedPosition);
+      if (posOpt.has_value()) {
+        ImGui::Text("Editing Position: %s", m_selectedPosition.c_str());
+        ImGui::Separator();
 
-               // Apply changes immediately  
-               if (changed) {  
-                   try {  
-                       m_configManager.AddPosition(m_selectedDevice, m_selectedPosition, m_editingPosition);  
-                       m_logger->LogInfo("Updated position: " + m_selectedPosition + " for device: " + m_selectedDevice);  
-                   }  
-                   catch (const std::exception& e) {  
-                       m_logger->LogError("Failed to update position: " + std::string(e.what()));  
-                   }  
-               }  
+        // Position name (read-only for now)  
+        ImGui::Text("Position Name: %s", m_selectedPosition.c_str());
 
-               // Delete button  
-               ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));  
-               if (ImGui::Button("Delete Position")) {  
-                   ImGui::OpenPopup("Delete Position?");  
-               }  
-               ImGui::PopStyleColor();  
+        // Position coordinates  
+        ImGui::Text("Coordinates:");
 
-               // Confirmation dialog  
-               if (ImGui::BeginPopupModal("Delete Position?", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {  
-                   ImGui::Text("Are you sure you want to delete position '%s'?", m_selectedPosition.c_str());  
-                   ImGui::Text("This operation cannot be undone!");  
-                   ImGui::Separator();  
+        // Add "Paste from Clipboard" button for existing positions
+        if (ImGui::Button("Paste from Clipboard")) {
+          ProcessClipboardData();
+        }
 
-                   if (ImGui::Button("Yes, Delete", ImVec2(120, 0))) {  
-                       DeleteSelectedPosition();  
-                       ImGui::CloseCurrentPopup();  
-                   }  
-                   ImGui::SameLine();  
-                   if (ImGui::Button("Cancel", ImVec2(120, 0))) {  
-                       ImGui::CloseCurrentPopup();  
-                   }  
-                   ImGui::EndPopup();  
-               }  
-           }  
-       }  
-       else {  
-           ImGui::Text("Select a position or add a new one.");  
-       }  
-   }  
-   else {  
-       ImGui::Text("Select a device first.");  
-   }  
+        bool changed = false;
+        changed |= ImGui::DragScalar("X", ImGuiDataType_Double, &m_editingPosition.x, 0.1);
+        changed |= ImGui::DragScalar("Y", ImGuiDataType_Double, &m_editingPosition.y, 0.1);
+        changed |= ImGui::DragScalar("Z", ImGuiDataType_Double, &m_editingPosition.z, 0.1);
 
-   ImGui::EndChild();  
+        // Only show U, V, W for hex devices
+        if (m_selectedDevice.find("hex") != std::string::npos) {
+          changed |= ImGui::DragScalar("U", ImGuiDataType_Double, &m_editingPosition.u, 0.1);
+          changed |= ImGui::DragScalar("V", ImGuiDataType_Double, &m_editingPosition.v, 0.1);
+          changed |= ImGui::DragScalar("W", ImGuiDataType_Double, &m_editingPosition.w, 0.1);
+        }
+
+        ImGui::Separator();
+
+        // Apply changes immediately  
+        if (changed) {
+          try {
+            m_configManager.AddPosition(m_selectedDevice, m_selectedPosition, m_editingPosition);
+            m_logger->LogInfo("Updated position: " + m_selectedPosition + " for device: " + m_selectedDevice);
+          }
+          catch (const std::exception& e) {
+            m_logger->LogError("Failed to update position: " + std::string(e.what()));
+          }
+        }
+
+        // Delete button  
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+        if (ImGui::Button("Delete Position")) {
+          ImGui::OpenPopup("Delete Position?");
+        }
+        ImGui::PopStyleColor();
+
+        // Confirmation dialog  
+        if (ImGui::BeginPopupModal("Delete Position?", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+          ImGui::Text("Are you sure you want to delete position '%s'?", m_selectedPosition.c_str());
+          ImGui::Text("This operation cannot be undone!");
+          ImGui::Separator();
+
+          if (ImGui::Button("Yes, Delete", ImVec2(120, 0))) {
+            DeleteSelectedPosition();
+            ImGui::CloseCurrentPopup();
+          }
+          ImGui::SameLine();
+          if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            ImGui::CloseCurrentPopup();
+          }
+          ImGui::EndPopup();
+        }
+      }
+    }
+    else {
+      ImGui::Text("Select a position or add a new one.");
+    }
+  }
+  else {
+    ImGui::Text("Select a device first.");
+  }
+
+  ImGui::EndChild();
 }
+
+
+// New function to process clipboard data
+void MotionConfigEditor::ProcessClipboardData() {
+  if (m_selectedDevice.empty()) {
+    m_logger->LogError("No device selected");
+    return;
+  }
+
+  // Get clipboard text from ImGui
+  std::string clipboardText = ImGui::GetClipboardText();
+
+  // Log the clipboard content for debugging
+  m_logger->LogInfo("Clipboard content: " + clipboardText);
+
+  if (clipboardText.empty()) {
+    m_logger->LogError("Clipboard is empty");
+    return;
+  }
+
+  try {
+    // Parse JSON from clipboard
+    json clipboardJson = json::parse(clipboardText);
+
+    // Log successful parsing
+    m_logger->LogInfo("Successfully parsed JSON from clipboard");
+
+    // Validate the structure
+    if (!clipboardJson.contains("device") || !clipboardJson.contains("positions")) {
+      m_logger->LogError("Invalid clipboard format: missing 'device' or 'positions'");
+      return;
+    }
+
+    std::string deviceName = clipboardJson["device"];
+
+    // Check if the device in clipboard matches the selected device
+    if (deviceName != m_selectedDevice) {
+      m_logger->LogWarning("Device in clipboard (" + deviceName +
+        ") doesn't match selected device (" + m_selectedDevice + ")");
+    }
+
+    // Save the original position values
+    m_oldPosition = m_editingPosition;
+
+    // Initialize new position with old values as base
+    m_newPosition = m_oldPosition;
+
+    // Update position values from clipboard
+    auto& positions = clipboardJson["positions"];
+    if (positions.contains("X")) {
+      m_newPosition.x = positions["X"];
+      m_logger->LogInfo("Setting X value from clipboard: " + std::to_string(m_newPosition.x));
+    }
+    if (positions.contains("Y")) {
+      m_newPosition.y = positions["Y"];
+      m_logger->LogInfo("Setting Y value from clipboard: " + std::to_string(m_newPosition.y));
+    }
+    if (positions.contains("Z")) {
+      m_newPosition.z = positions["Z"];
+      m_logger->LogInfo("Setting Z value from clipboard: " + std::to_string(m_newPosition.z));
+    }
+
+    // Check for U, V, W (for hex devices)
+    if (positions.contains("U")) {
+      m_newPosition.u = positions["U"];
+      m_logger->LogInfo("Setting U value from clipboard: " + std::to_string(m_newPosition.u));
+    }
+    if (positions.contains("V")) {
+      m_newPosition.v = positions["V"];
+      m_logger->LogInfo("Setting V value from clipboard: " + std::to_string(m_newPosition.v));
+    }
+    if (positions.contains("W")) {
+      m_newPosition.w = positions["W"];
+      m_logger->LogInfo("Setting W value from clipboard: " + std::to_string(m_newPosition.w));
+    }
+
+    // Show confirmation popup
+    m_showClipboardConfirmation = true;
+    m_logger->LogInfo("Opening confirmation popup");
+    ImGui::OpenPopup("Confirm Position Update");
+  }
+  catch (const json::exception& e) {
+    m_logger->LogError("Failed to parse clipboard data: " + std::string(e.what()));
+  }
+  catch (const std::exception& e) {
+    m_logger->LogError("Error processing clipboard: " + std::string(e.what()));
+  }
+}
+
+// New function to render the confirmation popup
+void MotionConfigEditor::RenderClipboardConfirmationPopup() {
+  // Always set modal flag to ensure it doesn't get lost
+  ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+  ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_Appearing);
+
+  // Begin the popup conditionally
+  bool isOpen = true;
+  if (ImGui::BeginPopupModal("Confirm Position Update", &isOpen, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Update position values from clipboard?");
+    ImGui::Separator();
+
+    // Display device and position name
+    ImGui::Text("Device: %s", m_selectedDevice.c_str());
+    ImGui::Text("Position: %s",
+      m_isAddingNewPosition ? m_newPositionName.c_str() : m_selectedPosition.c_str());
+
+    ImGui::Spacing();
+
+    // Create a table for side-by-side comparison
+    if (ImGui::BeginTable("PositionValuesTable", 4, ImGuiTableFlags_Borders)) {
+      // Headers
+      ImGui::TableSetupColumn("Axis");
+      ImGui::TableSetupColumn("Current Value");
+      ImGui::TableSetupColumn("New Value");
+      ImGui::TableSetupColumn("Difference");
+      ImGui::TableHeadersRow();
+
+      // Highlight colors for differences
+      ImVec4 changedColor = ImVec4(1.0f, 0.8f, 0.0f, 1.0f); // Yellow
+      ImVec4 unchangedColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f); // White
+
+      // X row
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn(); ImGui::Text("X");
+      ImGui::TableNextColumn(); ImGui::Text("%.6f", m_oldPosition.x);
+      ImGui::TableNextColumn(); ImGui::Text("%.6f", m_newPosition.x);
+
+      // Highlight difference if values are different
+      float xDiff = m_newPosition.x - m_oldPosition.x;
+      ImGui::TableNextColumn();
+      if (std::abs(xDiff) > 0.000001) {
+        ImGui::TextColored(changedColor, "%.6f", xDiff);
+      }
+      else {
+        ImGui::TextColored(unchangedColor, "%.6f", xDiff);
+      }
+
+      // Y row
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn(); ImGui::Text("Y");
+      ImGui::TableNextColumn(); ImGui::Text("%.6f", m_oldPosition.y);
+      ImGui::TableNextColumn(); ImGui::Text("%.6f", m_newPosition.y);
+
+      // Highlight difference if values are different
+      float yDiff = m_newPosition.y - m_oldPosition.y;
+      ImGui::TableNextColumn();
+      if (std::abs(yDiff) > 0.000001) {
+        ImGui::TextColored(changedColor, "%.6f", yDiff);
+      }
+      else {
+        ImGui::TextColored(unchangedColor, "%.6f", yDiff);
+      }
+
+      // Z row
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn(); ImGui::Text("Z");
+      ImGui::TableNextColumn(); ImGui::Text("%.6f", m_oldPosition.z);
+      ImGui::TableNextColumn(); ImGui::Text("%.6f", m_newPosition.z);
+
+      // Highlight difference if values are different
+      float zDiff = m_newPosition.z - m_oldPosition.z;
+      ImGui::TableNextColumn();
+      if (std::abs(zDiff) > 0.000001) {
+        ImGui::TextColored(changedColor, "%.6f", zDiff);
+      }
+      else {
+        ImGui::TextColored(unchangedColor, "%.6f", zDiff);
+      }
+
+      // Only show U, V, W for hex devices
+      if (m_selectedDevice.find("hex") != std::string::npos) {
+        // U row
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn(); ImGui::Text("U");
+        ImGui::TableNextColumn(); ImGui::Text("%.6f", m_oldPosition.u);
+        ImGui::TableNextColumn(); ImGui::Text("%.6f", m_newPosition.u);
+
+        float uDiff = m_newPosition.u - m_oldPosition.u;
+        ImGui::TableNextColumn();
+        if (std::abs(uDiff) > 0.000001) {
+          ImGui::TextColored(changedColor, "%.6f", uDiff);
+        }
+        else {
+          ImGui::TextColored(unchangedColor, "%.6f", uDiff);
+        }
+
+        // V row
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn(); ImGui::Text("V");
+        ImGui::TableNextColumn(); ImGui::Text("%.6f", m_oldPosition.v);
+        ImGui::TableNextColumn(); ImGui::Text("%.6f", m_newPosition.v);
+
+        float vDiff = m_newPosition.v - m_oldPosition.v;
+        ImGui::TableNextColumn();
+        if (std::abs(vDiff) > 0.000001) {
+          ImGui::TextColored(changedColor, "%.6f", vDiff);
+        }
+        else {
+          ImGui::TextColored(unchangedColor, "%.6f", vDiff);
+        }
+
+        // W row
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn(); ImGui::Text("W");
+        ImGui::TableNextColumn(); ImGui::Text("%.6f", m_oldPosition.w);
+        ImGui::TableNextColumn(); ImGui::Text("%.6f", m_newPosition.w);
+
+        float wDiff = m_newPosition.w - m_oldPosition.w;
+        ImGui::TableNextColumn();
+        if (std::abs(wDiff) > 0.000001) {
+          ImGui::TextColored(changedColor, "%.6f", wDiff);
+        }
+        else {
+          ImGui::TextColored(unchangedColor, "%.6f", wDiff);
+        }
+      }
+
+      ImGui::EndTable();
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // Buttons for confirmation or cancellation
+    ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 250) / 2); // Center buttons
+    if (ImGui::Button("Confirm", ImVec2(120, 0))) {
+      // Apply new position values
+      m_editingPosition = m_newPosition;
+
+      // If not adding a new position, update the existing one
+      if (!m_isAddingNewPosition && !m_selectedPosition.empty()) {
+        try {
+          m_configManager.AddPosition(m_selectedDevice, m_selectedPosition, m_editingPosition);
+          m_logger->LogInfo("Updated position from clipboard: " + m_selectedPosition +
+            " for device: " + m_selectedDevice);
+        }
+        catch (const std::exception& e) {
+          m_logger->LogError("Failed to update position: " + std::string(e.what()));
+        }
+      }
+
+      m_showClipboardConfirmation = false;
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+      m_showClipboardConfirmation = false;
+      ImGui::CloseCurrentPopup();
+    }
+
+    // If dialog is closed by any means, reset the flag
+    if (!isOpen) {
+      m_showClipboardConfirmation = false;
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+  }
+
+  // If the popup flag is set but the popup isn't showing, force open it
+  else if (m_showClipboardConfirmation) {
+    ImGui::OpenPopup("Confirm Position Update");
+  }
+}
+
 
 
 void MotionConfigEditor::RenderSettingsTab() {

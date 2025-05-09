@@ -66,7 +66,7 @@ public:
   bool MoveToPositionMultiAxis(const std::vector<std::string>& axes,
     const std::vector<double>& positions,
     bool blocking = true);
-
+  bool CopyPositionToClipboard(); // New method to copy current position as JSON
 private:
   // Communication thread methods
   void StartCommunicationThread();
@@ -94,7 +94,7 @@ private:
   std::atomic<bool> m_threadRunning{ false };
   std::atomic<bool> m_terminateThread{ false };
   std::atomic<bool> m_isConnected{ false };
-
+  std::string m_deviceName;
   // Command queue
   std::vector<MotorCommand> m_commandQueue;
   std::mutex m_commandMutex;
@@ -129,4 +129,7 @@ private:
   std::chrono::steady_clock::time_point m_lastStatusUpdate;
   std::chrono::steady_clock::time_point m_lastPositionUpdate;
   const int m_statusUpdateInterval = 200;  // 5Hz updates
+
+  std::string m_statusMessage;
+  float m_statusMessageTime = 0.0f;
 };

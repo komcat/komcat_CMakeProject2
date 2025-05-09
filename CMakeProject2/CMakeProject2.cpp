@@ -1290,7 +1290,9 @@ int main(int argc, char* argv[])
 		}
 
 		// Render the Motion Control Layer UI
-		motionControlLayer.RenderUI();
+		if (motionControlLayer.IsVisible()) {
+			motionControlLayer.RenderUI();
+		}
 
 
 		// Render Pylon Camera Test UI
