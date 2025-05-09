@@ -74,6 +74,8 @@ public:
     const std::vector<double>& positions,
     bool blocking = true);
 
+  // Add method to get available axes
+  const std::vector<std::string>& GetAvailableAxes() const { return m_availableAxes; }
 
 
   // Add to pi_controller.h in the public section:

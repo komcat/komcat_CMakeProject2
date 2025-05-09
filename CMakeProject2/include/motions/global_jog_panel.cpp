@@ -437,8 +437,27 @@ void GlobalJogPanel::RenderUI() {
   }
   ImGui::PopStyleColor();
 
+
+
+
+
   ImGui::Separator();
 
+  //if (!m_selectedDevice.empty() && DeviceSupportsUVW(m_selectedDevice)) {
+  //  m_logger->LogInfo("GlobalJogPanel: Rendering UVW controls for " + m_selectedDevice);
+  //  RenderRotationControls();
+  //}
+  //else {
+  //  m_logger->LogWarning("GlobalJogPanel: UVW controls not shown for " + m_selectedDevice +
+  //    " - DeviceSupportsUVW: " + std::to_string(DeviceSupportsUVW(m_selectedDevice)));
+  //}
+
+  // Add rotation controls if device supports UVW
+  if (!m_selectedDevice.empty() && DeviceSupportsUVW(m_selectedDevice)) {
+    RenderRotationControls();
+  }
+
+  ImGui::Separator();
   // Key bindings section
   if (ImGui::CollapsingHeader("Key Bindings")) {
     if (m_keyBindingEnabled) {
@@ -472,4 +491,189 @@ void GlobalJogPanel::RenderUI() {
   }
 
   ImGui::End();
+}
+
+
+
+// Check if device supports UVW axes (typically PI hexapod controllers)
+// Check if device supports UVW axes (typically PI hexapod controllers)
+bool GlobalJogPanel::DeviceSupportsUVW(const std::string& deviceId) {
+  if (deviceId.empty()) {
+    return false;
+  }
+
+  auto deviceOpt = m_configManager.GetDevice(deviceId);
+  if (!deviceOpt.has_value()) {
+    return false;
+  }
+
+  const auto& device = deviceOpt.value().get();
+
+  // Check if this is a PI controller (port 50000)
+  if (device.Port != 50000) {
+    return false;
+  }
+
+  // Get the controller
+  PIController* controller = m_piControllerManager.GetController(deviceId);
+  if (!controller || !controller->IsConnected()) {
+    m_logger->LogWarning("GlobalJogPanel: Controller not connected for " + deviceId);
+    return false;
+  }
+
+  // Get available axes from the controller
+  const auto& availableAxes = controller->GetAvailableAxes();
+
+  // Log the available axes
+  if (debugverbose)m_logger->LogInfo("GlobalJogPanel: DeviceSupportsUVW - available axes for " + deviceId + ": " +std::to_string(availableAxes.size()) + " axes");
+
+  // If axes are named as numbers 1-6 instead of letters X,Y,Z,U,V,W
+  // Check if there are at least 6 axes (hexapod typically has 6 axes)
+  if (availableAxes.size() >= 6) {
+    // Check if the axes are numbered or lettered
+    bool hasNumericAxes = false;
+
+    // Check for numeric axes pattern (1, 2, 3, 4, 5, 6)
+    if (availableAxes.size() >= 6) {
+      // For hex devices that use axis numbers 1-6 instead of letters
+      if (std::find(availableAxes.begin(), availableAxes.end(), "4") != availableAxes.end() ||
+        std::find(availableAxes.begin(), availableAxes.end(), "5") != availableAxes.end() ||
+        std::find(availableAxes.begin(), availableAxes.end(), "6") != availableAxes.end()) {
+        if(debugverbose) m_logger->LogInfo("GlobalJogPanel: DeviceSupportsUVW - device has numeric axes (1-6)");
+        return true;
+      }
+    }
+
+    // Look for lettered axes (U, V, W)
+    bool hasU = std::find(availableAxes.begin(), availableAxes.end(), "U") != availableAxes.end();
+    bool hasV = std::find(availableAxes.begin(), availableAxes.end(), "V") != availableAxes.end();
+    bool hasW = std::find(availableAxes.begin(), availableAxes.end(), "W") != availableAxes.end();
+
+    if (debugverbose)m_logger->LogInfo("GlobalJogPanel: DeviceSupportsUVW - U:" + std::to_string(hasU) +
+      " V:" + std::to_string(hasV) + " W:" + std::to_string(hasW));
+
+    return hasU && hasV && hasW;
+  }
+
+  return false;
+}
+
+// Handle UVW rotation movement
+// Handle UVW rotation movement with support for numeric axes
+// Handle UVW rotation movement for hexapod devices
+void GlobalJogPanel::MoveRotationAxis(const std::string& axis, double amount) {
+  if (m_selectedDevice.empty()) {
+    m_logger->LogWarning("GlobalJogPanel: No device selected for rotation");
+    return;
+  }
+
+  // Verify device supports UVW
+  if (!DeviceSupportsUVW(m_selectedDevice)) {
+    m_logger->LogWarning("GlobalJogPanel: Selected device does not support rotation axes");
+    return;
+  }
+
+  // Get the controller
+  PIController* controller = m_piControllerManager.GetController(m_selectedDevice);
+  if (!controller || !controller->IsConnected()) {
+    m_logger->LogError("GlobalJogPanel: Controller not available for device: " + m_selectedDevice);
+    return;
+  }
+
+  // For PI controllers, we always use the original axis letters (U, V, W)
+  // The PIController implementation handles the mapping to numeric axes internally if needed
+
+  // Execute the move - PI expects the actual letter in the API
+  bool success = controller->MoveRelative(axis, amount, false);
+
+  if (success) {
+    m_logger->LogInfo("GlobalJogPanel: Moved rotation axis " + axis + " by " + std::to_string(amount) + " deg");
+  }
+  else {
+    m_logger->LogWarning("GlobalJogPanel: Failed to move rotation axis " + axis);
+  }
+}
+
+
+
+
+// Render rotation controls in the UI
+// Render rotation controls in the UI with improved contrast
+void GlobalJogPanel::RenderRotationControls() {
+  // Skip rendering if device doesn't support UVW
+  if (!DeviceSupportsUVW(m_selectedDevice)) {
+    return;
+  }
+
+  ImGui::Separator();
+  // Use a more visible blue color for the title
+  ImGui::TextColored(ImVec4(0.2f, 0.6f, 1.0f, 1.0f), "Rotation Controls (UVW)");
+
+  // Current step for rotation (use smaller values for rotation)
+  // Convert linear step to rotation step - use 10x scaling for rotations
+  double rotStep = m_jogSteps[m_currentStepIndex] * 10.0; // Convert from mm to degrees with scaling
+
+  ImGui::Text("Rotation Step: %.3f deg", rotStep);
+
+  // Center everything
+  float fullWidth = ImGui::GetContentRegionAvail().x;
+  float controlWidth = 250.0f; // Total width of control group
+  float startX = (fullWidth - controlWidth) * 0.5f;
+
+  // Define consistent button sizes
+  float buttonWidth = 60.0f;
+  float buttonHeight = 30.0f;
+  float arrowWidth = 70.0f;
+
+  // Styling constants with improved contrast
+  ImVec4 negColor = ImVec4(0.8f, 0.3f, 0.3f, 0.9f);   // Brighter red for negative
+  ImVec4 posColor = ImVec4(0.3f, 0.8f, 0.3f, 0.9f);   // Brighter green for positive
+  ImVec4 labelColor = ImVec4(1.0f, 0.85f, 0.0f, 1.0f); // Gold instead of yellow for labels
+  ImVec4 textColor = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);   // Black text for buttons for contrast
+
+  // Draw U, V, W axis controls in rows
+  const char* axes[] = { "U", "V", "W" };
+  const char* axisDescriptions[] = { "Roll", "Pitch", "Yaw" };
+
+  for (int i = 0; i < 3; ++i) {
+    // Create centered layout
+    ImGui::SetCursorPosX(startX);
+
+    // Axis label with fixed width - use larger, more visible font
+    ImGui::PushStyleColor(ImGuiCol_Text, labelColor);
+    // Draw a darker background behind the text for better contrast
+    ImVec2 textSize = ImGui::CalcTextSize((std::string(axes[i]) + " (" + axisDescriptions[i] + "):").c_str());
+    ImVec2 textPos = ImGui::GetCursorScreenPos();
+    ImGui::GetWindowDrawList()->AddRectFilled(
+      textPos,
+      ImVec2(textPos.x + textSize.x, textPos.y + textSize.y),
+      IM_COL32(40, 40, 40, 200)
+    );
+    ImGui::Text("%s (%s):", axes[i], axisDescriptions[i]);
+    ImGui::PopStyleColor();
+
+    // Negative button
+    ImGui::SameLine(startX + 80.0f);
+    ImGui::PushStyleColor(ImGuiCol_Button, negColor);
+    ImGui::PushStyleColor(ImGuiCol_Text, textColor); // Black text for contrast
+    if (ImGui::Button(("<##" + std::string(axes[i]) + "-").c_str(), ImVec2(buttonWidth, buttonHeight))) {
+      MoveRotationAxis(axes[i], -rotStep);
+    }
+    ImGui::PopStyleColor(2);
+
+    // Draw directional arrows in the middle
+    ImGui::SameLine();
+    float textWidth = ImGui::CalcTextSize("<-   ->").x;
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (arrowWidth - textWidth) * 0.5f);
+    ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "<-   ->"); // White for better visibility
+
+    // Positive button
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Button, posColor);
+    ImGui::PushStyleColor(ImGuiCol_Text, textColor); // Black text for contrast
+    if (ImGui::Button((">##" + std::string(axes[i]) + "+").c_str(), ImVec2(buttonWidth, buttonHeight))) {
+      MoveRotationAxis(axes[i], rotStep);
+    }
+    ImGui::PopStyleColor(2);
+  }
 }

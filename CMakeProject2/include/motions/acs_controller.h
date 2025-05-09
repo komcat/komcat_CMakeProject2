@@ -67,6 +67,9 @@ public:
     const std::vector<double>& positions,
     bool blocking = true);
   bool CopyPositionToClipboard(); // New method to copy current position as JSON
+
+  // Add this method to expose available axes
+
 private:
   // Communication thread methods
   void StartCommunicationThread();

@@ -42,7 +42,7 @@ public:
 
   // Process key input - call this from the main input handling loop
   void ProcessKeyInput(int keyCode, bool keyDown);
-
+  bool debugverbose = false;
 private:
   // References to managers
   MotionConfigManager& m_configManager;
@@ -96,4 +96,16 @@ private:
 
   // Render styles
   ImVec4 GetButtonColor(const std::string& key);
+
+  // Add these to the private section of the GlobalJogPanel class
+
+// Check if the selected device supports UVW axes
+  bool DeviceSupportsUVW(const std::string& deviceId);
+
+  // Helper method for handling UVW axis movement
+  void MoveRotationAxis(const std::string& axis, double amount);
+
+  // UI helper for displaying the rotation controls
+  void RenderRotationControls();
+
 };
