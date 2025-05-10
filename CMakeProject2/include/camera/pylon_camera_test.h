@@ -12,7 +12,7 @@ class PylonCameraTest {
 public:
 	PylonCameraTest();
 	~PylonCameraTest();
-
+	friend class MachineOperations;
 	// Render ImGui UI for testing camera
 	void RenderUI();
 

@@ -8,6 +8,7 @@
 #include "include/data/global_data_store.h"
 #include "include/scanning/scanning_algorithm.h"
 #include "include/logger.h"
+#include "include/camera/pylon_camera_test.h"
 #include <string>
 #include <vector>
 #include <chrono>
@@ -24,7 +25,8 @@ public:
     PIControllerManager& piControllerManager,
     EziIOManager& ioManager,
     PneumaticManager& pneumaticManager,
-    CLD101xOperations* laserOps = nullptr // Make it optional with default nullptr
+    CLD101xOperations* laserOps = nullptr,
+    PylonCameraTest* cameraTest = nullptr  // Add camera parameter
   );
 
   ~MachineOperations();
@@ -130,6 +132,20 @@ public:
     }
   }
 
+  // Camera control methods
+  bool InitializeCamera();
+  bool ConnectCamera();
+  bool DisconnectCamera();
+  bool StartCameraGrabbing();
+  bool StopCameraGrabbing();
+  bool IsCameraInitialized() const;
+  bool IsCameraConnected() const;
+  bool IsCameraGrabbing() const;
+
+  // Camera capture methods
+  bool CaptureImageToFile(const std::string& filename = "");
+  bool UpdateCameraDisplay(); // Call this from your main loop to update the camera display
+
 private:
   MotionControlLayer& m_motionLayer;
   PIControllerManager& m_piControllerManager;
@@ -155,4 +171,7 @@ private:
     mutable std::mutex peakMutex;    // Add mutable here
   };
   std::map<std::string, ScanInfo> m_scanInfo;
+
+  // Add camera reference
+  PylonCameraTest* m_cameraTest;
 };

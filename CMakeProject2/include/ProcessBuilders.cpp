@@ -42,6 +42,8 @@ namespace ProcessBuilders {
 	std::unique_ptr<SequenceStep> BuildInitializationSequence(MachineOperations& machineOps) {
 		auto sequence = std::make_unique<SequenceStep>("Initialization", machineOps);
 
+		sequence->AddOperation(std::make_shared<WaitForCameraReadyOperation>(5000));
+
 		// 1. Move gantry-main to safe position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"gantry-main", "Process_Flow", "node_4027"));
@@ -151,6 +153,16 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
 			"IOBottom", 0, true));
 
+		// 4. Start camera grabbing
+		sequence->AddOperation(std::make_shared<StartCameraGrabbingOperation>());
+
+		// 5. Wait for camera to stabilize
+		sequence->AddOperation(std::make_shared<WaitOperation>(500));  // 500ms delay
+
+		// 6. Capture image
+		sequence->AddOperation(std::make_shared<CaptureImageOperation>());
+
+
 		// 4. Wait for user confirmation that grip is successful
 		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
 			"Confirm left lens is successfully gripped", uiManager));
@@ -174,6 +186,12 @@ namespace ProcessBuilders {
 		// 10. Move to placement position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"hex-left", "Process_Flow", "node_5662"));
+
+		// 4. Start camera grabbing
+		sequence->AddOperation(std::make_shared<WaitForCameraReadyOperation>());
+		sequence->AddOperation(std::make_shared<StartCameraGrabbingOperation>());
+		sequence->AddOperation(std::make_shared<CaptureImageOperation>("place_check.png"));
+
 
 		return sequence;
 	}

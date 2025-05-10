@@ -67,10 +67,11 @@
 #include "include/ui/HierarchicalControllerAdapters.h" // Include the new adapter file
 #include "include/ui/MotionControlHierarchicalAdapter.h"
 #include "include/camera/PylonCameraAdapter.h"
+
+
+
+
 #pragma region header functions
-
-
-
 
 void RenderDraggableOverlay() {
 	// Set window position and style
@@ -827,6 +828,7 @@ int main(int argc, char* argv[])
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 
+
 	// Setup Dear ImGui style
 	//ImGui::StyleColorsDark();
 	ImGui::StyleColorsLight();
@@ -1121,7 +1123,8 @@ int main(int argc, char* argv[])
 		piControllerManager,
 		ioManager,
 		pneumaticManager,
-		&laserOps  // Pass the laser operations object
+		&laserOps,  // Pass the laser operations object
+		&pylonCameraTest
 	);
 
 	InitializationWindow initWindow(machineOps);

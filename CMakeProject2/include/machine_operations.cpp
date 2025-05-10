@@ -2,19 +2,25 @@
 #include "machine_operations.h"
 #include "include/cld101x_operations.h"  // Include it here, not in the header
 #include <sstream>
+#include <filesystem>
+#include <chrono>
+#include <iomanip>
 
 
+// Update the constructor to accept the camera parameter
 MachineOperations::MachineOperations(
   MotionControlLayer& motionLayer,
   PIControllerManager& piControllerManager,
   EziIOManager& ioManager,
   PneumaticManager& pneumaticManager,
-  CLD101xOperations* laserOps  // New parameter
+  CLD101xOperations* laserOps,
+  PylonCameraTest* cameraTest
 ) : m_motionLayer(motionLayer),
 m_piControllerManager(piControllerManager),
 m_ioManager(ioManager),
 m_pneumaticManager(pneumaticManager),
-m_laserOps(laserOps)
+m_laserOps(laserOps),
+m_cameraTest(cameraTest)
 {
   m_logger = Logger::GetInstance();
   m_logger->LogInfo("MachineOperations: Initialized");
@@ -907,3 +913,244 @@ bool MachineOperations::WaitForDeviceMotionCompletion(const std::string& deviceN
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 }
+
+#pragma region Pylon Camera Test
+
+
+
+// Camera control methods implementation
+bool MachineOperations::InitializeCamera() {
+  if (!m_cameraTest) {
+    m_logger->LogError("MachineOperations: Camera not available");
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: Initializing camera");
+  bool success = m_cameraTest->GetCamera().Initialize();
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Camera initialized successfully");
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to initialize camera");
+  }
+
+  return success;
+}
+
+bool MachineOperations::ConnectCamera() {
+  if (!m_cameraTest) {
+    m_logger->LogError("MachineOperations: Camera not available");
+    return false;
+  }
+
+  if (!m_cameraTest->GetCamera().IsConnected()) {
+    m_logger->LogInfo("MachineOperations: Connecting to camera");
+    bool success = m_cameraTest->GetCamera().Connect();
+
+    if (success) {
+      m_logger->LogInfo("MachineOperations: Connected to camera successfully");
+    }
+    else {
+      m_logger->LogError("MachineOperations: Failed to connect to camera");
+    }
+
+    return success;
+  }
+
+  m_logger->LogInfo("MachineOperations: Camera already connected");
+  return true;
+}
+
+bool MachineOperations::DisconnectCamera() {
+  if (!m_cameraTest) {
+    m_logger->LogError("MachineOperations: Camera not available");
+    return false;
+  }
+
+  if (m_cameraTest->GetCamera().IsConnected()) {
+    m_logger->LogInfo("MachineOperations: Disconnecting camera");
+    m_cameraTest->GetCamera().Disconnect();
+    m_logger->LogInfo("MachineOperations: Camera disconnected");
+    return true;
+  }
+
+  m_logger->LogInfo("MachineOperations: Camera not connected");
+  return true;
+}
+
+bool MachineOperations::StartCameraGrabbing() {
+  if (!m_cameraTest) {
+    m_logger->LogError("MachineOperations: Camera not available");
+    return false;
+  }
+
+  if (!m_cameraTest->GetCamera().IsConnected()) {
+    m_logger->LogWarning("MachineOperations: Camera not connected, attempting to connect");
+    if (!ConnectCamera()) {
+      return false;
+    }
+  }
+
+  if (!m_cameraTest->GetCamera().IsGrabbing()) {
+    m_logger->LogInfo("MachineOperations: Starting camera grabbing");
+    bool success = m_cameraTest->GetCamera().StartGrabbing();
+
+    if (success) {
+      m_logger->LogInfo("MachineOperations: Camera grabbing started");
+    }
+    else {
+      m_logger->LogError("MachineOperations: Failed to start camera grabbing");
+    }
+
+    return success;
+  }
+
+  m_logger->LogInfo("MachineOperations: Camera already grabbing");
+  return true;
+}
+
+bool MachineOperations::StopCameraGrabbing() {
+  if (!m_cameraTest) {
+    m_logger->LogError("MachineOperations: Camera not available");
+    return false;
+  }
+
+  if (m_cameraTest->GetCamera().IsGrabbing()) {
+    m_logger->LogInfo("MachineOperations: Stopping camera grabbing");
+    m_cameraTest->GetCamera().StopGrabbing();
+    m_logger->LogInfo("MachineOperations: Camera grabbing stopped");
+    return true;
+  }
+
+  m_logger->LogInfo("MachineOperations: Camera not grabbing");
+  return true;
+}
+
+bool MachineOperations::IsCameraInitialized() const {
+  if (!m_cameraTest) {
+    return false;
+  }
+
+  // The PylonCamera class doesn't directly expose an IsInitialized method,
+  // so we'll assume it's initialized if it's connected or if it has a model name
+  return m_cameraTest->GetCamera().IsConnected() ||
+    !m_cameraTest->GetCamera().GetDeviceInfo().empty();
+}
+
+bool MachineOperations::IsCameraConnected() const {
+  if (!m_cameraTest) {
+    return false;
+  }
+
+  return m_cameraTest->GetCamera().IsConnected();
+}
+
+bool MachineOperations::IsCameraGrabbing() const {
+  if (!m_cameraTest) {
+    return false;
+  }
+
+  return m_cameraTest->GetCamera().IsGrabbing();
+}
+
+bool MachineOperations::CaptureImageToFile(const std::string& filename) {
+  if (!m_cameraTest) {
+    m_logger->LogError("MachineOperations: Camera not available");
+    return false;
+  }
+
+  if (!m_cameraTest->GetCamera().IsConnected()) {
+    m_logger->LogError("MachineOperations: Camera not connected");
+    return false;
+  }
+
+  // Create a directory for image captures if it doesn't exist
+  std::filesystem::path imgDir = "captures";
+  if (!std::filesystem::exists(imgDir)) {
+    try {
+      m_logger->LogInfo("MachineOperations: Creating image capture directory: " + imgDir.string());
+      std::filesystem::create_directory(imgDir);
+    }
+    catch (const std::filesystem::filesystem_error& e) {
+      m_logger->LogError("MachineOperations: Failed to create directory: " + std::string(e.what()));
+      // If we can't create the directory, continue with the current working directory
+    }
+  }
+
+  // Generate a filename if not provided
+  std::string actualFilename = filename;
+  if (actualFilename.empty()) {
+    // Generate default filename using timestamp
+    auto now = std::chrono::system_clock::now();
+    auto time = std::chrono::system_clock::to_time_t(now);
+    std::stringstream ss;
+    ss << "capture_" << std::put_time(std::localtime(&time), "%Y%m%d_%H%M%S") << ".png";
+    actualFilename = ss.str();
+  }
+
+  // Build full path
+  std::filesystem::path baseName = std::filesystem::path(actualFilename).filename(); // Extract just the filename
+  std::filesystem::path fullPath = imgDir / baseName;
+  std::string fullPathStr = fullPath.string();
+
+  m_logger->LogInfo("MachineOperations: Capturing image to file: " + fullPathStr);
+
+  // If the camera is not grabbing, we need to grab a single frame first
+  if (!m_cameraTest->GetCamera().IsGrabbing()) {
+    m_logger->LogInfo("MachineOperations: Starting camera grabbing for single capture");
+    if (!m_cameraTest->GrabSingleFrame()) {
+      m_logger->LogError("MachineOperations: Failed to grab single frame");
+      return false;
+    }
+  }
+
+  // We need to modify the default capture behavior to specify our filename
+  // Since pylonCameraTest.CaptureImage() generates its own filename,
+  // we can use a temporary approach to save to our desired path
+  try {
+    std::lock_guard<std::mutex> lock(m_cameraTest->m_imageMutex); // Access protected member
+
+    // Check if we have a valid grab result
+    if (!m_cameraTest->m_ptrGrabResult || !m_cameraTest->m_ptrGrabResult->GrabSucceeded() ||
+      !m_cameraTest->m_pylonImage.IsValid()) {
+      m_logger->LogError("MachineOperations: No valid frame available to capture");
+      return false;
+    }
+
+    // Save the image directly using our path
+    Pylon::CImagePersistence::Save(Pylon::ImageFileFormat_Png, fullPathStr.c_str(), m_cameraTest->m_pylonImage);
+
+    // Update the camera test's status
+    m_cameraTest->m_imageCaptured = true;
+    m_cameraTest->m_lastSavedPath = fullPathStr;
+
+    m_logger->LogInfo("MachineOperations: Image captured successfully to " + fullPathStr);
+    return true;
+  }
+  catch (const Pylon::GenericException& e) {
+    m_logger->LogError("MachineOperations: Error saving image: " + std::string(e.GetDescription()));
+    return false;
+  }
+  catch (const std::exception& e) {
+    m_logger->LogError("MachineOperations: Error during image capture: " + std::string(e.what()));
+    return false;
+  }
+}
+
+
+
+bool MachineOperations::UpdateCameraDisplay() {
+  if (!m_cameraTest) {
+    return false;
+  }
+
+  // Check if camera is grabbing frames
+  if (!m_cameraTest->GetCamera().IsGrabbing()) {
+    return false;
+  }
+
+  // The camera display will be updated through the RenderUI method in the main loop
+  return true;
+}
+#pragma endregion

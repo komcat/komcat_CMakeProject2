@@ -485,3 +485,124 @@ private:
   std::vector<std::pair<std::string, std::string>> m_devicePositions;
   std::string m_description;
 };
+
+
+// Initialize Camera operation
+class InitializeCameraOperation : public SequenceOperation {
+public:
+  InitializeCameraOperation() {}
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.InitializeCamera();
+  }
+
+  std::string GetDescription() const override {
+    return "Initialize camera";
+  }
+};
+
+// Connect Camera operation
+class ConnectCameraOperation : public SequenceOperation {
+public:
+  ConnectCameraOperation() {}
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.ConnectCamera();
+  }
+
+  std::string GetDescription() const override {
+    return "Connect to camera";
+  }
+};
+
+// Start Camera Grabbing operation
+class StartCameraGrabbingOperation : public SequenceOperation {
+public:
+  StartCameraGrabbingOperation() {}
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.StartCameraGrabbing();
+  }
+
+  std::string GetDescription() const override {
+    return "Start camera grabbing";
+  }
+};
+
+// Stop Camera Grabbing operation
+class StopCameraGrabbingOperation : public SequenceOperation {
+public:
+  StopCameraGrabbingOperation() {}
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.StopCameraGrabbing();
+  }
+
+  std::string GetDescription() const override {
+    return "Stop camera grabbing";
+  }
+};
+
+// Capture Image operation
+class CaptureImageOperation : public SequenceOperation {
+public:
+  CaptureImageOperation(const std::string& filename = "")
+    : m_filename(filename) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.CaptureImageToFile(m_filename);
+  }
+
+  std::string GetDescription() const override {
+    return "Capture image" + (m_filename.empty() ? "" : " to " + m_filename);
+  }
+
+private:
+  std::string m_filename;
+};
+
+// Wait for Camera Initialization operation (combines initialize and connect)
+class WaitForCameraReadyOperation : public SequenceOperation {
+public:
+  WaitForCameraReadyOperation(int timeoutMs = 5000)
+    : m_timeoutMs(timeoutMs) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // First initialize if not already initialized
+    if (!ops.IsCameraInitialized()) {
+      if (!ops.InitializeCamera()) {
+        return false;
+      }
+    }
+
+    // Then connect if not already connected
+    if (!ops.IsCameraConnected()) {
+      if (!ops.ConnectCamera()) {
+        return false;
+      }
+    }
+
+    // Wait for the camera to be truly ready with a timeout
+    auto startTime = std::chrono::steady_clock::now();
+    auto endTime = startTime + std::chrono::milliseconds(m_timeoutMs);
+
+    while (std::chrono::steady_clock::now() < endTime) {
+      if (ops.IsCameraConnected()) {
+        return true;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    // Timeout expired
+    return false;
+  }
+
+  std::string GetDescription() const override {
+    return "Wait for camera to be ready (timeout: " + std::to_string(m_timeoutMs) + "ms)";
+  }
+
+private:
+  int m_timeoutMs;
+};
