@@ -67,7 +67,8 @@
 #include "include/ui/HierarchicalControllerAdapters.h" // Include the new adapter file
 #include "include/ui/MotionControlHierarchicalAdapter.h"
 #include "include/camera/PylonCameraAdapter.h"
-
+// In your main.cpp or equivalent file
+#include "include/script/script_editor_ui.h"
 
 
 
@@ -1134,7 +1135,7 @@ int main(int argc, char* argv[])
 
 
 
-
+	ScriptEditorUI scriptEditor(machineOps);
 
 
 // Create the vertical toolbar
@@ -1176,6 +1177,8 @@ int main(int argc, char* argv[])
 
 	// Add remaining components to the misc category
 	toolbarVertical->AddReferenceToCategory("General", CreateHierarchicalUI(cld101xManager, "Laser TEC Cntrl"));
+	// In your VerticalToolbarMenu setup:
+	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(scriptEditor, "Script Editor"));
 
 	// Log successful initialization
 	logger->LogInfo("VerticalToolbarMenu initialized with " +
@@ -1341,7 +1344,7 @@ int main(int argc, char* argv[])
 		processControlPanel.RenderUI();
 
 
-	
+		scriptEditor.RenderUI();
 
 
 
