@@ -69,7 +69,7 @@
 #include "include/camera/PylonCameraAdapter.h"
 // In your main.cpp or equivalent file
 #include "include/script/script_editor_ui.h"
-
+#include "include/ui/MotionGraphic.h"
 
 
 #pragma region header functions
@@ -1099,25 +1099,6 @@ int main(int argc, char* argv[])
 // Create a DataChartManager with the config file path
 	DataChartManager dataChartManager("data_display_config.json");
 
-	//dataChartManager.Initialize();
-
-
-
-	// Add the channels you want to monitor
-	//dataChartManager.AddChannel("GPIB-Current", "Current Reading", "A", false);
-	////dataChartManager.AddChannel("Virtual_1", "Virtual Channel 1", "unit", true);
-	////dataChartManager.AddChannel("Virtual_2", "Virtual Channel 2", "unit", true);
-	////dataChartManager.AddChannel("hex-left-A-5", "Voltage L5", "unit", true); 
-	////dataChartManager.AddChannel("hex-left-A-6", "Voltage L6", "unit", true);
-	//dataChartManager.AddChannel("hex-right-A-5", "Voltage R5", "unit", true);
-	////dataChartManager.AddChannel("hex-right-A-6", "Voltage R6", "unit", true);
-	//dataChartManager.AddChannel("SagnacV", "SagnacV", "V", true);
-
-
-
-
-
-
 // Update the MachineOperations construction to include the laser operations:
 	MachineOperations machineOps(
 		motionControlLayer,
@@ -1136,6 +1117,9 @@ int main(int argc, char* argv[])
 
 
 	ScriptEditorUI scriptEditor(machineOps);
+	// Create the MotionGraphic instance after all dependencies are initialized
+	MotionGraphic motionGraphic(configManager, motionControlLayer, machineOps);
+	logger->LogInfo("MotionGraphic initialized");
 
 
 // Create the vertical toolbar
@@ -1179,6 +1163,8 @@ int main(int argc, char* argv[])
 	toolbarVertical->AddReferenceToCategory("General", CreateHierarchicalUI(cld101xManager, "Laser TEC Cntrl"));
 	// In your VerticalToolbarMenu setup:
 	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(scriptEditor, "Script Editor"));
+	// Add the MotionGraphic to your vertical toolbar
+	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(motionGraphic, "Motion Graphic"));
 
 	// Log successful initialization
 	logger->LogInfo("VerticalToolbarMenu initialized with " +
@@ -1345,7 +1331,7 @@ int main(int argc, char* argv[])
 
 
 		scriptEditor.RenderUI();
-
+		motionGraphic.RenderUI();
 
 
 		// Rendering
