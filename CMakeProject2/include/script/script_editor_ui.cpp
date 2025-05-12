@@ -225,19 +225,31 @@ void ScriptEditorUI::RenderControlSection() {
   // Execution controls
   ScriptExecutor::ExecutionState state = m_executor.GetState();
 
-  // Execute/Stop button
+
+ // Execute/Stop button
   if (state == ScriptExecutor::ExecutionState::Idle ||
     state == ScriptExecutor::ExecutionState::Completed ||
     state == ScriptExecutor::ExecutionState::Error) {
     if (ImGui::Button("Execute Script", ImVec2(150, 0))) {
+      // Make sure the previous execution is completely finished
+      m_executor.Stop(); // Ensure clean state
+
+      // Small delay to ensure thread cleanup
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
       // When starting execution, update the script from the buffer
       m_script = m_editorBuffer;
-      m_executor.ExecuteScript(m_script);
+      if (!m_executor.ExecuteScript(m_script)) {
+        m_statusMessage = "Failed to start script execution";
+        m_statusExpiry = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+      }
     }
   }
   else {
     if (ImGui::Button("Stop Execution", ImVec2(150, 0))) {
       m_executor.Stop();
+      m_statusMessage = "Stopping script execution...";
+      m_statusExpiry = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     }
   }
 

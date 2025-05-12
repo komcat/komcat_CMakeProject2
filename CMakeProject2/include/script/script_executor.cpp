@@ -15,7 +15,26 @@ ScriptExecutor::ScriptExecutor(MachineOperations& machineOps)
 }
 
 ScriptExecutor::~ScriptExecutor() {
-  Stop();
+  // Make sure to stop execution cleanly
+  if (m_state == ExecutionState::Running || m_state == ExecutionState::Paused) {
+    m_stopRequested = true;
+
+    // If we're paused, unpause to allow thread to exit
+    if (m_state == ExecutionState::Paused) {
+      m_pauseRequested = false;
+      m_state = ExecutionState::Running;
+    }
+
+    // Wait for thread to finish
+    if (m_executionThread.joinable()) {
+      try {
+        m_executionThread.join();
+      }
+      catch (...) {
+        // Ignore any exceptions during cleanup
+      }
+    }
+  }
 }
 
 std::string ScriptExecutor::TrimString(const std::string& str) {
@@ -43,6 +62,11 @@ bool ScriptExecutor::ExecuteScript(const std::string& script, bool startImmediat
   if (m_state == ExecutionState::Running || m_state == ExecutionState::Paused) {
     LogError("Cannot execute a new script while another is running");
     return false;
+  }
+
+  // Make sure any previous thread is properly cleaned up
+  if (m_executionThread.joinable()) {
+    m_executionThread.join();
   }
 
   // Clear previous state
@@ -115,8 +139,15 @@ void ScriptExecutor::Start() {
     return;
   }
 
-  // Ensure we're not already executing
-  Stop();
+  // Make sure any previous thread is cleaned up
+  if (m_executionThread.joinable()) {
+    try {
+      m_executionThread.join();
+    }
+    catch (const std::exception& e) {
+      LogError("Error joining previous thread: " + std::string(e.what()));
+    }
+  }
 
   // Update state and start execution thread
   m_state = ExecutionState::Running;
@@ -129,8 +160,11 @@ void ScriptExecutor::Start() {
     m_executionCallback(m_state);
   }
 
+  // Create new thread
   m_executionThread = std::thread(&ScriptExecutor::ExecuteScriptInternal, this);
 }
+
+
 
 void ScriptExecutor::Pause() {
   if (m_state == ExecutionState::Running) {
@@ -156,8 +190,15 @@ void ScriptExecutor::Stop() {
     m_stopRequested = true;
     m_pauseRequested = false; // Clear pause if set
 
+    // If state is paused, make sure to unpause first so the thread can exit
+    if (m_state == ExecutionState::Paused) {
+      m_state = ExecutionState::Running;
+    }
+
     // Wait for thread to finish
     if (m_executionThread.joinable()) {
+      // Give the thread a chance to exit gracefully
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
       m_executionThread.join();
     }
 
@@ -170,12 +211,17 @@ void ScriptExecutor::Stop() {
   }
 }
 
+
 void ScriptExecutor::ExecuteScriptInternal() {
   try {
     // Execute each operation in the sequence
     const auto& operations = m_sequence->GetOperations();
 
     for (size_t i = 0; i < operations.size() && !m_stopRequested; i++) {
+      // Check stop request at the beginning of each iteration
+      if (m_stopRequested) {
+        break;
+      }
       // Handle pause request
       while (m_pauseRequested && !m_stopRequested) {
         if (m_state != ExecutionState::Paused) {
@@ -185,6 +231,10 @@ void ScriptExecutor::ExecuteScriptInternal() {
           }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+      // Double-check stop request after pause
+      if (m_stopRequested) {
+        break;
       }
 
       // If we were paused and now resuming, update state
@@ -246,6 +296,20 @@ void ScriptExecutor::ExecuteScriptInternal() {
 
         break;
       }
+
+      // Final state update
+      if (!m_stopRequested && m_state != ExecutionState::Error) {
+        m_state = ExecutionState::Completed;
+        Log("Script execution completed successfully");
+
+        if (m_executionCallback) {
+          m_executionCallback(m_state);
+        }
+      }
+      else if (m_stopRequested) {
+        // Explicitly set state to Idle if stopped
+        m_state = ExecutionState::Idle;
+      }
     }
 
     // If we completed normally (not stopped or error)
@@ -260,6 +324,14 @@ void ScriptExecutor::ExecuteScriptInternal() {
   }
   catch (const std::exception& e) {
     LogError(std::string("Error during script execution: ") + e.what());
+    m_state = ExecutionState::Error;
+
+    if (m_executionCallback) {
+      m_executionCallback(m_state);
+    }
+  }
+  catch (...) {
+    LogError("Unknown error during script execution");
     m_state = ExecutionState::Error;
 
     if (m_executionCallback) {
