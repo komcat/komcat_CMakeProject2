@@ -1356,6 +1356,7 @@ int main(int argc, char* argv[])
 
 
 	pylonCameraTest.GetCamera().StopGrabbing();
+	std::this_thread::sleep_for(std::chrono::milliseconds(3000));
 	pylonCameraTest.GetCamera().Disconnect();
 	if (pylonCameraTest.GetCamera().IsCameraDeviceRemoved())
 	{

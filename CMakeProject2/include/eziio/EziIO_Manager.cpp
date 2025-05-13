@@ -293,7 +293,15 @@ EziIOManager::EziIOManager()
 }
 
 EziIOManager::~EziIOManager() {
-  shutdown();
+  try {
+    shutdown();
+  }
+  catch (const std::exception& e) {
+    std::cerr << "Exception during EziIOManager destruction: " << e.what() << std::endl;
+  }
+  catch (...) {
+    std::cerr << "Unknown exception during EziIOManager destruction" << std::endl;
+  }
 }
 
 bool EziIOManager::initialize() {
@@ -313,10 +321,23 @@ void EziIOManager::shutdown() {
     return;
   }
 
-  // Stop the polling thread
-  stopPolling();
+  // Stop the polling thread first
+  try {
+    stopPolling();
+  }
+  catch (...) {
+    std::cerr << "Error stopping polling thread during shutdown" << std::endl;
+  }
 
-  disconnectAll();
+  // Disconnect all devices
+  try {
+    disconnectAll();
+  }
+  catch (...) {
+    std::cerr << "Error disconnecting devices during shutdown" << std::endl;
+  }
+
+  // Clear collections
   m_devices.clear();
   m_deviceMap.clear();
   m_deviceNameMap.clear();
