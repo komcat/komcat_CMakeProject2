@@ -11,7 +11,8 @@ ScriptEditorUI::ScriptEditorUI(MachineOperations& machineOps)
   m_showCommandHelp(false),
   m_machineOps(machineOps),
   m_executor(machineOps),
-  m_name("Script Editor")
+  m_name("Script Editor"),
+  m_scriptUIManager(std::make_unique<ScriptUIManager>())
 {
   // Initialize editor buffer
   memset(m_editorBuffer, 0, EDITOR_BUFFER_SIZE);
@@ -71,6 +72,9 @@ ScriptEditorUI::ScriptEditorUI(MachineOperations& machineOps)
     "ENDWHILE\n\n"
     "# Turn off laser\n"
     "LASER_OFF\n");
+
+
+  m_executor.SetUIManager(m_scriptUIManager.get());
 }
 
 ScriptEditorUI::~ScriptEditorUI() {
@@ -331,7 +335,37 @@ void ScriptEditorUI::RenderControlSection() {
 
   // Status display
   ImGui::Separator();
+  // Add auto-confirm checkbox
+  if (ImGui::Checkbox("Auto-confirm Prompts", &m_autoConfirmPrompts)) {
+    m_scriptUIManager->SetAutoConfirm(m_autoConfirmPrompts);
+  }
 
+  // Add confirmation UI if script is running and waiting
+  if (m_executor.GetState() == ScriptExecutor::ExecutionState::Running ||
+    m_executor.GetState() == ScriptExecutor::ExecutionState::Paused) {
+
+    if (m_scriptUIManager->IsWaitingForConfirmation() && !m_autoConfirmPrompts) {
+      ImGui::Separator();
+      ImGui::TextWrapped("Script requires confirmation:");
+
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f));
+      ImGui::TextWrapped("%s", m_scriptUIManager->GetLastMessage().c_str());
+      ImGui::PopStyleColor();
+
+      if (ImGui::Button("Confirm", ImVec2(100, 0))) {
+        m_scriptUIManager->ConfirmationReceived(true);
+      }
+
+      ImGui::SameLine();
+
+      if (ImGui::Button("Cancel", ImVec2(100, 0))) {
+        m_scriptUIManager->ConfirmationReceived(false);
+      }
+    }
+  }
+
+  // Status display
+  ImGui::Separator();
   // Status text with color based on state
   ImVec4 statusColor;
   const char* statusText = nullptr;

@@ -4,6 +4,7 @@
 #include "include/script/script_executor.h"
 #include "include/machine_operations.h"
 #include "include/ui/VerticalToolbarMenu.h"
+#include "script_ui_manager.h"
 #include <string>
 #include <vector>
 #include <functional>
@@ -98,5 +99,9 @@ private:
 
   void AddToRecentFiles(const std::string& filepath);
 
+  // Add UI manager
+  std::unique_ptr<ScriptUIManager> m_scriptUIManager;
 
+  // Add confirmation UI state
+  bool m_autoConfirmPrompts = false;
 };

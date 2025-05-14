@@ -1,4 +1,4 @@
-// script_executor.cpp
+// script_executor.cpp - Fixed thread management
 #include "include/script/script_executor.h"
 #include <sstream>
 #include <algorithm>
@@ -25,18 +25,33 @@ ScriptExecutor::~ScriptExecutor() {
       m_state = ExecutionState::Running;
     }
 
-    // Wait for thread to finish
+    // Wait for thread to finish with timeout
     if (m_executionThread.joinable()) {
-      try {
-        m_executionThread.join();
-      }
-      catch (...) {
-        // Ignore any exceptions during cleanup
+      // Use a timed wait
+      auto start = std::chrono::steady_clock::now();
+      while (m_executionThread.joinable()) {
+        auto elapsed = std::chrono::steady_clock::now() - start;
+        if (elapsed > std::chrono::seconds(2)) {
+          // Force detach after timeout
+          m_executionThread.detach();
+          break;
+        }
+
+        if (m_state != ExecutionState::Running && m_state != ExecutionState::Paused) {
+          try {
+            m_executionThread.join();
+          }
+          catch (...) {
+            m_executionThread.detach();
+          }
+          break;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
       }
     }
   }
 }
-
 std::string ScriptExecutor::TrimString(const std::string& str) {
   if (str.empty()) {
     return str;
@@ -56,20 +71,26 @@ std::string ScriptExecutor::TrimString(const std::string& str) {
   // Return the trimmed substring
   return str.substr(start, end - start + 1);
 }
-
 bool ScriptExecutor::ExecuteScript(const std::string& script, bool startImmediately) {
-  // Don't start a new execution if one is already running
+  // Force stop any existing execution
   if (m_state == ExecutionState::Running || m_state == ExecutionState::Paused) {
-    LogError("Cannot execute a new script while another is running");
-    return false;
+    Stop();
+
+    // Wait a bit to ensure thread has stopped
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
   }
 
-  // Make sure any previous thread is properly cleaned up
+  // Make sure any previous thread is completely cleaned up
   if (m_executionThread.joinable()) {
-    m_executionThread.join();
+    // Simple approach: detach and wait
+    m_executionThread.detach();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
-  // Clear previous state
+  // Create a fresh thread object
+  m_executionThread = std::thread();
+
+  // Clear all state
   m_script = script;
   m_log.clear();
   m_errors.clear();
@@ -80,11 +101,13 @@ bool ScriptExecutor::ExecuteScript(const std::string& script, bool startImmediat
   m_stopRequested = false;
   m_variables.clear();
 
+  // Always reset state to Idle
+  m_state = ExecutionState::Idle;
+
   // Count total lines (excluding comments and empty lines)
   std::istringstream stream(script);
   std::string line;
   while (std::getline(stream, line)) {
-    // Use the TrimString function instead of regex_replace
     line = TrimString(line);
     if (!line.empty() && line[0] != '#') {
       m_totalLines++;
@@ -93,10 +116,9 @@ bool ScriptExecutor::ExecuteScript(const std::string& script, bool startImmediat
 
   // Parse the script
   try {
-    m_sequence = m_parser.ParseScript(script, m_machineOps, nullptr, "UserScript");
+    m_sequence = m_parser.ParseScript(script, m_machineOps, m_uiManager, "UserScript");
     if (!m_sequence) {
       m_state = ExecutionState::Error;
-      // Copy parser errors
       m_errors = m_parser.GetErrors();
       for (const auto& error : m_errors) {
         LogError(error);
@@ -141,12 +163,8 @@ void ScriptExecutor::Start() {
 
   // Make sure any previous thread is cleaned up
   if (m_executionThread.joinable()) {
-    try {
-      m_executionThread.join();
-    }
-    catch (const std::exception& e) {
-      LogError("Error joining previous thread: " + std::string(e.what()));
-    }
+    m_executionThread.detach();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
   // Update state and start execution thread
@@ -163,8 +181,6 @@ void ScriptExecutor::Start() {
   // Create new thread
   m_executionThread = std::thread(&ScriptExecutor::ExecuteScriptInternal, this);
 }
-
-
 
 void ScriptExecutor::Pause() {
   if (m_state == ExecutionState::Running) {
@@ -195,11 +211,36 @@ void ScriptExecutor::Stop() {
       m_state = ExecutionState::Running;
     }
 
-    // Wait for thread to finish
+    Log("Stopping script execution...");
+
+    // Give the thread time to recognize stop request
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    // Wait for thread to finish with timeout
     if (m_executionThread.joinable()) {
-      // Give the thread a chance to exit gracefully
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      m_executionThread.join();
+      auto start = std::chrono::steady_clock::now();
+      bool joined = false;
+
+      while (!joined && (std::chrono::steady_clock::now() - start) < std::chrono::seconds(2)) {
+        try {
+          if (m_executionThread.joinable()) {
+            m_executionThread.join();
+            joined = true;
+          }
+        }
+        catch (...) {
+          // If join fails, break and detach
+          break;
+        }
+
+        if (!joined) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+      }
+
+      if (!joined && m_executionThread.joinable()) {
+        m_executionThread.detach();
+      }
     }
 
     m_state = ExecutionState::Idle;
@@ -210,6 +251,10 @@ void ScriptExecutor::Stop() {
     }
   }
 }
+
+
+
+
 
 
 void ScriptExecutor::ExecuteScriptInternal() {
@@ -262,13 +307,17 @@ void ScriptExecutor::ExecuteScriptInternal() {
       auto flowOp = std::dynamic_pointer_cast<ScriptParser::FlowControlOperation>(operations[i]);
       if (flowOp) {
         ExecuteFlowControl(flowOp.get(), i);
+
+        // Check if we should stop after flow control
+        if (m_stopRequested || m_state == ExecutionState::Error) {
+          break;
+        }
         continue;
       }
 
       // Check for variable operations
       auto varOp = std::dynamic_pointer_cast<ScriptParser::VariableOperation>(operations[i]);
       if (varOp) {
-        // Set the variable
         try {
           double value = EvaluateExpression(varOp->GetExpression());
           SetVariable(varOp->GetName(), value);
@@ -280,7 +329,7 @@ void ScriptExecutor::ExecuteScriptInternal() {
           if (m_executionCallback) {
             m_executionCallback(m_state);
           }
-          return; // Exit the function on error
+          return;
         }
         continue;
       }
@@ -289,6 +338,11 @@ void ScriptExecutor::ExecuteScriptInternal() {
       bool success = operations[i]->Execute(m_machineOps);
 
       if (!success) {
+        // Check if this was a user cancellation from PROMPT
+        if (m_currentOperation.find("Wait for user confirmation:") != std::string::npos) {
+          Log("User cancelled at prompt: " + m_currentOperation);
+        }
+
         LogError("Operation failed: " + m_currentOperation);
         m_state = ExecutionState::Error;
 
@@ -296,14 +350,16 @@ void ScriptExecutor::ExecuteScriptInternal() {
           m_executionCallback(m_state);
         }
 
-        return; // Exit the function on error
+        return;
       }
 
-      // DON'T set state to completed here - wait until ALL operations are done
-      // This was the bug causing premature completion
+      // Check stop request after each operation
+      if (m_stopRequested) {
+        break;
+      }
     }
 
-    // NOW check final state after the loop completes
+    // Check final state after the loop completes
     if (!m_stopRequested && m_state != ExecutionState::Error) {
       m_state = ExecutionState::Completed;
       Log("Script execution completed successfully");
@@ -313,7 +369,6 @@ void ScriptExecutor::ExecuteScriptInternal() {
       }
     }
     else if (m_stopRequested) {
-      // Explicitly set state to Idle if stopped
       m_state = ExecutionState::Idle;
       Log("Script execution stopped");
 

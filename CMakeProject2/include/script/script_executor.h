@@ -50,7 +50,7 @@ public:
   // Callbacks
   void SetExecutionCallback(ExecutionCallback callback) { m_executionCallback = callback; }
   void SetLogCallback(LogCallback callback) { m_logCallback = callback; }
-
+  void SetUIManager(UserInteractionManager* uiManager) { m_uiManager = uiManager; }
 private:
   // Helper method to trim whitespace from strings
   std::string TrimString(const std::string& str);
@@ -104,4 +104,6 @@ private:
   // Callbacks
   ExecutionCallback m_executionCallback;
   LogCallback m_logCallback;
+
+  UserInteractionManager* m_uiManager = nullptr;
 };
