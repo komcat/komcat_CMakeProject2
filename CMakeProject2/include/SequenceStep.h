@@ -606,3 +606,24 @@ public:
 private:
   int m_timeoutMs;
 };
+
+// Add this after the other operation classes in SequenceStep.h
+class MoveRelativeOperation : public SequenceOperation {
+public:
+  MoveRelativeOperation(const std::string& deviceName, const std::string& axis, double distance)
+    : m_deviceName(deviceName), m_axis(axis), m_distance(distance) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.MoveRelative(m_deviceName, m_axis, m_distance, true);
+  }
+
+  std::string GetDescription() const override {
+    return "Move " + m_deviceName + " relative on " + m_axis + " axis by " + std::to_string(m_distance);
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_axis;
+  double m_distance;
+};

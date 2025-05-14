@@ -1154,3 +1154,58 @@ bool MachineOperations::UpdateCameraDisplay() {
   return true;
 }
 #pragma endregion
+
+bool MachineOperations::MoveRelative(const std::string& deviceName, const std::string& axis,
+  double distance, bool blocking) {
+  m_logger->LogInfo("MachineOperations: Moving device " + deviceName +
+    " relative on axis " + axis + " by " + std::to_string(distance));
+
+  // Check if the device is connected
+  if (!IsDeviceConnected(deviceName)) {
+    m_logger->LogError("MachineOperations: Device not connected: " + deviceName);
+    return false;
+  }
+
+  // Determine which controller type to use
+  if (IsDevicePIController(deviceName)) {
+    PIController* controller = m_piControllerManager.GetController(deviceName);
+    if (!controller || !controller->IsConnected()) {
+      m_logger->LogError("MachineOperations: No connected PI controller for device " + deviceName);
+      return false;
+    }
+
+    bool success = controller->MoveRelative(axis, distance, blocking);
+
+    if (success) {
+      m_logger->LogInfo("MachineOperations: Successfully initiated relative move for device " +
+        deviceName + " on axis " + axis);
+    }
+    else {
+      m_logger->LogError("MachineOperations: Failed to move device " + deviceName +
+        " relative on axis " + axis);
+    }
+
+    return success;
+  }
+  else {
+    // For ACS controllers
+    ACSController* controller = m_motionLayer.GetACSControllerManager().GetController(deviceName);
+    if (!controller || !controller->IsConnected()) {
+      m_logger->LogError("MachineOperations: No connected ACS controller for device " + deviceName);
+      return false;
+    }
+
+    bool success = controller->MoveRelative(axis, distance, blocking);
+
+    if (success) {
+      m_logger->LogInfo("MachineOperations: Successfully initiated relative move for device " +
+        deviceName + " on axis " + axis);
+    }
+    else {
+      m_logger->LogError("MachineOperations: Failed to move device " + deviceName +
+        " relative on axis " + axis);
+    }
+
+    return success;
+  }
+}

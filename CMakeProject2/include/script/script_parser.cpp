@@ -132,18 +132,18 @@ void ScriptParser::ExtractProcedures(std::vector<std::string>& lines) {
       // Extract procedure name
       size_t nameStart = upperLine.find_first_not_of(" \t", 17); // After "DEFINE PROCEDURE"
       if (nameStart == std::string::npos) {
-        AddError("Invalid procedure definition, missing name", i + 1);
+        AddError("Invalid procedure definition, missing name", static_cast<int>(i + 1));
         continue;
       }
 
       size_t nameEnd = line.find("(", nameStart);
       if (nameEnd == std::string::npos) {
-        AddError("Invalid procedure definition, missing ()", i + 1);
+        AddError("Invalid procedure definition, missing ()", static_cast<int>(i + 1));
         continue;
       }
 
       if (inProcedure) {
-        AddError("Nested procedure definitions are not allowed", i + 1);
+        AddError("Nested procedure definitions are not allowed", static_cast<int>(i + 1));
         continue;
       }
 
@@ -155,7 +155,7 @@ void ScriptParser::ExtractProcedures(std::vector<std::string>& lines) {
     // Check for procedure end
     else if (line == "END") {
       if (!inProcedure) {
-        AddError("END without DEFINE PROCEDURE", i + 1);
+        AddError("END without DEFINE PROCEDURE", static_cast<int>(i + 1));
         continue;
       }
 
@@ -175,7 +175,7 @@ void ScriptParser::ExtractProcedures(std::vector<std::string>& lines) {
 
   // Check if we have an unclosed procedure
   if (inProcedure) {
-    AddError("Unclosed procedure: " + currentProcedure, lines.size());
+    AddError("Unclosed procedure: " + currentProcedure, static_cast<int>(lines.size()));
   }
 
   // Remove procedure definitions from the main script
@@ -185,6 +185,8 @@ void ScriptParser::ExtractProcedures(std::vector<std::string>& lines) {
     lines.erase(lines.begin() + idx);
   }
 }
+
+
 
 bool ScriptParser::ValidateControlStructures(const std::vector<std::shared_ptr<SequenceOperation>>& operations) {
   std::stack<ControlStructureInfo> controlStack;
@@ -248,7 +250,7 @@ bool ScriptParser::ValidateControlStructures(const std::vector<std::shared_ptr<S
   // Check if all control structures were closed
   if (!controlStack.empty()) {
     FlowControlOperation::Type unclosedType = controlStack.top().type;
-    AddError("Unclosed " + typeNames[unclosedType] + " statement", operations.size());
+    AddError("Unclosed " + typeNames[unclosedType] + " statement", static_cast<int>(operations.size()));
     return false;
   }
 
@@ -441,44 +443,6 @@ std::shared_ptr<SequenceOperation> ScriptParser::ParseProcedureCall(const std::v
   return std::make_shared<ProcedureCallOperation>(procName);
 }
 
-// Example implementation for movement commands
-std::shared_ptr<SequenceOperation> ScriptParser::ParseMoveCommand(const std::vector<std::string>& tokens, MachineOperations& machineOps) {
-  std::string command = tokens[0];
-  std::transform(command.begin(), command.end(), command.begin(), ::toupper);
-
-  if (command == "MOVE") {
-    if (tokens.size() < 6) {
-      throw std::runtime_error("Invalid MOVE command syntax. Expected: MOVE <device> TO <node> IN <graph>");
-    }
-
-    std::string deviceName = tokens[1];
-    if (tokens[2] != "TO") {
-      throw std::runtime_error("Expected 'TO' in MOVE command");
-    }
-
-    std::string nodeId = tokens[3];
-
-    if (tokens[4] != "IN") {
-      throw std::runtime_error("Expected 'IN' in MOVE command");
-    }
-
-    std::string graphName = tokens[5];
-
-    return std::make_shared<MoveToNodeOperation>(deviceName, graphName, nodeId);
-  }
-  else if (command == "MOVE_TO_POINT") {
-    if (tokens.size() < 3) {
-      throw std::runtime_error("Invalid MOVE_TO_POINT command syntax. Expected: MOVE_TO_POINT <device> <position>");
-    }
-
-    std::string deviceName = tokens[1];
-    std::string positionName = tokens[2];
-
-    return std::make_shared<MoveToPointNameOperation>(deviceName, positionName);
-  }
-
-  throw std::runtime_error("Unrecognized move command: " + command);
-}
 
 // Example implementation for laser commands
 std::shared_ptr<SequenceOperation> ScriptParser::ParseLaserCommand(const std::vector<std::string>& tokens, MachineOperations& machineOps) {
@@ -818,4 +782,61 @@ bool ScriptParser::ValidateScript(const std::string& script, std::vector<std::st
 
   // Return true if validation succeeded (no errors)
   return !HasErrors();
+}
+
+std::shared_ptr<SequenceOperation> ScriptParser::ParseMoveCommand(const std::vector<std::string>& tokens, MachineOperations& machineOps) {
+  std::string command = tokens[0];
+  std::transform(command.begin(), command.end(), command.begin(), ::toupper);
+
+  if (command == "MOVE") {
+    if (tokens.size() < 6) {
+      throw std::runtime_error("Invalid MOVE command syntax. Expected: MOVE <device> TO <node> IN <graph>");
+    }
+
+    std::string deviceName = tokens[1];
+    if (tokens[2] != "TO") {
+      throw std::runtime_error("Expected 'TO' in MOVE command");
+    }
+
+    std::string nodeId = tokens[3];
+
+    if (tokens[4] != "IN") {
+      throw std::runtime_error("Expected 'IN' in MOVE command");
+    }
+
+    std::string graphName = tokens[5];
+
+    return std::make_shared<MoveToNodeOperation>(deviceName, graphName, nodeId);
+  }
+  else if (command == "MOVE_TO_POINT") {
+    if (tokens.size() < 3) {
+      throw std::runtime_error("Invalid MOVE_TO_POINT command syntax. Expected: MOVE_TO_POINT <device> <position>");
+    }
+
+    std::string deviceName = tokens[1];
+    std::string positionName = tokens[2];
+
+    return std::make_shared<MoveToPointNameOperation>(deviceName, positionName);
+  }
+  else if (command == "MOVE_RELATIVE") {
+    if (tokens.size() < 4) {
+      throw std::runtime_error("Invalid MOVE_RELATIVE command syntax. Expected: MOVE_RELATIVE <device> <axis> <distance>");
+    }
+
+    std::string deviceName = tokens[1];
+    std::string axis = tokens[2];
+
+    // Parse the distance as a double
+    double distance;
+    try {
+      distance = std::stod(tokens[3]);
+    }
+    catch (const std::exception& e) {
+      throw std::runtime_error("Invalid distance value in MOVE_RELATIVE command: " + tokens[3]);
+    }
+
+    return std::make_shared<MoveRelativeOperation>(deviceName, axis, distance);
+  }
+
+  throw std::runtime_error("Unrecognized move command: " + command);
 }

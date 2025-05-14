@@ -41,7 +41,8 @@ public:
 
   // In the public section of MachineOperations class in machine_operations.h
   bool MoveToPointName(const std::string& deviceName, const std::string& positionName, bool blocking = true);
-
+  bool MoveRelative(const std::string& deviceName, const std::string& axis,
+    double distance, bool blocking = true);
   // IO control methods
   bool SetOutput(const std::string& deviceName, int outputPin, bool state);
   bool SetOutput(int deviceId, int outputPin, bool state);
