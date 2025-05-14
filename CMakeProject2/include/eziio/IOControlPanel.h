@@ -24,6 +24,9 @@ public:
   // Get component name (needed for ToolbarMenu compatibility)
   const std::string& GetName() const { return m_name; }
 
+  // Load configuration from JSON file
+  bool LoadConfiguration(const std::string& filename);
+
 private:
   // Reference to the IO manager
   EziIOManager& m_ioManager;
@@ -47,4 +50,7 @@ private:
 
   // Initialize the list of pins to control
   void InitializePins();
+
+  // Default configuration filename
+  static const std::string DEFAULT_CONFIG_FILE;
 };

@@ -1017,7 +1017,8 @@ int main(int argc, char* argv[])
 	// Create our IO Control Panel for quick output control
 	IOControlPanel ioControlPanel(ioManager);
 	logger->LogInfo("IOControlPanel initialized for quick output control");
-
+	// Optionally load a custom config file
+// ioControlPanel.LoadConfiguration("custom_io_panel_config.json");
 
 
 
