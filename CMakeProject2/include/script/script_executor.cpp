@@ -749,22 +749,47 @@ bool ScriptExecutor::EvaluateCondition(const std::string& condition) {
   // Trim the condition
   std::string trimmedCondition = TrimString(condition);
 
+  Log("Evaluating condition: " + trimmedCondition);
+
   // Handle basic comparison operations
   size_t posEq = trimmedCondition.find("==");
   size_t posNeq = trimmedCondition.find("!=");
-  size_t posLt = trimmedCondition.find("<");
-  size_t posGt = trimmedCondition.find(">");
   size_t posLte = trimmedCondition.find("<=");
   size_t posGte = trimmedCondition.find(">=");
+  size_t posLt = trimmedCondition.find("<");
+  size_t posGt = trimmedCondition.find(">");
 
+  // Check for <= first (before <)
+  if (posLte != std::string::npos) {
+    std::string left = TrimString(trimmedCondition.substr(0, posLte));
+    std::string right = TrimString(trimmedCondition.substr(posLte + 2));
+
+    double leftVal = EvaluateExpression(left);
+    double rightVal = EvaluateExpression(right);
+
+    Log("Comparing: " + std::to_string(leftVal) + " <= " + std::to_string(rightVal));
+    return leftVal <= rightVal;
+  }
+  // Check for >= 
+  else if (posGte != std::string::npos) {
+    std::string left = TrimString(trimmedCondition.substr(0, posGte));
+    std::string right = TrimString(trimmedCondition.substr(posGte + 2));
+
+    double leftVal = EvaluateExpression(left);
+    double rightVal = EvaluateExpression(right);
+
+    Log("Comparing: " + std::to_string(leftVal) + " >= " + std::to_string(rightVal));
+    return leftVal >= rightVal;
+  }
   // Check for equality
-  if (posEq != std::string::npos) {
+  else if (posEq != std::string::npos) {
     std::string left = TrimString(trimmedCondition.substr(0, posEq));
     std::string right = TrimString(trimmedCondition.substr(posEq + 2));
 
     double leftVal = EvaluateExpression(left);
     double rightVal = EvaluateExpression(right);
 
+    Log("Comparing: " + std::to_string(leftVal) + " == " + std::to_string(rightVal));
     return leftVal == rightVal;
   }
   // Check for inequality
@@ -775,27 +800,8 @@ bool ScriptExecutor::EvaluateCondition(const std::string& condition) {
     double leftVal = EvaluateExpression(left);
     double rightVal = EvaluateExpression(right);
 
+    Log("Comparing: " + std::to_string(leftVal) + " != " + std::to_string(rightVal));
     return leftVal != rightVal;
-  }
-  // Check for less than or equal
-  else if (posLte != std::string::npos) {
-    std::string left = TrimString(trimmedCondition.substr(0, posLte));
-    std::string right = TrimString(trimmedCondition.substr(posLte + 2));
-
-    double leftVal = EvaluateExpression(left);
-    double rightVal = EvaluateExpression(right);
-
-    return leftVal <= rightVal;
-  }
-  // Check for greater than or equal
-  else if (posGte != std::string::npos) {
-    std::string left = TrimString(trimmedCondition.substr(0, posGte));
-    std::string right = TrimString(trimmedCondition.substr(posGte + 2));
-
-    double leftVal = EvaluateExpression(left);
-    double rightVal = EvaluateExpression(right);
-
-    return leftVal >= rightVal;
   }
   // Check for less than
   else if (posLt != std::string::npos) {
@@ -805,6 +811,7 @@ bool ScriptExecutor::EvaluateCondition(const std::string& condition) {
     double leftVal = EvaluateExpression(left);
     double rightVal = EvaluateExpression(right);
 
+    Log("Comparing: " + std::to_string(leftVal) + " < " + std::to_string(rightVal));
     return leftVal < rightVal;
   }
   // Check for greater than
@@ -815,12 +822,14 @@ bool ScriptExecutor::EvaluateCondition(const std::string& condition) {
     double leftVal = EvaluateExpression(left);
     double rightVal = EvaluateExpression(right);
 
+    Log("Comparing: " + std::to_string(leftVal) + " > " + std::to_string(rightVal));
     return leftVal > rightVal;
   }
 
   // If no comparison operator found, evaluate as a boolean expression
   try {
     double result = EvaluateExpression(trimmedCondition);
+    Log("Boolean evaluation: " + std::to_string(result) + " -> " + (result != 0.0 ? "TRUE" : "FALSE"));
     return result != 0.0; // Non-zero is true
   }
   catch (const std::exception& e) {
@@ -829,32 +838,32 @@ bool ScriptExecutor::EvaluateCondition(const std::string& condition) {
   }
 }
 
+
 void ScriptExecutor::SetVariable(const std::string& name, double value) {
   m_variables[name] = value;
+  Log("Variable " + name + " set to " + std::to_string(value));
 }
 
 double ScriptExecutor::GetVariable(const std::string& name, double defaultValue) {
   auto it = m_variables.find(name);
   if (it != m_variables.end()) {
+    Log("Variable " + name + " = " + std::to_string(it->second));
     return it->second;
   }
+  Log("Variable " + name + " not found, using default: " + std::to_string(defaultValue));
   return defaultValue;
 }
 
 double ScriptExecutor::EvaluateExpression(const std::string& expression) {
-  // This is a very simplified expression evaluator
-  // In a real implementation, you would need a proper expression parser
+  Log("Evaluating expression: " + expression);
 
-  // Try to replace variables
-  std::string processedExpr = expression;
-  size_t pos = 0;
+  // Trim the expression
+  std::string processedExpr = TrimString(expression);
 
   // Find all "$varname" patterns and replace with their values
+  size_t pos = 0;
   while ((pos = processedExpr.find("$", pos)) != std::string::npos) {
-    // If $ is the last character, it's not a valid variable
-    if (pos == processedExpr.length() - 1) break;
-
-    // Find the end of the variable name (first non-alphanumeric character after $)
+    // Find the end of the variable name
     size_t endPos = pos + 1;
     while (endPos < processedExpr.length() &&
       (isalnum(processedExpr[endPos]) || processedExpr[endPos] == '_')) {
@@ -867,10 +876,10 @@ double ScriptExecutor::EvaluateExpression(const std::string& expression) {
     // Get variable value
     double value = GetVariable(varName, 0.0);
 
-    // Convert to string and replace
+    // Convert to string
     std::string valueStr = std::to_string(value);
 
-    // Remove trailing zeros from floating point representation
+    // Remove trailing zeros
     valueStr.erase(valueStr.find_last_not_of('0') + 1, std::string::npos);
     if (valueStr.back() == '.') {
       valueStr.pop_back();
@@ -882,15 +891,130 @@ double ScriptExecutor::EvaluateExpression(const std::string& expression) {
     pos += valueStr.length();
   }
 
-  // For simple expressions, just evaluate directly
-  // In a real implementation, you would use an expression parser library
+  Log("After variable replacement: " + processedExpr);
+
+  // Handle arithmetic expressions with proper operator precedence
+  // First handle multiplication and division, then addition and subtraction
+
+  // Helper lambda to find operator position that's not within parentheses
+  auto findOperator = [](const std::string& expr, const std::string& op) -> size_t {
+    int parenDepth = 0;
+    for (size_t i = 0; i < expr.length(); i++) {
+      if (expr[i] == '(') parenDepth++;
+      else if (expr[i] == ')') parenDepth--;
+      else if (parenDepth == 0 && expr.substr(i, op.length()) == op) {
+        // For minus, ensure it's not a negative number at the start
+        if (op == "-" && i == 0) continue;
+        return i;
+      }
+    }
+    return std::string::npos;
+  };
+
+  // Handle addition/subtraction (lowest precedence)
+  size_t plusPos = findOperator(processedExpr, "+");
+  size_t minusPos = findOperator(processedExpr, "-");
+
+  // Choose the rightmost operator (for left-to-right evaluation)
+  size_t opPos = std::string::npos;
+  std::string op;
+  if (plusPos != std::string::npos && minusPos != std::string::npos) {
+    if (plusPos > minusPos) {
+      opPos = plusPos;
+      op = "+";
+    }
+    else {
+      opPos = minusPos;
+      op = "-";
+    }
+  }
+  else if (plusPos != std::string::npos) {
+    opPos = plusPos;
+    op = "+";
+  }
+  else if (minusPos != std::string::npos) {
+    opPos = minusPos;
+    op = "-";
+  }
+
+  if (opPos != std::string::npos) {
+    std::string leftStr = TrimString(processedExpr.substr(0, opPos));
+    std::string rightStr = TrimString(processedExpr.substr(opPos + 1));
+
+    double left = EvaluateExpression(leftStr);  // Recursive call
+    double right = EvaluateExpression(rightStr); // Recursive call
+
+    if (op == "+") {
+      double result = left + right;
+      Log("Addition: " + std::to_string(left) + " + " + std::to_string(right) + " = " + std::to_string(result));
+      return result;
+    }
+    else {
+      double result = left - right;
+      Log("Subtraction: " + std::to_string(left) + " - " + std::to_string(right) + " = " + std::to_string(result));
+      return result;
+    }
+  }
+
+  // Handle multiplication/division (higher precedence)
+  size_t multPos = findOperator(processedExpr, "*");
+  size_t divPos = findOperator(processedExpr, "/");
+
+  opPos = std::string::npos;
+  if (multPos != std::string::npos && divPos != std::string::npos) {
+    if (multPos > divPos) {
+      opPos = multPos;
+      op = "*";
+    }
+    else {
+      opPos = divPos;
+      op = "/";
+    }
+  }
+  else if (multPos != std::string::npos) {
+    opPos = multPos;
+    op = "*";
+  }
+  else if (divPos != std::string::npos) {
+    opPos = divPos;
+    op = "/";
+  }
+
+  if (opPos != std::string::npos) {
+    std::string leftStr = TrimString(processedExpr.substr(0, opPos));
+    std::string rightStr = TrimString(processedExpr.substr(opPos + 1));
+
+    double left = EvaluateExpression(leftStr);  // Recursive call
+    double right = EvaluateExpression(rightStr); // Recursive call
+
+    if (op == "*") {
+      double result = left * right;
+      Log("Multiplication: " + std::to_string(left) + " * " + std::to_string(right) + " = " + std::to_string(result));
+      return result;
+    }
+    else {
+      if (right == 0) {
+        throw std::runtime_error("Division by zero");
+      }
+      double result = left / right;
+      Log("Division: " + std::to_string(left) + " / " + std::to_string(right) + " = " + std::to_string(result));
+      return result;
+    }
+  }
+
+  // For simple numeric expressions
   try {
-    return std::stod(processedExpr);
+    double result = std::stod(processedExpr);
+    Log("Numeric value: " + std::to_string(result));
+    return result;
   }
   catch (...) {
     throw std::runtime_error("Invalid expression: " + expression);
   }
 }
+
+
+
 
 void ScriptExecutor::Log(const std::string& message) {
   std::lock_guard<std::mutex> lock(m_mutex);
