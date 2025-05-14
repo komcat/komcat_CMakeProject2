@@ -68,7 +68,9 @@ private:
   // UI state
   bool m_isVisible;
   std::string m_script;
+  // Settings display
   bool m_showCommandHelp;
+  float m_fontSize = 1.0f;  // Font scale factor (1.0 = default size)
 
   // Sample scripts
   std::map<std::string, std::string> m_sampleScripts;
@@ -95,4 +97,6 @@ private:
   const size_t MAX_RECENT_FILES = 5;
 
   void AddToRecentFiles(const std::string& filepath);
+
+
 };

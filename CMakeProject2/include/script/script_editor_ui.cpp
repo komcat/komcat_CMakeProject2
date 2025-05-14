@@ -158,7 +158,38 @@ void ScriptEditorUI::RenderUI() {
       }
       ImGui::EndMenu();
     }
+    if (ImGui::BeginMenu("View")) {
+      ImGui::MenuItem("Command Help", nullptr, &m_showCommandHelp);
+      ImGui::Separator();
 
+      // Font size menu
+      if (ImGui::BeginMenu("Font Size")) {
+        if (ImGui::MenuItem("Default", nullptr, m_fontSize == 1.0f)) {
+          m_fontSize = 1.0f;
+        }
+        if (ImGui::MenuItem("Small", nullptr, m_fontSize == 0.85f)) {
+          m_fontSize = 0.85f;
+        }
+        if (ImGui::MenuItem("Large", nullptr, m_fontSize == 2.0f)) {
+          m_fontSize = 2.0f;
+        }
+        if (ImGui::MenuItem("Extra Large", nullptr, m_fontSize == 4.0f)) {
+          m_fontSize = 4.0f;
+        }
+        ImGui::Separator();
+        // Custom font size slider
+        ImGui::SliderFloat("Custom", &m_fontSize, 0.5f, 2.0f, "%.2f");
+        ImGui::EndMenu();
+      }
+      ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Help")) {
+      if (ImGui::MenuItem("Command Reference", nullptr, &m_showCommandHelp)) {
+        // Toggle command help panel
+      }
+      ImGui::EndMenu();
+    }
     if (ImGui::BeginMenu("Help")) {
       if (ImGui::MenuItem("Command Reference", nullptr, &m_showCommandHelp)) {
         // Toggle command help panel
@@ -230,12 +261,22 @@ void ScriptEditorUI::RenderEditorSection() {
     flags |= ImGuiInputTextFlags_ReadOnly;
   }
 
+  // Apply font scaling
+  ImFont* font = ImGui::GetFont();
+  float oldScale = font->Scale;
+  font->Scale *= m_fontSize;
+  ImGui::PushFont(font);
+
   // Multiline text editor
   if (ImGui::InputTextMultiline("##editor", m_editorBuffer, EDITOR_BUFFER_SIZE,
     ImVec2(-1, -1), flags)) {
     // Update script when text changes
     m_script = m_editorBuffer;
   }
+
+  // Restore font scale
+  font->Scale = oldScale;
+  ImGui::PopFont();
 }
 
 void ScriptEditorUI::RenderControlSection() {
