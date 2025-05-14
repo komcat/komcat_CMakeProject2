@@ -70,9 +70,12 @@
 // In your main.cpp or equivalent file
 #include "include/script/script_editor_ui.h"
 #include "include/ui/MotionGraphic.h"
-
+#include "include/script/script_runner.h"
+#include "include/script/ScriptRunnerAdapter.h"
 
 #pragma region header functions
+
+
 
 void RenderDraggableOverlay() {
 	// Set window position and style
@@ -811,7 +814,7 @@ int main(int argc, char* argv[])
 	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
 		SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_FULLSCREEN_DESKTOP);
 
-	SDL_Window* window = SDL_CreateWindow("Random Number Generator", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600, window_flags);
+	SDL_Window* window = SDL_CreateWindow("Fabrinet West AAA", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600, window_flags);
 	if (window == nullptr)
 	{
 		printf("Error creating window: %s\n", SDL_GetError());
@@ -1120,7 +1123,9 @@ int main(int argc, char* argv[])
 	// Create the MotionGraphic instance after all dependencies are initialized
 	MotionGraphic motionGraphic(configManager, motionControlLayer, machineOps);
 	logger->LogInfo("MotionGraphic initialized");
-
+	// Add these lines:
+	ScriptRunner scriptRunner(machineOps);
+	logger->LogInfo("ScriptRunner initialized");
 
 // Create the vertical toolbar
 	auto toolbarVertical = std::make_unique<VerticalToolbarMenu>();
@@ -1163,6 +1168,8 @@ int main(int argc, char* argv[])
 	toolbarVertical->AddReferenceToCategory("General", CreateHierarchicalUI(cld101xManager, "Laser TEC Cntrl"));
 	// In your VerticalToolbarMenu setup:
 	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(scriptEditor, "Script Editor"));
+	// Add this right after it:
+	toolbarVertical->AddReferenceToCategory("Products", CreateScriptRunnerAdapter(scriptRunner, "Script Runner"));
 	// Add the MotionGraphic to your vertical toolbar
 	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(motionGraphic, "Motion Graphic"));
 
@@ -1332,7 +1339,8 @@ int main(int argc, char* argv[])
 
 		scriptEditor.RenderUI();
 		motionGraphic.RenderUI();
-
+		// Add this right after it:
+		scriptRunner.RenderUI();
 
 		// Rendering
 		ImGui::Render();

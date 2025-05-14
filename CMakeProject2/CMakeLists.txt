@@ -248,7 +248,14 @@ add_executable(CMakeProject2
  "include/ui/MotionControlHierarchicalAdapter.h"
  "include/camera/PylonCameraAdapter.h"
  "include/script/script_parser.h"
- "include/script/script_parser.cpp" "include/script/script_executor.h" "include/script/script_executor.cpp" "include/script/script_editor_ui.h" "include/script/script_editor_ui.cpp" "include/ui/MotionGraphic.h" "include/ui/MotionGraphic.cpp")
+ "include/script/script_parser.cpp"
+ "include/script/script_executor.h"
+ "include/script/script_executor.cpp"
+ "include/script/script_editor_ui.h"
+ "include/script/script_editor_ui.cpp"
+ "include/ui/MotionGraphic.h"
+ "include/ui/MotionGraphic.cpp"
+ "include/script/script_runner.h" "include/script/script_runner.cpp" "include/script/ScriptRunnerAdapter.h")
 
 # Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
 target_include_directories(CMakeProject2 PRIVATE

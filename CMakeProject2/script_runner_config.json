@@ -1,0 +1,105 @@
+{
+  "version": "1.0",
+  "slots": [
+    {
+      "scriptPath": "scripts/initialization.aas",
+      "displayName": "System Initialize",
+      "enabled": true
+    },
+    {
+      "scriptPath": "scripts/test1.aas",
+      "displayName": "Test Movement 1",
+      "enabled": true
+    },
+    {
+      "scriptPath": "scripts/test2.aas",
+      "displayName": "Test Movement 2",
+      "enabled": true
+    },
+    {
+      "scriptPath": "scripts/alignment_routine.aas",
+      "displayName": "Lens Alignment",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    },
+    {
+      "scriptPath": "",
+      "displayName": "",
+      "enabled": false
+    }
+  ]
+}
