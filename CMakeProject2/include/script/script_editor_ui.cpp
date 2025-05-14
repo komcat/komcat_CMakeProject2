@@ -115,13 +115,19 @@ void ScriptEditorUI::RenderUI() {
         m_script.clear();
         strcpy(m_editorBuffer, "# New script");
       }
-      if (ImGui::MenuItem("Open")) {
-        // In a real app, you'd use a file dialog here
-        LoadScript("scripts/last_script.txt");
+      if (ImGui::MenuItem("Open...")) {
+        ShowOpenDialog();
       }
       if (ImGui::MenuItem("Save")) {
-        // In a real app, you'd use a file dialog here
-        SaveScript("scripts/last_script.txt");
+        if (m_currentFilePath.empty()) {
+          ShowSaveDialog();
+        }
+        else {
+          SaveScript(m_currentFilePath);
+        }
+      }
+      if (ImGui::MenuItem("Save As...")) {
+        ShowSaveDialog();
       }
       ImGui::Separator();
       if (ImGui::MenuItem("Exit")) {
@@ -129,7 +135,21 @@ void ScriptEditorUI::RenderUI() {
       }
       ImGui::EndMenu();
     }
-
+    if (ImGui::BeginMenu("Recent Files")) {
+      if (m_recentFiles.empty()) {
+        ImGui::MenuItem("(No recent files)", nullptr, false, false);
+      }
+      else {
+        for (const auto& file : m_recentFiles) {
+          if (ImGui::MenuItem(file.c_str())) {
+            if (LoadScript(file)) {
+              m_currentFilePath = file;
+            }
+          }
+        }
+      }
+      ImGui::EndMenu();
+    }
     if (ImGui::BeginMenu("Examples")) {
       for (const auto& [name, script] : m_sampleScripts) {
         if (ImGui::MenuItem(name.c_str())) {
@@ -184,7 +204,8 @@ void ScriptEditorUI::RenderUI() {
   if (m_showCommandHelp) {
     RenderCommandHelpSection();
   }
-
+  // Render file dialog if open
+  RenderFileDialog();
   ImGui::End();
 }
 
@@ -630,16 +651,22 @@ void ScriptEditorUI::OnScriptLog(const std::string& message) {
 
 bool ScriptEditorUI::LoadScript(const std::string& filename) {
   try {
+    // Ensure .aas extension
+    std::string actualFilename = filename;
+    if (actualFilename.find(".aas") == std::string::npos) {
+      actualFilename += ".aas";
+    }
+
     // Create directory if needed
-    std::filesystem::path filePath(filename);
+    std::filesystem::path filePath(actualFilename);
     std::filesystem::path dir = filePath.parent_path();
     if (!dir.empty() && !std::filesystem::exists(dir)) {
       std::filesystem::create_directories(dir);
     }
 
-    std::ifstream file(filename);
+    std::ifstream file(actualFilename);
     if (!file.is_open()) {
-      m_statusMessage = "Error: Could not open file " + filename;
+      m_statusMessage = "Error: Could not open file " + actualFilename;
       m_statusExpiry = std::chrono::steady_clock::now() + std::chrono::seconds(5);
       return false;
     }
@@ -648,8 +675,8 @@ bool ScriptEditorUI::LoadScript(const std::string& filename) {
       std::istreambuf_iterator<char>());
 
     SetScript(content);
-
-    m_statusMessage = "Script loaded from " + filename;
+    AddToRecentFiles(actualFilename);
+    m_statusMessage = "Script loaded from " + actualFilename;
     m_statusExpiry = std::chrono::steady_clock::now() + std::chrono::seconds(5);
 
     return true;
@@ -663,23 +690,29 @@ bool ScriptEditorUI::LoadScript(const std::string& filename) {
 
 bool ScriptEditorUI::SaveScript(const std::string& filename) {
   try {
+    // Ensure .aas extension
+    std::string actualFilename = filename;
+    if (actualFilename.find(".aas") == std::string::npos) {
+      actualFilename += ".aas";
+    }
+
     // Create directory if it doesn't exist
-    std::filesystem::path filePath(filename);
+    std::filesystem::path filePath(actualFilename);
     std::filesystem::path dir = filePath.parent_path();
     if (!dir.empty() && !std::filesystem::exists(dir)) {
       std::filesystem::create_directories(dir);
     }
 
-    std::ofstream file(filename);
+    std::ofstream file(actualFilename);
     if (!file.is_open()) {
-      m_statusMessage = "Error: Could not open file " + filename + " for writing";
+      m_statusMessage = "Error: Could not open file " + actualFilename + " for writing";
       m_statusExpiry = std::chrono::steady_clock::now() + std::chrono::seconds(5);
       return false;
     }
 
     file << m_script;
 
-    m_statusMessage = "Script saved to " + filename;
+    m_statusMessage = "Script saved to " + actualFilename;
     m_statusExpiry = std::chrono::steady_clock::now() + std::chrono::seconds(5);
 
     return true;
@@ -701,4 +734,80 @@ void ScriptEditorUI::SetScript(const std::string& script) {
 
 void ScriptEditorUI::AddSampleScript(const std::string& name, const std::string& script) {
   m_sampleScripts[name] = script;
+}
+
+void ScriptEditorUI::ShowOpenDialog() {
+  m_showFileDialog = true;
+  m_isOpenDialog = true;
+  strcpy(m_filePathBuffer, "scripts/");
+}
+
+void ScriptEditorUI::ShowSaveDialog() {
+  m_showFileDialog = true;
+  m_isOpenDialog = false;
+  if (m_currentFilePath.empty()) {
+    strcpy(m_filePathBuffer, "scripts/new_script.aas");
+  }
+  else {
+    strcpy(m_filePathBuffer, m_currentFilePath.c_str());
+  }
+}
+
+void ScriptEditorUI::RenderFileDialog() {
+  if (!m_showFileDialog) return;
+
+  ImGui::Begin("File Dialog", &m_showFileDialog);
+
+  ImGui::Text(m_isOpenDialog ? "Open Script File" : "Save Script File");
+  ImGui::Separator();
+
+  ImGui::InputText("File Path", m_filePathBuffer, sizeof(m_filePathBuffer));
+
+  // Add .aas extension if not present
+  std::string filePath(m_filePathBuffer);
+  if (filePath.find(".aas") == std::string::npos &&
+    filePath.find(".") == std::string::npos) {
+    filePath += ".aas";
+  }
+
+  ImGui::Separator();
+
+  if (ImGui::Button(m_isOpenDialog ? "Open" : "Save", ImVec2(120, 0))) {
+    if (m_isOpenDialog) {
+      if (LoadScript(filePath)) {
+        m_currentFilePath = filePath;
+        m_showFileDialog = false;
+      }
+    }
+    else {
+      if (SaveScript(filePath)) {
+        m_currentFilePath = filePath;
+        m_showFileDialog = false;
+      }
+    }
+  }
+
+  ImGui::SameLine();
+
+  if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+    m_showFileDialog = false;
+  }
+
+  ImGui::End();
+}
+
+void ScriptEditorUI::AddToRecentFiles(const std::string& filepath) {
+  // Remove if already in list
+  m_recentFiles.erase(
+    std::remove(m_recentFiles.begin(), m_recentFiles.end(), filepath),
+    m_recentFiles.end()
+  );
+
+  // Add to front
+  m_recentFiles.insert(m_recentFiles.begin(), filepath);
+
+  // Limit size
+  if (m_recentFiles.size() > MAX_RECENT_FILES) {
+    m_recentFiles.resize(MAX_RECENT_FILES);
+  }
 }

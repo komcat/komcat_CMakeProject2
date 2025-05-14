@@ -37,7 +37,10 @@ public:
 
   // Sample scripts for quick access
   void AddSampleScript(const std::string& name, const std::string& script);
-
+  // File dialog methods
+  void ShowOpenDialog();
+  void ShowSaveDialog();
+  void RenderFileDialog();
 private:
   // Helper method to trim whitespace from strings
   std::string TrimString(const std::string& str);
@@ -81,4 +84,15 @@ private:
   // Buffer for script editor
   static constexpr size_t EDITOR_BUFFER_SIZE = 65536;
   char m_editorBuffer[EDITOR_BUFFER_SIZE];
+
+  // File management
+  std::string m_currentFilePath;
+  bool m_showFileDialog = false;
+  bool m_isOpenDialog = true;
+  char m_filePathBuffer[256] = "";
+
+  std::vector<std::string> m_recentFiles;
+  const size_t MAX_RECENT_FILES = 5;
+
+  void AddToRecentFiles(const std::string& filepath);
 };
