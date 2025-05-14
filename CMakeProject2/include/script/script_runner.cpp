@@ -246,6 +246,75 @@ void ScriptRunner::RenderUI() {
   ImGuiWindowFlags windowFlags = ImGuiWindowFlags_None;
   ImGui::Begin("Script Runner", &m_isVisible, windowFlags);
 
+  // Track overall progress and status
+  int totalExecuting = 0;
+  int totalCompleted = 0;
+  int totalError = 0;
+  float totalProgress = 0.0f;
+
+  for (int i = 0; i < NUM_SLOTS; i++) {
+    if (m_slots[i].enabled && !m_slots[i].scriptPath.empty()) {
+      if (m_slots[i].isExecuting) {
+        totalExecuting++;
+        totalProgress += m_slots[i].executor->GetProgress();
+      }
+      else if (m_slots[i].lastState == ScriptExecutor::ExecutionState::Completed) {
+        totalCompleted++;
+        totalProgress += 1.0f; // Completed = 100%
+      }
+      else if (m_slots[i].lastState == ScriptExecutor::ExecutionState::Error) {
+        totalError++;
+        totalProgress += m_slots[i].executor->GetProgress();
+      }
+    }
+  }
+
+  // Show overall progress bar at the top
+  int totalTracked = totalExecuting + totalCompleted + totalError;
+  if (totalTracked > 0) {
+    float averageProgress = totalProgress / totalTracked;
+
+    // Color the progress bar based on state
+    ImVec4 barColor;
+    if (totalError > 0) {
+      barColor = ImVec4(0.9f, 0.2f, 0.2f, 1.0f); // Red for errors
+    }
+    else if (totalExecuting > 0) {
+      barColor = ImVec4(0.2f, 0.7f, 0.2f, 1.0f); // Green for running
+    }
+    else {
+      barColor = ImVec4(0.2f, 0.5f, 0.9f, 1.0f); // Blue for completed
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, barColor);
+
+    // Status text
+    std::string statusText;
+    if (totalExecuting > 0) {
+      statusText = "Running: " + std::to_string(totalExecuting);
+    }
+    if (totalCompleted > 0) {
+      if (!statusText.empty()) statusText += ", ";
+      statusText += "Completed: " + std::to_string(totalCompleted);
+    }
+    if (totalError > 0) {
+      if (!statusText.empty()) statusText += ", ";
+      statusText += "Error: " + std::to_string(totalError);
+    }
+
+    ImGui::Text("Overall Progress (%s):", statusText.c_str());
+    ImGui::ProgressBar(averageProgress, ImVec2(-1, 25));
+
+    ImGui::PopStyleColor();
+    ImGui::Separator();
+  }
+  else {
+    // Show empty progress bar when no scripts are loaded
+    ImGui::Text("Overall Progress (No active scripts):");
+    ImGui::ProgressBar(0.0f, ImVec2(-1, 25));
+    ImGui::Separator();
+  }
+
   // Header controls
   if (ImGui::Button("Refresh Scripts")) {
     RefreshFileList();
@@ -256,8 +325,19 @@ void ScriptRunner::RenderUI() {
     m_showSettings = !m_showSettings;
   }
 
+  ImGui::SameLine();
+  if (ImGui::Button("Reset All")) {
+    // Reset all slot states
+    for (int i = 0; i < NUM_SLOTS; i++) {
+      if (m_slots[i].enabled && !m_slots[i].isExecuting) {
+        m_slots[i].lastState = ScriptExecutor::ExecutionState::Idle;
+      }
+    }
+  }
+
   ImGui::Separator();
 
+  // Rest of the UI remains the same...
   // Settings popup
   if (m_showSettings) {
     ImGui::BeginChild("Settings", ImVec2(ImGui::GetContentRegionAvail().x, 80), true);
@@ -271,8 +351,13 @@ void ScriptRunner::RenderUI() {
     ImGui::Separator();
   }
 
-  // Single column layout for slots
-  ImGui::BeginChild("Slots", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+  // Split layout: slots on left, progress on right
+  float totalWidth = ImGui::GetContentRegionAvail().x;
+  float slotsWidth = totalWidth * 0.65f;
+  float progressWidth = totalWidth * 0.35f - 10.0f; // Minus spacing
+
+  // Left column - Slots
+  ImGui::BeginChild("Slots", ImVec2(slotsWidth, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
   for (int i = 0; i < m_visibleSlotCount; i++) {
     ImGui::PushID(i);
@@ -288,6 +373,13 @@ void ScriptRunner::RenderUI() {
 
   ImGui::EndChild();
 
+  ImGui::SameLine();
+
+  // Right column - Progress panel
+  ImGui::BeginChild("ProgressPanel", ImVec2(progressWidth, 0), true);
+  RenderProgressPanel();
+  ImGui::EndChild();
+
   // Render edit dialog if open
   if (m_showEditDialog) {
     RenderEditDialog();
@@ -295,6 +387,125 @@ void ScriptRunner::RenderUI() {
 
   ImGui::End();
 }
+
+
+
+void ScriptRunner::RenderProgressPanel() {
+  ImGui::Text("Execution Progress");
+  ImGui::Separator();
+
+  // Find all currently executing slots
+  std::vector<int> executingSlots;
+  for (int i = 0; i < NUM_SLOTS; i++) {
+    if (m_slots[i].isExecuting) {
+      executingSlots.push_back(i);
+    }
+  }
+
+  if (executingSlots.empty()) {
+    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No scripts currently executing");
+  }
+  else {
+    // Show progress for each executing slot
+    for (int slotIndex : executingSlots) {
+      auto& slot = m_slots[slotIndex];
+
+      ImGui::PushID(slotIndex);
+
+      // Slot header with status
+      ImGui::Text("Slot %d: %s", slotIndex + 1, slot.displayName.c_str());
+
+      // Status indicator
+      ImVec4 statusColor;
+      const char* statusText = "";
+      switch (slot.executor->GetState()) {
+      case ScriptExecutor::ExecutionState::Running:
+        statusColor = ImVec4(0.0f, 0.7f, 0.0f, 1.0f);
+        statusText = "Running";
+        break;
+      case ScriptExecutor::ExecutionState::Paused:
+        statusColor = ImVec4(0.9f, 0.7f, 0.0f, 1.0f);
+        statusText = "Paused";
+        break;
+      default:
+        statusColor = ImVec4(0.7f, 0.7f, 0.7f, 1.0f);
+        statusText = "Unknown";
+      }
+
+      ImGui::SameLine();
+      ImGui::TextColored(statusColor, "[%s]", statusText);
+
+      // Progress bar
+      float progress = slot.executor->GetProgress();
+      ImGui::ProgressBar(progress, ImVec2(-1, 0));
+
+      // Current operation
+      ImGui::Text("Line %d/%d",
+        slot.executor->GetCurrentLine(),
+        slot.executor->GetTotalLines());
+
+      ImGui::TextWrapped("Current: %s", slot.executor->GetCurrentOperation().c_str());
+
+      // Execution time
+      if (m_executionStartTimes.find(slotIndex) != m_executionStartTimes.end()) {
+        auto duration = std::chrono::steady_clock::now() - m_executionStartTimes[slotIndex];
+        auto seconds = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+        ImGui::Text("Time: %lld seconds", seconds);
+      }
+
+      ImGui::Separator();
+      ImGui::PopID();
+    }
+  }
+
+  // Log display section
+  ImGui::Spacing();
+  ImGui::Text("Execution Log");
+  ImGui::Separator();
+
+  // Add a dropdown to select which slot's log to view
+  static int selectedLogSlot = -1;
+  if (ImGui::BeginCombo("Select Slot Log", selectedLogSlot >= 0 ?
+    ("Slot " + std::to_string(selectedLogSlot + 1)).c_str() : "None")) {
+    for (int i = 0; i < NUM_SLOTS; i++) {
+      if (m_slots[i].enabled) {
+        std::string slotLabel = "Slot " + std::to_string(i + 1) + ": " + m_slots[i].displayName;
+        if (ImGui::Selectable(slotLabel.c_str(), selectedLogSlot == i)) {
+          selectedLogSlot = i;
+        }
+      }
+    }
+    ImGui::EndCombo();
+  }
+
+  if (selectedLogSlot >= 0 && selectedLogSlot < NUM_SLOTS) {
+    // Log display area
+    ImGui::BeginChild("LogArea", ImVec2(0, 200), true, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+
+    // Display the executor's log for the selected slot
+    const auto& log = m_slots[selectedLogSlot].executor->GetLog();
+    for (const auto& logEntry : log) {
+      // Color errors differently
+      if (logEntry.find("ERROR:") != std::string::npos) {
+        ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", logEntry.c_str());
+      }
+      else {
+        ImGui::TextUnformatted(logEntry.c_str());
+      }
+    }
+
+    // Auto-scroll to bottom
+    if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 10) {
+      ImGui::SetScrollHereY(1.0f);
+    }
+
+    ImGui::EndChild();
+  }
+  else {
+    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Select a slot to view its log");
+  }
+}
+
 
 void ScriptRunner::RenderSlot(int slotIndex) {
   auto& slot = m_slots[slotIndex];
@@ -342,11 +553,8 @@ void ScriptRunner::RenderSlot(int slotIndex) {
         break;
       }
 
-      ImGui::TextColored(color, "%s", statusText);
-
-      // Progress bar
-      float progress = slot.executor->GetProgress();
-      ImGui::ProgressBar(progress, ImVec2(-1, 0));
+      ImGui::TextColored(color, "%s - Line %d/%d", statusText,
+        slot.executor->GetCurrentLine(), slot.executor->GetTotalLines());
     }
   }
   else {

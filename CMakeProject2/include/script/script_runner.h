@@ -91,4 +91,16 @@ private:
 
   // Execution tracking
   std::map<int, std::chrono::steady_clock::time_point> m_executionStartTimes;
+
+  // Execution log tracking for each slot
+  std::map<int, std::vector<std::string>> m_executionLogs;
+
+  // Current operation for each slot
+  std::map<int, std::string> m_currentOperations;
+
+  // Selected log slot for display
+  int m_selectedLogSlot = -1;
+
+  // Progress panel rendering
+  void RenderProgressPanel();
 };

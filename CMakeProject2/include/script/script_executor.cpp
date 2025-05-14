@@ -222,6 +222,7 @@ void ScriptExecutor::ExecuteScriptInternal() {
       if (m_stopRequested) {
         break;
       }
+
       // Handle pause request
       while (m_pauseRequested && !m_stopRequested) {
         if (m_state != ExecutionState::Paused) {
@@ -232,6 +233,7 @@ void ScriptExecutor::ExecuteScriptInternal() {
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
+
       // Double-check stop request after pause
       if (m_stopRequested) {
         break;
@@ -278,7 +280,7 @@ void ScriptExecutor::ExecuteScriptInternal() {
           if (m_executionCallback) {
             m_executionCallback(m_state);
           }
-          break;
+          return; // Exit the function on error
         }
         continue;
       }
@@ -294,28 +296,26 @@ void ScriptExecutor::ExecuteScriptInternal() {
           m_executionCallback(m_state);
         }
 
-        break;
+        return; // Exit the function on error
       }
 
-      // Final state update
-      if (!m_stopRequested && m_state != ExecutionState::Error) {
-        m_state = ExecutionState::Completed;
-        Log("Script execution completed successfully");
-
-        if (m_executionCallback) {
-          m_executionCallback(m_state);
-        }
-      }
-      else if (m_stopRequested) {
-        // Explicitly set state to Idle if stopped
-        m_state = ExecutionState::Idle;
-      }
+      // DON'T set state to completed here - wait until ALL operations are done
+      // This was the bug causing premature completion
     }
 
-    // If we completed normally (not stopped or error)
+    // NOW check final state after the loop completes
     if (!m_stopRequested && m_state != ExecutionState::Error) {
       m_state = ExecutionState::Completed;
       Log("Script execution completed successfully");
+
+      if (m_executionCallback) {
+        m_executionCallback(m_state);
+      }
+    }
+    else if (m_stopRequested) {
+      // Explicitly set state to Idle if stopped
+      m_state = ExecutionState::Idle;
+      Log("Script execution stopped");
 
       if (m_executionCallback) {
         m_executionCallback(m_state);
@@ -339,6 +339,7 @@ void ScriptExecutor::ExecuteScriptInternal() {
     }
   }
 }
+
 
 // Flow control execution methods
 void ScriptExecutor::ExecuteFlowControl(const ScriptParser::FlowControlOperation* flowOp, size_t& index) {
