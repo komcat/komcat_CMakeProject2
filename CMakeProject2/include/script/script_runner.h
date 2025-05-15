@@ -4,6 +4,7 @@
 #include "include/script/script_executor.h"
 #include "include/machine_operations.h"
 #include "include/ui/VerticalToolbarMenu.h"
+#include "include/script/script_print_viewer.h"
 #include <string>
 #include <vector>
 #include <array>
@@ -29,7 +30,7 @@ public:
     }
   };
 
-  ScriptRunner(MachineOperations& machineOps);
+  ScriptRunner(MachineOperations& machineOps, ScriptPrintViewer* printViewer);
   ~ScriptRunner();
 
   // Render the UI
@@ -103,4 +104,6 @@ private:
 
   // Progress panel rendering
   void RenderProgressPanel();
+
+  ScriptPrintViewer* m_printViewer;  // <-- ADD THIS LINE
 };

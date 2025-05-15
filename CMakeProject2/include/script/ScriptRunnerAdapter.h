@@ -42,3 +42,4 @@ inline std::shared_ptr<IHierarchicalTogglableUI> CreateScriptRunnerAdapter(
   ScriptRunner& runner, const std::string& name) {
   return std::make_shared<ScriptRunnerAdapter>(runner, name);
 }
+

@@ -1,7 +1,9 @@
 // script_runner.cpp
 #include "include/script/script_runner.h"
+#include "include/script/print_operation.h"
 #include "imgui.h"
 #include <fstream>
+#include <sstream>
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <algorithm>
@@ -9,12 +11,15 @@
 
 using json = nlohmann::json;
 
-ScriptRunner::ScriptRunner(MachineOperations& machineOps)
-  : m_isVisible(false),
+ScriptRunner::ScriptRunner(MachineOperations& machineOps, ScriptPrintViewer* printViewer)
+  : m_machineOps(machineOps),
+  m_printViewer(printViewer),
+  m_isVisible(true),
   m_name("Script Runner"),
-  m_machineOps(machineOps),
   m_showEditDialog(false),
-  m_editingSlotIndex(-1)
+  m_editingSlotIndex(-1),
+  m_visibleSlotCount(10),
+  m_showSettings(false)
 {
   // Initialize slots
   for (int i = 0; i < NUM_SLOTS; i++) {
@@ -45,6 +50,9 @@ ScriptRunner::ScriptRunner(MachineOperations& machineOps)
 
   // Load configuration
   LoadConfiguration();
+
+  // Get initial list of scripts
+  RefreshFileList();
 }
 
 ScriptRunner::~ScriptRunner() {
@@ -191,9 +199,7 @@ void ScriptRunner::ClearSlot(int slotIndex) {
 }
 
 void ScriptRunner::ExecuteSlot(int slotIndex) {
-  if (slotIndex < 0 || slotIndex >= NUM_SLOTS) {
-    return;
-  }
+  if (slotIndex < 0 || slotIndex >= NUM_SLOTS) return;
 
   auto& slot = m_slots[slotIndex];
 
@@ -202,27 +208,54 @@ void ScriptRunner::ExecuteSlot(int slotIndex) {
   }
 
   if (slot.isExecuting) {
-    m_machineOps.LogWarning("Slot " + std::to_string(slotIndex + 1) + " is already executing");
-    return;
+    return; // Already executing
   }
 
-  // Load the script content
+  // Load script content
   std::string scriptContent;
   if (!LoadScriptContent(slot.scriptPath, scriptContent)) {
     slot.lastError = "Failed to load script file";
+    slot.lastState = ScriptExecutor::ExecutionState::Error;
     return;
   }
 
-  // Execute the script
-  slot.lastError.clear();
-  slot.isExecuting = true;
-  m_executionStartTimes[slotIndex] = std::chrono::steady_clock::now();
+  // Create new executor
+  slot.executor = std::make_unique<ScriptExecutor>(m_machineOps);
 
-  if (!slot.executor->ExecuteScript(scriptContent, true)) {
-    slot.isExecuting = false;
-    slot.lastError = "Failed to start script execution";
-    slot.lastState = ScriptExecutor::ExecutionState::Error;
+  // Set up print handler to use the print viewer - THIS IS THE KEY PART
+  if (m_printViewer) {
+    slot.executor->SetPrintHandler([this](const std::string& message) {
+      if (m_printViewer) {
+        m_printViewer->AddPrintMessage(message);
+      }
+    });
+
+    // Also set the global print handler for PrintOperation
+    PrintOperation::SetPrintHandler([this](const std::string& message) {
+      if (m_printViewer) {
+        m_printViewer->AddPrintMessage(message);
+      }
+    });
   }
+
+  // Set callbacks for execution state changes
+  slot.executor->SetExecutionCallback([this, slotIndex](ScriptExecutor::ExecutionState state) {
+    OnSlotExecutionStateChanged(slotIndex, state);
+  });
+
+  slot.executor->SetLogCallback([this, slotIndex](const std::string& message) {
+    OnSlotLog(slotIndex, message);
+  });
+
+  // Execute script
+  if (!slot.executor->ExecuteScript(scriptContent, true)) {
+    slot.lastError = "Failed to parse script";
+    slot.lastState = ScriptExecutor::ExecutionState::Error;
+    slot.isExecuting = false;
+    return;
+  }
+
+  slot.isExecuting = true;
 }
 
 void ScriptRunner::StopSlot(int slotIndex) {
@@ -726,3 +759,4 @@ std::vector<std::string> ScriptRunner::GetScriptFiles(const std::string& directo
 
   return scripts;
 }
+

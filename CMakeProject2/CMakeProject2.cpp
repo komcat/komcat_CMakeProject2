@@ -1128,7 +1128,7 @@ int main(int argc, char* argv[])
 	MotionGraphic motionGraphic(configManager, motionControlLayer, machineOps);
 	logger->LogInfo("MotionGraphic initialized");
 	// Add these lines:
-	ScriptRunner scriptRunner(machineOps);
+	ScriptRunner scriptRunner(machineOps, &scriptPrintViewer);
 	logger->LogInfo("ScriptRunner initialized");
 
 // Create the vertical toolbar
