@@ -7,6 +7,9 @@
 #include <deque>
 #include <mutex>
 #include <chrono>
+#include <fstream>
+#include <filesystem>
+#include <ctime>  // For tm structure
 
 class ScriptPrintViewer : public IHierarchicalTogglableUI {
 public:
@@ -29,6 +32,12 @@ public:
   // Render the UI
   void RenderUI();
 
+  // File logging configuration
+  void EnableFileLogging(bool enable) { m_fileLoggingEnabled = enable; }
+  bool IsFileLoggingEnabled() const { return m_fileLoggingEnabled; }
+  void SetLogDirectory(const std::string& directory) { m_logDirectory = directory; }
+  const std::string& GetLogDirectory() const { return m_logDirectory; }
+
 private:
   struct PrintEntry {
     std::string message;
@@ -49,4 +58,17 @@ private:
 
   // Filtering
   char m_filterBuffer[256] = "";
+
+  // File logging members
+  bool m_fileLoggingEnabled = true;
+  std::string m_logDirectory = "logs/scripts";
+  std::ofstream m_logFile;
+  std::chrono::system_clock::time_point m_currentLogDate;
+
+  // File logging methods
+  void InitializeLogFile();
+  void CheckAndRotateLogFile();
+  void WriteToLogFile(const PrintEntry& entry);
+  std::string GetLogFileName(const std::chrono::system_clock::time_point& date);
+  void CloseLogFile();
 };
