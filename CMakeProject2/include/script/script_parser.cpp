@@ -2,6 +2,7 @@
 #include "include/script/script_parser.h"
 #include "include/ProcessBuilders.h" // For MockUserInteractionManager
 #include "include/MockUserInteractionManager.h"
+#include "include/script/print_operation.h"
 #include <sstream>
 #include <algorithm>
 
@@ -472,6 +473,8 @@ std::shared_ptr<SequenceOperation> ScriptParser::ParseLaserCommand(const std::ve
 }
 
 // Utility commands implementation
+// Add this to your script_parser.cpp in the ParseUtilityCommand method
+
 std::shared_ptr<SequenceOperation> ScriptParser::ParseUtilityCommand(const std::vector<std::string>& tokens, MachineOperations& machineOps) {
   std::string command = tokens[0];
   std::transform(command.begin(), command.end(), command.begin(), ::toupper);
@@ -496,6 +499,11 @@ std::shared_ptr<SequenceOperation> ScriptParser::ParseUtilityCommand(const std::
       message += tokens[i];
     }
 
+    // Remove quotes if present
+    if (message.length() >= 2 && message.front() == '"' && message.back() == '"') {
+      message = message.substr(1, message.length() - 2);
+    }
+
     // Use the provided UI manager or create a mock one if none was provided
     if (m_uiManager) {
       return std::make_shared<UserConfirmOperation>(message, *m_uiManager);
@@ -504,6 +512,25 @@ std::shared_ptr<SequenceOperation> ScriptParser::ParseUtilityCommand(const std::
       static MockUserInteractionManager mockUiManager;
       return std::make_shared<UserConfirmOperation>(message, mockUiManager);
     }
+  }
+  else if (command == "PRINT") {
+    if (tokens.size() < 2) {
+      throw std::runtime_error("Invalid PRINT command syntax. Expected: PRINT <message>");
+    }
+
+    // Combine remaining tokens as the message
+    std::string message;
+    for (size_t i = 1; i < tokens.size(); i++) {
+      if (i > 1) message += " ";
+      message += tokens[i];
+    }
+
+    // Remove quotes if present
+    if (message.length() >= 2 && message.front() == '"' && message.back() == '"') {
+      message = message.substr(1, message.length() - 2);
+    }
+
+    return std::make_shared<PrintOperation>(message);
   }
 
   throw std::runtime_error("Unrecognized utility command: " + command);

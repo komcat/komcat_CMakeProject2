@@ -1,5 +1,6 @@
 // script_executor.cpp - Fixed thread management
 #include "include/script/script_executor.h"
+#include "include/script/print_operation.h"
 #include <sstream>
 #include <algorithm>
 #include <chrono>
@@ -334,6 +335,27 @@ void ScriptExecutor::ExecuteScriptInternal() {
         continue;
       }
 
+
+      // Check for print operations
+      auto printOp = std::dynamic_pointer_cast<PrintOperation>(operations[i]);
+      if (printOp) {
+        // Handle print operation with variable substitution
+        std::string message = printOp->GetDescription().substr(7); // Remove "Print: " prefix
+
+        // Replace variables in the message
+        std::string processedMessage = ReplaceVariables(message);
+
+        // Log the message
+        Log("PRINT: " + processedMessage);
+
+        // Call print handler if available
+        if (m_printHandler) {
+          m_printHandler(processedMessage);
+        }
+
+        continue;
+      }
+
       // Execute the operation
       bool success = operations[i]->Execute(m_machineOps);
 
@@ -492,6 +514,7 @@ void ScriptExecutor::ExecuteFlowControl(const ScriptParser::FlowControlOperation
   }
 }
 
+
 void ScriptExecutor::ProcessForLoop(const std::string& condition, size_t& index, size_t endForIndex) {
   // Parse FOR loop parameters (variable|start|end|step)
   size_t pos1 = condition.find('|');
@@ -584,6 +607,26 @@ void ScriptExecutor::ProcessForLoop(const std::string& condition, size_t& index,
         continue;
       }
 
+      // CHECK FOR PRINT OPERATIONS - ADD THIS SECTION
+      auto printOp = std::dynamic_pointer_cast<PrintOperation>(m_sequence->GetOperations()[i]);
+      if (printOp) {
+        // Handle print operation with variable substitution
+        std::string message = printOp->GetDescription().substr(7); // Remove "Print: " prefix
+
+        // Replace variables in the message
+        std::string processedMessage = ReplaceVariables(message);
+
+        // Log the message
+        Log("PRINT: " + processedMessage);
+
+        // Call print handler if available
+        if (m_printHandler) {
+          m_printHandler(processedMessage);
+        }
+
+        continue;
+      }
+
       // Execute the operation
       bool success = m_sequence->GetOperations()[i]->Execute(m_machineOps);
       if (!success) {
@@ -611,7 +654,6 @@ void ScriptExecutor::ProcessForLoop(const std::string& condition, size_t& index,
   // Set the index to after ENDFOR
   index = endForIndex;
 }
-
 void ScriptExecutor::ProcessWhileLoop(const std::string& condition, size_t& index, size_t endWhileIndex) {
   // Save the WHILE statement index
   size_t whileIndex = index;
@@ -675,6 +717,26 @@ void ScriptExecutor::ProcessWhileLoop(const std::string& condition, size_t& inde
         continue;
       }
 
+      // CHECK FOR PRINT OPERATIONS - ADD THIS SECTION
+      auto printOp = std::dynamic_pointer_cast<PrintOperation>(m_sequence->GetOperations()[i]);
+      if (printOp) {
+        // Handle print operation with variable substitution
+        std::string message = printOp->GetDescription().substr(7); // Remove "Print: " prefix
+
+        // Replace variables in the message
+        std::string processedMessage = ReplaceVariables(message);
+
+        // Log the message
+        Log("PRINT: " + processedMessage);
+
+        // Call print handler if available
+        if (m_printHandler) {
+          m_printHandler(processedMessage);
+        }
+
+        continue;
+      }
+
       // Execute the operation
       bool success = m_sequence->GetOperations()[i]->Execute(m_machineOps);
       if (!success) {
@@ -707,6 +769,7 @@ void ScriptExecutor::ProcessWhileLoop(const std::string& condition, size_t& inde
   // Set the index to after ENDWHILE
   index = endWhileIndex;
 }
+
 
 size_t ScriptExecutor::FindMatchingEnd(size_t startIndex,
   ScriptParser::FlowControlOperation::Type startType,
@@ -1014,6 +1077,47 @@ double ScriptExecutor::EvaluateExpression(const std::string& expression) {
 }
 
 
+// Also add this helper method to script_executor.cpp:
+std::string ScriptExecutor::ReplaceVariables(const std::string& expression) {
+  std::string result = expression;
+  size_t pos = 0;
+
+  // Find all "$varname" patterns and replace with their values
+  while ((pos = result.find("$", pos)) != std::string::npos) {
+    // If $ is the last character, it's not a valid variable
+    if (pos == result.length() - 1) break;
+
+    // Find the end of the variable name
+    size_t endPos = pos + 1;
+    while (endPos < result.length() &&
+      (isalnum(result[endPos]) || result[endPos] == '_')) {
+      endPos++;
+    }
+
+    // Extract the variable name including $
+    std::string varName = result.substr(pos, endPos - pos);
+
+    // Get variable value
+    double value = GetVariable(varName, 0.0);
+
+    // Convert to string and replace
+    std::string valueStr = std::to_string(value);
+
+    // Remove trailing zeros from floating point representation
+    valueStr.erase(valueStr.find_last_not_of('0') + 1, std::string::npos);
+    if (valueStr.back() == '.') {
+      valueStr.pop_back();
+    }
+
+    result.replace(pos, varName.length(), valueStr);
+
+    // Move past this replacement
+    pos += valueStr.length();
+  }
+
+  return result;
+}
+
 
 
 void ScriptExecutor::Log(const std::string& message) {
@@ -1034,3 +1138,4 @@ void ScriptExecutor::LogError(const std::string& error) {
     m_logCallback("ERROR: " + error);
   }
 }
+

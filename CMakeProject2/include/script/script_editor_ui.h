@@ -4,6 +4,7 @@
 #include "include/script/script_executor.h"
 #include "include/machine_operations.h"
 #include "include/ui/VerticalToolbarMenu.h"
+#include "include/script/script_print_viewer.h"
 #include "script_ui_manager.h"
 #include <string>
 #include <vector>
@@ -13,7 +14,7 @@
 
 class ScriptEditorUI : public IHierarchicalTogglableUI {
 public:
-  ScriptEditorUI(MachineOperations& machineOps);
+  ScriptEditorUI(MachineOperations& machineOps, ScriptPrintViewer* printViewer);
   ~ScriptEditorUI();
 
   // Render the UI
@@ -104,4 +105,7 @@ private:
 
   // Add confirmation UI state
   bool m_autoConfirmPrompts = false;
+
+  // Add member variable
+  ScriptPrintViewer* m_printViewer;
 };

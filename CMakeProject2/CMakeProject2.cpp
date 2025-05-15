@@ -72,7 +72,7 @@
 #include "include/ui/MotionGraphic.h"
 #include "include/script/script_runner.h"
 #include "include/script/ScriptRunnerAdapter.h"
-
+#include "include/script/script_print_viewer.h"
 #pragma region header functions
 
 
@@ -1119,8 +1119,11 @@ int main(int argc, char* argv[])
 	logger->LogInfo("ProcessControlPanel initialized");
 
 
+	// Create the script print viewer
+	ScriptPrintViewer scriptPrintViewer;
+	logger->LogInfo("ScriptPrintViewer initialized");
 
-	ScriptEditorUI scriptEditor(machineOps);
+	ScriptEditorUI scriptEditor(machineOps, &scriptPrintViewer);
 	// Create the MotionGraphic instance after all dependencies are initialized
 	MotionGraphic motionGraphic(configManager, motionControlLayer, machineOps);
 	logger->LogInfo("MotionGraphic initialized");
@@ -1171,6 +1174,8 @@ int main(int argc, char* argv[])
 	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(scriptEditor, "Script Editor"));
 	// Add this right after it:
 	toolbarVertical->AddReferenceToCategory("Products", CreateScriptRunnerAdapter(scriptRunner, "Script Runner"));
+	// Add to the toolbar setup
+	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(scriptPrintViewer, "Script Output"));
 	// Add the MotionGraphic to your vertical toolbar
 	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(motionGraphic, "Motion Graphic"));
 
@@ -1342,6 +1347,7 @@ int main(int argc, char* argv[])
 		motionGraphic.RenderUI();
 		// Add this right after it:
 		scriptRunner.RenderUI();
+		scriptPrintViewer.RenderUI();
 
 		// Rendering
 		ImGui::Render();

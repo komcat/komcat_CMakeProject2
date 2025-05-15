@@ -51,6 +51,14 @@ public:
   void SetExecutionCallback(ExecutionCallback callback) { m_executionCallback = callback; }
   void SetLogCallback(LogCallback callback) { m_logCallback = callback; }
   void SetUIManager(UserInteractionManager* uiManager) { m_uiManager = uiManager; }
+
+  // Add print handler support
+  void SetPrintHandler(std::function<void(const std::string&)> handler) {
+    m_printHandler = handler;
+  }
+
+  std::string ScriptExecutor::ReplaceVariables(const std::string& expression);
+
 private:
   // Helper method to trim whitespace from strings
   std::string TrimString(const std::string& str);
@@ -106,4 +114,7 @@ private:
   LogCallback m_logCallback;
 
   UserInteractionManager* m_uiManager = nullptr;
+
+  // Print handler
+  std::function<void(const std::string&)> m_printHandler;
 };

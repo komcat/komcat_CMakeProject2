@@ -1,19 +1,24 @@
 // script_editor_ui.cpp
 #include "include/script/script_editor_ui.h"
+#include "include/script/print_operation.h"
 #include "imgui.h"
 #include <fstream>
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
 
-ScriptEditorUI::ScriptEditorUI(MachineOperations& machineOps)
+// In the constructor, include the print viewer reference
+ScriptEditorUI::ScriptEditorUI(MachineOperations& machineOps, ScriptPrintViewer* printViewer)
   : m_isVisible(false),
   m_showCommandHelp(false),
   m_machineOps(machineOps),
   m_executor(machineOps),
   m_name("Script Editor"),
-  m_scriptUIManager(std::make_unique<ScriptUIManager>())
+  m_scriptUIManager(std::make_unique<ScriptUIManager>()),
+  m_printViewer(printViewer)
 {
+
+
   // Initialize editor buffer
   memset(m_editorBuffer, 0, EDITOR_BUFFER_SIZE);
 
@@ -72,7 +77,22 @@ ScriptEditorUI::ScriptEditorUI(MachineOperations& machineOps)
     "ENDWHILE\n\n"
     "# Turn off laser\n"
     "LASER_OFF\n");
+  // Set up print handler for the executor
+  if (m_printViewer) {
+    m_executor.SetPrintHandler([this](const std::string& message) {
+      m_printViewer->AddPrintMessage(message);
+    });
 
+    // Also set the global handler for direct operations
+    PrintOperation::SetPrintHandler([this](const std::string& message) {
+      if (m_printViewer) {
+        m_printViewer->AddPrintMessage(message);
+      }
+    });
+  }
+
+  // Set UI manager for the executor
+  m_executor.SetUIManager(m_scriptUIManager.get());
 
   m_executor.SetUIManager(m_scriptUIManager.get());
 }

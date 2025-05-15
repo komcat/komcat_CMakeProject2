@@ -17,6 +17,7 @@ add_subdirectory(nlohmann_json)
 # Define paths to SDL2 and ImGui - adjust these if needed
 set(SDL2_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/sdl2")
 # Set SDL2 paths directly - using simple direct references
+
 set(SDL2_INCLUDE_DIR "${SDL2_DIR}/include")
 
 
@@ -255,7 +256,15 @@ add_executable(CMakeProject2
  "include/script/script_editor_ui.cpp"
  "include/ui/MotionGraphic.h"
  "include/ui/MotionGraphic.cpp"
- "include/script/script_runner.h" "include/script/script_runner.cpp" "include/script/ScriptRunnerAdapter.h" "include/script/script_ui_manager.h")
+ "include/script/script_runner.h"
+ "include/script/script_runner.cpp" 
+ "include/script/ScriptRunnerAdapter.h"
+ "include/script/script_ui_manager.h"
+ "include/script/print_operation.h"
+ "include/script/print_operation.cpp"
+ "include/script/script_print_viewer.h"
+ "include/script/script_print_viewer.cpp"
+)
 
 # Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
 target_include_directories(CMakeProject2 PRIVATE
