@@ -106,4 +106,8 @@ private:
   void RenderProgressPanel();
 
   ScriptPrintViewer* m_printViewer;  // <-- ADD THIS LINE
+
+  // ... existing members ...
+  std::mutex m_printMutex;  // Add this line
+
 };

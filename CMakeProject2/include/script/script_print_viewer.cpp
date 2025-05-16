@@ -20,25 +20,25 @@ ScriptPrintViewer::~ScriptPrintViewer() {
 }
 
 void ScriptPrintViewer::AddPrintMessage(const std::string& message) {
-  std::lock_guard<std::mutex> lock(m_mutex);
+  try {
+    std::lock_guard<std::mutex> lock(m_mutex);
 
-  PrintEntry entry;
-  entry.message = message;
-  entry.timestamp = std::chrono::system_clock::now();
+    PrintEntry entry;
+    entry.message = message;
+    entry.timestamp = std::chrono::system_clock::now();
 
-  m_printHistory.push_back(entry);
+    m_printHistory.push_back(entry);
 
-  // Write to log file if enabled
-  if (m_fileLoggingEnabled) {
-    CheckAndRotateLogFile();
-    WriteToLogFile(entry);
+    // Limit history size
+    while (m_printHistory.size() > m_maxEntries) {
+      m_printHistory.pop_front();
+    }
   }
-
-  // Limit history size
-  while (m_printHistory.size() > m_maxEntries) {
-    m_printHistory.pop_front();
+  catch (const std::exception& e) {
+    // Log the error but don't let it propagate
   }
 }
+
 
 void ScriptPrintViewer::Clear() {
   std::lock_guard<std::mutex> lock(m_mutex);
@@ -67,8 +67,7 @@ void ScriptPrintViewer::RenderUI() {
   if (ImGui::Checkbox("Log to File", &m_fileLoggingEnabled)) {
     if (m_fileLoggingEnabled) {
       InitializeLogFile();
-    }
-    else {
+    } else {
       CloseLogFile();
     }
   }
@@ -140,7 +139,7 @@ void ScriptPrintViewer::InitializeLogFile() {
       std::filesystem::path filePath(filename);
       if (std::filesystem::file_size(filePath) == 0) {
         m_logFile << "=== Script Print Log Started at ";
-
+        
         auto time_t = std::chrono::system_clock::to_time_t(m_currentLogDate);
         m_logFile << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
         m_logFile << " ===" << std::endl;
@@ -156,13 +155,13 @@ void ScriptPrintViewer::InitializeLogFile() {
 
 void ScriptPrintViewer::CheckAndRotateLogFile() {
   auto now = std::chrono::system_clock::now();
-
+  
   // Convert to time_t and then to tm structure to compare dates
   auto currentTime_t = std::chrono::system_clock::to_time_t(now);
   auto logTime_t = std::chrono::system_clock::to_time_t(m_currentLogDate);
-
+  
   struct tm currentTm, logTm;
-
+  
   // Use localtime_s on Windows or localtime_r on Unix for thread safety
 #ifdef _WIN32
   localtime_s(&currentTm, &currentTime_t);
@@ -171,11 +170,11 @@ void ScriptPrintViewer::CheckAndRotateLogFile() {
   localtime_r(&currentTime_t, &currentTm);
   localtime_r(&logTime_t, &logTm);
 #endif
-
+  
   // Compare year, month, and day
   if (currentTm.tm_year != logTm.tm_year ||
-    currentTm.tm_mon != logTm.tm_mon ||
-    currentTm.tm_mday != logTm.tm_mday) {
+      currentTm.tm_mon != logTm.tm_mon ||
+      currentTm.tm_mday != logTm.tm_mday) {
     CloseLogFile();
     InitializeLogFile();
   }
@@ -188,23 +187,23 @@ void ScriptPrintViewer::WriteToLogFile(const PrintEntry& entry) {
 
   // Format timestamp
   auto time_t = std::chrono::system_clock::to_time_t(entry.timestamp);
-
+  
   m_logFile << "[";
   m_logFile << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
   m_logFile << "] " << entry.message << std::endl;
-
+  
   // Flush to ensure data is written
   m_logFile.flush();
 }
 
 std::string ScriptPrintViewer::GetLogFileName(const std::chrono::system_clock::time_point& date) {
   auto time_t = std::chrono::system_clock::to_time_t(date);
-
+  
   std::stringstream filename;
   filename << m_logDirectory << "/script_print_";
   filename << std::put_time(std::localtime(&time_t), "%Y%m%d");
   filename << ".log";
-
+  
   return filename.str();
 }
 
@@ -213,12 +212,12 @@ void ScriptPrintViewer::CloseLogFile() {
     // Write closing message
     auto now = std::chrono::system_clock::now();
     auto time_t = std::chrono::system_clock::to_time_t(now);
-
+    
     m_logFile << std::endl;
     m_logFile << "=== Script Print Log Closed at ";
     m_logFile << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
     m_logFile << " ===" << std::endl;
-
+    
     m_logFile.close();
   }
 }

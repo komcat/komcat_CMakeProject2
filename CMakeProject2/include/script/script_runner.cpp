@@ -8,7 +8,7 @@
 #include <filesystem>
 #include <algorithm>
 #include <iomanip>
-
+#include <mutex>
 using json = nlohmann::json;
 
 ScriptRunner::ScriptRunner(MachineOperations& machineOps, ScriptPrintViewer* printViewer)
@@ -211,6 +211,29 @@ void ScriptRunner::ExecuteSlot(int slotIndex) {
     return; // Already executing
   }
 
+  // IMPORTANT: Ensure previous executor is properly stopped and cleaned up
+  if (slot.executor) {
+    // Stop the previous execution if it's still running
+    if (slot.executor->GetState() != ScriptExecutor::ExecutionState::Idle &&
+      slot.executor->GetState() != ScriptExecutor::ExecutionState::Completed &&
+      slot.executor->GetState() != ScriptExecutor::ExecutionState::Error) {
+      slot.executor->Stop();
+    }
+
+    // Wait up to 3 seconds for the executor to fully stop
+    auto startTime = std::chrono::steady_clock::now();
+    while (slot.executor->GetState() != ScriptExecutor::ExecutionState::Idle &&
+      std::chrono::steady_clock::now() - startTime < std::chrono::milliseconds(50)) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+
+    // Release the previous executor completely before creating a new one
+    slot.executor.reset(nullptr);
+
+    // Add a small delay to ensure complete cleanup
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+
   // Load script content
   std::string scriptContent;
   if (!LoadScriptContent(slot.scriptPath, scriptContent)) {
@@ -222,16 +245,11 @@ void ScriptRunner::ExecuteSlot(int slotIndex) {
   // Create new executor
   slot.executor = std::make_unique<ScriptExecutor>(m_machineOps);
 
-  // Set up print handler to use the print viewer - THIS IS THE KEY PART
+
+  // Set up print handler to use the print viewer
   if (m_printViewer) {
     slot.executor->SetPrintHandler([this](const std::string& message) {
-      if (m_printViewer) {
-        m_printViewer->AddPrintMessage(message);
-      }
-    });
-
-    // Also set the global print handler for PrintOperation
-    PrintOperation::SetPrintHandler([this](const std::string& message) {
+      std::lock_guard<std::mutex> lock(m_printMutex);
       if (m_printViewer) {
         m_printViewer->AddPrintMessage(message);
       }

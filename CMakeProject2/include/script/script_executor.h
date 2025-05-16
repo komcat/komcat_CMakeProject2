@@ -62,7 +62,7 @@ public:
 private:
   // Helper method to trim whitespace from strings
   std::string TrimString(const std::string& str);
-
+  bool m_threadRunning;  // Flag to track if thread is active
   // Execution methods for control flow
   void ExecuteScriptInternal();
   bool EvaluateCondition(const std::string& condition);

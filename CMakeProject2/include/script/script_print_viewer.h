@@ -44,6 +44,7 @@ private:
     std::chrono::system_clock::time_point timestamp;
   };
 
+
   bool m_isVisible;
   std::string m_name;
   std::vector<std::shared_ptr<IHierarchicalTogglableUI>> m_children;

@@ -4,6 +4,7 @@
 #include <sstream>
 #include <algorithm>
 #include <chrono>
+#include <future>
 
 ScriptExecutor::ScriptExecutor(MachineOperations& machineOps)
   : m_machineOps(machineOps),
@@ -11,51 +12,42 @@ ScriptExecutor::ScriptExecutor(MachineOperations& machineOps)
   m_pauseRequested(false),
   m_stopRequested(false),
   m_currentLine(0),
-  m_totalLines(0)
+  m_totalLines(0),
+  m_threadRunning(false)  // Initialize to false
 {
 }
 
 ScriptExecutor::~ScriptExecutor() {
-  // Make sure to stop execution cleanly
-  if (m_state == ExecutionState::Running || m_state == ExecutionState::Paused) {
-    m_stopRequested = true;
+  // Signal thread to stop
+  m_stopRequested = true;
+  m_pauseRequested = false;
 
-    // If we're paused, unpause to allow thread to exit
-    if (m_state == ExecutionState::Paused) {
-      m_pauseRequested = false;
-      m_state = ExecutionState::Running;
-    }
-
-    // Wait for thread to finish with timeout
-    if (m_executionThread.joinable()) {
-      // Use a timed wait
-      auto start = std::chrono::steady_clock::now();
-      while (m_executionThread.joinable()) {
-        auto elapsed = std::chrono::steady_clock::now() - start;
-        if (elapsed > std::chrono::seconds(2)) {
-          // Force detach after timeout
-          m_executionThread.detach();
-          break;
+  // Wait for thread to finish with timeout using std::future
+  if (m_threadRunning && m_executionThread.joinable()) {
+    auto future = std::async(std::launch::async, [this]() {
+      try {
+        if (m_executionThread.joinable()) {
+          m_executionThread.join();
         }
+      }
+      catch (...) {
+        // Catch any exceptions from join
+      }
+    });
 
-        if (m_state != ExecutionState::Running && m_state != ExecutionState::Paused) {
-          try {
-            m_executionThread.join();
-          }
-          catch (...) {
-            m_executionThread.detach();
-          }
-          break;
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    // Wait up to 2 seconds
+    if (future.wait_for(std::chrono::seconds(2)) == std::future_status::timeout) {
+      // We timed out - log a warning
+      m_machineOps.LogWarning("Thread cleanup timed out in ScriptExecutor destructor");
+      // We must detach the thread as a last resort
+      if (m_executionThread.joinable()) {
+        m_executionThread.detach();
       }
     }
   }
+
+  m_threadRunning = false;
 }
-
-
-
 
 std::string ScriptExecutor::TrimString(const std::string& str) {
   if (str.empty()) {
@@ -85,11 +77,17 @@ bool ScriptExecutor::ExecuteScript(const std::string& script, bool startImmediat
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
   }
 
-  // Make sure any previous thread is completely cleaned up
   if (m_executionThread.joinable()) {
-    // Simple approach: detach and wait
-    m_executionThread.detach();
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    auto future = std::async(std::launch::async, [&]() {
+      m_executionThread.join();
+    });
+
+    // Wait with timeout
+    if (future.wait_for(std::chrono::seconds(2)) == std::future_status::timeout) {
+      // Log that we couldn't join the thread
+      m_machineOps.LogWarning("Couldn't join execution thread - detaching");
+      m_executionThread.detach();
+    }
   }
 
   // Create a fresh thread object
@@ -156,6 +154,7 @@ bool ScriptExecutor::ExecuteScript(const std::string& script, bool startImmediat
   return true;
 }
 
+// In ScriptExecutor::Start()
 void ScriptExecutor::Start() {
   if (m_state == ExecutionState::Running) {
     return; // Already running
@@ -166,10 +165,9 @@ void ScriptExecutor::Start() {
     return;
   }
 
-  // Make sure any previous thread is cleaned up
+  // Ensure any previous thread is detached
   if (m_executionThread.joinable()) {
     m_executionThread.detach();
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
   // Update state and start execution thread
@@ -183,9 +181,12 @@ void ScriptExecutor::Start() {
     m_executionCallback(m_state);
   }
 
-  // Create new thread
+  // Create new thread and immediately detach it
   m_executionThread = std::thread(&ScriptExecutor::ExecuteScriptInternal, this);
+  m_executionThread.detach();  // Always detach - never join
 }
+
+
 
 void ScriptExecutor::Pause() {
   if (m_state == ExecutionState::Running) {
@@ -263,6 +264,7 @@ void ScriptExecutor::Stop() {
 
 
 void ScriptExecutor::ExecuteScriptInternal() {
+  m_threadRunning = true;  // Set flag at start of thread
   try {
     // Execute each operation in the sequence
     const auto& operations = m_sequence->GetOperations();
@@ -406,7 +408,6 @@ void ScriptExecutor::ExecuteScriptInternal() {
   catch (const std::exception& e) {
     LogError(std::string("Error during script execution: ") + e.what());
     m_state = ExecutionState::Error;
-
     if (m_executionCallback) {
       m_executionCallback(m_state);
     }
@@ -414,11 +415,12 @@ void ScriptExecutor::ExecuteScriptInternal() {
   catch (...) {
     LogError("Unknown error during script execution");
     m_state = ExecutionState::Error;
-
     if (m_executionCallback) {
       m_executionCallback(m_state);
     }
   }
+
+  m_threadRunning = false;  // Clear flag at end of thread
 }
 
 
