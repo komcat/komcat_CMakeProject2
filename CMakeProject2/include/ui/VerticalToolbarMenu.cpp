@@ -160,6 +160,10 @@ void VerticalToolbarMenu::RenderUI() {
   float oldWindowPadding = style.WindowPadding.x;
   style.WindowPadding.x = 8.0f; // Adjust padding for vertical toolbar
 
+  // Set window background transparent
+  ImVec4 oldBgColor = style.Colors[ImGuiCol_WindowBg];
+  style.Colors[ImGuiCol_WindowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f); // Fully transparent
+
   // Create toolbar window on the left side of the screen
   ImGui::SetNextWindowPos(ImVec2(0, 0));
   ImGui::SetNextWindowSize(ImVec2(m_width, ImGui::GetIO().DisplaySize.y));
@@ -168,7 +172,9 @@ void VerticalToolbarMenu::RenderUI() {
     ImGuiWindowFlags_NoTitleBar |
     ImGuiWindowFlags_NoResize |
     ImGuiWindowFlags_NoMove |
-    ImGuiWindowFlags_NoCollapse;
+    ImGuiWindowFlags_NoCollapse |
+    ImGuiWindowFlags_NoScrollbar |
+    ImGuiWindowFlags_NoScrollWithMouse;
 
   ImGui::Begin("##VerticalToolbarMenu", nullptr, toolbarFlags);
 
@@ -186,16 +192,17 @@ void VerticalToolbarMenu::RenderUI() {
 
   // Restore original style
   style.WindowPadding.x = oldWindowPadding;
+  style.Colors[ImGuiCol_WindowBg] = oldBgColor; // Restore original background color
 }
 
 void VerticalToolbarMenu::RenderComponent(const std::shared_ptr<IHierarchicalTogglableUI>& component) {
   bool isVisible = component->IsVisible();
   bool hasChildren = component->HasChildren();
 
-  // Button colors
+  // Button colors - updated with softer, more natural colors
   ImVec4 activeButtonColor = ImVec4(0.2f, 0.7f, 0.2f, 1.0f); // Green for active
   ImVec4 inactiveButtonColor = ImVec4(0.5f, 0.5f, 0.5f, 1.0f); // Gray for inactive
-  ImVec4 categoryButtonColor = ImVec4(0.3f, 0.3f, 0.7f, 1.0f); // Blue for categories
+  ImVec4 categoryButtonColor = ImVec4(0.4f, 0.5f, 0.7f, 0.9f); // Softer blue for categories
 
   // Set button width to fill the toolbar
   float buttonWidth = ImGui::GetContentRegionAvail().x;
@@ -203,12 +210,18 @@ void VerticalToolbarMenu::RenderComponent(const std::shared_ptr<IHierarchicalTog
   // Set button color based on state and type
   if (hasChildren) {
     ImGui::PushStyleColor(ImGuiCol_Button, categoryButtonColor);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.6f, 0.8f, 0.9f)); // Lighter blue when hovered
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.3f, 0.4f, 0.6f, 0.9f)); // Darker blue when clicked
   }
   else if (isVisible) {
     ImGui::PushStyleColor(ImGuiCol_Button, activeButtonColor);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.6f, 0.1f, 1.0f));
   }
   else {
     ImGui::PushStyleColor(ImGuiCol_Button, inactiveButtonColor);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
   }
 
   // Create the button
@@ -224,11 +237,12 @@ void VerticalToolbarMenu::RenderComponent(const std::shared_ptr<IHierarchicalTog
     }
   }
 
-  ImGui::PopStyleColor(); // Reset button color
+  ImGui::PopStyleColor(3); // Reset all button colors (button, hovered, active)
 
   // Add a small spacing between buttons
   ImGui::Spacing();
 }
+
 
 void VerticalToolbarMenu::RenderSecondaryPanel() {
   // Safety check - ensure m_selectedCategory is valid

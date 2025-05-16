@@ -722,8 +722,9 @@ void RenderMinimizeExitButtons(SDL_Window* window, bool& done) {
 
 void RenderFPSoverlay(float m_fps)
 {
+	//ImGuiCond_FirstUseEver
 	// Create a performance overlay
-	ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver); // Only set position once
+	ImGui::SetNextWindowPos(ImVec2(310, 0)); // Only set position once
 	ImGui::SetNextWindowBgAlpha(0.35f); // Transparent background
 	ImGui::Begin("Performance", nullptr,
 		ImGuiWindowFlags_NoDecoration |
