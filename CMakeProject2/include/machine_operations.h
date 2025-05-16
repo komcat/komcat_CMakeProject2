@@ -146,7 +146,7 @@ public:
   // Camera capture methods
   bool CaptureImageToFile(const std::string& filename = "");
   bool UpdateCameraDisplay(); // Call this from your main loop to update the camera display
-
+  bool MachineOperations::IntegrateCameraWithMotion(PylonCameraTest* cameraTest);
 private:
   MotionControlLayer& m_motionLayer;
   PIControllerManager& m_piControllerManager;
@@ -175,4 +175,6 @@ private:
 
   // Add camera reference
   PylonCameraTest* m_cameraTest;
+
+
 };

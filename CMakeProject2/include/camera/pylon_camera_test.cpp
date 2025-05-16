@@ -1,4 +1,6 @@
 #include "include/camera/pylon_camera_test.h"
+#include "include/machine_operations.h"
+#include "include/SequenceStep.h"
 #include <iostream>
 #include <SDL_opengl.h>
 
@@ -9,6 +11,8 @@ PylonCameraTest::PylonCameraTest()
 	, m_textureID(0)
 	, m_textureInitialized(false)
 	, m_newFrameReady(false)
+	, m_showMouseCrosshair(false)  // Initialize new crosshair flag
+	, m_logPixelOnClick(false)     // Initialize click logging flag
 {
 	// Initialize format converter for display
 	m_formatConverter.OutputPixelFormat = Pylon::PixelType_RGB8packed;
@@ -164,177 +168,377 @@ bool PylonCameraTest::CreateTexture() {
 	}
 }
 
-void PylonCameraTest::RenderUI() {
-	if (!m_isVisible) {
-		return;
-	}
+// New method for rendering UI with machine operations support
+void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
+  if (!m_isVisible) {
+    return;
+  }
 
-	// Main control window
-	ImGui::Begin("Pylon Camera Test");
+  // Main control window
+  ImGui::Begin("Pylon Camera Test");
 
-	// Camera connection/initialization
-	if (!m_camera.IsConnected()) {
-		if (ImGui::Button("Initialize & Connect")) {
-			if (m_camera.Initialize() && m_camera.Connect()) {
-				std::cout << "Camera initialized and connected" << std::endl;
-			}
-			else {
-				std::cout << "Failed to initialize or connect camera" << std::endl;
-			}
-		}
-	}
-	else {
-		// Display camera info
-		ImGui::Text("%s", m_camera.GetDeviceInfo().c_str());
+  // Camera connection/initialization
+  if (!m_camera.IsConnected()) {
+    if (ImGui::Button("Initialize & Connect")) {
+      if (m_camera.Initialize() && m_camera.Connect()) {
+        std::cout << "Camera initialized and connected" << std::endl;
+      }
+      else {
+        std::cout << "Failed to initialize or connect camera" << std::endl;
+      }
+    }
+  }
+  else {
+    // Display camera info
+    ImGui::Text("%s", m_camera.GetDeviceInfo().c_str());
 
-		// Grabbing control
-		if (!m_camera.IsGrabbing()) {
-			// Add "Start Grabbing" button for continuous acquisition
-			if (ImGui::Button("Start Grabbing")) {
-				// Reset texture when starting grabbing
-				if (m_textureInitialized) {
-					glDeleteTextures(1, &m_textureID);
-					m_textureInitialized = false;
-				}
-				m_hasValidImage = false;
-				m_frameCounter = 0;
-				m_newFrameReady = false;
+    // Grabbing control
+    if (!m_camera.IsGrabbing()) {
+      // Add "Start Grabbing" button for continuous acquisition
+      if (ImGui::Button("Start Grabbing")) {
+        // Reset texture when starting grabbing
+        if (m_textureInitialized) {
+          glDeleteTextures(1, &m_textureID);
+          m_textureInitialized = false;
+        }
+        m_hasValidImage = false;
+        m_frameCounter = 0;
+        m_newFrameReady = false;
 
-				if (m_camera.StartGrabbing()) {
-					std::cout << "Started grabbing" << std::endl;
-				}
-				else {
-					std::cout << "Failed to start grabbing" << std::endl;
-				}
-			}
+        if (m_camera.StartGrabbing()) {
+          std::cout << "Started grabbing" << std::endl;
+        }
+        else {
+          std::cout << "Failed to start grabbing" << std::endl;
+        }
+      }
 
-			// Add "Grab One Image" button for single frame acquisition
-			ImGui::SameLine();
-			if (ImGui::Button("Grab One Image")) {
-				if (GrabSingleFrame()) {
-					// If frame was grabbed successfully, update texture
-					if (m_newFrameReady) {
-						CreateTexture();
-					}
-				}
-			}
-		}
-		else {
-			// Button to stop continuous acquisition
-			if (ImGui::Button("Stop Grabbing")) {
-				m_camera.StopGrabbing();
-				std::cout << "Stopped grabbing" << std::endl;
-			}
+      // Add "Grab One Image" button for single frame acquisition
+      ImGui::SameLine();
+      if (ImGui::Button("Grab One Image")) {
+        if (GrabSingleFrame()) {
+          // If frame was grabbed successfully, update texture
+          if (m_newFrameReady) {
+            CreateTexture();
+          }
+        }
+      }
+    }
+    else {
+      // Button to stop continuous acquisition
+      if (ImGui::Button("Stop Grabbing")) {
+        m_camera.StopGrabbing();
+        std::cout << "Stopped grabbing" << std::endl;
+      }
 
-			// Add capture button
-			ImGui::SameLine();
-			if (ImGui::Button("Capture Image")) {
-				CaptureImage();
-			}
+      // Add capture button
+      ImGui::SameLine();
+      if (ImGui::Button("Capture Image")) {
+        CaptureImage();
+      }
 
-			// Display capture status if an image was captured
-			if (m_imageCaptured) {
-				ImGui::SameLine();
-				ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Saved to: %s", m_lastSavedPath.c_str());
+      // Display capture status if an image was captured
+      if (m_imageCaptured) {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Saved to: %s", m_lastSavedPath.c_str());
 
-				// Auto-reset the status after 3 seconds
-				static float statusTimer = 0.0f;
-				statusTimer += ImGui::GetIO().DeltaTime;
-				if (statusTimer > 3.0f) {
-					m_imageCaptured = false;
-					statusTimer = 0.0f;
-				}
-			}
+        // Auto-reset the status after 3 seconds
+        static float statusTimer = 0.0f;
+        statusTimer += ImGui::GetIO().DeltaTime;
+        if (statusTimer > 3.0f) {
+          m_imageCaptured = false;
+          statusTimer = 0.0f;
+        }
+      }
 
-			// Show grabbing stats
-			ImGui::Text("Frames received: %d", m_frameCounter);
-			ImGui::Text("Last frame size: %dx%d", m_lastFrameWidth, m_lastFrameHeight);
-			ImGui::Text("Last timestamp: %llu", m_lastFrameTimestamp);
+      // Show grabbing stats
+      ImGui::Text("Frames received: %d", m_frameCounter);
+      ImGui::Text("Last frame size: %dx%d", m_lastFrameWidth, m_lastFrameHeight);
+      ImGui::Text("Last timestamp: %llu", m_lastFrameTimestamp);
 
-			// Check if we need to create a new texture from the latest frame
-			if (m_newFrameReady) {
-				if (CreateTexture()) {
+      // Added: Crosshair controls
+      ImGui::Checkbox("Show Mouse Crosshair", &m_showMouseCrosshair);
 
-					if (enableDebug)
-					{
-						// Debug output for texture creation						
-						std::cout << "successfully created texture with ID: " << m_textureID << std::endl;
-					}
+      // Add gantry movement control checkbox
+      ImGui::Checkbox("Enable Click to Move Gantry", &m_enableClickToMove);
 
-				}
-			}
-		}
+      // Add pixel-to-mm calibration controls
+      ImGui::Separator();
+      ImGui::Text("Pixel-to-MM Calibration:");
 
-		// Disconnect button
-		if (ImGui::Button("Disconnect")) {
-			m_camera.Disconnect();
+      // Modify the pixel-to-mm factors
+      float pixelToMMX = m_pixelToMMFactorX;
+      float pixelToMMY = m_pixelToMMFactorY;
 
-			// Clean up texture when disconnecting
-			if (m_textureInitialized) {
-				glDeleteTextures(1, &m_textureID);
-				m_textureInitialized = false;
-			}
-			m_hasValidImage = false;
+      if (ImGui::InputFloat("X Factor (mm/pixel)", &pixelToMMX, 0.001f, 0.01f, "%.4f")) {
+        if (pixelToMMX > 0) {
+          m_pixelToMMFactorX = pixelToMMX;
+        }
+      }
 
-			std::cout << "Camera disconnected" << std::endl;
-			m_frameCounter = 0;
-		}
-	}
+      if (ImGui::InputFloat("Y Factor (mm/pixel)", &pixelToMMY, 0.001f, 0.01f, "%.4f")) {
+        if (pixelToMMY > 0) {
+          m_pixelToMMFactorY = pixelToMMY;
+        }
+      }
 
-	// Device removal handling
-	if (m_camera.IsCameraDeviceRemoved() || m_deviceRemoved) {
-		ImGui::Separator();
-		ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Camera has been removed!");
+      ImGui::SameLine();
+      if (ImGui::Button("Reset to Default")) {
+        m_pixelToMMFactorX = 0.00248f;
+        m_pixelToMMFactorY = 0.00248f;
+      }
 
-		if (ImGui::Button("Try Reconnect")) {
-			if (m_camera.TryReconnect()) {
-				std::cout << "Successfully reconnected to camera" << std::endl;
-				m_deviceRemoved = false;
-			}
-			else {
-				std::cout << "Failed to reconnect to camera" << std::endl;
-			}
-		}
-	}
+      // Check if we need to create a new texture from the latest frame
+      if (m_newFrameReady) {
+        if (CreateTexture()) {
+          if (enableDebug) {
+            // Debug output for texture creation                     
+            std::cout << "successfully created texture with ID: " << m_textureID << std::endl;
+          }
+        }
+      }
+    }
 
-	ImGui::End();
+    // Disconnect button
+    if (ImGui::Button("Disconnect")) {
+      m_camera.Disconnect();
 
-	// Image display window - always show when we have a valid image
-	if (m_camera.IsGrabbing() || m_hasValidImage) {
-		ImGui::Begin("Camera Image");
+      // Clean up texture when disconnecting
+      if (m_textureInitialized) {
+        glDeleteTextures(1, &m_textureID);
+        m_textureInitialized = false;
+      }
+      m_hasValidImage = false;
 
-		if (m_textureInitialized && m_hasValidImage) {
-			// Calculate the available width of the window
-			float availWidth = ImGui::GetContentRegionAvail().x;
+      std::cout << "Camera disconnected" << std::endl;
+      m_frameCounter = 0;
+    }
+  }
 
-			// Calculate aspect ratio to maintain proportions
-			float aspectRatio = static_cast<float>(m_lastFrameWidth) / static_cast<float>(m_lastFrameHeight);
-			if (aspectRatio <= 0.0f) aspectRatio = 1.0f; // Safeguard
+  // Device removal handling
+  if (m_camera.IsCameraDeviceRemoved() || m_deviceRemoved) {
+    ImGui::Separator();
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Camera has been removed!");
 
-			// Calculate height based on width to maintain aspect ratio
-			float displayWidth = (std::min)(availWidth, 800.0f); // Limit max width
-			float displayHeight = displayWidth / aspectRatio;
+    if (ImGui::Button("Try Reconnect")) {
+      if (m_camera.TryReconnect()) {
+        std::cout << "Successfully reconnected to camera" << std::endl;
+        m_deviceRemoved = false;
+      }
+      else {
+        std::cout << "Failed to reconnect to camera" << std::endl;
+      }
+    }
+  }
 
-			// Display the image with the calculated dimensions
-			ImGui::Image((ImTextureID)(intptr_t)m_textureID,
-				ImVec2(displayWidth, displayHeight),
-				ImVec2(0, 0),        // UV coordinates of the top-left corner
-				ImVec2(1, 1));       // UV coordinates of the bottom-right corner
-		}
-		else {
-			ImGui::Text("Waiting for valid image from camera...");
-			if (!m_textureInitialized) {
-				ImGui::Text("Texture not initialized");
-			}
-			if (!m_hasValidImage) {
-				ImGui::Text("No valid image data");
-			}
-		}
+  ImGui::End();
 
-		ImGui::End();
-	}
+  // Image display window - always show when we have a valid image
+  if (m_camera.IsGrabbing() || m_hasValidImage) {
+    ImGui::Begin("Camera Image");
+
+    if (m_textureInitialized && m_hasValidImage) {
+      // Calculate the available width of the window
+      float availWidth = ImGui::GetContentRegionAvail().x;
+
+      // Calculate aspect ratio to maintain proportions
+      float aspectRatio = static_cast<float>(m_lastFrameWidth) / static_cast<float>(m_lastFrameHeight);
+      if (aspectRatio <= 0.0f) aspectRatio = 1.0f; // Safeguard
+
+      // Calculate height based on width to maintain aspect ratio
+      float displayWidth = (std::min)(availWidth, 800.0f); // Limit max width
+      float displayHeight = displayWidth / aspectRatio;
+
+      // Get cursor position for the image (needed for crosshair and click position)
+      ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+
+      // Display the image with the calculated dimensions
+      ImVec2 imageSize(displayWidth, displayHeight);
+      ImGui::Image((ImTextureID)(intptr_t)m_textureID,
+        imageSize,
+        ImVec2(0, 0),        // UV coordinates of the top-left corner
+        ImVec2(1, 1));       // UV coordinates of the bottom-right corner
+
+      // Draw static crosshair in cyan (after the image is rendered)
+      ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+      // Center of the image
+      ImVec2 imageCenter(
+        cursorPos.x + displayWidth / 2,
+        cursorPos.y + displayHeight / 2
+      );
+
+      // Draw static crosshair (full width and height)
+      drawList->AddLine(
+        ImVec2(cursorPos.x, imageCenter.y),
+        ImVec2(cursorPos.x + displayWidth, imageCenter.y),
+        IM_COL32(0, 255, 255, 255), 1.0f); // Horizontal line - cyan
+
+      drawList->AddLine(
+        ImVec2(imageCenter.x, cursorPos.y),
+        ImVec2(imageCenter.x, cursorPos.y + displayHeight),
+        IM_COL32(0, 255, 255, 255), 1.0f); // Vertical line - cyan
+
+      // Get mouse position and check if it's over the image
+      ImVec2 mousePos = ImGui::GetMousePos();
+      bool mouseOverImage =
+        mousePos.x >= cursorPos.x && mousePos.x <= cursorPos.x + displayWidth &&
+        mousePos.y >= cursorPos.y && mousePos.y <= cursorPos.y + displayHeight;
+
+      // Draw mouse position crosshair if enabled and mouse is over image
+      if (m_showMouseCrosshair && mouseOverImage) {
+        // Draw mouse crosshair in yellow (full width and height)
+        drawList->AddLine(
+          ImVec2(cursorPos.x, mousePos.y),
+          ImVec2(cursorPos.x + displayWidth, mousePos.y),
+          IM_COL32(255, 255, 0, 255), 1.0f); // Horizontal line - yellow
+
+        drawList->AddLine(
+          ImVec2(mousePos.x, cursorPos.y),
+          ImVec2(mousePos.x, cursorPos.y + displayHeight),
+          IM_COL32(255, 255, 0, 255), 1.0f); // Vertical line - yellow
+      }
+
+      // Store the last mouse position relative to the image
+      if (mouseOverImage) {
+        m_lastMousePos = ImVec2(
+          mousePos.x - cursorPos.x,
+          mousePos.y - cursorPos.y
+        );
+
+        // Check for mouse click on the image
+        if (ImGui::IsMouseClicked(0) && ImGui::IsItemHovered()) {
+          // Calculate position in original image coordinates
+          float imageX = (m_lastMousePos.x / displayWidth) * m_lastFrameWidth;
+          float imageY = (m_lastMousePos.y / displayHeight) * m_lastFrameHeight;
+
+          // Calculate delta from center in pixels
+          float centerX = m_lastFrameWidth / 2.0f;
+          float centerY = m_lastFrameHeight / 2.0f;
+          float deltaXPixels = imageX - centerX;
+          float deltaYPixels = imageY - centerY;
+
+          // Convert to mm using calibration factors
+          float deltaXmm = deltaXPixels * m_pixelToMMFactorX;
+          float deltaYmm = deltaYPixels * m_pixelToMMFactorY;
+
+          // Log the pixel and real-world positions
+          std::cout << "Clicked at pixel coordinates: X=" << imageX << ", Y=" << imageY << std::endl;
+          std::cout << "Delta from center: " << deltaXPixels << " pixels X, " << deltaYPixels << " pixels Y" << std::endl;
+          std::cout << "Real-world delta: " << deltaXmm << " mm X, " << deltaYmm << " mm Y" << std::endl;
+
+          // Store values for display
+          m_clickedImageX = imageX;
+          m_clickedImageY = imageY;
+          m_logPixelOnClick = true;
+
+          // Move gantry if machine operations is provided, checkbox is enabled, and we're targeting 'gantry-main'
+          if (machineOps != nullptr && m_enableClickToMove) {
+            // This assumes +X in the image corresponds to -X in gantry movements
+            // and +Y in the image corresponds to -Y in gantry movements
+            // Adjust these signs according to your specific setup
+            float moveXmm = deltaXmm;  // Use as-is or invert if needed
+            float moveYmm = deltaYmm;  // Use as-is or invert if needed
+
+            std::cout << "Requesting gantry move by: X=" << moveXmm << "mm, Y=" << moveYmm << "mm" << std::endl;
+
+            // Create and execute the move relative operations
+            auto moveSequence = std::make_unique<SequenceStep>("Camera Click Move", *machineOps);
+
+            // Add X movement if significant
+            if (std::abs(moveXmm) > 0.001) {
+              moveSequence->AddOperation(std::make_shared<MoveRelativeOperation>(
+                "gantry-main", "X", moveXmm));
+            }
+
+            // Add Y movement if significant
+            if (std::abs(moveYmm) > 0.001) {
+              moveSequence->AddOperation(std::make_shared<MoveRelativeOperation>(
+                "gantry-main", "Y", moveYmm));
+            }
+
+            // Execute the sequence
+            if (!moveSequence->GetOperations().empty()) {
+              std::cout << "Executing move sequence..." << std::endl;
+              moveSequence->Execute();
+            }
+          }
+        }
+      }
+
+      // Display pixel coordinates and calculated real-world deltas
+      if (m_logPixelOnClick) {
+        // Calculate center and deltas
+        float centerX = m_lastFrameWidth / 2.0f;
+        float centerY = m_lastFrameHeight / 2.0f;
+        float deltaXPixels = m_clickedImageX - centerX;
+        float deltaYPixels = m_clickedImageY - centerY;
+        float deltaXmm = deltaXPixels * m_pixelToMMFactorX;
+        float deltaYmm = deltaYPixels * m_pixelToMMFactorY;
+
+        ImGui::Text("Last clicked pixel: X=%.1f, Y=%.1f", m_clickedImageX, m_clickedImageY);
+        ImGui::Text("Delta from center: %.1f px X, %.1f px Y", deltaXPixels, deltaYPixels);
+        ImGui::Text("Real-world delta: %.3f mm X, %.3f mm Y", deltaXmm, deltaYmm);
+
+        if (machineOps != nullptr) {
+          // Show gantry move buttons, enabled only if enableClickToMove is true
+          if (m_enableClickToMove) {
+            if (ImGui::Button("Move Gantry to Clicked Position")) {
+              // Create and execute move as above
+              float moveXmm = -deltaXmm;  // Invert X for proper gantry movement
+              float moveYmm = -deltaYmm;  // Invert Y for proper gantry movement
+
+              auto moveSequence = std::make_unique<SequenceStep>("Camera Click Move", *machineOps);
+
+              // Add X and Y movements
+              if (std::abs(moveXmm) > 0.001) {
+                moveSequence->AddOperation(std::make_shared<MoveRelativeOperation>(
+                  "gantry-main", "X", moveXmm));
+              }
+
+              if (std::abs(moveYmm) > 0.001) {
+                moveSequence->AddOperation(std::make_shared<MoveRelativeOperation>(
+                  "gantry-main", "Y", moveYmm));
+              }
+
+              // Execute the sequence
+              if (!moveSequence->GetOperations().empty()) {
+                moveSequence->Execute();
+              }
+            }
+          }
+          else {
+            // Display a disabled button and a message if clicked
+            ImGui::BeginDisabled(); // This will gray out the button
+            bool clicked = ImGui::Button("Move Gantry to Clicked Position");
+            ImGui::EndDisabled();
+
+            if (clicked) {
+              ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+                "Enable 'Click to Move Gantry' checkbox to use this feature");
+            }
+          }
+        }
+      }
+    }
+    else {
+      ImGui::Text("Waiting for valid image from camera...");
+      if (!m_textureInitialized) {
+        ImGui::Text("Texture not initialized");
+      }
+      if (!m_hasValidImage) {
+        ImGui::Text("No valid image data");
+      }
+    }
+
+    ImGui::End();
+  }
 }
-
+// This method should replace the original RenderUI method
+void PylonCameraTest::RenderUI() {
+  // Call the extended version with nullptr for machineOps
+  RenderUIWithMachineOps(nullptr);
+}
 
 bool PylonCameraTest::CaptureImage()
 {

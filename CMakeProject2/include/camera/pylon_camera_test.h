@@ -8,6 +8,9 @@
 #include <iomanip>
 #include <sstream>
 
+// Forward declaration of MachineOperations class to avoid circular inclusion
+class MachineOperations;
+
 class PylonCameraTest {
 public:
 	PylonCameraTest();
@@ -15,6 +18,9 @@ public:
 	friend class MachineOperations;
 	// Render ImGui UI for testing camera
 	void RenderUI();
+
+	// New method to render UI with machine operations for pixel-to-mm conversion
+	void RenderUIWithMachineOps(MachineOperations* machineOps);
 
 	// Capture image and save to disk
 	bool CaptureImage();
@@ -29,7 +35,7 @@ public:
 
 	bool IsVisible() const { return m_isVisible; }
 	// Method to check if texture cleanup is needed - to be called from main loop
-		// Just declare these methods in the header
+	// Just declare these methods in the header
 	bool NeedsTextureCleanup() const;
 	void CleanupTexture();
 
@@ -51,6 +57,17 @@ public:
 			// }
 		}
 	}
+
+	// Set the pixel-to-mm calibration factors
+	void SetPixelToMMFactors(float xFactor, float yFactor) {
+		m_pixelToMMFactorX = xFactor;
+		m_pixelToMMFactorY = yFactor;
+	}
+
+	// Get the pixel-to-mm calibration factors
+	float GetPixelToMMFactorX() const { return m_pixelToMMFactorX; }
+	float GetPixelToMMFactorY() const { return m_pixelToMMFactorY; }
+
 private:
 	// Creates a new OpenGL texture from the current frame
 	// Must be called from the main thread (where OpenGL context is valid)
@@ -91,7 +108,17 @@ private:
 	bool m_textureInitialized;
 	bool m_isVisible = false;
 
+	// Crosshair related variables
+	bool m_showMouseCrosshair = false;  // Flag for mouse crosshair
+	ImVec2 m_lastMousePos = ImVec2(0, 0);  // Mouse position on image
+	bool m_logPixelOnClick = false;  // Flag to log pixel positions
+	float m_clickedImageX = 0.0f;  // X coordinate of last clicked pixel
+	float m_clickedImageY = 0.0f;  // Y coordinate of last clicked pixel
 
+	// Pixel-to-mm conversion factors (calibration)
+	float m_pixelToMMFactorX = 0.010f;  // Default value: 0.01mm per pixel
+	float m_pixelToMMFactorY = 0.010f;  // Default value: 0.01mm per pixel
+	bool m_enableClickToMove = false;  // Flag to enable/disable gantry movement on click
 	// Helper method to initialize and start grabbing
 	void AutoInitializeAndStartGrabbing() {
 		// Only proceed if not already grabbing
@@ -125,4 +152,3 @@ private:
 		}
 	}
 };
-

@@ -1302,9 +1302,9 @@ int main(int argc, char* argv[])
 
 
 		// Render Pylon Camera Test UI
-		pylonCameraTest.RenderUI();
+		//pylonCameraTest.RenderUI();
 
-
+		pylonCameraTest.RenderUIWithMachineOps(&machineOps);
 
 		// Render the EziIO UI
 		ioUI.RenderUI();

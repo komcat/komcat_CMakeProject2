@@ -1209,3 +1209,21 @@ bool MachineOperations::MoveRelative(const std::string& deviceName, const std::s
     return success;
   }
 }
+
+
+// Add this new method to integrate camera control with motion control
+bool MachineOperations::IntegrateCameraWithMotion(PylonCameraTest* cameraTest) {
+  if (!cameraTest) {
+    m_logger->LogError("MachineOperations: Cannot integrate camera - camera test is null");
+    return false;
+  }
+
+  // Set default calibration factors - you may need to adjust these based on your camera and lens
+  // This is the conversion factor from pixels to mm
+  cameraTest->SetPixelToMMFactors(0.00248f, 0.00248f);  // 0.01mm per pixel for both X and Y
+
+  // Render the UI with machine operations integration
+  cameraTest->RenderUIWithMachineOps(this);
+
+  return true;
+}
