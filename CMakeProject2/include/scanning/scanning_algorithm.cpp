@@ -149,7 +149,16 @@ bool ScanningAlgorithm::RecordBaseline() {
   }
 
   // Get current measurement
-  double currentValue = GetMeasurement();
+  //double currentValue = GetMeasurement();
+
+  // Take multiple readings
+  constexpr int numReadings = 5;
+  double sum = 0.0;
+  for (int i = 0; i < numReadings; i++) {
+    sum += GetMeasurement();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+  double currentValue = sum / numReadings;
 
   // Store baseline data
   m_baseline.value = currentValue;
