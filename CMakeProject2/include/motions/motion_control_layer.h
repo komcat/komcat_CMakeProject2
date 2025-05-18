@@ -73,7 +73,11 @@ public:
 
   // Helper to determine which controller manager to use for a device
   bool IsDevicePIController(const std::string& deviceName) const;
+  // Set debug verbose mode
+  void SetDebugVerbose(bool enabled) { m_enableDebug = enabled; }
 
+  // Get current debug verbose state
+  bool GetDebugVerbose() const { return m_enableDebug; }
   const MotionConfigManager& GetConfigManager() const {
     return m_configManager;
   }
@@ -101,7 +105,7 @@ private:
   PIControllerManager& m_piControllerManager;
   ACSControllerManager& m_acsControllerManager;
   Logger* m_logger;
-
+  bool m_enableDebug = false;
   // Path execution thread
   std::thread m_executionThread;
   std::mutex m_mutex;

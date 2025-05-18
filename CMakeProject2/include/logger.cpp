@@ -4,12 +4,13 @@
 #include <iomanip>
 #include <sstream>
 #include <filesystem>
+#include <iostream> // Added for stdout logging
 
 // Initialize static instance
 std::unique_ptr<Logger> Logger::s_instance = nullptr;
 
 Logger::Logger() : m_isMinimized(false), m_isMaximized(false), m_fontSize(1.0f),
-m_unreadMessages(0), m_unreadWarnings(0), m_unreadErrors(0) {
+m_unreadMessages(0), m_unreadWarnings(0), m_unreadErrors(0), m_logToStdout(true) {
   // Get current date and open initial log file
   auto now = std::chrono::system_clock::now();
   auto time = std::chrono::system_clock::to_time_t(now);
@@ -158,6 +159,31 @@ void Logger::Log(const std::string& message, LogLevel level) {
     m_logFile << fileLogMessage << std::endl;
     m_logFile.flush(); // Ensure it's written immediately
   }
+
+  // Log to stdout if enabled
+  if (m_logToStdout) {
+    // Set console color based on log level (ANSI escape codes for color)
+    std::string colorCode;
+    switch (level) {
+    case LogLevel::Debug:
+      colorCode = "\033[90m"; // Gray
+      break;
+    case LogLevel::Info:
+      colorCode = "\033[37m"; // White
+      break;
+    case LogLevel::Warning:
+      colorCode = "\033[33m"; // Yellow
+      break;
+    case LogLevel::Error:
+      colorCode = "\033[31m"; // Red
+      break;
+    }
+
+    std::string resetColor = "\033[0m"; // Reset color to default
+
+    // Output to stdout with appropriate coloring
+    std::cout << colorCode << fileLogMessage << resetColor << std::endl;
+  }
 }
 
 // Convenience methods for different log levels
@@ -220,6 +246,15 @@ void Logger::ResetUnreadCounters() {
   m_unreadMessages = 0;
   m_unreadWarnings = 0;
   m_unreadErrors = 0;
+}
+
+// Enable/disable stdout logging
+void Logger::SetLogToStdout(bool enable) {
+  m_logToStdout = enable;
+}
+
+bool Logger::IsLoggingToStdout() const {
+  return m_logToStdout;
 }
 
 void Logger::RenderUI() {
@@ -380,6 +415,13 @@ void Logger::RenderUI() {
 
     ImGui::SameLine();
     ImGui::Text("Font: %.1fx", m_fontSize);
+
+    // Add stdout toggle
+    ImGui::SameLine();
+    bool logToStdout = m_logToStdout;
+    if (ImGui::Checkbox("Log to Console", &logToStdout)) {
+      SetLogToStdout(logToStdout);
+    }
 
     // Add filter buttons
     ImGui::SameLine();

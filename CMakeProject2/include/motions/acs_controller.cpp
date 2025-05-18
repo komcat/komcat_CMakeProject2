@@ -701,11 +701,15 @@ bool ACSController::WaitForMotionCompletion(const std::string& axis, double time
   }
 }
 
+//
+// Updated ConfigureFromDevice method for ACSController to handle space-separated InstalledAxes
+//
 bool ACSController::ConfigureFromDevice(const MotionDevice& device) {
   if (m_isConnected) {
     m_logger->LogWarning("ACSController: Cannot configure from device while connected");
     return false;
   }
+
   m_deviceName = device.Name;
   m_logger->LogInfo("ACSController: Configuring from device: " + device.Name);
 
@@ -713,9 +717,47 @@ bool ACSController::ConfigureFromDevice(const MotionDevice& device) {
   m_ipAddress = device.IpAddress;
   m_port = device.Port;
 
-  // Define available axes - use only X, Y, Z for this controller
+  // Define available axes based on device configuration
   m_availableAxes.clear();
-  m_availableAxes = { "X", "Y", "Z" };
+
+  // If InstalledAxes is specified, use it
+  if (!device.InstalledAxes.empty()) {
+    // Since InstalledAxes may be space-separated (e.g., "X Y Z"),
+    // we need to parse it by splitting on spaces
+
+    std::string axisStr = device.InstalledAxes;
+    std::string delimiter = " ";
+    size_t pos = 0;
+    std::string token;
+
+    // Parse the space-separated string
+    while ((pos = axisStr.find(delimiter)) != std::string::npos) {
+      token = axisStr.substr(0, pos);
+      if (!token.empty()) {
+        m_availableAxes.push_back(token);
+      }
+      axisStr.erase(0, pos + delimiter.length());
+    }
+
+    // Add the last token if there is one
+    if (!axisStr.empty()) {
+      m_availableAxes.push_back(axisStr);
+    }
+
+    // Log the configured axes
+    std::string axesList;
+    for (const auto& axis : m_availableAxes) {
+      if (!axesList.empty()) axesList += " ";
+      axesList += axis;
+    }
+
+    m_logger->LogInfo("ACSController: Configured with specified axes: " + axesList);
+  }
+  // Otherwise, use defaults based on device type (historically ACS controllers use X, Y, Z)
+  else {
+    m_availableAxes = { "X", "Y", "Z" };
+    m_logger->LogInfo("ACSController: Configured with default gantry axes (X Y Z)");
+  }
 
   return true;
 }

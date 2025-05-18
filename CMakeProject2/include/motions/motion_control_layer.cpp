@@ -420,8 +420,29 @@ bool MotionControlLayer::IsDevicePIController(const std::string& deviceName) con
 
   const auto& device = deviceOpt.value().get();
 
-  // PI controllers use port 50000, ACS uses different ports (like 701)
-  return (device.Port == 50000);
+  // First check the explicit controller type if available
+  if (!device.TypeController.empty()) {
+    bool isPIController = (device.TypeController == "PI");
+
+    if (m_enableDebug) {
+      m_logger->LogInfo("MotionControlLayer: Device " + deviceName +
+        " has explicit controller type: " + device.TypeController +
+        " (isPIController=" + (isPIController ? "true" : "false") + ")");
+    }
+
+    return isPIController;
+  }
+
+  // Fall back to the port number check as a secondary method
+  bool isPIControllerByPort = (device.Port == 50000);
+
+  if (m_enableDebug) {
+    m_logger->LogInfo("MotionControlLayer: Device " + deviceName +
+      " has no explicit controller type, using port number " + std::to_string(device.Port) +
+      " (isPIController=" + (isPIControllerByPort ? "true" : "false") + ")");
+  }
+
+  return isPIControllerByPort;
 }
 
 

@@ -33,7 +33,9 @@ void MotionConfigManager::LoadConfig(const std::string& filePath) {
                 if (deviceJson.contains("IpAddress")) device.IpAddress = deviceJson["IpAddress"];
                 if (deviceJson.contains("Port")) device.Port = deviceJson["Port"];
                 if (deviceJson.contains("Id")) device.Id = deviceJson["Id"];
-
+                // In MotionConfigManager::LoadConfig
+                if (deviceJson.contains("typeController")) device.TypeController = deviceJson["typeController"];
+                if (deviceJson.contains("installAxes")) device.InstalledAxes = deviceJson["installAxes"];
                 // Parse positions if they exist
                 if (deviceJson.contains("Positions") && deviceJson["Positions"].is_object()) {
                     for (auto& [posName, posJson] : deviceJson["Positions"].items()) {
@@ -433,7 +435,9 @@ bool MotionConfigManager::SaveConfig(const std::string& filePath) {
             deviceJson["Port"] = device.Port;
             deviceJson["Id"] = device.Id;
             deviceJson["Name"] = device.Name;
-
+            // In MotionConfigManager::SaveConfig
+            deviceJson["typeController"] = device.TypeController;
+            deviceJson["installAxes"] = device.InstalledAxes;
             // Add positions
             json positionsJson;
             for (const auto& [posName, pos] : device.Positions) {

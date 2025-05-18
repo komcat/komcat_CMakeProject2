@@ -59,6 +59,9 @@ private:
   int m_unreadWarnings = 0;
   int m_unreadErrors = 0;
 
+  // Should also log to stdout?
+  bool m_logToStdout = true;
+
   // Constructor is private (singleton pattern)
   Logger();
 
@@ -108,4 +111,8 @@ public:
 
   // Save logs to file (custom filename)
   bool SaveLogsToFile(const std::string& filename);
+
+  // Enable/disable stdout logging
+  void SetLogToStdout(bool enable);
+  bool IsLoggingToStdout() const;
 };

@@ -24,6 +24,9 @@ struct MotionDevice {
     int Id = 0;
     std::string Name;
     std::map<std::string, PositionStruct> Positions;
+    // New fields for enhanced configuration
+    std::string TypeController = "PI";  // Default to PI if not specified
+    std::string InstalledAxes = "XYZUVW";  // Default to all axes if not specified
 };
 
 // Graph node structure

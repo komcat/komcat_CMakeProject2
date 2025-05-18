@@ -697,6 +697,9 @@ bool PIController::WaitForMotionCompletion(const std::string& axis, double timeo
 	}
 }
 
+//
+// Updated ConfigureFromDevice method for PIController to handle space-separated InstalledAxes
+//
 bool PIController::ConfigureFromDevice(const MotionDevice& device) {
 	if (m_isConnected) {
 		m_logger->LogWarning("PIController: Cannot configure from device while connected");
@@ -709,11 +712,46 @@ bool PIController::ConfigureFromDevice(const MotionDevice& device) {
 	m_ipAddress = device.IpAddress;
 	m_port = device.Port;
 
-	// Define available axes based on device configuration
-	// For a 6-axis hexapod, typical axes are 1-6
+	// Define available axes based on device's InstalledAxes configuration
 	m_availableAxes.clear();
-	for (int i = 1; i <= 6; i++) {
-		m_availableAxes.push_back(std::to_string(i));
+
+	// If InstalledAxes is specified, use it
+	if (!device.InstalledAxes.empty()) {
+		// Since InstalledAxes may be space-separated (e.g., "X Y Z U V W"),
+		// we need to parse it differently from the single-character version
+
+		std::string axisStr = device.InstalledAxes;
+		std::string delimiter = " ";
+		size_t pos = 0;
+		std::string token;
+
+		// Parse the space-separated string
+		while ((pos = axisStr.find(delimiter)) != std::string::npos) {
+			token = axisStr.substr(0, pos);
+			if (!token.empty()) {
+				m_availableAxes.push_back(token);
+			}
+			axisStr.erase(0, pos + delimiter.length());
+		}
+
+		// Add the last token if there is one
+		if (!axisStr.empty()) {
+			m_availableAxes.push_back(axisStr);
+		}
+
+		// Log the configured axes
+		std::string axesList;
+		for (const auto& axis : m_availableAxes) {
+			if (!axesList.empty()) axesList += " ";
+			axesList += axis;
+		}
+
+		m_logger->LogInfo("PIController: Configured with specified axes: " + axesList);
+	}
+	// Otherwise, use defaults based on device type (historically hexapods have 6 axes)
+	else {
+		m_availableAxes = { "X", "Y", "Z", "U", "V", "W" };
+		m_logger->LogInfo("PIController: Configured with default hexapod axes (X Y Z U V W)");
 	}
 
 	return true;
