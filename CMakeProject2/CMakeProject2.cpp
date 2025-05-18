@@ -785,7 +785,9 @@ public:
 	}
 };
 
-
+void CheckImGuiVersion() {
+	std::cout << "ImGui Version: " << IMGUI_VERSION << std::endl;
+}
 #pragma endregion
 
 
@@ -811,27 +813,33 @@ int main(int argc, char* argv[])
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
-	// OR for borderless fullscreen at desktop resolution (often preferred):
+	// For a normal window with frame
 	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
-		SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_FULLSCREEN_DESKTOP);
+		SDL_WINDOW_ALLOW_HIGHDPI);
 
-	SDL_Window* window = SDL_CreateWindow("Fabrinet West AAA", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600, window_flags);
+	// Create window with proper size
+	SDL_Window* window = SDL_CreateWindow("Fabrinet West AAA",
+		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+		1280, 720, // Set your preferred default size here
+		window_flags);
 	if (window == nullptr)
 	{
 		printf("Error creating window: %s\n", SDL_GetError());
 		SDL_Quit();
 		return -1;
 	}
-
 	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
 	SDL_GL_MakeCurrent(window, gl_context);
 	SDL_GL_SetSwapInterval(1); // Enable vsync
 
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
+	CheckImGuiVersion();
+
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
 
 	// Setup Dear ImGui style
@@ -841,6 +849,22 @@ int main(int argc, char* argv[])
 	// Setup Platform/Renderer backends
 	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
 	ImGui_ImplOpenGL3_Init("#version 130");
+
+
+	// Setup style for docking
+	ImGuiStyle& style = ImGui::GetStyle();
+	// Update and Render additional Platform Windows
+	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+	{
+		SDL_Window* backup_current_window = SDL_GL_GetCurrentWindow();
+		SDL_GLContext backup_current_context = SDL_GL_GetCurrentContext();
+		ImGui::UpdatePlatformWindows();
+		ImGui::RenderPlatformWindowsDefault();
+		SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
+	}
+
+
+
 	// ADD THIS LINE RIGHT AFTER:
 	ImPlot::CreateContext();  // Initialize ImPlot
 
@@ -1241,7 +1265,8 @@ int main(int argc, char* argv[])
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL2_NewFrame();
 		ImGui::NewFrame();
-
+		// Create dockspace
+		ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);
 
 		RenderFPSoverlay(fps);
 
@@ -1356,7 +1381,23 @@ int main(int argc, char* argv[])
 		glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
 		glClear(GL_COLOR_BUFFER_BIT);
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+		// Update and Render additional Platform Windows
+		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+		{
+			SDL_Window* backup_current_window = SDL_GL_GetCurrentWindow();
+			SDL_GLContext backup_current_context = SDL_GL_GetCurrentContext();
+			ImGui::UpdatePlatformWindows();
+			ImGui::RenderPlatformWindowsDefault();
+			SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
+		}
+
 		SDL_GL_SwapWindow(window);
+
+
+
+
+
 	}
 	// When exit is triggered:
 	logger->Log("Application shutting down");

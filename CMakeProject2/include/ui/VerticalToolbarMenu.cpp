@@ -160,29 +160,20 @@ void VerticalToolbarMenu::RenderUI() {
   float oldWindowPadding = style.WindowPadding.x;
   style.WindowPadding.x = 8.0f; // Adjust padding for vertical toolbar
 
-  // Set window background transparent
-  ImVec4 oldBgColor = style.Colors[ImGuiCol_WindowBg];
-  style.Colors[ImGuiCol_WindowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f); // Fully transparent
+  // Create toolbar window that can be moved and resized
+  ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver); // Position only on first appearance
+  ImGui::SetNextWindowSize(ImVec2(m_width, ImGui::GetIO().DisplaySize.y), ImGuiCond_FirstUseEver); // Size only on first appearance
 
-  // Create toolbar window on the left side of the screen
-  ImGui::SetNextWindowPos(ImVec2(0, 0));
-  ImGui::SetNextWindowSize(ImVec2(m_width, ImGui::GetIO().DisplaySize.y));
+  // Remove most flags to allow normal window behavior
+  ImGuiWindowFlags toolbarFlags = ImGuiWindowFlags_None; // Allow default window behavior
 
-  ImGuiWindowFlags toolbarFlags =
-    ImGuiWindowFlags_NoTitleBar |
-    ImGuiWindowFlags_NoResize |
-    ImGuiWindowFlags_NoMove |
-    ImGuiWindowFlags_NoCollapse |
-    ImGuiWindowFlags_NoScrollbar |
-    ImGuiWindowFlags_NoScrollWithMouse;
-
-  ImGui::Begin("##VerticalToolbarMenu", nullptr, toolbarFlags);
+  // Keep background visible
+  ImGui::Begin("Toolbar", nullptr, toolbarFlags); // Added proper title instead of hidden one
 
   // Render all root components
   for (auto& component : m_rootComponents) {
     RenderComponent(component);
   }
-
   ImGui::End();
 
   // Render secondary panel if needed
@@ -192,9 +183,7 @@ void VerticalToolbarMenu::RenderUI() {
 
   // Restore original style
   style.WindowPadding.x = oldWindowPadding;
-  style.Colors[ImGuiCol_WindowBg] = oldBgColor; // Restore original background color
 }
-
 void VerticalToolbarMenu::RenderComponent(const std::shared_ptr<IHierarchicalTogglableUI>& component) {
   bool isVisible = component->IsVisible();
   bool hasChildren = component->HasChildren();
@@ -251,19 +240,19 @@ void VerticalToolbarMenu::RenderSecondaryPanel() {
     return;
   }
 
-  // Create secondary panel next to the main toolbar
-  ImGui::SetNextWindowPos(ImVec2(m_width, 0));
-  ImGui::SetNextWindowSize(ImVec2(m_width, ImGui::GetIO().DisplaySize.y));
+  // Get the selected category name for the window title
+  std::string panelName = m_selectedCategory->GetName() + " Menu"; // Remove ## to show the title
 
-  ImGuiWindowFlags panelFlags =
-    ImGuiWindowFlags_NoTitleBar |
-    ImGuiWindowFlags_NoResize |
-    ImGuiWindowFlags_NoMove |
-    ImGuiWindowFlags_NoCollapse;
+  // Only set initial position if first time creating this window
+  ImGui::SetNextWindowPos(ImVec2(m_width, 0), ImGuiCond_FirstUseEver);
 
-  std::string panelName = "##SecondaryPanel_" + m_selectedCategory->GetName();
+  // Set a default size but allow resizing
+  ImGui::SetNextWindowSize(ImVec2(m_width, ImGui::GetIO().DisplaySize.y * 0.8f), ImGuiCond_FirstUseEver);
 
-  // Begin the secondary panel window
+  // Window flags - allow user to move, resize, and collapse
+  ImGuiWindowFlags panelFlags = 0; // No special flags needed for movable window
+
+  // Begin the secondary panel window with visible title
   bool keepOpen = true;
   if (!ImGui::Begin(panelName.c_str(), &keepOpen, panelFlags)) {
     ImGui::End();
@@ -278,15 +267,7 @@ void VerticalToolbarMenu::RenderSecondaryPanel() {
     return;
   }
 
-  // Add header with category name and close button
-  ImGui::Text("%s", m_selectedCategory->GetName().c_str());
-  ImGui::SameLine(ImGui::GetWindowWidth() - 30);
-  if (ImGui::Button("X", ImVec2(20, 20))) {
-    m_showSecondaryPanel = false;
-    m_selectedCategory = nullptr;
-    ImGui::End();
-    return;
-  }
+
 
   ImGui::Separator();
 

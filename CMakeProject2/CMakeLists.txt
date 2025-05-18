@@ -26,7 +26,7 @@ set(SDL2_INCLUDE_DIR "${SDL2_DIR}/include")
 
 
 
-set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/imgui")
+set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/imgui-docking")
 # Define path to ACSC files
 set(ACSC_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 

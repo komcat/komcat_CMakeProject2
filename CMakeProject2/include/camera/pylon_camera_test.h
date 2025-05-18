@@ -151,4 +151,9 @@ private:
 			}
 		}
 	}
+
+
+
+	bool m_controlWindowOpen = true;
+	bool m_imageWindowOpen = true;
 };

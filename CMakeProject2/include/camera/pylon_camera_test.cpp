@@ -175,7 +175,7 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
   }
 
   // Main control window
-  ImGui::Begin("Pylon Camera Test");
+  ImGui::Begin("Pylon Camera Test", &m_controlWindowOpen);
 
   // Camera connection/initialization
   if (!m_camera.IsConnected()) {
@@ -334,8 +334,8 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
   ImGui::End();
 
   // Image display window - always show when we have a valid image
-  if (m_camera.IsGrabbing() || m_hasValidImage) {
-    ImGui::Begin("Camera Image");
+  if ((m_camera.IsGrabbing() || m_hasValidImage) && m_imageWindowOpen) {
+    ImGui::Begin("Camera Image", &m_imageWindowOpen);
 
     if (m_textureInitialized && m_hasValidImage) {
       // Calculate the available width of the window
