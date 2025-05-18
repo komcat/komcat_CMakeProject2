@@ -795,7 +795,9 @@ int main(int argc, char* argv[])
 {
 
 
-
+	// Get the logger instance
+	Logger* logger = Logger::GetInstance();
+	logger->Log("Application started");
 
 	// Setup SDL
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
@@ -828,6 +830,17 @@ int main(int argc, char* argv[])
 		SDL_Quit();
 		return -1;
 	}
+
+	// Set application icon
+	SDL_Surface* iconSurface = SDL_LoadBMP("resources/icon.bmp");  // Adjust path as needed
+	if (iconSurface) {
+		SDL_SetWindowIcon(window, iconSurface);
+		SDL_FreeSurface(iconSurface);
+	}
+	else {
+		logger->LogWarning("Failed to load application icon: " + std::string(SDL_GetError()));
+	}
+
 	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
 	SDL_GL_MakeCurrent(window, gl_context);
 	SDL_GL_SetSwapInterval(1); // Enable vsync
@@ -868,9 +881,7 @@ int main(int argc, char* argv[])
 	// ADD THIS LINE RIGHT AFTER:
 	ImPlot::CreateContext();  // Initialize ImPlot
 
-	// Get the logger instance
-	Logger* logger = Logger::GetInstance();
-	logger->Log("Application started");
+
 
 
 	// Create Python Process Manager and start scripts

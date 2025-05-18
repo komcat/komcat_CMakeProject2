@@ -266,6 +266,27 @@ add_executable(CMakeProject2
  "include/script/script_print_viewer.cpp"
 )
 
+
+
+
+# Add this section to your existing CMakeLists.txt file
+# (after your add_executable() statement)
+
+# Create resources directory in the build folder
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
+
+# Define the source icon file path
+set(ICON_SOURCE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.bmp")
+
+# Check if the icon file exists
+if(EXISTS "${ICON_SOURCE_PATH}")
+    # Copy the icon file to the build directory
+    file(COPY "${ICON_SOURCE_PATH}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/resources")
+    message(STATUS "Icon file will be copied to build directory")
+else()
+    message(WARNING "Icon file not found at: ${ICON_SOURCE_PATH}")
+endif()
+
 # Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
 target_include_directories(CMakeProject2 PRIVATE
     ${SDL2_INCLUDE_DIR}
