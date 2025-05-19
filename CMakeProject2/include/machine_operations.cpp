@@ -1227,3 +1227,126 @@ bool MachineOperations::IntegrateCameraWithMotion(PylonCameraTest* cameraTest) {
 
   return true;
 }
+
+// Get the current node for a device in a motion graph
+std::string MachineOperations::GetDeviceCurrentNode(const std::string& deviceName, const std::string& graphName) {
+  m_logger->LogInfo("MachineOperations: Getting current node for device " + deviceName +
+    " in graph " + graphName);
+
+  std::string currentNodeId;
+  if (!m_motionLayer.GetDeviceCurrentNode(graphName, deviceName, currentNodeId)) {
+    m_logger->LogError("MachineOperations: Failed to get current node for device " + deviceName);
+    return "";
+  }
+
+  return currentNodeId;
+}
+
+std::string MachineOperations::GetDeviceCurrentPositionName(const std::string& deviceName) {
+  m_logger->LogInfo("MachineOperations: Getting current named position for device " + deviceName);
+
+  // Get current position
+  PositionStruct currentPosition;
+  if (!GetDeviceCurrentPosition(deviceName, currentPosition)) {
+    m_logger->LogError("MachineOperations: Failed to get current position for device " + deviceName);
+    return "";
+  }
+
+  // Get all named positions for the device
+  auto& configManager = m_motionLayer.GetConfigManager();
+  auto namedPositionsOpt = configManager.GetNamedPositions(deviceName);
+  if (!namedPositionsOpt.has_value()) {
+    m_logger->LogWarning("MachineOperations: No named positions found for device " + deviceName);
+    return "";
+  }
+
+  const auto& namedPositions = namedPositionsOpt.value().get();
+  if (namedPositions.empty()) {
+    return "";
+  }
+
+  // Find the closest named position
+  std::string closestPosName;
+  double minDistance = (std::numeric_limits<double>::max)();
+
+  for (const auto& posEntry : namedPositions) {
+    const auto& posName = posEntry.first;
+    const auto& pos = posEntry.second;
+
+    // Calculate distance (without considering rotation)
+    double distance = GetDistanceBetweenPositions(currentPosition, pos, false);
+
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestPosName = posName;
+    }
+  }
+
+  // If we're very close to a named position (within 0.1mm), consider we're at that position
+  if (minDistance <= 0.1) {
+    m_logger->LogInfo("MachineOperations: Device " + deviceName +
+      " is at named position " + closestPosName);
+    return closestPosName;
+  }
+
+  // If no position is close enough, return empty string
+  m_logger->LogInfo("MachineOperations: Device " + deviceName +
+    " is not at any named position (closest: " + closestPosName +
+    ", distance: " + std::to_string(minDistance) + " mm)");
+  return "";
+}
+// Get the current position for a device
+bool MachineOperations::GetDeviceCurrentPosition(const std::string& deviceName, PositionStruct& position) {
+  m_logger->LogInfo("MachineOperations: Getting current position for device " + deviceName);
+
+  // Use the motion layer to get the current position
+  if (!m_motionLayer.GetCurrentPosition(deviceName, position)) {
+    m_logger->LogError("MachineOperations: Failed to get current position for device " + deviceName);
+    return false;
+  }
+
+  // Log position details
+  std::stringstream posStr;
+  posStr << "Current position - X:" << std::fixed << std::setprecision(6) << position.x
+    << " Y:" << std::setprecision(6) << position.y
+    << " Z:" << std::setprecision(6) << position.z;
+
+  // Include rotation values if any are non-zero
+  if (position.u != 0.0 || position.v != 0.0 || position.w != 0.0) {
+    posStr << " U:" << std::setprecision(6) << position.u
+      << " V:" << std::setprecision(6) << position.v
+      << " W:" << std::setprecision(6) << position.w;
+  }
+
+  m_logger->LogInfo("MachineOperations: " + posStr.str());
+  return true;
+}
+
+// Calculate the distance between two positions
+double MachineOperations::GetDistanceBetweenPositions(const PositionStruct& pos1,
+  const PositionStruct& pos2,
+  bool includeRotation) {
+  // Calculate Euclidean distance for XYZ
+  double dx = pos1.x - pos2.x;
+  double dy = pos1.y - pos2.y;
+  double dz = pos1.z - pos2.z;
+
+  double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+  // If rotation should be included
+  if (includeRotation) {
+    double du = pos1.u - pos2.u;
+    double dv = pos1.v - pos2.v;
+    double dw = pos1.w - pos2.w;
+
+    // Add weighted rotation component to distance
+    // Weight rotation less than translation (scale factor 0.1)
+    double rotationFactor = 0.1;
+    double rotDistance = std::sqrt(du * du + dv * dv + dw * dw) * rotationFactor;
+
+    // Combine the distances
+    distance = std::sqrt(distance * distance + rotDistance * rotDistance);
+  }
+
+  return distance;
+}

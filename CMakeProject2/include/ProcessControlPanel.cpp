@@ -261,6 +261,81 @@ void ProcessControlPanel::RenderUI() {
     ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
     ImGui::Text("Releases grippers and returns to safe position");
   }
+  // In ProcessControlPanel.cpp, add these new case descriptions in the RenderUI method
+// where all the other process descriptions are defined:
+
+  else if (m_selectedProcess == "RejectLeftLens") {
+    ImGui::TextWrapped("Moves the left lens to the reject position and releases it safely.");
+    ImGui::Spacing();
+
+    float bulletSpacing = 24.0f;
+    float indent = 10.0f;
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+    ImGui::Text("Retracts all pneumatics for safety");
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+    ImGui::Text("Moves gantry to safe position");
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+    ImGui::Text("Moves hex-left to reject lens position");
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+    ImGui::Text("Releases left gripper");
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+    ImGui::Text("Waits for lens to drop completely");
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+    ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+    ImGui::Text("Returns hex-left to home position");
+    }
+  else if (m_selectedProcess == "RejectRightLens") {
+      ImGui::TextWrapped("Moves the right lens to the reject position and releases it safely.");
+      ImGui::Spacing();
+
+      float bulletSpacing = 24.0f;
+      float indent = 10.0f;
+
+      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+      ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+      ImGui::Text("Retracts all pneumatics for safety");
+
+      ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+      ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+      ImGui::Text("Moves gantry to safe position");
+
+      ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+      ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+      ImGui::Text("Moves hex-right to reject lens position");
+
+      ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+      ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+      ImGui::Text("Releases right gripper");
+
+      ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+      ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+      ImGui::Text("Waits for lens to drop completely");
+
+      ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
+      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+      ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
+      ImGui::Text("Returns hex-right to home position");
+      }
   //else if (m_selectedProcess == "CompleteProcess") {
   //  ImGui::TextWrapped("Performs the complete end-to-end assembly process, including all the steps above in sequence.");
   //  ImGui::Spacing();
@@ -428,6 +503,8 @@ void ProcessControlPanel::UpdateStatus(const std::string& message, bool isError)
   }
 }
 
+// In ProcessControlPanel.cpp, add these cases to the BuildSelectedProcess method:
+
 std::unique_ptr<SequenceStep> ProcessControlPanel::BuildSelectedProcess() {
   if (m_selectedProcess == "Initialization") {
     return ProcessBuilders::BuildInitializationSequence(m_machineOps);
@@ -449,6 +526,12 @@ std::unique_ptr<SequenceStep> ProcessControlPanel::BuildSelectedProcess() {
   }
   else if (m_selectedProcess == "CompleteProcess") {
     return ProcessBuilders::BuildCompleteProcessSequence(m_machineOps, *m_uiManager);
+  }
+  else if (m_selectedProcess == "RejectLeftLens") {
+    return ProcessBuilders::RejectLeftLensSequence(m_machineOps, *m_uiManager);
+  }
+  else if (m_selectedProcess == "RejectRightLens") {
+    return ProcessBuilders::RejectRightLensSequence(m_machineOps, *m_uiManager);
   }
 
   // Default fallback

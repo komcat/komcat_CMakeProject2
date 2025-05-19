@@ -70,7 +70,9 @@ public:
     bool SaveConfig(const std::string& filePath = "");
 
     void UpdateGraph(const std::string& graphName, const Graph& updatedGraph);
-
+    // Add this to the public section of MotionConfigManager.h
+// Get all named positions for a device
+    std::optional<std::reference_wrapper<const std::map<std::string, PositionStruct>>> GetNamedPositions(const std::string& deviceName) const;
 private:
     // Parse and load the configuration
     void LoadConfig(const std::string& filePath);

@@ -147,6 +147,18 @@ public:
   bool CaptureImageToFile(const std::string& filename = "");
   bool UpdateCameraDisplay(); // Call this from your main loop to update the camera display
   bool MachineOperations::IntegrateCameraWithMotion(PylonCameraTest* cameraTest);
+
+  // Get current position information
+  std::string GetDeviceCurrentNode(const std::string& deviceName, const std::string& graphName);
+  std::string GetDeviceCurrentPositionName(const std::string& deviceName);
+  bool GetDeviceCurrentPosition(const std::string& deviceName, PositionStruct& position);
+
+  // Get distance between positions
+  double GetDistanceBetweenPositions(const PositionStruct& pos1, const PositionStruct& pos2,
+    bool includeRotation = false);
+
+
+
 private:
   MotionControlLayer& m_motionLayer;
   PIControllerManager& m_piControllerManager;

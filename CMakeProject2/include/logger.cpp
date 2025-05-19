@@ -145,6 +145,9 @@ void Logger::Log(const std::string& message, LogLevel level) {
     levelString = "ERROR";
     m_unreadErrors++;
     break;
+  case LogLevel::Process:
+    levelString = "PROC";
+    break;
   }
 
   // Increment unread counter if minimized
@@ -176,6 +179,9 @@ void Logger::Log(const std::string& message, LogLevel level) {
       break;
     case LogLevel::Error:
       colorCode = "\033[31m"; // Red
+      break;
+    case LogLevel::Process:
+      colorCode = "\033[36m"; // Cyan
       break;
     }
 
@@ -429,8 +435,9 @@ void Logger::RenderUI() {
     static bool showInfo = true;
     static bool showWarning = true;
     static bool showError = true;
+    static bool showProcess = true;  // Add new filter
 
-    ImGui::SameLine(ImGui::GetWindowWidth() - 480);
+    ImGui::SameLine(ImGui::GetWindowWidth() - 580);  // Adjust position to accommodate the new checkbox
     ImGui::Checkbox("Debug", &showDebug);
 
     ImGui::SameLine();
@@ -441,6 +448,9 @@ void Logger::RenderUI() {
 
     ImGui::SameLine();
     ImGui::Checkbox("Error", &showError);
+
+    ImGui::SameLine();
+    ImGui::Checkbox("Process", &showProcess);  // Add new checkbox
 
     ImGui::Separator();
 
@@ -460,11 +470,12 @@ void Logger::RenderUI() {
         if ((logMsg.level == LogLevel::Debug && !showDebug) ||
           (logMsg.level == LogLevel::Info && !showInfo) ||
           (logMsg.level == LogLevel::Warning && !showWarning) ||
-          (logMsg.level == LogLevel::Error && !showError)) {
+          (logMsg.level == LogLevel::Error && !showError) ||
+          (logMsg.level == LogLevel::Process && !showProcess)) {  // Add new filter check
           continue;
         }
 
-        // Set text color based on message level - enhanced for better contrast
+        // Set text color based on message level
         ImVec4 textColor;
         switch (logMsg.level) {
         case LogLevel::Debug:
@@ -478,6 +489,9 @@ void Logger::RenderUI() {
           break;
         case LogLevel::Error:
           textColor = ImVec4(1.0f, 0.4f, 0.4f, 1.0f); // Brighter Red
+          break;
+        case LogLevel::Process:
+          textColor = ImVec4(0.2f, 0.8f, 0.8f, 1.0f); // Cyan
           break;
         }
 
@@ -539,6 +553,10 @@ bool Logger::SaveLogsToFile(const std::string& filename) {
     case LogLevel::Error:
       levelString = "ERROR";
       break;
+    case LogLevel::Process:
+      levelString = "PROC";
+      break;
+    
     }
 
     file << "[" << logMsg.timestamp << "] [" << levelString << "] " << logMsg.text << std::endl;
@@ -546,4 +564,9 @@ bool Logger::SaveLogsToFile(const std::string& filename) {
 
   file.close();
   return true;
+}
+
+// Convenience method for process log level
+void Logger::LogProcess(const std::string& message) {
+  Log(message, LogLevel::Process);
 }

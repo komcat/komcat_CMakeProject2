@@ -15,7 +15,7 @@ void ProcessStep::NotifyCompletion(bool success) {
 }
 
 void ProcessStep::LogInfo(const std::string& message) {
-  Logger::GetInstance()->LogInfo("ProcessStep[" + m_name + "]: " + message);
+  Logger::GetInstance()->LogProcess("ProcessStep[" + m_name + "]: " + message);
 }
 
 void ProcessStep::LogError(const std::string& message) {

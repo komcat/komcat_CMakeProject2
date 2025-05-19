@@ -11,7 +11,8 @@ enum class LogLevel {
   Debug,  // Gray - debug information
   Info,   // White - normal information
   Warning, // Orange - warnings
-  Error    // Red - errors
+  Error,    // Red - errors
+  Process  // Cyan - process information
 };
 
 // Structure to store log messages with their level
@@ -89,6 +90,7 @@ public:
   void LogInfo(const std::string& message);
   void LogWarning(const std::string& message);
   void LogError(const std::string& message);
+  void LogProcess(const std::string& message); // New method for process logs
 
   // Clear all logs
   void Clear();

@@ -543,3 +543,8 @@ void MotionConfigManager::UpdateGraph(const std::string& graphName, const Graph&
     // Note: This only updates the in-memory representation
     // Call SaveConfig() to persist changes to the file
 }
+
+std::optional<std::reference_wrapper<const std::map<std::string, PositionStruct>>> MotionConfigManager::GetNamedPositions(const std::string& deviceName) const {
+  // This is just an alias for GetDevicePositions for better semantic clarity
+  return GetDevicePositions(deviceName);
+}

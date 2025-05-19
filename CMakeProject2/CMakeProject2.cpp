@@ -1419,8 +1419,8 @@ int main(int argc, char* argv[])
 	logger->LogInfo("Stopping Python processes...");
 	pythonManager.StopAllProcesses();
 
-
-
+	logger->LogInfo("Wait 5 sec for python process to close.. (if they are closing)");
+	std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 
 
 	pylonCameraTest.GetCamera().StopGrabbing();

@@ -110,7 +110,7 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<LaserOnOperation>());
 
 		// 4. Wait for processing time
-		sequence->AddOperation(std::make_shared<WaitOperation>(5000)); // 100ms
+		sequence->AddOperation(std::make_shared<WaitOperation>(500)); // 100ms
 
 		// 5. Turn off laser and TEC
 		//sequence->AddOperation(std::make_shared<LaserOffOperation>());
@@ -234,6 +234,7 @@ namespace ProcessBuilders {
 
 		return sequence;
 	}
+
 	std::unique_ptr<SequenceStep> BuildUVCuringSequence(MachineOperations& machineOps,
 		UserInteractionManager& uiManager) {
 		auto sequence = std::make_unique<SequenceStep>("UV Curing", machineOps);
@@ -372,18 +373,81 @@ namespace ProcessBuilders {
 		return sequence;
 	}
 
+	std::unique_ptr<SequenceStep> RejectLeftLensSequence(MachineOperations& machineOps,
+		UserInteractionManager& uiManager) {
+		auto sequence = std::make_unique<SequenceStep>("Reject Left Lens Process", machineOps);
+
+		// 1. Retract all pneumatics
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>("UV_Head"));
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Pick_Up_Tool"));
+
+		// 2. Move gantry to safe position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe position
+
+		// 3. Move hex-left to reject lens position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"hex-left", "Process_Flow", "node_5531")); // Reject lens position
+
+		// 4. Release left gripper (pin 0)
+		sequence->AddOperation(std::make_shared<SetOutputOperation>(
+			"IOBottom", 0, false)); // Clear output L_Gripper (pin 0)
+
+		// 5. Wait for 3 seconds to ensure lens is dropped
+		sequence->AddOperation(std::make_shared<WaitOperation>(3000)); // 3 seconds
+
+		// 6. Move hex-left back to home position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"hex-left", "Process_Flow", "node_5480")); // Home position
+
+		return sequence;
+	}
+
+	std::unique_ptr<SequenceStep> RejectRightLensSequence(MachineOperations& machineOps, UserInteractionManager& uiManager) {
+		auto sequence = std::make_unique<SequenceStep>("Reject Right Lens Process", machineOps);
+
+		// 1. Retract all pneumatics
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>("UV_Head"));
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Pick_Up_Tool"));
+
+		// 2. Move gantry to safe position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe position
+
+		// 3. Move hex-right to reject lens position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"hex-right", "Process_Flow", "node_5190")); // Reject lens position
+
+		// 4. Release right gripper (pin 2)
+		sequence->AddOperation(std::make_shared<SetOutputOperation>(
+			"IOBottom", 2, false)); // Clear output R_Gripper (pin 2)
+
+		// 5. Wait for 3 seconds to ensure lens is dropped
+		sequence->AddOperation(std::make_shared<WaitOperation>(3000)); // 3 seconds
+
+		// 6. Move hex-right back to home position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"hex-right", "Process_Flow", "node_5136")); // Home position
+
+		return sequence;
+	}
+
+
+
 	// Implementation in ProcessBuilders.cpp
 	void ProcessBuilders::DebugPrintSequence(const std::string& name, const std::unique_ptr<SequenceStep>& sequence) {
 		Logger* logger = Logger::GetInstance();
 
-		logger->LogInfo("=== DEBUG SEQUENCE: " + name + " ===");
-		logger->LogInfo("Operation count: " + std::to_string(sequence->GetOperations().size()));
+		logger->LogProcess("=== DEBUG SEQUENCE: " + name + " ===");
+		logger->LogProcess("Operation count: " + std::to_string(sequence->GetOperations().size()));
 
 		int i = 1;
 		for (const auto& op : sequence->GetOperations()) {
-			logger->LogInfo(std::to_string(i++) + ": " + op->GetDescription());
+			logger->LogProcess(std::to_string(i++) + ": " + op->GetDescription());
 		}
 
-		logger->LogInfo("=== END DEBUG SEQUENCE ===");
+		logger->LogProcess("=== END DEBUG SEQUENCE ===");
 	}
 } // namespace ProcessBuilders
