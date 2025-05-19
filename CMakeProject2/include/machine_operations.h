@@ -157,8 +157,9 @@ public:
   double GetDistanceBetweenPositions(const PositionStruct& pos1, const PositionStruct& pos2,
     bool includeRotation = false);
 
+  bool CleanupAllScanners();
 
-
+  bool ResetScanState(const std::string& deviceName);
 private:
   MotionControlLayer& m_motionLayer;
   PIControllerManager& m_piControllerManager;
@@ -187,6 +188,5 @@ private:
 
   // Add camera reference
   PylonCameraTest* m_cameraTest;
-
 
 };

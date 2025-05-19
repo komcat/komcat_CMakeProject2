@@ -11,6 +11,11 @@ void SequenceStep::AddOperation(std::shared_ptr<SequenceOperation> operation) {
 }
 
 bool SequenceStep::Execute() {
+  LogInfo("Starting sequence execution with " + std::to_string(m_operations.size()) + " operations");
+
+  // Clean up any lingering scanners before starting a new sequence
+  m_machineOps.CleanupAllScanners();
+
   // Print the entire sequence plan before execution
   PrintSequencePlan();
 

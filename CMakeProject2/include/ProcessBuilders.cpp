@@ -149,6 +149,13 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"gantry-main", "Process_Flow", "node_4186"));	//see pick collimate lens
 
+
+		// 4. Wait for user confirmation that grip is successful
+		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
+			"Confirm left lens is successfully gripped", uiManager));
+
+
+
 		// 3. Set output L-gripper (pin 0) to grab the lens
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
 			"IOBottom", 0, true));
@@ -163,9 +170,7 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<CaptureImageOperation>());
 
 
-		// 4. Wait for user confirmation that grip is successful
-		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
-			"Confirm left lens is successfully gripped", uiManager));
+
 
 		// 5. Release the lens temporarily (clear output)
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
@@ -209,18 +214,31 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"gantry-main", "Process_Flow", "node_4209"));  // Verify this is correct for focus lens
 
-		// Use R-gripper (pin 2) for RIGHT lens
-		sequence->AddOperation(std::make_shared<SetOutputOperation>(
-			"IOBottom", 2, true));  // Set RIGHT gripper
 
 		// Wait for user confirmation
 		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
 			"Confirm right lens is successfully gripped", uiManager));
 
+		// Use R-gripper (pin 2) for RIGHT lens
+		sequence->AddOperation(std::make_shared<SetOutputOperation>(
+			"IOBottom", 2, true));  // Set RIGHT gripper
+
+		// 4. Start camera grabbing
+		sequence->AddOperation(std::make_shared<StartCameraGrabbingOperation>());
+
+		// 5. Wait for camera to stabilize
+		sequence->AddOperation(std::make_shared<WaitOperation>(500));  // 500ms delay
+
+		// 6. Capture image
+		sequence->AddOperation(std::make_shared<CaptureImageOperation>());
+
 		// Release and re-grip cycle for the RIGHT lens
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
 			"IOBottom", 2, false));  // Release RIGHT gripper
 		sequence->AddOperation(std::make_shared<WaitOperation>(1500));
+
+
+
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
 			"IOBottom", 2, true, 500));  // Re-grip RIGHT lens
 
@@ -258,14 +276,14 @@ namespace ProcessBuilders {
 		// 2. Perform scan (will automatically move to peak)
 		sequence->AddOperation(std::make_shared<RunScanOperation>(
 			"hex-left", "GPIB-Current",
-			std::vector<double>{0.0005, 0.0002, 0.0001},
+			std::vector<double>{ 0.0002, 0.0001},
 			300, // settling time in ms
 			std::vector<std::string>{"Z", "X", "Y"}));
 
 		// 2. Perform scan (will automatically move to peak)
 		sequence->AddOperation(std::make_shared<RunScanOperation>(
 			"hex-right", "GPIB-Current",
-			std::vector<double>{0.0005, 0.0002, 0.0001},
+			std::vector<double>{0.0002, 0.0001},
 			300, // settling time in ms
 			std::vector<std::string>{"Z", "X", "Y"}));
 

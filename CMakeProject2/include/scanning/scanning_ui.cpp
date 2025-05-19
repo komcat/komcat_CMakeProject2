@@ -6,6 +6,7 @@
 
 
 // Constructor - properly initialize atomic variables
+// Modify the constructor in scanning_ui.cpp to initialize the presets
 ScanningUI::ScanningUI(PIControllerManager& piControllerManager,
   GlobalDataStore& dataStore)
   : m_piControllerManager(piControllerManager),
@@ -26,11 +27,13 @@ ScanningUI::ScanningUI(PIControllerManager& piControllerManager,
   // Default parameters for hexapod optimization
   m_parameters = ScanningParameters::CreateDefault();
   m_parameters.axesToScan = { "Z", "X", "Y" };
-  m_parameters.stepSizes = { 0.001, 0.0005, 0.0002 };
   m_parameters.motionSettleTimeMs = 400;
   m_parameters.consecutiveDecreasesLimit = 2;
   m_parameters.improvementThreshold = 0.005;
   m_parameters.maxTotalDistance = 2.0;
+
+  // Initialize step size presets
+  InitializeStepSizePresets();
 }
 
 
@@ -179,6 +182,32 @@ void ScanningUI::RenderScanControls() {
     !m_parameters.stepSizes.empty() &&
     GetSelectedController() != nullptr &&
     GetSelectedController()->IsConnected();
+
+  // Add step size preset dropdown
+  ImGui::Text("Step Size Preset:");
+  if (ImGui::BeginCombo("##StepSizePreset", m_stepSizePresets[m_selectedPresetIndex].name.c_str())) {
+    for (int i = 0; i < m_stepSizePresets.size(); i++) {
+      bool isSelected = (m_selectedPresetIndex == i);
+      if (ImGui::Selectable(m_stepSizePresets[i].name.c_str(), isSelected)) {
+        m_selectedPresetIndex = i;
+        m_parameters.stepSizes = m_stepSizePresets[i].stepSizes;
+      }
+      if (isSelected) {
+        ImGui::SetItemDefaultFocus();
+      }
+    }
+    ImGui::EndCombo();
+  }
+
+  // Display current step sizes
+  std::string stepsStr;
+  for (size_t i = 0; i < m_parameters.stepSizes.size(); ++i) {
+    if (i > 0) stepsStr += ", ";
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "%.5f", m_parameters.stepSizes[i]);
+    stepsStr += buffer;
+  }
+  ImGui::Text("Step Sizes (mm): %s", stepsStr.c_str());
 
   // Check if the controller is currently moving - this avoids lock contention
   bool isControllerMoving = false;
@@ -525,4 +554,18 @@ PIController* ScanningUI::GetSelectedController() const {
     return nullptr;
   }
   return m_piControllerManager.GetController(m_selectedDevice);
+}
+// Add this implementation to scanning_ui.cpp
+void ScanningUI::InitializeStepSizePresets() {
+  // Define presets
+  m_stepSizePresets = {
+    {"Normal (0.002, 0.001, 0.0005, 0.0002 mm)", {0.002, 0.001, 0.0005, 0.0002}},
+    {"Fine (0.005, 0.0002 mm)", {0.001, 0.0002}},
+    {"Ultra (0.0002, 0.0001 mm)", {0.0003, 0.0001}}
+  };
+
+  // Initialize parameters with the first preset
+  if (!m_stepSizePresets.empty()) {
+    m_parameters.stepSizes = m_stepSizePresets[0].stepSizes;
+  }
 }

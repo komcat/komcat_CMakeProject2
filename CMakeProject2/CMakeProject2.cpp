@@ -1419,10 +1419,11 @@ int main(int argc, char* argv[])
 	logger->LogInfo("Stopping Python processes...");
 	pythonManager.StopAllProcesses();
 
-	logger->LogInfo("Wait 5 sec for python process to close.. (if they are closing)");
-	std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-
-
+	logger->LogInfo("Wait 2 sec for python process to close.. (if they are closing)");
+	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+	logger->LogInfo("deconstruct MachineOperations..");
+	machineOps.~MachineOperations();
+	std::this_thread::sleep_for(std::chrono::milliseconds(500));
 	pylonCameraTest.GetCamera().StopGrabbing();
 	std::this_thread::sleep_for(std::chrono::milliseconds(3000));
 	pylonCameraTest.GetCamera().Disconnect();

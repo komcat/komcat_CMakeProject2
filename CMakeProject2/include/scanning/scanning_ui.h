@@ -102,4 +102,15 @@ private:
 
   // Process batched measurements if needed
   void ProcessMeasurementBatch();
+
+  // Step size presets
+  struct StepSizePreset {
+    std::string name;
+    std::vector<double> stepSizes;
+  };
+  std::vector<StepSizePreset> m_stepSizePresets;
+  int m_selectedPresetIndex = 0;
+
+  // Initialize presets in the constructor
+  void InitializeStepSizePresets();
 };

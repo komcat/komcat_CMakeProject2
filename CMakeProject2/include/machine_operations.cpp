@@ -555,26 +555,52 @@ bool MachineOperations::StartScan(const std::string& deviceName, const std::stri
   const std::vector<double>& stepSizes, int settlingTimeMs,
   const std::vector<std::string>& axesToScan) {
   // Check if a scan is already active for this device
-    {
-      std::lock_guard<std::mutex> lock(m_scanMutex);
-      if (m_activeScans.find(deviceName) != m_activeScans.end()) {
+  bool needsReset = false;
+  {
+    std::lock_guard<std::mutex> lock(m_scanMutex);
+    if (m_activeScans.find(deviceName) != m_activeScans.end()) {
+      // Check if the scan is truly active or just stalled
+      auto& scanner = m_activeScans[deviceName];
+      if (scanner && scanner->IsScanningActive()) {
         m_logger->LogWarning("MachineOperations: Scan already in progress for device " + deviceName);
         return false;
       }
+      else {
+        // The scanner exists but is not active - this is a stalled state
+        needsReset = true;
+        m_logger->LogWarning("MachineOperations: Found stalled scanner for device " + deviceName + ", will reset");
+      }
     }
 
-    // Get the PI controller for the device
-    PIController* controller = m_piControllerManager.GetController(deviceName);
-    if (!controller || !controller->IsConnected()) {
-      m_logger->LogError("MachineOperations: No connected PI controller for device " + deviceName);
-      return false;
+    // Also check the scan info status
+    auto infoIt = m_scanInfo.find(deviceName);
+    if (infoIt != m_scanInfo.end() && infoIt->second.isActive.load()) {
+      // The scan info shows active but we didn't find an active scanner
+      // This is definitely a desynchronized state
+      needsReset = true;
+      m_logger->LogWarning("MachineOperations: Scan info shows active but no active scanner for " + deviceName + ", will reset");
     }
+  }
 
-    // Setup scanning parameters
-    ScanningParameters params = ScanningParameters::CreateDefault();
-    params.axesToScan = axesToScan;
-    params.stepSizes = stepSizes;
-    params.motionSettleTimeMs = settlingTimeMs;
+  // Reset state if needed
+  if (needsReset) {
+    ResetScanState(deviceName);
+  }
+
+  // Continue with the original StartScan logic
+  // Get the PI controller for the device
+  PIController* controller = m_piControllerManager.GetController(deviceName);
+  if (!controller || !controller->IsConnected()) {
+    m_logger->LogError("MachineOperations: No connected PI controller for device " + deviceName);
+    return false;
+  }
+
+  // Rest of the method continues as before...
+  // Setup scanning parameters
+  ScanningParameters params = ScanningParameters::CreateDefault();
+  params.axesToScan = axesToScan;
+  params.stepSizes = stepSizes;
+  params.motionSettleTimeMs = settlingTimeMs;
 
     try {
       // Validate parameters
@@ -666,6 +692,7 @@ bool MachineOperations::StartScan(const std::string& deviceName, const std::stri
     }
 }
 
+// Modify the StopScan method to ensure proper cleanup
 bool MachineOperations::StopScan(const std::string& deviceName) {
   std::unique_ptr<ScanningAlgorithm> scanner;
 
@@ -674,8 +701,17 @@ bool MachineOperations::StopScan(const std::string& deviceName) {
     std::lock_guard<std::mutex> lock(m_scanMutex);
     auto it = m_activeScans.find(deviceName);
     if (it == m_activeScans.end()) {
-      m_logger->LogWarning("MachineOperations: No active scan for device " + deviceName);
-      return false;
+      // Even if the scanner isn't found, reset the scan info data
+      // This is critical for recovery from abnormal states
+      auto infoIt = m_scanInfo.find(deviceName);
+      if (infoIt != m_scanInfo.end()) {
+        infoIt->second.isActive.store(false);
+        std::lock_guard<std::mutex> statusLock(infoIt->second.statusMutex);
+        infoIt->second.status = "No active scan";
+      }
+
+      m_logger->LogWarning("MachineOperations: No active scan found for device " + deviceName + ", but reset status anyway");
+      return true; // Return success since the end goal is achieved (no active scan)
     }
 
     scanner = std::move(it->second);
@@ -687,20 +723,93 @@ bool MachineOperations::StopScan(const std::string& deviceName) {
     scanner->HaltScan();
     m_logger->LogInfo("MachineOperations: Scan stopped for device " + deviceName);
 
-     // Update scan status
+    // Update scan status
     auto it = m_scanInfo.find(deviceName);
     if (it != m_scanInfo.end()) {
-        it->second.isActive.store(false);
-        std::lock_guard<std::mutex> lock(it->second.statusMutex);
-        it->second.status = "Scan stopped by user";
+      it->second.isActive.store(false);
+      std::lock_guard<std::mutex> lock(it->second.statusMutex);
+      it->second.status = "Scan stopped by user";
     }
-    
+
     // Use our safe cleanup method
     return SafelyCleanupScanner(deviceName);
   }
 
   return false;
 }
+
+// Add a new method to machine_operations.cpp to reset scan state if needed
+bool MachineOperations::ResetScanState(const std::string& deviceName) {
+  std::lock_guard<std::mutex> lock(m_scanMutex);
+
+  // Reset active scans tracking
+  auto scanIt = m_activeScans.find(deviceName);
+  if (scanIt != m_activeScans.end()) {
+    // Try to halt the scan if it's still active
+    if (scanIt->second && scanIt->second->IsScanningActive()) {
+      scanIt->second->HaltScan();
+
+      // Wait briefly for it to stop
+      for (int i = 0; i < 10; i++) {
+        if (!scanIt->second->IsScanningActive()) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      }
+    }
+
+    // Remove from active scans
+    m_activeScans.erase(scanIt);
+    m_logger->LogInfo("MachineOperations: Removed stalled scan for " + deviceName);
+  }
+
+  // Reset scan info state
+  auto infoIt = m_scanInfo.find(deviceName);
+  if (infoIt != m_scanInfo.end()) {
+    infoIt->second.isActive.store(false);
+    std::lock_guard<std::mutex> statusLock(infoIt->second.statusMutex);
+    infoIt->second.status = "Ready";
+  }
+
+  return true;
+}
+
+// Also add a cleanup method to be called before starting a new sequence
+// This should be called at the start of your process sequence
+bool MachineOperations::CleanupAllScanners() {
+  std::lock_guard<std::mutex> lock(m_scanMutex);
+
+  bool success = true;
+  // First, try to stop all active scanners
+  for (auto& [deviceName, scanner] : m_activeScans) {
+    if (scanner && scanner->IsScanningActive()) {
+      m_logger->LogInfo("MachineOperations: Halting lingering scan for " + deviceName);
+      scanner->HaltScan();
+
+      // Wait briefly for it to stop
+      for (int i = 0; i < 10; i++) {
+        if (!scanner->IsScanningActive()) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      }
+
+      if (scanner->IsScanningActive()) {
+        m_logger->LogWarning("MachineOperations: Failed to halt scan for " + deviceName);
+        success = false;
+      }
+    }
+  }
+
+  // Clear all active scans regardless
+  m_activeScans.clear();
+
+  // Reset all scan info states
+  for (auto& [deviceName, info] : m_scanInfo) {
+    info.isActive.store(false);
+    std::lock_guard<std::mutex> statusLock(info.statusMutex);
+    info.status = "Ready";
+  }
+
+  return success;
+}
+
 
 bool MachineOperations::IsScanActive(const std::string& deviceName) const {
   auto it = m_scanInfo.find(deviceName);
