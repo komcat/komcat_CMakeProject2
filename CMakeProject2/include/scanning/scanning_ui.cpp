@@ -26,8 +26,8 @@ ScanningUI::ScanningUI(PIControllerManager& piControllerManager,
   // Default parameters for hexapod optimization
   m_parameters = ScanningParameters::CreateDefault();
   m_parameters.axesToScan = { "Z", "X", "Y" };
-  m_parameters.stepSizes = { 0.002, 0.001, 0.0005, 0.0002 };
-  m_parameters.motionSettleTimeMs = 300;
+  m_parameters.stepSizes = { 0.001, 0.0005, 0.0002 };
+  m_parameters.motionSettleTimeMs = 400;
   m_parameters.consecutiveDecreasesLimit = 2;
   m_parameters.improvementThreshold = 0.005;
   m_parameters.maxTotalDistance = 2.0;
@@ -54,7 +54,7 @@ void ScanningUI::RenderUI() {
   ImGui::Separator();
 
   // Simple status display
-  ImGui::Text("Step Size: 0.5, 1, 2 microns");
+  ImGui::Text("  m_parameters.stepSizes = { 0.001, 0.0005, 0.0002 };");
   ImGui::Text("Max Travel: 2.0 mm");
 
   // Start/Stop buttons

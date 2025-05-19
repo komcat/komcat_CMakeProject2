@@ -490,11 +490,11 @@ void ScanningAlgorithm::UpdateGlobalPeak(double value, const PositionStruct& pos
 
 bool ScanningAlgorithm::MoveToPosition(const PositionStruct& position) {
   try {
-    // Use the PI controller to move to the absolute position using only XYZ axes
-    // Set rotation axes to 0 to avoid any rotation movement
+    // Use the PI controller to move to the absolute position using XYZ and UVW axes
+    // Maintain the rotation axes values from the position structure
     bool success = m_piController.MoveToPositionAll(
       position.x, position.y, position.z,
-      0.0, 0.0, 0.0,  // Set UVW to zero to avoid rotation 
+      position.u, position.v, position.w,  // Use the actual UVW values from position
       false // non-blocking move
     );
 
@@ -504,9 +504,9 @@ bool ScanningAlgorithm::MoveToPosition(const PositionStruct& position) {
     }
 
     // Wait for motion to complete using WaitForMotionCompletion for each axis
-    // Only wait for XYZ axes since we're only moving those
+    // Need to wait for all axes including UVW if they changed
     bool allComplete = true;
-    for (const auto& axis : { "X", "Y", "Z" }) {
+    for (const auto& axis : { "X", "Y", "Z", "U", "V", "W" }) {
       if (!m_piController.WaitForMotionCompletion(axis)) {
         m_logger->LogError("Timeout waiting for " + std::string(axis) + " axis to complete motion");
         allComplete = false;
@@ -577,9 +577,9 @@ bool ScanningAlgorithm::GetCurrentPosition(PositionStruct& position) {
     position.x = positions["X"];
     position.y = positions["Y"];
     position.z = positions["Z"];
-    position.u = 0.0;  // Ignore rotation axes
-    position.v = 0.0;
-    position.w = 0.0;
+    position.u = positions["U"];  // Get actual UVW values
+    position.v = positions["V"];
+    position.w = positions["W"];
     return true;
   }
   return false;

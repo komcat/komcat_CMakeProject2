@@ -82,9 +82,10 @@ public:
   const std::vector<std::shared_ptr<SequenceOperation>>& GetOperations() const {
     return m_operations;
   }
-
+  void PrintSequencePlan() const;
 private:
   std::vector<std::shared_ptr<SequenceOperation>> m_operations;
+
 };
 
 // Retract slide operation

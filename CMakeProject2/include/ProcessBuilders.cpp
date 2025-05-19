@@ -201,47 +201,39 @@ namespace ProcessBuilders {
 
 		auto sequence = std::make_unique<SequenceStep>("Pick and Place Right Lens", machineOps);
 
-
-
-		// 2. Move hex-right to pick lens position
+		// Move hex-right to pick lens position (verify this is correct for RIGHT lens)
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"hex-right", "Process_Flow", "node_5245"));
 
-
+		// Move gantry to see the RIGHT lens pick position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"gantry-main", "Process_Flow", "node_4209"));	//see pick focus lens
+			"gantry-main", "Process_Flow", "node_4209"));  // Verify this is correct for focus lens
 
-		// 3. Set output R-gripper (pin 2) to grab the lens
+		// Use R-gripper (pin 2) for RIGHT lens
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
-			"IOBottom", 2, true));
+			"IOBottom", 2, true));  // Set RIGHT gripper
 
-		// 4. Wait for user confirmation that grip is successful
+		// Wait for user confirmation
 		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
 			"Confirm right lens is successfully gripped", uiManager));
 
-		// 5. Release the lens temporarily (clear output)
+		// Release and re-grip cycle for the RIGHT lens
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
-			"IOBottom", 2, false));
-
-		// 6. Wait 1.5 seconds
+			"IOBottom", 2, false));  // Release RIGHT gripper
 		sequence->AddOperation(std::make_shared<WaitOperation>(1500));
-
-		// 7. Grip the lens again (set output)
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
-			"IOBottom", 2, true, 500));
+			"IOBottom", 2, true, 500));  // Re-grip RIGHT lens
 
+		// Move gantry to see the RIGHT lens
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"gantry-main", "Process_Flow", "node_4156"));	//see focus lens
+			"gantry-main", "Process_Flow", "node_4156"));  // Verify this is for focus lens
 
-
-
-		// 10. Move to placement position
+		// Move to RIGHT lens placement position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"hex-right", "Process_Flow", "node_5263"));
+			"hex-right", "Process_Flow", "node_5263"));  // Verify this is correct for RIGHT placement
 
 		return sequence;
 	}
-
 	std::unique_ptr<SequenceStep> BuildUVCuringSequence(MachineOperations& machineOps,
 		UserInteractionManager& uiManager) {
 		auto sequence = std::make_unique<SequenceStep>("UV Curing", machineOps);
@@ -380,4 +372,18 @@ namespace ProcessBuilders {
 		return sequence;
 	}
 
+	// Implementation in ProcessBuilders.cpp
+	void ProcessBuilders::DebugPrintSequence(const std::string& name, const std::unique_ptr<SequenceStep>& sequence) {
+		Logger* logger = Logger::GetInstance();
+
+		logger->LogInfo("=== DEBUG SEQUENCE: " + name + " ===");
+		logger->LogInfo("Operation count: " + std::to_string(sequence->GetOperations().size()));
+
+		int i = 1;
+		for (const auto& op : sequence->GetOperations()) {
+			logger->LogInfo(std::to_string(i++) + ": " + op->GetDescription());
+		}
+
+		logger->LogInfo("=== END DEBUG SEQUENCE ===");
+	}
 } // namespace ProcessBuilders

@@ -108,4 +108,8 @@ namespace ProcessBuilders {
   // Build a complete process sequence (combines all steps)
   std::unique_ptr<SequenceStep> BuildCompleteProcessSequence(
     MachineOperations& machineOps, UserInteractionManager& uiManager);
+
+  // Debug method to print a sequence without executing it
+  void DebugPrintSequence(const std::string& name, const std::unique_ptr<SequenceStep>& sequence);
+
 }
