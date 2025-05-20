@@ -1418,7 +1418,7 @@ int main(int argc, char* argv[])
 	// When exit is triggered:
 	logger->Log("Application shutting down");
 
-
+	piControllerManager.~PIControllerManager();
 
 	// Stop Python scripts before other cleanup
 	logger->LogInfo("Stopping Python processes...");

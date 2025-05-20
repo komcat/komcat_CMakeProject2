@@ -147,14 +147,14 @@ public:
 
 
   bool CopyPositionToClipboard(); // Method to copy current position as JSON
-
+  void StopCommunicationThread();
 private:
   bool m_debugVerbose = false;
 
 
   // Communication thread methods
   void StartCommunicationThread();
-  void StopCommunicationThread();
+  //void StopCommunicationThread();
   void CommunicationThreadFunc();
   bool enableDebug = false;
   std::string m_windowTitle = "PI Controller"; // Default title

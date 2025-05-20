@@ -80,6 +80,7 @@ void PIControllerManager::DisconnectAll() {
   for (auto& [name, controller] : m_controllers) {
     if (controller->IsConnected()) {
       m_logger->LogInfo("PIControllerManager: Disconnecting " + name);
+      controller->StopCommunicationThread();
       controller->Disconnect();
     }
   }

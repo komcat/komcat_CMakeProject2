@@ -32,7 +32,7 @@ set(ACSC_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 
 
 # Add PI GCS2 paths
-set(PI_ROOT "C:/Program Files (x86)/Physik Instrumente (PI)/Software Suite/Development/C++/API")
+set(PI_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/PI")
 set(PI_INCLUDE_DIR "${PI_ROOT}")
 set(PI_LIB_DIR "${PI_ROOT}")
 
