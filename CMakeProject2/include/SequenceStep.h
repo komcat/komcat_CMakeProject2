@@ -628,3 +628,183 @@ private:
   std::string m_axis;
   double m_distance;
 };
+
+
+/// <summary>
+/// Operation that periodically reads and logs a data value from the GlobalDataStore
+/// for a specified duration and at specified intervals.
+/// </summary>
+class PeriodicMonitorDataValueOperation : public SequenceOperation {
+public:
+  /// <summary>
+  /// Creates a new operation to periodically monitor a data value.
+  /// </summary>
+  /// <param name="dataId">The identifier of the data channel to monitor.</param>
+  /// <param name="durationMs">The total duration to monitor in milliseconds.</param>
+  /// <param name="intervalMs">The interval between readings in milliseconds.</param>
+  PeriodicMonitorDataValueOperation(const std::string& dataId, int durationMs, int intervalMs)
+    : m_dataId(dataId), m_durationMs(durationMs), m_intervalMs(intervalMs) {
+  }
+
+  /// <summary>
+  /// Executes the operation, reading and logging the specified data value at regular intervals.
+  /// </summary>
+  /// <param name="ops">Reference to MachineOperations for accessing the data store.</param>
+  /// <returns>True if the monitoring completed successfully, false otherwise.</returns>
+  bool Execute(MachineOperations& ops) override {
+    auto startTime = std::chrono::steady_clock::now();
+    auto endTime = startTime + std::chrono::milliseconds(m_durationMs);
+
+    ops.LogInfo("Starting periodic monitoring of " + m_dataId +
+      " for " + std::to_string(m_durationMs / 1000) + " seconds");
+
+    while (std::chrono::steady_clock::now() < endTime) {
+      float value = ops.ReadDataValue(m_dataId);
+      ops.LogInfo(m_dataId + " value: " + std::to_string(value));
+
+      // Sleep for the interval duration
+      std::this_thread::sleep_for(std::chrono::milliseconds(m_intervalMs));
+    }
+
+    ops.LogInfo("Completed periodic monitoring of " + m_dataId);
+    return true;
+  }
+
+  /// <summary>
+  /// Gets a human-readable description of this operation.
+  /// </summary>
+  /// <returns>A string describing the monitoring operation.</returns>
+  std::string GetDescription() const override {
+    return "Monitor " + m_dataId + " for " +
+      std::to_string(m_durationMs / 1000) + " seconds";
+  }
+
+private:
+  std::string m_dataId;  ///< The identifier of the data channel to monitor
+  int m_durationMs;      ///< The total duration to monitor in milliseconds
+  int m_intervalMs;      ///< The interval between readings in milliseconds
+};
+
+/// <summary>
+/// Operation that reads a single data value from the GlobalDataStore and logs it.
+/// Useful for capturing instantaneous readings at specific points in a sequence.
+/// </summary>
+class ReadAndLogDataValueOperation : public SequenceOperation {
+public:
+  /// <summary>
+  /// Creates a new operation to read and log a data value.
+  /// </summary>
+  /// <param name="dataId">The identifier of the data channel to read.</param>
+  /// <param name="description">Optional custom description for the log message.</param>
+  ReadAndLogDataValueOperation(const std::string& dataId, const std::string& description = "")
+    : m_dataId(dataId), m_description(description) {
+  }
+
+  /// <summary>
+  /// Executes the operation, reading and logging the specified data value.
+  /// </summary>
+  /// <param name="ops">Reference to MachineOperations for accessing the data store.</param>
+  /// <returns>True if the read and log succeeded, false otherwise.</returns>
+  bool Execute(MachineOperations& ops) override {
+    float value = ops.ReadDataValue(m_dataId);
+    std::string message = m_description.empty() ?
+      m_dataId + " value: " + std::to_string(value) :
+      m_description + ": " + std::to_string(value);
+    ops.LogInfo(message);
+    return true;
+  }
+
+  /// <summary>
+  /// Gets a human-readable description of this operation.
+  /// </summary>
+  /// <returns>A string describing the read and log operation.</returns>
+  std::string GetDescription() const override {
+    return "Read and log " + m_dataId;
+  }
+
+private:
+  std::string m_dataId;      ///< The identifier of the data channel to read
+  std::string m_description; ///< Optional custom description for the log message
+};
+
+/// <summary>
+/// Operation that reads the current laser power setting and logs it.
+/// </summary>
+class ReadAndLogLaserCurrentOperation : public SequenceOperation {
+public:
+  /// <summary>
+  /// Creates a new operation to read and log the laser current.
+  /// </summary>
+  /// <param name="laserName">Optional name of the laser device if multiple lasers are present.</param>
+  /// <param name="description">Optional custom description for the log message.</param>
+  ReadAndLogLaserCurrentOperation(const std::string& laserName = "", const std::string& description = "")
+    : m_laserName(laserName), m_description(description) {
+  }
+
+  /// <summary>
+  /// Executes the operation, reading and logging the current laser power setting.
+  /// </summary>
+  /// <param name="ops">Reference to MachineOperations for accessing the laser controller.</param>
+  /// <returns>True if the read and log succeeded, false otherwise.</returns>
+  bool Execute(MachineOperations& ops) override {
+    float current = ops.GetLaserCurrent(m_laserName);
+    std::string message = m_description.empty() ?
+      "Laser current" + (m_laserName.empty() ? "" : " for " + m_laserName) + ": " + std::to_string(current) + "A" :
+      m_description + ": " + std::to_string(current) + "A";
+    ops.LogInfo(message);
+    return true;
+  }
+
+  /// <summary>
+  /// Gets a human-readable description of this operation.
+  /// </summary>
+  /// <returns>A string describing the read and log operation.</returns>
+  std::string GetDescription() const override {
+    return "Read and log laser current" + (m_laserName.empty() ? "" : " for " + m_laserName);
+  }
+
+private:
+  std::string m_laserName;   ///< Optional name of the laser device
+  std::string m_description; ///< Optional custom description for the log message
+};
+
+/// <summary>
+/// Operation that reads the current laser temperature and logs it.
+/// </summary>
+class ReadAndLogLaserTemperatureOperation : public SequenceOperation {
+public:
+  /// <summary>
+  /// Creates a new operation to read and log the laser temperature.
+  /// </summary>
+  /// <param name="laserName">Optional name of the laser device if multiple lasers are present.</param>
+  /// <param name="description">Optional custom description for the log message.</param>
+  ReadAndLogLaserTemperatureOperation(const std::string& laserName = "", const std::string& description = "")
+    : m_laserName(laserName), m_description(description) {
+  }
+
+  /// <summary>
+  /// Executes the operation, reading and logging the current laser temperature.
+  /// </summary>
+  /// <param name="ops">Reference to MachineOperations for accessing the laser controller.</param>
+  /// <returns>True if the read and log succeeded, false otherwise.</returns>
+  bool Execute(MachineOperations& ops) override {
+    float temperature = ops.GetLaserTemperature(m_laserName);
+    std::string message = m_description.empty() ?
+      "Laser temperature" + (m_laserName.empty() ? "" : " for " + m_laserName) + ": " + std::to_string(temperature) + "°C" :
+      m_description + ": " + std::to_string(temperature) + "°C";
+    ops.LogInfo(message);
+    return true;
+  }
+
+  /// <summary>
+  /// Gets a human-readable description of this operation.
+  /// </summary>
+  /// <returns>A string describing the read and log operation.</returns>
+  std::string GetDescription() const override {
+    return "Read and log laser temperature" + (m_laserName.empty() ? "" : " for " + m_laserName);
+  }
+
+private:
+  std::string m_laserName;   ///< Optional name of the laser device
+  std::string m_description; ///< Optional custom description for the log message
+};

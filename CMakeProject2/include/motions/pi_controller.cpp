@@ -638,8 +638,8 @@ bool PIController::WaitForMotionCompletion(const std::string& axis, double timeo
 		m_logger->LogError("PIController: Cannot wait for motion completion - not connected");
 		return false;
 	}
-
-	m_logger->LogInfo("PIController: Waiting for motion completion on axis " + axis);
+	if(m_debugVerbose)
+		m_logger->LogDebug("PIController: Waiting for motion completion on axis " + axis);
 
 	// Use system clock for timeout
 	auto startTime = std::chrono::steady_clock::now();

@@ -206,6 +206,15 @@ namespace ProcessBuilders {
 
 		auto sequence = std::make_unique<SequenceStep>("Pick and Place Right Lens", machineOps);
 
+		// Read and log initial laser current and temperature
+		sequence->AddOperation(std::make_shared<ReadAndLogLaserCurrentOperation>(
+			"", "Initial laser current"));
+		sequence->AddOperation(std::make_shared<ReadAndLogLaserTemperatureOperation>(
+			"", "Initial laser temperature"));
+		sequence->AddOperation(std::make_shared<ReadAndLogDataValueOperation>(
+			"GPIB-Current", "(GPIB-Current) Dry (only collimate) reading"));
+
+
 		// Move hex-right to pick lens position (verify this is correct for RIGHT lens)
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"hex-right", "Process_Flow", "node_5245"));
@@ -257,6 +266,7 @@ namespace ProcessBuilders {
 		UserInteractionManager& uiManager) {
 		auto sequence = std::make_unique<SequenceStep>("UV Curing", machineOps);
 
+
 		// 1. Move gantry to UV position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"gantry-main", "Process_Flow", "node_4426"));
@@ -267,9 +277,15 @@ namespace ProcessBuilders {
 
 		// 2. Extend UV_Head pneumatic
 		sequence->AddOperation(std::make_shared<ExtendSlideOperation>("UV_Head"));
+		// Read and log initial laser current and temperature
+		sequence->AddOperation(std::make_shared<ReadAndLogLaserCurrentOperation>(
+			"", "Read laser current"));
+		sequence->AddOperation(std::make_shared<ReadAndLogLaserTemperatureOperation>(
+			"", "Read laser temperature"));
+		sequence->AddOperation(std::make_shared<ReadAndLogDataValueOperation>(
+			"GPIB-Current", "(GPIB-Current) Dry Alignment (before fine tune)"));
 
-
-		// 4. Wait for user confirmation that grip is successful
+		// 4. Wait for user to do fine alignment
 		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
 			"Confirm to fine align lens again (um steps =0.5, 0.2, 0.1) ", uiManager));
 
@@ -286,6 +302,15 @@ namespace ProcessBuilders {
 			std::vector<double>{0.0002, 0.0001},
 			300, // settling time in ms
 			std::vector<std::string>{"Z", "X", "Y"}));
+
+		// Read and log initial laser current and temperature
+		sequence->AddOperation(std::make_shared<ReadAndLogLaserCurrentOperation>(
+			"", "Read laser current"));
+		sequence->AddOperation(std::make_shared<ReadAndLogLaserTemperatureOperation>(
+			"", "Read laser temperature"));
+		sequence->AddOperation(std::make_shared<ReadAndLogDataValueOperation>(
+			"GPIB-Current", "(GPIB-Current) Dry Alignment (Before UV)"));
+
 
 		// 4. Wait for user confirmation that grip is successful
 		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
@@ -307,7 +332,11 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<WaitOperation>(150));
 
 		// 7. Wait for curing (200 seconds)
-		sequence->AddOperation(std::make_shared<WaitOperation>(210000));
+		//sequence->AddOperation(std::make_shared<WaitOperation>(210000));
+		sequence->AddOperation(std::make_shared<PeriodicMonitorDataValueOperation>(
+			"GPIB-Current", 210000, 5000)); // Monitor every 5 seconds for 210 seconds total
+
+
 
 		// 8. Retract UV_Head
 		sequence->AddOperation(std::make_shared<RetractSlideOperation>("UV_Head"));
@@ -341,6 +370,16 @@ namespace ProcessBuilders {
 		// 14. Move gantry to safe position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"gantry-main", "Process_Flow", "node_4027"));
+
+
+		// Read and log initial laser current and temperature
+		sequence->AddOperation(std::make_shared<ReadAndLogLaserCurrentOperation>(
+			"", "Read laser current"));
+		sequence->AddOperation(std::make_shared<ReadAndLogLaserTemperatureOperation>(
+			"", "Read laser temperature"));
+		sequence->AddOperation(std::make_shared<ReadAndLogDataValueOperation>(
+			"GPIB-Current", "(GPIB-Current) After UV reading"));
+
 
 		// 5. Turn off laser and TEC
 		sequence->AddOperation(std::make_shared<LaserOffOperation>());
