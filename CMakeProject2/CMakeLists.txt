@@ -37,7 +37,7 @@ set(PI_INCLUDE_DIR "${PI_ROOT}")
 set(PI_LIB_DIR "${PI_ROOT}")
 
 # Set Pylon SDK path - adjust this if your installation is different
-set(PYLON_ROOT "C:/Program Files/Basler/pylon 8")
+set(PYLON_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/pylon 8")
 set(PYLON_INCLUDE_DIR "${PYLON_ROOT}/Development/include")
 set(PYLON_LIB_DIR "${PYLON_ROOT}/Development/lib/x64")
 
