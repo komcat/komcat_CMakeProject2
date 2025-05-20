@@ -1,5 +1,6 @@
 // VerticalToolbarMenu.cpp
 #include "VerticalToolbarMenu.h"
+#include "ToolbarStateManager.h"
 #include "imgui.h"
 #include <algorithm>
 
@@ -8,7 +9,11 @@ VerticalToolbarMenu::VerticalToolbarMenu() {
   m_logger->LogInfo("VerticalToolbarMenu initialized");
 }
 
+// Modify the destructor to save states before destruction
 VerticalToolbarMenu::~VerticalToolbarMenu() {
+  // Save all window states before destruction
+  SaveAllWindowStates();
+
   // Clear all references to UI components
   m_rootComponents.clear();
   m_categories.clear();
@@ -19,6 +24,7 @@ VerticalToolbarMenu::~VerticalToolbarMenu() {
   }
 }
 
+// In VerticalToolbarMenu::AddReference
 void VerticalToolbarMenu::AddReference(std::shared_ptr<IHierarchicalTogglableUI> component) {
   if (!component) {
     m_logger->LogWarning("Attempted to add null component to VerticalToolbarMenu");
@@ -37,10 +43,18 @@ void VerticalToolbarMenu::AddReference(std::shared_ptr<IHierarchicalTogglableUI>
     return;
   }
 
+  // Load saved state if available and apply it
+  auto& stateManager = ToolbarStateManager::GetInstance();
+  bool savedState = stateManager.GetWindowState(name, component->IsVisible());
+
+  // Only toggle if the current state is different from the saved state
+  if (savedState != component->IsVisible()) {
+    component->ToggleWindow();
+  }
+
   m_rootComponents.push_back(component);
   m_logger->LogInfo("Added component '" + name + "' to VerticalToolbarMenu");
 }
-
 std::shared_ptr<HierarchicalTogglableUI> VerticalToolbarMenu::CreateCategory(const std::string& name) {
   // Check if category already exists
   auto it = m_categories.find(name);
@@ -184,6 +198,7 @@ void VerticalToolbarMenu::RenderUI() {
   // Restore original style
   style.WindowPadding.x = oldWindowPadding;
 }
+// Modify RenderComponent to save state when toggled
 void VerticalToolbarMenu::RenderComponent(const std::shared_ptr<IHierarchicalTogglableUI>& component) {
   bool isVisible = component->IsVisible();
   bool hasChildren = component->HasChildren();
@@ -223,6 +238,10 @@ void VerticalToolbarMenu::RenderComponent(const std::shared_ptr<IHierarchicalTog
     else {
       // Regular component, toggle its window
       component->ToggleWindow();
+
+      // Save the new state
+      auto& stateManager = ToolbarStateManager::GetInstance();
+      stateManager.SaveWindowState(component->GetName(), component->IsVisible());
     }
   }
 
@@ -232,6 +251,26 @@ void VerticalToolbarMenu::RenderComponent(const std::shared_ptr<IHierarchicalTog
   ImGui::Spacing();
 }
 
+// Add a new method to save the current state of all windows
+void VerticalToolbarMenu::SaveAllWindowStates() {
+  auto& stateManager = ToolbarStateManager::GetInstance();
+
+  // Save state for all root components
+  for (const auto& component : m_rootComponents) {
+    stateManager.SaveWindowState(component->GetName(), component->IsVisible());
+
+    // If this is a category, also save states of its children
+    if (component->HasChildren()) {
+      const auto& children = component->GetChildren();
+      for (const auto& child : children) {
+        stateManager.SaveWindowState(child->GetName(), child->IsVisible());
+      }
+    }
+  }
+
+  // Force a save to file
+  stateManager.SaveState();
+}
 
 void VerticalToolbarMenu::RenderSecondaryPanel() {
   // Safety check - ensure m_selectedCategory is valid

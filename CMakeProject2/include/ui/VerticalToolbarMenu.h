@@ -6,6 +6,7 @@
 #include <memory>
 #include <unordered_map>
 #include "include/logger.h"
+#include "ToolbarStateManager.h"
 
 // Forward declarations
 class Logger;
@@ -184,7 +185,76 @@ public:
   // Configuration
   void SetWidth(float width) { m_width = width; }
   float GetWidth() const { return m_width; }
+  // Initialize the toolbar with state persistence
+  void InitializeStateTracking(const std::string& stateFilePath = "toolbar_state.json") {
+    // Initialize the state manager
+    ToolbarStateManager::GetInstance().Initialize(stateFilePath);
+  }
 
+  // Count total windows (components)
+  size_t GetTotalWindowCount() const {
+    size_t count = 0;
+
+    // Count root components
+    count += m_rootComponents.size();
+
+    // Count children in categories
+    for (const auto& [name, category] : m_categories) {
+      count += category->GetChildren().size();
+    }
+
+    return count;
+  }
+
+  // Count visible windows
+  size_t GetVisibleWindowCount() const {
+    size_t count = 0;
+
+    // Count visible root components
+    for (const auto& component : m_rootComponents) {
+      if (component->IsVisible()) {
+        count++;
+      }
+
+      // If this is a category, also count visible children
+      if (component->HasChildren()) {
+        const auto& children = component->GetChildren();
+        for (const auto& child : children) {
+          if (child->IsVisible()) {
+            count++;
+          }
+        }
+      }
+    }
+
+    return count;
+  }
+
+  // Get a list of all visible window names
+  std::vector<std::string> GetVisibleWindowNames() const {
+    std::vector<std::string> visibleWindows;
+
+    // Check root components
+    for (const auto& component : m_rootComponents) {
+      if (component->IsVisible()) {
+        visibleWindows.push_back(component->GetName());
+      }
+
+      // If this is a category, also check its children
+      if (component->HasChildren()) {
+        const auto& children = component->GetChildren();
+        for (const auto& child : children) {
+          if (child->IsVisible()) {
+            visibleWindows.push_back(child->GetName());
+          }
+        }
+      }
+    }
+
+    return visibleWindows;
+  }
+
+  void VerticalToolbarMenu::SaveAllWindowStates();
 private:
   // Collection of root UI components and categories
   std::vector<std::shared_ptr<IHierarchicalTogglableUI>> m_rootComponents;

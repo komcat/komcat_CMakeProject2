@@ -1117,6 +1117,7 @@ int main(int argc, char* argv[])
 
 	// Create the ProductConfigManager instance
 	ProductConfigManager productConfigManager(configManager);
+	productConfigManager.ToggleWindow();
 
 	// Create the CLD101x manager
 	CLD101xManager cld101xManager;
@@ -1165,11 +1166,15 @@ int main(int argc, char* argv[])
 	logger->LogInfo("MotionGraphic initialized");
 	// Add these lines:
 	ScriptRunner scriptRunner(machineOps, &scriptPrintViewer);
+	scriptRunner.ToggleWindow();
 	logger->LogInfo("ScriptRunner initialized");
 
 // Create the vertical toolbar
 	auto toolbarVertical = std::make_unique<VerticalToolbarMenu>();
 	toolbarVertical->SetWidth(200); // Set toolbar width
+
+	// Initialize state tracking with your preferred config file path
+	toolbarVertical->InitializeStateTracking("toolbar_state.json");
 
 	// Create categories
 	auto motorsCategory = toolbarVertical->CreateCategory("Motors");

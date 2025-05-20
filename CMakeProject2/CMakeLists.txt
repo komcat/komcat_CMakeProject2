@@ -264,7 +264,7 @@ add_executable(CMakeProject2
  "include/script/print_operation.cpp"
  "include/script/script_print_viewer.h"
  "include/script/script_print_viewer.cpp"
-)
+ "include/ui/ToolbarStateManager.h")
 
 
 
