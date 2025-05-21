@@ -559,6 +559,7 @@ PIController* ScanningUI::GetSelectedController() const {
 void ScanningUI::InitializeStepSizePresets() {
   // Define presets
   m_stepSizePresets = {
+     {"Coarse (0.005, 0.001, 0.0005mm)", {0.005,0.001, 0.0005}},
     {"Normal (0.002, 0.001, 0.0005, 0.0002 mm)", {0.002, 0.001, 0.0005, 0.0002}},
     {"Fine (0.005, 0.0002 mm)", {0.001, 0.0002}},
     {"Ultra (0.0002, 0.0001 mm)", {0.0003, 0.0001}}

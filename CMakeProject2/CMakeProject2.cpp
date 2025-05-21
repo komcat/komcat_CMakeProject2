@@ -416,14 +416,14 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
 			{"GPIB-Current", {"A", {
 					{1e-12, "pA"},
 					{1e-9, "nA"},
-					{1e-6, "µA"},
+					{1e-6, "uA"},
 					{1e-3, "mA"},
 					{1, "A"}
 			}}},
 			{"hex-right-A-5", {"V", {
 					{1e-12, "pV"},
 					{1e-9, "nV"},
-					{1e-6, "µV"},
+					{1e-6, "uV"},
 					{1e-3, "mV"},
 					{1, "V"}
 			}}},
@@ -455,10 +455,28 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
 	if (unitIt != unitsMap.end()) {
 		auto& prefixes = unitIt->second.prefixes;
 
+		// Modified logic for SI prefix selection based on requirements:
+		// 1. Stay in current unit unless value >= 2000 times the unit
+		// 2. When scaling up, use the next prefix
+		// 3. No automatic scaling down
+
 		// Find the appropriate SI prefix
-		for (const auto& prefix : prefixes) {
-			if (absValue < prefix.first * 1000 ||
-				prefix.first == prefixes.back().first) {
+		for (size_t i = 0; i < prefixes.size(); i++) {
+			const auto& prefix = prefixes[i];
+			float threshold = 2000.0f; // Threshold to move to next unit
+
+			// Check if this is the correct unit for the value
+			if (i < prefixes.size() - 1) {
+				// If value is less than threshold times this unit, use this unit
+				if (absValue < prefix.first * threshold) {
+					unitDisplay = prefix.second;
+					scaledValue = absValue / prefix.first;
+					break;
+				}
+				// Otherwise, try the next larger unit
+			}
+			else {
+				// Last prefix in the list, use it regardless
 				unitDisplay = prefix.second;
 				scaledValue = absValue / prefix.first;
 				break;
@@ -507,11 +525,11 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
 
 	// Format value with only 1 decimal place
 	char valueStr[32];
-	snprintf(valueStr, sizeof(valueStr), "%.1f", scaledValue);
+	snprintf(valueStr, sizeof(valueStr), "%.2f", scaledValue);
 
 	// Set a monospaced font and large size for the digital display look
 	ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Assume monospace font
-	ImGui::SetWindowFontScale(5.0f); // Make it larger
+	ImGui::SetWindowFontScale(7.0f); // Make it larger
 
 	// Calculate width for right alignment of the value
 	float windowWidth = ImGui::GetWindowSize().x;
@@ -549,6 +567,7 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
 	ImGui::PopStyleVar(2);
 	ImGui::PopStyleColor();
 }
+
 
 void RenderDigitalDisplay(const std::string& dataName) {
 	// Get the value from the global data store

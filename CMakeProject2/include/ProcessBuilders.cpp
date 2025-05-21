@@ -385,6 +385,10 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<LaserOffOperation>());
 		sequence->AddOperation(std::make_shared<TECOffOperation>());
 
+
+		sequence->AddOperation(std::make_shared<SetOutputOperation>(
+			"IOBottom", 10, false));  // clear output Vacuum_Base (pin 10)
+
 		return sequence;
 	}
 
