@@ -808,3 +808,59 @@ private:
   std::string m_laserName;   ///< Optional name of the laser device
   std::string m_description; ///< Optional custom description for the log message
 };
+
+
+// ADD these new operation classes to SequenceStep.h:
+
+// Apply Camera Exposure for Node operation
+class ApplyCameraExposureForNodeOperation : public SequenceOperation {
+public:
+  ApplyCameraExposureForNodeOperation(const std::string& nodeId)
+    : m_nodeId(nodeId) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.ApplyCameraExposureForNode(m_nodeId);
+  }
+
+  std::string GetDescription() const override {
+    return "Apply camera exposure settings for node " + m_nodeId;
+  }
+
+private:
+  std::string m_nodeId;
+};
+
+// Apply Default Camera Exposure operation
+class ApplyDefaultCameraExposureOperation : public SequenceOperation {
+public:
+  ApplyDefaultCameraExposureOperation() {}
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.ApplyDefaultCameraExposure();
+  }
+
+  std::string GetDescription() const override {
+    return "Apply default camera exposure settings";
+  }
+};
+
+// Enable/Disable Auto Camera Exposure operation
+class SetAutoExposureOperation : public SequenceOperation {
+public:
+  SetAutoExposureOperation(bool enabled)
+    : m_enabled(enabled) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    ops.SetAutoExposureEnabled(m_enabled);
+    return true;
+  }
+
+  std::string GetDescription() const override {
+    return std::string("Set automatic camera exposure ") + (m_enabled ? "ON" : "OFF");
+  }
+
+private:
+  bool m_enabled;
+};

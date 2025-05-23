@@ -1,171 +1,200 @@
-#include "include/camera/pylon_camera_test.h"
+﻿#include "include/camera/pylon_camera_test.h"
 #include "include/machine_operations.h"
 #include "include/SequenceStep.h"
 #include <iostream>
 #include <SDL_opengl.h>
 
 PylonCameraTest::PylonCameraTest()
-	: m_frameCounter(0)
-	, m_lastFrameTimestamp(0)
-	, m_hasValidImage(false)
-	, m_textureID(0)
-	, m_textureInitialized(false)
-	, m_newFrameReady(false)
-	, m_showMouseCrosshair(false)  // Initialize new crosshair flag
-	, m_logPixelOnClick(false)     // Initialize click logging flag
+  : m_frameCounter(0)
+  , m_lastFrameTimestamp(0)
+  , m_hasValidImage(false)
+  , m_textureID(0)
+  , m_textureInitialized(false)
+  , m_newFrameReady(false)
+  , m_showMouseCrosshair(false)  // Initialize new crosshair flag
+  , m_logPixelOnClick(false)     // Initialize click logging flag
+  , m_exposureManager("camera_exposure_config.json")  // Initialize exposure manager
 {
-	// Initialize format converter for display
-	m_formatConverter.OutputPixelFormat = Pylon::PixelType_RGB8packed;
-	m_formatConverter.OutputBitAlignment = Pylon::OutputBitAlignment_MsbAligned;
+  // Initialize format converter for display
+  m_formatConverter.OutputPixelFormat = Pylon::PixelType_RGB8packed;
+  m_formatConverter.OutputBitAlignment = Pylon::OutputBitAlignment_MsbAligned;
 
-	// Set callbacks
-	m_camera.SetDeviceRemovalCallback([this]() {
-		std::cout << "Device removal callback called" << std::endl;
-		m_deviceRemoved = true;
-	});
+  // Set callbacks
+  m_camera.SetDeviceRemovalCallback([this]() {
+    std::cout << "Device removal callback called" << std::endl;
+    m_deviceRemoved = true;
+  });
 
-	m_camera.SetNewFrameCallback([this](const Pylon::CGrabResultPtr& grabResult) {
-		// Process the new frame
-		if (grabResult->GrabSucceeded()) {
-			// Update frame counter
-			m_frameCounter++;
+  m_camera.SetNewFrameCallback([this](const Pylon::CGrabResultPtr& grabResult) {
+    // Process the new frame
+    if (grabResult->GrabSucceeded()) {
+      // Update frame counter
+      m_frameCounter++;
 
-			// Get timestamp
-			m_lastFrameTimestamp = grabResult->GetTimeStamp();
+      // Get timestamp
+      m_lastFrameTimestamp = grabResult->GetTimeStamp();
 
-			// Get image width and height
-			m_lastFrameWidth = grabResult->GetWidth();
-			m_lastFrameHeight = grabResult->GetHeight();
+      // Get image width and height
+      m_lastFrameWidth = grabResult->GetWidth();
+      m_lastFrameHeight = grabResult->GetHeight();
 
-			try {
-				// Lock mutex while updating the image
-				std::lock_guard<std::mutex> lock(m_imageMutex);
+      try {
+        // Lock mutex while updating the image
+        std::lock_guard<std::mutex> lock(m_imageMutex);
 
-				// Store the grab result
-				m_ptrGrabResult = grabResult;
+        // Store the grab result
+        m_ptrGrabResult = grabResult;
 
-				// Convert the grabbed buffer to a pylon image
-				if (m_pylonImage.IsValid()) {
-					m_pylonImage.Release();
-				}
-				m_pylonImage.AttachGrabResultBuffer(m_ptrGrabResult);
+        // Convert the grabbed buffer to a pylon image
+        if (m_pylonImage.IsValid()) {
+          m_pylonImage.Release();
+        }
+        m_pylonImage.AttachGrabResultBuffer(m_ptrGrabResult);
 
-				// Convert to a format suitable for display
-				if (m_formatConverterOutput.IsValid()) {
-					m_formatConverterOutput.Release();
-				}
-				m_formatConverter.Convert(m_formatConverterOutput, m_pylonImage);
+        // Convert to a format suitable for display
+        if (m_formatConverterOutput.IsValid()) {
+          m_formatConverterOutput.Release();
+        }
+        m_formatConverter.Convert(m_formatConverterOutput, m_pylonImage);
 
-				// Signal that a new frame is ready
-				m_newFrameReady = true;
-			}
-			catch (const std::exception& e) {
-				std::cerr << "Error in frame callback: " << e.what() << std::endl;
-			}
-		}
-	});
+        // Signal that a new frame is ready
+        m_newFrameReady = true;
+      }
+      catch (const std::exception& e) {
+        std::cerr << "Error in frame callback: " << e.what() << std::endl;
+      }
+    }
+  });
+
+  // Set exposure manager callback to log when settings are applied
+  m_exposureManager.SetSettingsAppliedCallback([](const std::string& nodeId, const CameraExposureSettings& settings) {
+    std::cout << "Camera exposure settings applied for node: " << nodeId << std::endl;
+    std::cout << "  - Exposure: " << settings.exposure_time << " μs" << std::endl;
+    std::cout << "  - Gain: " << settings.gain << " dB" << std::endl;
+    std::cout << "  - Description: " << settings.description << std::endl;
+  });
 }
 
 PylonCameraTest::~PylonCameraTest() {
-	// Clean up texture if it was created
-	if (m_textureInitialized) {
-		glDeleteTextures(1, &m_textureID);
-		m_textureInitialized = false;
-	}
+  // Clean up texture if it was created
+  if (m_textureInitialized) {
+    glDeleteTextures(1, &m_textureID);
+    m_textureInitialized = false;
+  }
 
-	// Release pylon image resources
-	m_ptrGrabResult.Release();
-	m_formatConverterOutput.Release();
-	m_pylonImage.Release();
+  // Release pylon image resources
+  m_ptrGrabResult.Release();
+  m_formatConverterOutput.Release();
+  m_pylonImage.Release();
+}
+
+bool PylonCameraTest::ApplyExposureForNode(const std::string& nodeId) {
+  if (!m_camera.IsConnected()) {
+    std::cerr << "Cannot apply exposure settings: Camera not connected" << std::endl;
+    return false;
+  }
+
+  std::cout << "Applying camera exposure settings for node: " << nodeId << std::endl;
+  return m_exposureManager.ApplySettingsForNode(m_camera, nodeId);
+}
+
+bool PylonCameraTest::ApplyDefaultExposure() {
+  if (!m_camera.IsConnected()) {
+    std::cerr << "Cannot apply default exposure settings: Camera not connected" << std::endl;
+    return false;
+  }
+
+  std::cout << "Applying default camera exposure settings" << std::endl;
+  return m_exposureManager.ApplyDefaultSettings(m_camera);
 }
 
 bool PylonCameraTest::CreateTexture() {
-	// This should be called from the main thread (RenderUI)
+  // This should be called from the main thread (RenderUI)
 
-	// Lock mutex while accessing the image
-	std::lock_guard<std::mutex> lock(m_imageMutex);
+  // Lock mutex while accessing the image
+  std::lock_guard<std::mutex> lock(m_imageMutex);
 
-	if (!m_newFrameReady || !m_formatConverterOutput.IsValid()) {
-		return false;
-	}
+  if (!m_newFrameReady || !m_formatConverterOutput.IsValid()) {
+    return false;
+  }
 
-	try {
-		// Get image dimensions
-		uint32_t width = m_formatConverterOutput.GetWidth();
-		uint32_t height = m_formatConverterOutput.GetHeight();
+  try {
+    // Get image dimensions
+    uint32_t width = m_formatConverterOutput.GetWidth();
+    uint32_t height = m_formatConverterOutput.GetHeight();
 
-		if (width == 0 || height == 0) {
-			return false;
-		}
+    if (width == 0 || height == 0) {
+      return false;
+    }
 
-		// Get pointer to image data
-		const uint8_t* pImageBuffer = static_cast<uint8_t*>(m_formatConverterOutput.GetBuffer());
-		if (!pImageBuffer) {
-			return false;
-		}
+    // Get pointer to image data
+    const uint8_t* pImageBuffer = static_cast<uint8_t*>(m_formatConverterOutput.GetBuffer());
+    if (!pImageBuffer) {
+      return false;
+    }
 
-		// Clean up previous texture if it exists
-		if (m_textureInitialized) {
-			glDeleteTextures(1, &m_textureID);
-			m_textureInitialized = false;
-		}
+    // Clean up previous texture if it exists
+    if (m_textureInitialized) {
+      glDeleteTextures(1, &m_textureID);
+      m_textureInitialized = false;
+    }
 
-		// Create a new texture
-		glGenTextures(1, &m_textureID);
+    // Create a new texture
+    glGenTextures(1, &m_textureID);
 
-		// Check if texture was created successfully
-		GLenum error = glGetError();
-		if (error != GL_NO_ERROR) {
-			std::cerr << "OpenGL error after glGenTextures: " << error << std::endl;
-			return false;
-		}
+    // Check if texture was created successfully
+    GLenum error = glGetError();
+    if (error != GL_NO_ERROR) {
+      std::cerr << "OpenGL error after glGenTextures: " << error << std::endl;
+      return false;
+    }
 
-		m_textureInitialized = true;
+    m_textureInitialized = true;
 
-		// Bind the texture
-		glBindTexture(GL_TEXTURE_2D, m_textureID);
+    // Bind the texture
+    glBindTexture(GL_TEXTURE_2D, m_textureID);
 
-		error = glGetError();
-		if (error != GL_NO_ERROR) {
-			std::cerr << "OpenGL error after glBindTexture: " << error << std::endl;
-			return false;
-		}
+    error = glGetError();
+    if (error != GL_NO_ERROR) {
+      std::cerr << "OpenGL error after glBindTexture: " << error << std::endl;
+      return false;
+    }
 
-		// Set texture parameters
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    // Set texture parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-		// Set proper alignment for pixel data - use 1-byte alignment
-		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    // Set proper alignment for pixel data - use 1-byte alignment
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-		// Upload the image data to GPU
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
+    // Upload the image data to GPU
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
 
-		// Check for OpenGL errors
-		error = glGetError();
-		if (error != GL_NO_ERROR) {
-			std::cerr << "OpenGL error after glTexImage2D: " << error << std::endl;
-			m_hasValidImage = false;
-			return false;
-		}
+    // Check for OpenGL errors
+    error = glGetError();
+    if (error != GL_NO_ERROR) {
+      std::cerr << "OpenGL error after glTexImage2D: " << error << std::endl;
+      m_hasValidImage = false;
+      return false;
+    }
 
-		// Set valid image flag if no errors
-		m_hasValidImage = true;
+    // Set valid image flag if no errors
+    m_hasValidImage = true;
 
-		// Reset the new frame flag
-		m_newFrameReady = false;
+    // Reset the new frame flag
+    m_newFrameReady = false;
 
-		// Unbind the texture
-		glBindTexture(GL_TEXTURE_2D, 0);
+    // Unbind the texture
+    glBindTexture(GL_TEXTURE_2D, 0);
 
-		return true;
-	}
-	catch (const std::exception& e) {
-		std::cerr << "Error creating texture: " << e.what() << std::endl;
-		return false;
-	}
+    return true;
+  }
+  catch (const std::exception& e) {
+    std::cerr << "Error creating texture: " << e.what() << std::endl;
+    return false;
+  }
 }
 
 // New method for rendering UI with machine operations support
@@ -182,6 +211,8 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
     if (ImGui::Button("Initialize & Connect")) {
       if (m_camera.Initialize() && m_camera.Connect()) {
         std::cout << "Camera initialized and connected" << std::endl;
+        // Apply default exposure settings after connecting
+        ApplyDefaultExposure();
       }
       else {
         std::cout << "Failed to initialize or connect camera" << std::endl;
@@ -191,6 +222,47 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
   else {
     // Display camera info
     ImGui::Text("%s", m_camera.GetDeviceInfo().c_str());
+
+    // Camera exposure controls section
+    if (ImGui::CollapsingHeader("Camera Exposure Settings")) {
+      // Button to open exposure manager UI
+      if (ImGui::Button("Open Exposure Manager")) {
+        m_exposureManager.ToggleWindow();
+      }
+
+      ImGui::SameLine();
+      if (ImGui::Button("Apply Default Exposure")) {
+        ApplyDefaultExposure();
+      }
+
+      // Quick exposure controls
+      ImGui::Separator();
+      ImGui::Text("Quick Node Exposure Controls:");
+
+      // Create buttons for common nodes
+      const std::vector<std::pair<std::string, std::string>> commonNodes = {
+        {"node_4083", "Sled View"},
+        {"node_4107", "PIC View"},
+        {"node_4137", "Collimate Lens"},
+        {"node_4156", "Focus Lens"},
+        {"node_4186", "Pick Coll Lens"},
+        {"node_4209", "Pick Focus Lens"},
+        {"node_4500", "Serial Number"}
+      };
+
+      int buttonCount = 0;
+      for (const auto& [nodeId, nodeName] : commonNodes) {
+        if (m_exposureManager.HasSettingsForNode(nodeId)) {
+          if (ImGui::Button(nodeName.c_str())) {
+            ApplyExposureForNode(nodeId);
+          }
+          buttonCount++;
+          if ((buttonCount % 3) != 0) { // 3 buttons per row
+            ImGui::SameLine();
+          }
+        }
+      }
+    }
 
     // Grabbing control
     if (!m_camera.IsGrabbing()) {
@@ -324,6 +396,8 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
       if (m_camera.TryReconnect()) {
         std::cout << "Successfully reconnected to camera" << std::endl;
         m_deviceRemoved = false;
+        // Apply default exposure settings after reconnecting
+        ApplyDefaultExposure();
       }
       else {
         std::cout << "Failed to reconnect to camera" << std::endl;
@@ -332,6 +406,9 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
   }
 
   ImGui::End();
+
+  // Render the exposure manager UI
+  m_exposureManager.RenderUI();
 
   // Image display window - always show when we have a valid image
   if ((m_camera.IsGrabbing() || m_hasValidImage) && m_imageWindowOpen) {
@@ -534,6 +611,8 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
     ImGui::End();
   }
 }
+
+
 // This method should replace the original RenderUI method
 void PylonCameraTest::RenderUI() {
   // Call the extended version with nullptr for machineOps
@@ -542,161 +621,162 @@ void PylonCameraTest::RenderUI() {
 
 bool PylonCameraTest::CaptureImage()
 {
-	if (!m_camera.IsConnected() || !m_camera.IsGrabbing()) {
-		std::cerr << "Cannot capture image: Camera not connected or not grabbing" << std::endl;
-		return false;
-	}
+  if (!m_camera.IsConnected() || !m_camera.IsGrabbing()) {
+    std::cerr << "Cannot capture image: Camera not connected or not grabbing" << std::endl;
+    return false;
+  }
 
-	try {
-		// Lock mutex to ensure we get a complete frame
-		std::lock_guard<std::mutex> lock(m_imageMutex);
+  try {
+    // Lock mutex to ensure we get a complete frame
+    std::lock_guard<std::mutex> lock(m_imageMutex);
 
-		// Check if we have a valid grab result
-		if (!m_ptrGrabResult || !m_ptrGrabResult->GrabSucceeded() || !m_pylonImage.IsValid()) {
-			std::cerr << "No valid frame available to capture" << std::endl;
-			return false;
-		}
+    // Check if we have a valid grab result
+    if (!m_ptrGrabResult || !m_ptrGrabResult->GrabSucceeded() || !m_pylonImage.IsValid()) {
+      std::cerr << "No valid frame available to capture" << std::endl;
+      return false;
+    }
 
-		// Generate a filename based on current time
-		auto now = std::chrono::system_clock::now();
-		auto time = std::chrono::system_clock::to_time_t(now);
-		std::stringstream ss;
-		ss << "capture_" << std::put_time(std::localtime(&time), "%Y%m%d_%H%M%S") << ".png";
-		std::string filename = ss.str();
+    // Generate a filename based on current time
+    auto now = std::chrono::system_clock::now();
+    auto time = std::chrono::system_clock::to_time_t(now);
+    std::stringstream ss;
+    ss << "capture_" << std::put_time(std::localtime(&time), "%Y%m%d_%H%M%S") << ".png";
+    std::string filename = ss.str();
 
-		// Save the image
-		if (SaveImageToDisk(filename)) {
-			m_imageCaptured = true;
-			m_lastSavedPath = filename;
-			std::cout << "Image captured and saved as: " << filename << std::endl;
-			return true;
-		}
-		else {
-			std::cerr << "Failed to save image" << std::endl;
-			return false;
-		}
-	}
-	catch (const std::exception& e) {
-		std::cerr << "Error during image capture: " << e.what() << std::endl;
-		return false;
-	}
+    // Save the image
+    if (SaveImageToDisk(filename)) {
+      m_imageCaptured = true;
+      m_lastSavedPath = filename;
+      std::cout << "Image captured and saved as: " << filename << std::endl;
+      return true;
+    }
+    else {
+      std::cerr << "Failed to save image" << std::endl;
+      return false;
+    }
+  }
+  catch (const std::exception& e) {
+    std::cerr << "Error during image capture: " << e.what() << std::endl;
+    return false;
+  }
 }
 
 bool PylonCameraTest::SaveImageToDisk(const std::string& filename)
 {
-	try {
-		// Save the image using Pylon's image writer
-		Pylon::CImagePersistence::Save(Pylon::ImageFileFormat_Png, filename.c_str(), m_pylonImage);
-		return true;
-	}
-	catch (const Pylon::GenericException& e) {
-		std::cerr << "Error saving image: " << e.GetDescription() << std::endl;
-		return false;
-	}
-	catch (const std::exception& e) {
-		std::cerr << "Error saving image: " << e.what() << std::endl;
-		return false;
-	}
+  try {
+    // Save the image using Pylon's image writer
+    Pylon::CImagePersistence::Save(Pylon::ImageFileFormat_Png, filename.c_str(), m_pylonImage);
+    return true;
+  }
+  catch (const Pylon::GenericException& e) {
+    std::cerr << "Error saving image: " << e.GetDescription() << std::endl;
+    return false;
+  }
+  catch (const std::exception& e) {
+    std::cerr << "Error saving image: " << e.what() << std::endl;
+    return false;
+  }
 }
+
 bool PylonCameraTest::GrabSingleFrame()
 {
-	if (!m_camera.IsConnected()) {
-		std::cerr << "Cannot grab frame: Camera not connected" << std::endl;
-		return false;
-	}
+  if (!m_camera.IsConnected()) {
+    std::cerr << "Cannot grab frame: Camera not connected" << std::endl;
+    return false;
+  }
 
-	// If already grabbing continuously, don't do anything
-	if (m_camera.IsGrabbing()) {
-		std::cerr << "Already grabbing continuously" << std::endl;
-		return false;
-	}
+  // If already grabbing continuously, don't do anything
+  if (m_camera.IsGrabbing()) {
+    std::cerr << "Already grabbing continuously" << std::endl;
+    return false;
+  }
 
-	try {
-		// Start single frame acquisition
-		std::cout << "Grabbing single frame..." << std::endl;
+  try {
+    // Start single frame acquisition
+    std::cout << "Grabbing single frame..." << std::endl;
 
-		// Create a temporary grab result
-		Pylon::CGrabResultPtr grabResult;
+    // Create a temporary grab result
+    Pylon::CGrabResultPtr grabResult;
 
-		// Open camera if not already open
-		if (!m_camera.GetInternalCamera().IsOpen()) {
-			m_camera.GetInternalCamera().Open();
-		}
+    // Open camera if not already open
+    if (!m_camera.GetInternalCamera().IsOpen()) {
+      m_camera.GetInternalCamera().Open();
+    }
 
-		// Set the camera to SingleFrame acquisition mode if possible
-		try {
-			Pylon::CEnumParameter(m_camera.GetInternalCamera().GetNodeMap(), "AcquisitionMode").SetValue("SingleFrame");
-		}
-		catch (...) {
-			// Some cameras might not support this mode, ignore the error
-		}
+    // Set the camera to SingleFrame acquisition mode if possible
+    try {
+      Pylon::CEnumParameter(m_camera.GetInternalCamera().GetNodeMap(), "AcquisitionMode").SetValue("SingleFrame");
+    }
+    catch (...) {
+      // Some cameras might not support this mode, ignore the error
+    }
 
-		// Execute software trigger if camera supports it
-		try {
-			m_camera.GetInternalCamera().ExecuteSoftwareTrigger();
-		}
-		catch (...) {
-			// If software trigger is not supported, we'll just grab
-		}
+    // Execute software trigger if camera supports it
+    try {
+      m_camera.GetInternalCamera().ExecuteSoftwareTrigger();
+    }
+    catch (...) {
+      // If software trigger is not supported, we'll just grab
+    }
 
-		// Start grabbing with a timeout of 5 seconds
-		m_camera.GetInternalCamera().GrabOne(5000, grabResult);
+    // Start grabbing with a timeout of 5 seconds
+    m_camera.GetInternalCamera().GrabOne(5000, grabResult);
 
-		if (grabResult && grabResult->GrabSucceeded()) {
-			std::cout << "Single frame grabbed successfully" << std::endl;
+    if (grabResult && grabResult->GrabSucceeded()) {
+      std::cout << "Single frame grabbed successfully" << std::endl;
 
-			// Lock mutex while updating the image
-			std::lock_guard<std::mutex> lock(m_imageMutex);
+      // Lock mutex while updating the image
+      std::lock_guard<std::mutex> lock(m_imageMutex);
 
-			// Store the grab result
-			m_ptrGrabResult = grabResult;
+      // Store the grab result
+      m_ptrGrabResult = grabResult;
 
-			// Update frame counter and dimensions
-			m_frameCounter++;
-			m_lastFrameWidth = grabResult->GetWidth();
-			m_lastFrameHeight = grabResult->GetHeight();
-			m_lastFrameTimestamp = grabResult->GetTimeStamp();
+      // Update frame counter and dimensions
+      m_frameCounter++;
+      m_lastFrameWidth = grabResult->GetWidth();
+      m_lastFrameHeight = grabResult->GetHeight();
+      m_lastFrameTimestamp = grabResult->GetTimeStamp();
 
-			// Convert the grabbed buffer to a pylon image
-			if (m_pylonImage.IsValid()) {
-				m_pylonImage.Release();
-			}
-			m_pylonImage.AttachGrabResultBuffer(m_ptrGrabResult);
+      // Convert the grabbed buffer to a pylon image
+      if (m_pylonImage.IsValid()) {
+        m_pylonImage.Release();
+      }
+      m_pylonImage.AttachGrabResultBuffer(m_ptrGrabResult);
 
-			// Convert to a format suitable for display
-			if (m_formatConverterOutput.IsValid()) {
-				m_formatConverterOutput.Release();
-			}
-			m_formatConverter.Convert(m_formatConverterOutput, m_pylonImage);
+      // Convert to a format suitable for display
+      if (m_formatConverterOutput.IsValid()) {
+        m_formatConverterOutput.Release();
+      }
+      m_formatConverter.Convert(m_formatConverterOutput, m_pylonImage);
 
-			// Signal that a new frame is ready
-			m_newFrameReady = true;
+      // Signal that a new frame is ready
+      m_newFrameReady = true;
 
-			return true;
-		}
-		else {
-			std::cerr << "Failed to grab single frame" << std::endl;
-			return false;
-		}
-	}
-	catch (const Pylon::GenericException& e) {
-		std::cerr << "Pylon exception during single frame grab: " << e.GetDescription() << std::endl;
-		return false;
-	}
-	catch (const std::exception& e) {
-		std::cerr << "Exception during single frame grab: " << e.what() << std::endl;
-		return false;
-	}
+      return true;
+    }
+    else {
+      std::cerr << "Failed to grab single frame" << std::endl;
+      return false;
+    }
+  }
+  catch (const Pylon::GenericException& e) {
+    std::cerr << "Pylon exception during single frame grab: " << e.GetDescription() << std::endl;
+    return false;
+  }
+  catch (const std::exception& e) {
+    std::cerr << "Exception during single frame grab: " << e.what() << std::endl;
+    return false;
+  }
 }
 
 bool PylonCameraTest::NeedsTextureCleanup() const {
-	return m_needsTextureCleanup && m_textureInitialized;
+  return m_needsTextureCleanup && m_textureInitialized;
 }
 
 void PylonCameraTest::CleanupTexture() {
-	if (m_textureInitialized) {
-		glDeleteTextures(1, &m_textureID);
-		m_textureInitialized = false;
-	}
-	m_needsTextureCleanup = false;
+  if (m_textureInitialized) {
+    glDeleteTextures(1, &m_textureID);
+    m_textureInitialized = false;
+  }
+  m_needsTextureCleanup = false;
 }

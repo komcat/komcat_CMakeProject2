@@ -1,0 +1,68 @@
+{
+  "camera_exposure_settings": {
+    "default": {
+      "exposure_time": 500,
+      "gain": 1,
+      "exposure_auto": false,
+      "gain_auto": false
+    },
+    "nodes": {
+      "node_4083": {
+        "name": "g_sled",
+        "exposure_time": 500,
+        "gain": 1,
+        "exposure_auto": false,
+        "gain_auto": false,
+        "description": "Sled viewing position"
+      },
+      "node_4107": {
+        "name": "g_pic",
+        "exposure_time": 800,
+        "gain": 1,
+        "exposure_auto": false,
+        "gain_auto": false,
+        "description": "PIC viewing position"
+      },
+      "node_4137": {
+        "name": "g_collLens",
+        "exposure_time": 1200,
+        "gain": 1,
+        "exposure_auto": false,
+        "gain_auto": false,
+        "description": "Collimate lens viewing"
+      },
+      "node_4156": {
+        "name": "g_focusLens",
+        "exposure_time": 1500,
+        "gain": 1.0,
+        "exposure_auto": false,
+        "gain_auto": false,
+        "description": "Focus lens viewing"
+      },
+      "node_4186": {
+        "name": "g_pick_collLens",
+        "exposure_time": 900,
+        "gain": 1.2,
+        "exposure_auto": false,
+        "gain_auto": false,
+        "description": "Pick collimate lens position"
+      },
+      "node_4209": {
+        "name": "g_pick_focusLens",
+        "exposure_time": 600,
+        "gain": 1.0,
+        "exposure_auto": false,
+        "gain_auto": false,
+        "description": "Pick focus lens position"
+      },
+      "node_4500": {
+        "name": "SN view",
+        "exposure_time": 300,
+        "gain": 1,
+        "exposure_auto": false,
+        "gain_auto": false,
+        "description": "Serial number viewing"
+      }
+    }
+  }
+}

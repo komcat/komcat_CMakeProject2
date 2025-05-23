@@ -1,6 +1,7 @@
 #pragma once
 
 #include "pylon_camera.h"
+#include "CameraExposureManager.h"  // Add this include
 #include "imgui.h"
 #include <mutex>
 #include <atomic>
@@ -16,6 +17,7 @@ public:
 	PylonCameraTest();
 	~PylonCameraTest();
 	friend class MachineOperations;
+
 	// Render ImGui UI for testing camera
 	void RenderUI();
 
@@ -31,9 +33,19 @@ public:
 	// Get access to the camera instance
 	PylonCamera& GetCamera() { return m_camera; }
 
+	// Get access to the exposure manager
+	CameraExposureManager& GetExposureManager() { return m_exposureManager; }
+
+	// Method to apply exposure settings for a specific node
+	bool ApplyExposureForNode(const std::string& nodeId);
+
+	// Method to apply default exposure settings
+	bool ApplyDefaultExposure();
+
 	bool enableDebug = false;
 
 	bool IsVisible() const { return m_isVisible; }
+
 	// Method to check if texture cleanup is needed - to be called from main loop
 	// Just declare these methods in the header
 	bool NeedsTextureCleanup() const;
@@ -73,12 +85,16 @@ private:
 	// Must be called from the main thread (where OpenGL context is valid)
 	bool CreateTexture();
 	bool m_needsTextureCleanup = false;
+
 	// Save the image to disk
 	bool SaveImageToDisk(const std::string& filename);
 
 	// Camera instance
 	PylonCamera m_camera;
 	bool m_deviceRemoved = false;
+
+	// Camera exposure manager
+	CameraExposureManager m_exposureManager;
 
 	// Statistics
 	uint32_t m_frameCounter;
@@ -119,6 +135,7 @@ private:
 	float m_pixelToMMFactorX = 0.010f;  // Default value: 0.01mm per pixel
 	float m_pixelToMMFactorY = 0.010f;  // Default value: 0.01mm per pixel
 	bool m_enableClickToMove = false;  // Flag to enable/disable gantry movement on click
+
 	// Helper method to initialize and start grabbing
 	void AutoInitializeAndStartGrabbing() {
 		// Only proceed if not already grabbing
@@ -127,6 +144,9 @@ private:
 			if (!m_camera.IsConnected()) {
 				if (m_camera.Initialize() && m_camera.Connect()) {
 					std::cout << "Camera automatically initialized and connected" << std::endl;
+
+					// Apply default exposure settings when connecting
+					ApplyDefaultExposure();
 				}
 				else {
 					std::cout << "Failed to automatically initialize or connect camera" << std::endl;
@@ -151,8 +171,6 @@ private:
 			}
 		}
 	}
-
-
 
 	bool m_controlWindowOpen = true;
 	bool m_imageWindowOpen = true;

@@ -4,6 +4,7 @@
 #include "VerticalToolbarMenu.h"
 #include "include/motions/acs_controller_manager.h"
 #include "include/motions/pi_controller_manager.h"
+#include "include/camera/CameraExposureTestUI.h"
 
 // Adapter for ACSControllerManager that implements the IHierarchicalTogglableUI interface
 class ACSControllerManagerHierarchicalAdapter : public IHierarchicalTogglableUI {
@@ -82,4 +83,44 @@ inline std::shared_ptr<IHierarchicalTogglableUI> CreateHierarchicalPIControllerA
 
 inline std::shared_ptr<IHierarchicalTogglableUI> CreateHierarchicalACSControllerAdapter(ACSControllerManager& manager, const std::string& name) {
   return std::make_shared<ACSControllerManagerHierarchicalAdapter>(manager, name);
+}
+
+
+// Adapter for CameraExposureTestUI
+class CameraExposureTestUIAdapter : public IHierarchicalTogglableUI {
+public:
+  CameraExposureTestUIAdapter(CameraExposureTestUI& testUI, const std::string& name)
+    : m_testUI(testUI), m_name(name) {
+  }
+
+  bool IsVisible() const override {
+    return m_testUI.IsVisible();
+  }
+
+  void ToggleWindow() override {
+    m_testUI.ToggleWindow();
+  }
+
+  const std::string& GetName() const override {
+    return m_name;
+  }
+
+  bool HasChildren() const override {
+    return false;
+  }
+
+  const std::vector<std::shared_ptr<IHierarchicalTogglableUI>>& GetChildren() const override {
+    static std::vector<std::shared_ptr<IHierarchicalTogglableUI>> empty;
+    return empty;
+  }
+
+private:
+  CameraExposureTestUI& m_testUI;
+  std::string m_name;
+};
+
+// Helper function to create the adapter
+inline std::shared_ptr<IHierarchicalTogglableUI> CreateCameraExposureTestUIAdapter(
+  CameraExposureTestUI& testUI, const std::string& name) {
+  return std::make_shared<CameraExposureTestUIAdapter>(testUI, name);
 }

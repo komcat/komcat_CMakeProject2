@@ -7,7 +7,7 @@
 #include <iomanip>
 
 
-// Update the constructor to accept the camera parameter
+// 3. MODIFY the MachineOperations constructor (in machine_operations.cpp):
 MachineOperations::MachineOperations(
   MotionControlLayer& motionLayer,
   PIControllerManager& piControllerManager,
@@ -20,9 +20,17 @@ m_piControllerManager(piControllerManager),
 m_ioManager(ioManager),
 m_pneumaticManager(pneumaticManager),
 m_laserOps(laserOps),
-m_cameraTest(cameraTest)
+m_cameraTest(cameraTest),
+m_autoExposureEnabled(true)  // ADD this line
 {
   m_logger = Logger::GetInstance();
+
+  // ADD: Initialize camera exposure manager
+  if (m_cameraTest) {
+    m_cameraExposureManager = std::make_unique<CameraExposureManager>("camera_exposure_config.json");
+    m_logger->LogInfo("MachineOperations: Camera exposure manager initialized");
+  }
+
   m_logger->LogInfo("MachineOperations: Initialized");
 }
 
@@ -31,11 +39,23 @@ MachineOperations::~MachineOperations() {
   m_logger->LogInfo("MachineOperations: Shutting down");
 }
 
-// Move a device to a specific node in the graph
+// 4. MODIFY the MoveDeviceToNode method (in machine_operations.cpp):
+// In machine_operations.cpp - Updated MoveDeviceToNode method
 bool MachineOperations::MoveDeviceToNode(const std::string& deviceName, const std::string& graphName,
   const std::string& targetNodeId, bool blocking) {
   m_logger->LogInfo("MachineOperations: Moving device " + deviceName +
     " to node " + targetNodeId + " in graph " + graphName);
+
+  // RELOAD EXPOSURE CONFIG EVERY TIME TO GUARANTEE FRESH VALUES
+  if (m_cameraExposureManager) {
+    m_logger->LogInfo("MachineOperations: Reloading camera exposure configuration to ensure fresh values");
+    if (m_cameraExposureManager->LoadConfiguration("camera_exposure_config.json")) {
+      m_logger->LogInfo("MachineOperations: Camera exposure configuration reloaded successfully");
+    }
+    else {
+      m_logger->LogWarning("MachineOperations: Failed to reload camera exposure configuration, using existing values");
+    }
+  }
 
   // Get the current node for the device
   std::string currentNodeId;
@@ -48,12 +68,30 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName, const st
   if (currentNodeId == targetNodeId) {
     m_logger->LogInfo("MachineOperations: Device " + deviceName +
       " is already at node " + targetNodeId);
+
+    // STILL APPLY CAMERA EXPOSURE EVEN IF ALREADY AT NODE (in case config changed)
+    if (deviceName == "gantry-main" && m_autoExposureEnabled) {
+      m_logger->LogInfo("MachineOperations: Device already at " + targetNodeId +
+        ", but applying camera exposure with fresh config");
+      ApplyCameraExposureForNode(targetNodeId);
+    }
+
     return true;
   }
 
   // Plan and execute path
-  return MovePathFromTo(deviceName, graphName, currentNodeId, targetNodeId, blocking);
+  bool success = MovePathFromTo(deviceName, graphName, currentNodeId, targetNodeId, blocking);
+
+  // Apply camera exposure settings if the gantry moved successfully
+  if (success && deviceName == "gantry-main" && m_autoExposureEnabled) {
+    m_logger->LogInfo("MachineOperations: Gantry moved to " + targetNodeId +
+      ", applying camera exposure with fresh config");
+    ApplyCameraExposureForNode(targetNodeId);
+  }
+
+  return success;
 }
+
 
 // Move a device along a path from start to end node
 bool MachineOperations::MovePathFromTo(const std::string& deviceName, const std::string& graphName,
@@ -1458,4 +1496,63 @@ double MachineOperations::GetDistanceBetweenPositions(const PositionStruct& pos1
   }
 
   return distance;
+}
+
+
+// ADD these new methods at the end of machine_operations.cpp:
+
+
+// 5. ADD these new methods to machine_operations.cpp:
+bool MachineOperations::ApplyCameraExposureForNode(const std::string& nodeId) {
+  if (!m_cameraTest || !m_cameraExposureManager) {
+    m_logger->LogWarning("MachineOperations: Camera or exposure manager not available");
+    return false;
+  }
+
+  if (!m_cameraTest->GetCamera().IsConnected()) {
+    m_logger->LogWarning("MachineOperations: Camera not connected, cannot apply exposure settings");
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: Applying camera exposure settings for node " + nodeId);
+
+  // Small delay to ensure gantry has settled at the new position
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+  bool success = m_cameraExposureManager->ApplySettingsForNode(m_cameraTest->GetCamera(), nodeId);
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully applied camera exposure for node " + nodeId);
+  }
+  else {
+    m_logger->LogWarning("MachineOperations: Failed to apply specific exposure for node " + nodeId + ", trying default");
+    success = ApplyDefaultCameraExposure();
+  }
+
+  return success;
+}
+
+bool MachineOperations::ApplyDefaultCameraExposure() {
+  if (!m_cameraTest || !m_cameraExposureManager) {
+    m_logger->LogWarning("MachineOperations: Camera or exposure manager not available");
+    return false;
+  }
+
+  if (!m_cameraTest->GetCamera().IsConnected()) {
+    m_logger->LogWarning("MachineOperations: Camera not connected, cannot apply default exposure");
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: Applying default camera exposure settings");
+
+  bool success = m_cameraExposureManager->ApplyDefaultSettings(m_cameraTest->GetCamera());
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully applied default camera exposure");
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to apply default camera exposure");
+  }
+
+  return success;
 }

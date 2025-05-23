@@ -73,6 +73,9 @@
 #include "include/script/script_runner.h"
 #include "include/script/ScriptRunnerAdapter.h"
 #include "include/script/script_print_viewer.h"
+#include "include/camera/CameraExposureTestUI.h"
+
+
 #pragma region header functions
 
 
@@ -160,7 +163,7 @@ void RenderClockOverlay(int corner) {
 		ImGuiWindowFlags_NoMove | // Prevent moving
 		ImGuiWindowFlags_NoScrollbar |
 		ImGuiWindowFlags_NoSavedSettings |
-		ImGuiWindowFlags_AlwaysAutoResize|
+		ImGuiWindowFlags_AlwaysAutoResize |
 		ImGuiWindowFlags_NoBringToFrontOnFocus // Keeps it from being pushed back in z-order
 	);
 
@@ -1131,12 +1134,12 @@ int main(int argc, char* argv[])
 	DataClientManager dataClientManager("DataServerConfig.json");
 	logger->LogInfo("DataClientManager initialized");
 	dataClientManager.ConnectAutoClients();
-
+	dataClientManager.ToggleWindow();
 
 
 	// Create the ProductConfigManager instance
 	ProductConfigManager productConfigManager(configManager);
-	productConfigManager.ToggleWindow();
+	productConfigManager.ToggleWindow(); //default is oopen, make it close
 
 	// Create the CLD101x manager
 	CLD101xManager cld101xManager;
@@ -1158,8 +1161,10 @@ int main(int argc, char* argv[])
 
 // Create a DataChartManager with the config file path
 	DataChartManager dataChartManager("data_display_config.json");
+	dataChartManager.ToggleWindow(); //default is close, make it close
 
-// Update the MachineOperations construction to include the laser operations:
+
+	// Update the MachineOperations construction to include the laser operations:
 	MachineOperations machineOps(
 		motionControlLayer,
 		piControllerManager,
@@ -1170,6 +1175,30 @@ int main(int argc, char* argv[])
 	);
 
 	InitializationWindow initWindow(machineOps);
+
+	// Set up camera exposure logging callback
+	if (machineOps.GetCameraExposureManager()) {
+		machineOps.GetCameraExposureManager()->SetSettingsAppliedCallback(
+			[](const std::string& nodeId, const CameraExposureSettings& settings) {
+			std::cout << "Camera exposure updated for node " << nodeId << ":" << std::endl;
+			std::cout << "  - Exposure Time: " << settings.exposure_time << " μs" << std::endl;
+			std::cout << "  - Gain: " << settings.gain << " dB" << std::endl;
+			std::cout << "  - Auto Exposure: " << (settings.exposure_auto ? "On" : "Off") << std::endl;
+			std::cout << "  - Auto Gain: " << (settings.gain_auto ? "On" : "Off") << std::endl;
+			if (!settings.description.empty()) {
+				std::cout << "  - Description: " << settings.description << std::endl;
+			}
+		});
+
+		logger->LogInfo("Camera exposure integration configured");
+	}
+	// Create the camera exposure test UI
+	CameraExposureTestUI cameraExposureTestUI(machineOps);
+	logger->LogInfo("CameraExposureTestUI initialized");
+
+
+
+
 
 	ProcessControlPanel processControlPanel(machineOps);
 	logger->LogInfo("ProcessControlPanel initialized");
@@ -1188,7 +1217,7 @@ int main(int argc, char* argv[])
 	scriptRunner.ToggleWindow();
 	logger->LogInfo("ScriptRunner initialized");
 
-// Create the vertical toolbar
+	// Create the vertical toolbar
 	auto toolbarVertical = std::make_unique<VerticalToolbarMenu>();
 	toolbarVertical->SetWidth(200); // Set toolbar width
 
@@ -1239,11 +1268,19 @@ int main(int argc, char* argv[])
 	// Add the MotionGraphic to your vertical toolbar
 	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(motionGraphic, "Motion Graphic"));
 
+	if (machineOps.GetCameraExposureManager()) {
+		toolbarVertical->AddReferenceToCategory("Products",
+			CreateHierarchicalUI(*machineOps.GetCameraExposureManager(), "Camera Exposure"));
+	}
+	// Add it to the vertical toolbar using the correct adapter
+	toolbarVertical->AddReferenceToCategory("Products",
+		CreateCameraExposureTestUIAdapter(cameraExposureTestUI, "Camera Testing"));
+
 	// Log successful initialization
 	logger->LogInfo("VerticalToolbarMenu initialized with " +
 		std::to_string(toolbarVertical->GetComponentCount()) +
-		" components");	
-	
+		" components");
+
 	// In your main render loop:
 	// toolbarVertical->RenderUI();
 
@@ -1391,7 +1428,7 @@ int main(int argc, char* argv[])
 
 
 		//RenderSimpleChart();
-		
+
 		dataChartManager.Update();
 		dataChartManager.RenderUI();
 		//RenderValueDisplay();
@@ -1409,6 +1446,17 @@ int main(int argc, char* argv[])
 		// Add this right after it:
 		scriptRunner.RenderUI();
 		scriptPrintViewer.RenderUI();
+		machineOps.GetCameraExposureManager()->RenderUI();
+
+
+
+
+		// Render the new camera exposure test UI
+		cameraExposureTestUI.RenderUI();
+
+
+
+
 
 		// Rendering
 		ImGui::Render();
@@ -1436,6 +1484,9 @@ int main(int argc, char* argv[])
 	}
 	// When exit is triggered:
 	logger->Log("Application shutting down");
+
+	logger->LogInfo("Stopping Camera Exposure Test UI...");
+
 
 	piControllerManager.~PIControllerManager();
 
@@ -1480,7 +1531,7 @@ int main(int argc, char* argv[])
 		acsControllerManager.DisconnectAll();
 
 
-	
+
 	}
 	catch (const std::exception& e) {
 		std::cout << "Exception during shutdown: " << e.what() << std::endl;
@@ -1501,8 +1552,8 @@ int main(int argc, char* argv[])
 
 
 
-	
-	
+
+
 
 	// Cleanup - keep outside try-catch to ensure it always happens
 	ImGui_ImplOpenGL3_Shutdown();
