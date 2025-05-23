@@ -152,7 +152,7 @@ namespace ProcessBuilders {
 
 		// 4. Wait for user confirmation that grip is successful
 		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
-			"Confirm left lens is successfully gripped", uiManager));
+			"Check the lens position before gripping & click confirm", uiManager));
 
 
 
@@ -182,6 +182,11 @@ namespace ProcessBuilders {
 		// 7. Grip the lens again (set output)
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
 			"IOBottom", 0, true, 500));
+
+
+		// 4. Wait for user confirmation that grip is successful
+		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
+			"Confirm left lens is successfully gripped", uiManager));
 
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"gantry-main", "Process_Flow", "node_4137"));	//see collimate lens
@@ -226,7 +231,7 @@ namespace ProcessBuilders {
 
 		// Wait for user confirmation
 		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
-			"Confirm right lens is successfully gripped", uiManager));
+			"Check the lens position before gripping & click confirm", uiManager));
 
 		// Use R-gripper (pin 2) for RIGHT lens
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
@@ -250,6 +255,10 @@ namespace ProcessBuilders {
 
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
 			"IOBottom", 2, true, 500));  // Re-grip RIGHT lens
+
+		// 4. Wait for user confirmation that grip is successful
+		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
+			"Confirm left lens is successfully gripped", uiManager));
 
 		// Move gantry to see the RIGHT lens
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
