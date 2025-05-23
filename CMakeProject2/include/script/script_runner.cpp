@@ -561,9 +561,94 @@ void ScriptRunner::RenderProgressPanel() {
 void ScriptRunner::RenderSlot(int slotIndex) {
   auto& slot = m_slots[slotIndex];
 
+  // Get available content region
+  float contentWidth = ImGui::GetContentRegionAvail().x;
+  float buttonWidth = 120.0f; // Width for the execute button
+  float spacing = 8.0f;
+  float textAreaWidth = contentWidth - buttonWidth - spacing;
+
+  // Calculate row height based on content
+  float baseRowHeight = 100.0f; // Minimum height
+
+  // Start horizontal layout
+  ImGui::BeginGroup();
+
+  // Left side - Execute Button
+  ImGui::BeginChild(("ButtonArea" + std::to_string(slotIndex)).c_str(),
+    ImVec2(buttonWidth, baseRowHeight), false);
+
+  if (!slot.scriptPath.empty() && slot.enabled) {
+    // Create button text from description (first line or display name)
+    std::string buttonText;
+    if (!slot.description.empty()) {
+      // Use first line of description, truncated if too long
+      size_t firstNewline = slot.description.find('\n');
+      buttonText = slot.description.substr(0, firstNewline);
+      if (buttonText.length() > 15) {
+        buttonText = buttonText.substr(0, 12) + "...";
+      }
+    }
+    else {
+      // Fall back to display name
+      buttonText = slot.displayName;
+      if (buttonText.length() > 15) {
+        buttonText = buttonText.substr(0, 12) + "...";
+      }
+    }
+
+    // Color and state based on execution status
+    ImVec4 buttonColor;
+    if (slot.isExecuting) {
+      buttonColor = ImVec4(0.8f, 0.4f, 0.4f, 1.0f); // Red-ish for stop
+      buttonText = "STOP\n" + buttonText;
+    }
+    else {
+      buttonColor = ImVec4(0.4f, 0.8f, 0.4f, 1.0f); // Green-ish for run
+      buttonText = "RUN\n" + buttonText;
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_Button, buttonColor);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+      ImVec4(buttonColor.x * 1.1f, buttonColor.y * 1.1f,
+        buttonColor.z * 1.1f, buttonColor.w));
+
+    // Center the button vertically
+    float buttonHeight = baseRowHeight - 10.0f;
+    ImGui::SetCursorPosY(5.0f);
+
+    if (ImGui::Button(buttonText.c_str(), ImVec2(buttonWidth - 5, buttonHeight))) {
+      if (slot.isExecuting) {
+        StopSlot(slotIndex);
+      }
+      else {
+        ExecuteSlot(slotIndex);
+      }
+    }
+
+    ImGui::PopStyleColor(2);
+  }
+  else {
+    // Disabled or empty slot
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+
+    ImGui::SetCursorPosY(5.0f);
+    ImGui::Button("EMPTY\nSLOT", ImVec2(buttonWidth - 5, baseRowHeight - 10.0f));
+
+    ImGui::PopStyleColor(2);
+  }
+
+  ImGui::EndChild();
+
+  ImGui::SameLine();
+
+  // Right side - Script Information
+  ImGui::BeginChild(("InfoArea" + std::to_string(slotIndex)).c_str(),
+    ImVec2(textAreaWidth, baseRowHeight), false);
+
   // Slot header with number and enable checkbox
   ImGui::Text("Slot %d", slotIndex + 1);
-  ImGui::SameLine(ImGui::GetWindowWidth() - 30);
+  ImGui::SameLine(textAreaWidth - 30);
 
   if (ImGui::Checkbox(("##enabled" + std::to_string(slotIndex)).c_str(), &slot.enabled)) {
     SaveConfiguration();
@@ -571,20 +656,12 @@ void ScriptRunner::RenderSlot(int slotIndex) {
 
   ImGui::Separator();
 
-  // Display name
+  // Display name and status
   if (!slot.scriptPath.empty()) {
-    ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Assuming default font
+    // Display name
     ImGui::Text("%s", slot.displayName.c_str());
-    ImGui::PopFont();
 
-    // Description (wrap text)
-    if (!slot.description.empty()) {
-      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
-      ImGui::TextWrapped("%s", slot.description.c_str());
-      ImGui::PopStyleColor();
-    }
-
-    // Status
+    // Status indicator
     if (slot.isExecuting) {
       ImVec4 color;
       const char* statusText;
@@ -604,8 +681,16 @@ void ScriptRunner::RenderSlot(int slotIndex) {
         break;
       }
 
-      ImGui::TextColored(color, "%s - Line %d/%d", statusText,
+      ImGui::SameLine();
+      ImGui::TextColored(color, "[%s - Line %d/%d]", statusText,
         slot.executor->GetCurrentLine(), slot.executor->GetTotalLines());
+    }
+
+    // Description (wrap text)
+    if (!slot.description.empty()) {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
+      ImGui::TextWrapped("%s", slot.description.c_str());
+      ImGui::PopStyleColor();
     }
   }
   else {
@@ -613,24 +698,9 @@ void ScriptRunner::RenderSlot(int slotIndex) {
     ImGui::TextWrapped("Click Edit to assign a script");
   }
 
-  // Control buttons at bottom
-  ImGui::SetCursorPosY(ImGui::GetWindowHeight() - 30);
-
-  if (!slot.scriptPath.empty() && slot.enabled) {
-    if (slot.isExecuting) {
-      if (ImGui::Button(("Stop##" + std::to_string(slotIndex)).c_str(), ImVec2(80, 0))) {
-        StopSlot(slotIndex);
-      }
-    }
-    else {
-      if (ImGui::Button(("Run##" + std::to_string(slotIndex)).c_str(), ImVec2(80, 0))) {
-        ExecuteSlot(slotIndex);
-      }
-    }
-  }
-
-  ImGui::SameLine();
-  if (ImGui::Button(("Edit##" + std::to_string(slotIndex)).c_str(), ImVec2(80, 0))) {
+  // Edit button at bottom right
+  ImGui::SetCursorPos(ImVec2(textAreaWidth - 80, baseRowHeight - 25));
+  if (ImGui::Button(("Edit##" + std::to_string(slotIndex)).c_str(), ImVec2(75, 20))) {
     m_editingSlotIndex = slotIndex;
     m_showEditDialog = true;
 
@@ -641,7 +711,13 @@ void ScriptRunner::RenderSlot(int slotIndex) {
 
     RefreshFileList();
   }
+
+  ImGui::EndChild();
+
+  ImGui::EndGroup();
 }
+
+
 
 void ScriptRunner::RenderEditDialog() {
   ImGui::Begin("Edit Script Slot", &m_showEditDialog);
