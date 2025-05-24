@@ -1,13 +1,16 @@
-#pragma once
+﻿#pragma once
 
 #include "pylon_camera.h"
-#include "CameraExposureManager.h"  // Add this include
+#include "CameraExposureManager.h"
 #include "imgui.h"
+#include "nlohmann/json.hpp"  // Add this
 #include <mutex>
 #include <atomic>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
+#include <fstream>   // Add this - this is the key missing include
+#include <iostream>  // Add this for std::cout
 
 // Forward declaration of MachineOperations class to avoid circular inclusion
 class MachineOperations;
@@ -186,4 +189,15 @@ private:
 	// Texture size tracking
 	uint32_t m_lastTextureWidth = 0;
 	uint32_t m_lastTextureHeight = 0;
+
+
+	// Add this to pylon_camera_test.h (in private section)
+private:
+	std::string m_calibrationFilePath = "camera_calibration.json";
+
+	// Load calibration from JSON file
+	bool LoadCalibrationFromFile();
+
+	// Save calibration to JSON file  
+	bool SaveCalibrationToFile();
 };

@@ -4,6 +4,7 @@
 #include <iostream>
 #include <SDL_opengl.h>
 
+// Modify the PylonCameraTest constructor in pylon_camera_test.cpp
 PylonCameraTest::PylonCameraTest()
   : m_frameCounter(0)
   , m_lastFrameTimestamp(0)
@@ -11,14 +12,21 @@ PylonCameraTest::PylonCameraTest()
   , m_textureID(0)
   , m_textureInitialized(false)
   , m_newFrameReady(false)
-  , m_showMouseCrosshair(false)  // Initialize new crosshair flag
-  , m_logPixelOnClick(false)     // Initialize click logging flag
-  , m_exposureManager("camera_exposure_config.json")  // Initialize exposure manager
+  , m_showMouseCrosshair(false)
+  , m_logPixelOnClick(false)
+  , m_exposureManager("camera_exposure_config.json")
 {
   // Initialize format converter for display
   m_formatConverter.OutputPixelFormat = Pylon::PixelType_RGB8packed;
   m_formatConverter.OutputBitAlignment = Pylon::OutputBitAlignment_MsbAligned;
 
+  // Load calibration from file (do this BEFORE setting callbacks)
+  if (!LoadCalibrationFromFile()) {
+    // If loading fails, use default values and save them to create the file
+    m_pixelToMMFactorX = 0.00248f;  // Default from your JSON
+    m_pixelToMMFactorY = 0.00252f;  // Default from your JSON
+    SaveCalibrationToFile();  // Create the file with defaults
+  }
   // Set callbacks
   m_camera.SetDeviceRemovalCallback([this]() {
     std::cout << "Device removal callback called" << std::endl;
@@ -326,27 +334,65 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
       ImGui::Separator();
       ImGui::Text("Pixel-to-MM Calibration:");
 
-      // Modify the pixel-to-mm factors
+      // Add pixel-to-mm calibration controls
+      ImGui::Separator();
+      ImGui::Text("Pixel-to-MM Calibration:");
+
+      // Store original values to detect changes
+      float originalPixelToMMX = m_pixelToMMFactorX;
+      float originalPixelToMMY = m_pixelToMMFactorY;
+
+      // Modify the pixel-to-mm factors with improved precision
       float pixelToMMX = m_pixelToMMFactorX;
       float pixelToMMY = m_pixelToMMFactorY;
 
-      if (ImGui::InputFloat("X Factor (mm/pixel)", &pixelToMMX, 0.001f, 0.01f, "%.4f")) {
+      bool xChanged = false, yChanged = false;
+
+      if (ImGui::InputFloat("X Factor (mm/pixel)", &pixelToMMX, 0.00001f, 0.0001f, "%.5f")) {
         if (pixelToMMX > 0) {
           m_pixelToMMFactorX = pixelToMMX;
+          xChanged = true;
         }
       }
 
-      if (ImGui::InputFloat("Y Factor (mm/pixel)", &pixelToMMY, 0.001f, 0.01f, "%.4f")) {
+      if (ImGui::InputFloat("Y Factor (mm/pixel)", &pixelToMMY, 0.00001f, 0.0001f, "%.5f")) {
         if (pixelToMMY > 0) {
           m_pixelToMMFactorY = pixelToMMY;
+          yChanged = true;
         }
+      }
+
+      // Auto-save if values changed
+      if (xChanged || yChanged) {
+        SaveCalibrationToFile();
+        std::cout << "Camera calibration auto-saved due to user changes" << std::endl;
       }
 
       ImGui::SameLine();
       if (ImGui::Button("Reset to Default")) {
         m_pixelToMMFactorX = 0.00248f;
-        m_pixelToMMFactorY = 0.00248f;
+        m_pixelToMMFactorY = 0.00252f;
+        SaveCalibrationToFile();  // Auto-save the reset values
+        std::cout << "Camera calibration reset to defaults and saved" << std::endl;
       }
+
+      ImGui::SameLine();
+      if (ImGui::Button("Reload from File")) {
+        if (LoadCalibrationFromFile()) {
+          std::cout << "Camera calibration reloaded from file" << std::endl;
+        }
+        else {
+          std::cout << "Failed to reload camera calibration from file" << std::endl;
+        }
+      }
+
+      // Show current file path
+      ImGui::TextDisabled("Config file: %s", m_calibrationFilePath.c_str());
+
+      // Show preview of what 100 pixels would equal in mm
+      float preview100X = 100.0f * m_pixelToMMFactorX;
+      float preview100Y = 100.0f * m_pixelToMMFactorY;
+      ImGui::TextDisabled("Preview: 100 pixels = %.3f mm (X), %.3f mm (Y)", preview100X, preview100Y);
 
       // Check if we need to create a new texture from the latest frame
       if (m_newFrameReady) {
@@ -479,6 +525,65 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
           }
         }
       }
+
+      // ADD THIS: Handle mouse clicks on the image for gantry movement
+      if (m_enableClickToMove && machineOps && displayWidth > 100 && displayHeight > 100) {
+        // Check if mouse was clicked on the image
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+          ImVec2 mousePos = ImGui::GetMousePos();
+
+          // Calculate relative position within the image
+          float relativeX = (mousePos.x - cursorPos.x) / displayWidth;
+          float relativeY = (mousePos.y - cursorPos.y) / displayHeight;
+
+          // Ensure click is within image bounds
+          if (relativeX >= 0.0f && relativeX <= 1.0f &&
+            relativeY >= 0.0f && relativeY <= 1.0f) {
+
+            // Convert to pixel coordinates
+            float pixelX = relativeX * static_cast<float>(m_lastFrameWidth);
+            float pixelY = relativeY * static_cast<float>(m_lastFrameHeight);
+
+            // Calculate center of image in pixels
+            float centerPixelX = static_cast<float>(m_lastFrameWidth) * 0.5f;
+            float centerPixelY = static_cast<float>(m_lastFrameHeight) * 0.5f;
+
+            // Calculate offset from center in pixels
+            float deltaPixelX = pixelX - centerPixelX;
+            float deltaPixelY = pixelY - centerPixelY;
+
+            // Convert to mm using calibration factors
+            float deltaMM_X = deltaPixelX * m_pixelToMMFactorX;
+            float deltaMM_Y = deltaPixelY * m_pixelToMMFactorY;
+
+            std::cout << "Mouse clicked at pixel (" << pixelX << ", " << pixelY << ")" << std::endl;
+            std::cout << "Delta from center: (" << deltaPixelX << ", " << deltaPixelY << ") pixels" << std::endl;
+            std::cout << "Delta in mm: (" << deltaMM_X << ", " << deltaMM_Y << ")" << std::endl;
+
+            // Move gantry relative to current position
+            std::cout << "Moving gantry by (" << deltaMM_X << ", " << deltaMM_Y << ") mm" << std::endl;
+
+            // Perform the relative moves (non-blocking for smoother UI)
+            bool success = true;
+            if (std::abs(deltaMM_X) > 0.001f) { // Only move if significant distance
+              success &= machineOps->MoveRelative("gantry-main", "X", deltaMM_X, false);
+            }
+            if (std::abs(deltaMM_Y) > 0.001f) { // Only move if significant distance  
+              success &= machineOps->MoveRelative("gantry-main", "Y", deltaMM_Y, false);
+            }
+
+            if (success) {
+              std::cout << "✓ Gantry movement commands sent successfully" << std::endl;
+            }
+            else {
+              std::cout << "✗ Failed to send gantry movement commands" << std::endl;
+            }
+          }
+        }
+      }
+
+
+
     }
     else {
       ImGui::Text("Waiting for valid image from camera...");
@@ -661,4 +766,61 @@ void PylonCameraTest::CleanupTexture() {
     m_textureInitialized = false;
   }
   m_needsTextureCleanup = false;
+}
+
+// Load calibration from JSON file
+bool PylonCameraTest::LoadCalibrationFromFile() {
+  try {
+    std::ifstream file(m_calibrationFilePath);
+    if (!file.is_open()) {
+      std::cout << "Camera calibration file not found: " << m_calibrationFilePath
+        << ", using default values" << std::endl;
+      return false;
+    }
+
+    nlohmann::json config;
+    file >> config;
+    file.close();
+
+    if (config.contains("pixelToMillimeterFactorX")) {
+      m_pixelToMMFactorX = config["pixelToMillimeterFactorX"].get<float>();
+    }
+    if (config.contains("pixelToMillimeterFactorY")) {
+      m_pixelToMMFactorY = config["pixelToMillimeterFactorY"].get<float>();
+    }
+
+    std::cout << "✓ Camera calibration loaded: X=" << m_pixelToMMFactorX
+      << ", Y=" << m_pixelToMMFactorY << " mm/pixel" << std::endl;
+    return true;
+  }
+  catch (const std::exception& e) {
+    std::cerr << "Error loading camera calibration: " << e.what() << std::endl;
+    return false;
+  }
+}
+
+// Save calibration to JSON file
+bool PylonCameraTest::SaveCalibrationToFile() {
+  try {
+    nlohmann::json config;
+    config["pixelToMillimeterFactorX"] = m_pixelToMMFactorX;
+    config["pixelToMillimeterFactorY"] = m_pixelToMMFactorY;
+
+    std::ofstream file(m_calibrationFilePath);
+    if (!file.is_open()) {
+      std::cerr << "Cannot save camera calibration to: " << m_calibrationFilePath << std::endl;
+      return false;
+    }
+
+    file << std::setw(2) << config << std::endl;
+    file.close();
+
+    std::cout << "✓ Camera calibration saved: X=" << m_pixelToMMFactorX
+      << ", Y=" << m_pixelToMMFactorY << " mm/pixel" << std::endl;
+    return true;
+  }
+  catch (const std::exception& e) {
+    std::cerr << "Error saving camera calibration: " << e.what() << std::endl;
+    return false;
+  }
 }
