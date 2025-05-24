@@ -1517,7 +1517,7 @@ bool MachineOperations::ApplyCameraExposureForNode(const std::string& nodeId) {
   m_logger->LogInfo("MachineOperations: Applying camera exposure settings for node " + nodeId);
 
   // Small delay to ensure gantry has settled at the new position
-  std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
   bool success = m_cameraExposureManager->ApplySettingsForNode(m_cameraTest->GetCamera(), nodeId);
 

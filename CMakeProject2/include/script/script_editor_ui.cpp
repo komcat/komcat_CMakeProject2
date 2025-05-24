@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <iomanip>
+#include <ctime>
 
 // In the constructor, include the print viewer reference
 ScriptEditorUI::ScriptEditorUI(MachineOperations& machineOps, ScriptPrintViewer* printViewer)
@@ -848,36 +850,197 @@ void ScriptEditorUI::ShowSaveDialog() {
   }
 }
 
+// Enhanced RenderFileDialog method for script_editor_ui.cpp
 void ScriptEditorUI::RenderFileDialog() {
   if (!m_showFileDialog) return;
+
+  // Set a larger window size for the file browser
+  ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
 
   ImGui::Begin("File Dialog", &m_showFileDialog);
 
   ImGui::Text(m_isOpenDialog ? "Open Script File" : "Save Script File");
   ImGui::Separator();
 
-  ImGui::InputText("File Path", m_filePathBuffer, sizeof(m_filePathBuffer));
+  // Current directory display and navigation
+  static std::string currentDir = "scripts/";
 
-  // Add .aas extension if not present
-  std::string filePath(m_filePathBuffer);
-  if (filePath.find(".aas") == std::string::npos &&
-    filePath.find(".") == std::string::npos) {
-    filePath += ".aas";
+  // Ensure the scripts directory exists
+  std::filesystem::path scriptsPath(currentDir);
+  if (!std::filesystem::exists(scriptsPath)) {
+    std::filesystem::create_directories(scriptsPath);
+  }
+
+  ImGui::Text("Directory: %s", currentDir.c_str());
+
+  // Directory navigation buttons
+  if (ImGui::Button("Up")) {
+    std::filesystem::path path(currentDir);
+    if (path.has_parent_path() && path != path.root_path()) {
+      currentDir = path.parent_path().string() + "/";
+    }
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Scripts Folder")) {
+    currentDir = "scripts/";
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Refresh")) {
+    // Force refresh of file list (will happen automatically)
   }
 
   ImGui::Separator();
 
-  if (ImGui::Button(m_isOpenDialog ? "Open" : "Save", ImVec2(120, 0))) {
-    if (m_isOpenDialog) {
-      if (LoadScript(filePath)) {
-        m_currentFilePath = filePath;
-        m_showFileDialog = false;
+  // File browser section
+  ImGui::BeginChild("FileBrowser", ImVec2(-1, -80), true);
+
+  try {
+    std::vector<std::filesystem::directory_entry> directories;
+    std::vector<std::filesystem::directory_entry> aasFiles;
+
+    // Scan the current directory
+    if (std::filesystem::exists(currentDir)) {
+      for (const auto& entry : std::filesystem::directory_iterator(currentDir)) {
+        if (entry.is_directory()) {
+          directories.push_back(entry);
+        }
+        else if (entry.is_regular_file()) {
+          std::string extension = entry.path().extension().string();
+          std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+          if (extension == ".aas") {
+            aasFiles.push_back(entry);
+          }
+        }
       }
     }
+
+    // Sort directories and files
+    std::sort(directories.begin(), directories.end(),
+      [](const std::filesystem::directory_entry& a, const std::filesystem::directory_entry& b) {
+      return a.path().filename() < b.path().filename();
+    });
+
+    std::sort(aasFiles.begin(), aasFiles.end(),
+      [](const std::filesystem::directory_entry& a, const std::filesystem::directory_entry& b) {
+      return a.path().filename() < b.path().filename();
+    });
+
+    // Display directories first
+    for (const auto& dir : directories) {
+      std::string dirName = "[DIR] " + dir.path().filename().string();
+      if (ImGui::Selectable(dirName.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) {
+        if (ImGui::IsMouseDoubleClicked(0)) {
+          currentDir = dir.path().string() + "/";
+        }
+      }
+    }
+
+    // Display .aas files
+    for (const auto& file : aasFiles) {
+      std::string fileName = file.path().filename().string();
+      bool isSelected = (fileName == std::filesystem::path(m_filePathBuffer).filename().string());
+
+      if (ImGui::Selectable(fileName.c_str(), isSelected)) {
+        // When a file is selected, update the file path buffer
+        std::string fullPath = file.path().string();
+        strncpy(m_filePathBuffer, fullPath.c_str(), sizeof(m_filePathBuffer) - 1);
+        m_filePathBuffer[sizeof(m_filePathBuffer) - 1] = '\0';
+      }
+
+      // Double-click to open (for open dialog)
+      if (m_isOpenDialog && ImGui::IsMouseDoubleClicked(0) &&
+        ImGui::IsItemHovered()) {
+        std::string fullPath = file.path().string();
+        if (LoadScript(fullPath)) {
+          m_currentFilePath = fullPath;
+          m_showFileDialog = false;
+        }
+      }
+
+      // Show file info on hover
+      if (ImGui::IsItemHovered()) {
+        ImGui::BeginTooltip();
+        try {
+          auto fileTime = std::filesystem::last_write_time(file.path());
+          auto fileSize = std::filesystem::file_size(file.path());
+
+          // Convert file time to readable format
+          auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+            fileTime - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
+          auto time_t = std::chrono::system_clock::to_time_t(sctp);
+
+          ImGui::Text("Size: %zu bytes", fileSize);
+          ImGui::Text("Modified: %s", std::ctime(&time_t));
+        }
+        catch (...) {
+          ImGui::Text("File information unavailable");
+        }
+        ImGui::EndTooltip();
+      }
+    }
+
+    // Show message if no files found
+    if (aasFiles.empty() && directories.empty()) {
+      ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No .aas files found in this directory");
+    }
+    else if (aasFiles.empty()) {
+      ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No .aas files found (only subdirectories)");
+    }
+
+  }
+  catch (const std::filesystem::filesystem_error& e) {
+    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Error reading directory: %s", e.what());
+  }
+
+  ImGui::EndChild();
+
+  ImGui::Separator();
+
+  // File path input
+  ImGui::Text("File Path:");
+  ImGui::SetNextItemWidth(-1);
+  if (ImGui::InputText("##FilePath", m_filePathBuffer, sizeof(m_filePathBuffer))) {
+    // Auto-add .aas extension if not present
+    std::string filePath(m_filePathBuffer);
+    if (!filePath.empty() && filePath.find(".aas") == std::string::npos &&
+      filePath.find(".") == std::string::npos) {
+      filePath += ".aas";
+      strncpy(m_filePathBuffer, filePath.c_str(), sizeof(m_filePathBuffer) - 1);
+      m_filePathBuffer[sizeof(m_filePathBuffer) - 1] = '\0';
+    }
+  }
+
+  ImGui::Separator();
+
+  // Action buttons
+  std::string actionText = m_isOpenDialog ? "Open" : "Save";
+  if (ImGui::Button(actionText.c_str(), ImVec2(120, 0))) {
+    std::string filePath(m_filePathBuffer);
+
+    // If no path specified, show error
+    if (filePath.empty()) {
+      m_statusMessage = "Please select or enter a file name";
+      m_statusExpiry = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    }
     else {
-      if (SaveScript(filePath)) {
-        m_currentFilePath = filePath;
-        m_showFileDialog = false;
+      // Ensure .aas extension
+      if (filePath.find(".aas") == std::string::npos && filePath.find(".") == std::string::npos) {
+        filePath += ".aas";
+      }
+
+      if (m_isOpenDialog) {
+        if (LoadScript(filePath)) {
+          m_currentFilePath = filePath;
+          m_showFileDialog = false;
+        }
+      }
+      else {
+        if (SaveScript(filePath)) {
+          m_currentFilePath = filePath;
+          m_showFileDialog = false;
+        }
       }
     }
   }
@@ -888,8 +1051,23 @@ void ScriptEditorUI::RenderFileDialog() {
     m_showFileDialog = false;
   }
 
+  // Quick access buttons for common locations
+  ImGui::SameLine();
+  if (ImGui::Button("New File")) {
+    // Generate a new filename
+    auto now = std::chrono::system_clock::now();
+    auto time = std::chrono::system_clock::to_time_t(now);
+    std::stringstream ss;
+    ss << currentDir << "script_" << std::put_time(std::localtime(&time), "%Y%m%d_%H%M%S") << ".aas";
+    std::string newFile = ss.str();
+    strncpy(m_filePathBuffer, newFile.c_str(), sizeof(m_filePathBuffer) - 1);
+    m_filePathBuffer[sizeof(m_filePathBuffer) - 1] = '\0';
+  }
+
   ImGui::End();
 }
+
+
 
 void ScriptEditorUI::AddToRecentFiles(const std::string& filepath) {
   // Remove if already in list

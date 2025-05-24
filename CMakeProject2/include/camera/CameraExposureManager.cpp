@@ -224,8 +224,18 @@ bool CameraExposureManager::HasSettingsForNode(const std::string& nodeId) const 
   return m_nodeSettings.find(nodeId) != m_nodeSettings.end();
 }
 
+// Modify ApplySettingsForNode:
 bool CameraExposureManager::ApplySettingsForNode(PylonCamera& camera, const std::string& nodeId) {
-  auto [hasSettings, settings] = TryGetSettingsForNode(nodeId);  // Single lookup
+  auto [hasSettings, settings] = TryGetSettingsForNode(nodeId);
+
+  // Skip if we're already using these exact settings
+  if (m_currentAppliedNodeId == nodeId &&
+    m_currentAppliedSettings.exposure_time == settings.exposure_time &&
+    m_currentAppliedSettings.gain == settings.gain) {
+    std::cout << "Exposure settings already applied for node " << nodeId << std::endl;
+    return true;
+  }
+
 
   if (!hasSettings) {
     std::cout << "No specific exposure settings for node " << nodeId
@@ -246,6 +256,13 @@ bool CameraExposureManager::ApplySettingsForNode(PylonCamera& camera, const std:
   // Call callback if set
   if (m_settingsAppliedCallback) {
     m_settingsAppliedCallback(nodeId, settings);
+  }
+
+
+  // Cache what we applied
+  if (success) {
+    m_currentAppliedNodeId = nodeId;
+    m_currentAppliedSettings = settings;
   }
 
   return success;

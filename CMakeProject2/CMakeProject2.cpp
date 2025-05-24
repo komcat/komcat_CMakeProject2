@@ -744,15 +744,25 @@ void RenderMinimizeExitButtons(SDL_Window* window, bool& done) {
 
 void RenderFPSoverlay(float m_fps)
 {
-	//ImGuiCond_FirstUseEver
 	// Create a performance overlay
-	ImGui::SetNextWindowPos(ImVec2(310, 0)); // Only set position once
-	ImGui::SetNextWindowBgAlpha(0.35f); // Transparent background
+	ImGui::SetNextWindowPos(ImVec2(310, 0), ImGuiCond_FirstUseEver); // Only set position on first use
+	ImGui::SetNextWindowBgAlpha(0.25f); // Transparent background
 	ImGui::Begin("Performance", nullptr,
 		ImGuiWindowFlags_NoDecoration |
-		ImGuiWindowFlags_AlwaysAutoResize
+		ImGuiWindowFlags_AlwaysAutoResize |
+		ImGuiWindowFlags_NoScrollbar |
+		ImGuiWindowFlags_NoScrollWithMouse
 	);
+
+	// Push larger font size
+	ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Use default font
+	ImGui::SetWindowFontScale(5.0f); // Scale font to 2x size
+
 	ImGui::Text("FPS: %.1f", m_fps);
+
+	// Pop font changes
+	ImGui::SetWindowFontScale(1.0f);
+	ImGui::PopFont();
 
 	ImGui::End();
 }

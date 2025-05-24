@@ -109,98 +109,86 @@ bool PylonCameraTest::ApplyDefaultExposure() {
 }
 
 bool PylonCameraTest::CreateTexture() {
-  // This should be called from the main thread (RenderUI)
-
-  // Lock mutex while accessing the image
   std::lock_guard<std::mutex> lock(m_imageMutex);
 
   if (!m_newFrameReady || !m_formatConverterOutput.IsValid()) {
     return false;
   }
 
-  try {
-    // Get image dimensions
-    uint32_t width = m_formatConverterOutput.GetWidth();
-    uint32_t height = m_formatConverterOutput.GetHeight();
+  uint32_t width = m_formatConverterOutput.GetWidth();
+  uint32_t height = m_formatConverterOutput.GetHeight();
+  const uint8_t* pImageBuffer = static_cast<uint8_t*>(m_formatConverterOutput.GetBuffer());
 
-    if (width == 0 || height == 0) {
-      return false;
-    }
+  if (!pImageBuffer || width == 0 || height == 0) {
+    return false;
+  }
 
-    // Get pointer to image data
-    const uint8_t* pImageBuffer = static_cast<uint8_t*>(m_formatConverterOutput.GetBuffer());
-    if (!pImageBuffer) {
-      return false;
-    }
-
-    // Clean up previous texture if it exists
-    if (m_textureInitialized) {
-      glDeleteTextures(1, &m_textureID);
-      m_textureInitialized = false;
-    }
-
-    // Create a new texture
+  // Create texture only once
+  if (!m_textureInitialized) {
     glGenTextures(1, &m_textureID);
-
-    // Check if texture was created successfully
-    GLenum error = glGetError();
-    if (error != GL_NO_ERROR) {
-      std::cerr << "OpenGL error after glGenTextures: " << error << std::endl;
-      return false;
-    }
-
-    m_textureInitialized = true;
-
-    // Bind the texture
     glBindTexture(GL_TEXTURE_2D, m_textureID);
 
-    error = glGetError();
-    if (error != GL_NO_ERROR) {
-      std::cerr << "OpenGL error after glBindTexture: " << error << std::endl;
-      return false;
-    }
-
-    // Set texture parameters
+    // Set parameters once
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    // Set proper alignment for pixel data - use 1-byte alignment
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-    // Upload the image data to GPU
+    // Initial texture allocation
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
+    m_textureInitialized = true;
+    m_lastTextureWidth = width;
+    m_lastTextureHeight = height;
+  }
+  else {
+    glBindTexture(GL_TEXTURE_2D, m_textureID);
 
-    // Check for OpenGL errors
-    error = glGetError();
-    if (error != GL_NO_ERROR) {
-      std::cerr << "OpenGL error after glTexImage2D: " << error << std::endl;
-      m_hasValidImage = false;
-      return false;
+    // Only reallocate if size changed
+    if (width != m_lastTextureWidth || height != m_lastTextureHeight) {
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
+      m_lastTextureWidth = width;
+      m_lastTextureHeight = height;
     }
-
-    // Set valid image flag if no errors
-    m_hasValidImage = true;
-
-    // Reset the new frame flag
-    m_newFrameReady = false;
-
-    // Unbind the texture
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    return true;
+    else {
+      // Just update existing texture (much faster)
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
+    }
   }
-  catch (const std::exception& e) {
-    std::cerr << "Error creating texture: " << e.what() << std::endl;
-    return false;
-  }
+
+  glBindTexture(GL_TEXTURE_2D, 0);
+  m_hasValidImage = true;
+  m_newFrameReady = false;
+
+  return true;
 }
-
 // New method for rendering UI with machine operations support
+// In RenderUIWithMachineOps(), add frame rate limiting:
 void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
-  if (!m_isVisible) {
-    return;
+  if (!m_isVisible) return;
+
+  // Rate limit texture updates to 30fps max
+  static auto lastTextureUpdate = std::chrono::steady_clock::now();
+  auto now = std::chrono::steady_clock::now();
+  auto timeSinceUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTextureUpdate);
+
+  bool shouldUpdateTexture = (timeSinceUpdate.count() >= 33); // ~30fps
+
+  if (m_newFrameReady && shouldUpdateTexture) {
+    if (CreateTexture()) {
+      lastTextureUpdate = now;
+    }
+  }
+
+  // Cache UI calculations only when image size changes
+  if (m_lastFrameWidth != m_lastCachedWidth || m_lastFrameHeight != m_lastCachedHeight) {
+    float availWidth = ImGui::GetContentRegionAvail().x;
+    m_cachedAspectRatio = static_cast<float>(m_lastFrameWidth) / static_cast<float>(m_lastFrameHeight);
+    m_cachedDisplayWidth = (std::min)(availWidth, 800.0f);
+    m_cachedDisplayHeight = m_cachedDisplayWidth / m_cachedAspectRatio;
+
+    m_lastCachedWidth = m_lastFrameWidth;
+    m_lastCachedHeight = m_lastFrameHeight;
   }
 
   // Main control window
@@ -415,185 +403,79 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
     ImGui::Begin("Camera Image", &m_imageWindowOpen);
 
     if (m_textureInitialized && m_hasValidImage) {
-      // Calculate the available width of the window
-      float availWidth = ImGui::GetContentRegionAvail().x;
+      // Calculate proper display size to fit container
+      ImVec2 availSize = ImGui::GetContentRegionAvail();
+      float availWidth = availSize.x - 20.0f;  // Leave margin
+      float availHeight = availSize.y - 20.0f; // Leave margin
 
-      // Calculate aspect ratio to maintain proportions
+      // Calculate aspect ratio
       float aspectRatio = static_cast<float>(m_lastFrameWidth) / static_cast<float>(m_lastFrameHeight);
-      if (aspectRatio <= 0.0f) aspectRatio = 1.0f; // Safeguard
+      if (aspectRatio <= 0.0f) aspectRatio = 1.0f;
 
-      // Calculate height based on width to maintain aspect ratio
-      float displayWidth = (std::min)(availWidth, 800.0f); // Limit max width
+      // Calculate display size to fit container while maintaining aspect ratio
+      float displayWidth = availWidth;
       float displayHeight = displayWidth / aspectRatio;
 
-      // Get cursor position for the image (needed for crosshair and click position)
+      // If height is too big, fit by height instead
+      if (displayHeight > availHeight) {
+        displayHeight = availHeight;
+        displayWidth = displayHeight * aspectRatio;
+      }
+
+      // Ensure reasonable minimum size
+      displayWidth = (std::max)(displayWidth, 200.0f);
+      displayHeight = (std::max)(displayHeight, 150.0f);
+
+      // Center the image horizontally if it's smaller than available width
+      if (displayWidth < availWidth) {
+        float centerOffset = (availWidth - displayWidth) * 0.5f;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + centerOffset);
+      }
+
+      // CRITICAL: Get cursor position BEFORE drawing the image
       ImVec2 cursorPos = ImGui::GetCursorScreenPos();
 
-      // Display the image with the calculated dimensions
+      // Draw the image
       ImVec2 imageSize(displayWidth, displayHeight);
-      ImGui::Image((ImTextureID)(intptr_t)m_textureID,
-        imageSize,
-        ImVec2(0, 0),        // UV coordinates of the top-left corner
-        ImVec2(1, 1));       // UV coordinates of the bottom-right corner
+      ImGui::Image((ImTextureID)(intptr_t)m_textureID, imageSize, ImVec2(0, 0), ImVec2(1, 1));
 
-      // Draw static crosshair in cyan (after the image is rendered)
-      ImDrawList* drawList = ImGui::GetWindowDrawList();
+      // Draw crosshairs only if image is reasonable size
+      if (displayWidth > 100 && displayHeight > 100) {
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-      // Center of the image
-      ImVec2 imageCenter(
-        cursorPos.x + displayWidth / 2,
-        cursorPos.y + displayHeight / 2
-      );
-
-      // Draw static crosshair (full width and height)
-      drawList->AddLine(
-        ImVec2(cursorPos.x, imageCenter.y),
-        ImVec2(cursorPos.x + displayWidth, imageCenter.y),
-        IM_COL32(0, 255, 255, 255), 1.0f); // Horizontal line - cyan
-
-      drawList->AddLine(
-        ImVec2(imageCenter.x, cursorPos.y),
-        ImVec2(imageCenter.x, cursorPos.y + displayHeight),
-        IM_COL32(0, 255, 255, 255), 1.0f); // Vertical line - cyan
-
-      // Get mouse position and check if it's over the image
-      ImVec2 mousePos = ImGui::GetMousePos();
-      bool mouseOverImage =
-        mousePos.x >= cursorPos.x && mousePos.x <= cursorPos.x + displayWidth &&
-        mousePos.y >= cursorPos.y && mousePos.y <= cursorPos.y + displayHeight;
-
-      // Draw mouse position crosshair if enabled and mouse is over image
-      if (m_showMouseCrosshair && mouseOverImage) {
-        // Draw mouse crosshair in yellow (full width and height)
-        drawList->AddLine(
-          ImVec2(cursorPos.x, mousePos.y),
-          ImVec2(cursorPos.x + displayWidth, mousePos.y),
-          IM_COL32(255, 255, 0, 255), 1.0f); // Horizontal line - yellow
-
-        drawList->AddLine(
-          ImVec2(mousePos.x, cursorPos.y),
-          ImVec2(mousePos.x, cursorPos.y + displayHeight),
-          IM_COL32(255, 255, 0, 255), 1.0f); // Vertical line - yellow
-      }
-
-      // Store the last mouse position relative to the image
-      if (mouseOverImage) {
-        m_lastMousePos = ImVec2(
-          mousePos.x - cursorPos.x,
-          mousePos.y - cursorPos.y
+        // Calculate image center (relative to where image actually starts)
+        ImVec2 imageCenter(
+          cursorPos.x + displayWidth * 0.5f,
+          cursorPos.y + displayHeight * 0.5f
         );
 
-        // Check for mouse click on the image
-        if (ImGui::IsMouseClicked(0) && ImGui::IsItemHovered()) {
-          // Calculate position in original image coordinates
-          float imageX = (m_lastMousePos.x / displayWidth) * m_lastFrameWidth;
-          float imageY = (m_lastMousePos.y / displayHeight) * m_lastFrameHeight;
+        // Draw static crosshair (centered on image)
+        drawList->AddLine(
+          ImVec2(cursorPos.x, imageCenter.y),                // Left edge to right edge at center Y
+          ImVec2(cursorPos.x + displayWidth, imageCenter.y),
+          IM_COL32(0, 255, 255, 255), 2.0f); // Horizontal line - cyan, thicker
 
-          // Calculate delta from center in pixels
-          float centerX = m_lastFrameWidth / 2.0f;
-          float centerY = m_lastFrameHeight / 2.0f;
-          float deltaXPixels = imageX - centerX;
-          float deltaYPixels = imageY - centerY;
+        drawList->AddLine(
+          ImVec2(imageCenter.x, cursorPos.y),                // Top edge to bottom edge at center X
+          ImVec2(imageCenter.x, cursorPos.y + displayHeight),
+          IM_COL32(0, 255, 255, 255), 2.0f); // Vertical line - cyan, thicker
 
-          // Convert to mm using calibration factors
-          float deltaXmm = deltaXPixels * m_pixelToMMFactorX;
-          float deltaYmm = deltaYPixels * m_pixelToMMFactorY;
+        // Mouse crosshair only when needed
+        if (m_showMouseCrosshair) {
+          ImVec2 mousePos = ImGui::GetMousePos();
+          bool mouseOverImage =
+            mousePos.x >= cursorPos.x && mousePos.x <= cursorPos.x + displayWidth &&
+            mousePos.y >= cursorPos.y && mousePos.y <= cursorPos.y + displayHeight;
 
-          // Log the pixel and real-world positions
-          std::cout << "Clicked at pixel coordinates: X=" << imageX << ", Y=" << imageY << std::endl;
-          std::cout << "Delta from center: " << deltaXPixels << " pixels X, " << deltaYPixels << " pixels Y" << std::endl;
-          std::cout << "Real-world delta: " << deltaXmm << " mm X, " << deltaYmm << " mm Y" << std::endl;
-
-          // Store values for display
-          m_clickedImageX = imageX;
-          m_clickedImageY = imageY;
-          m_logPixelOnClick = true;
-
-          // Move gantry if machine operations is provided, checkbox is enabled, and we're targeting 'gantry-main'
-          if (machineOps != nullptr && m_enableClickToMove) {
-            // This assumes +X in the image corresponds to -X in gantry movements
-            // and +Y in the image corresponds to -Y in gantry movements
-            // Adjust these signs according to your specific setup
-            float moveXmm = deltaXmm;  // Use as-is or invert if needed
-            float moveYmm = deltaYmm;  // Use as-is or invert if needed
-
-            std::cout << "Requesting gantry move by: X=" << moveXmm << "mm, Y=" << moveYmm << "mm" << std::endl;
-
-            // Create and execute the move relative operations
-            auto moveSequence = std::make_unique<SequenceStep>("Camera Click Move", *machineOps);
-
-            // Add X movement if significant
-            if (std::abs(moveXmm) > 0.001) {
-              moveSequence->AddOperation(std::make_shared<MoveRelativeOperation>(
-                "gantry-main", "X", moveXmm));
-            }
-
-            // Add Y movement if significant
-            if (std::abs(moveYmm) > 0.001) {
-              moveSequence->AddOperation(std::make_shared<MoveRelativeOperation>(
-                "gantry-main", "Y", moveYmm));
-            }
-
-            // Execute the sequence
-            if (!moveSequence->GetOperations().empty()) {
-              std::cout << "Executing move sequence..." << std::endl;
-              moveSequence->Execute();
-            }
-          }
-        }
-      }
-
-      // Display pixel coordinates and calculated real-world deltas
-      if (m_logPixelOnClick) {
-        // Calculate center and deltas
-        float centerX = m_lastFrameWidth / 2.0f;
-        float centerY = m_lastFrameHeight / 2.0f;
-        float deltaXPixels = m_clickedImageX - centerX;
-        float deltaYPixels = m_clickedImageY - centerY;
-        float deltaXmm = deltaXPixels * m_pixelToMMFactorX;
-        float deltaYmm = deltaYPixels * m_pixelToMMFactorY;
-
-        ImGui::Text("Last clicked pixel: X=%.1f, Y=%.1f", m_clickedImageX, m_clickedImageY);
-        ImGui::Text("Delta from center: %.1f px X, %.1f px Y", deltaXPixels, deltaYPixels);
-        ImGui::Text("Real-world delta: %.3f mm X, %.3f mm Y", deltaXmm, deltaYmm);
-
-        if (machineOps != nullptr) {
-          // Show gantry move buttons, enabled only if enableClickToMove is true
-          if (m_enableClickToMove) {
-            if (ImGui::Button("Move Gantry to Clicked Position")) {
-              // Create and execute move as above
-              float moveXmm = -deltaXmm;  // Invert X for proper gantry movement
-              float moveYmm = -deltaYmm;  // Invert Y for proper gantry movement
-
-              auto moveSequence = std::make_unique<SequenceStep>("Camera Click Move", *machineOps);
-
-              // Add X and Y movements
-              if (std::abs(moveXmm) > 0.001) {
-                moveSequence->AddOperation(std::make_shared<MoveRelativeOperation>(
-                  "gantry-main", "X", moveXmm));
-              }
-
-              if (std::abs(moveYmm) > 0.001) {
-                moveSequence->AddOperation(std::make_shared<MoveRelativeOperation>(
-                  "gantry-main", "Y", moveYmm));
-              }
-
-              // Execute the sequence
-              if (!moveSequence->GetOperations().empty()) {
-                moveSequence->Execute();
-              }
-            }
-          }
-          else {
-            // Display a disabled button and a message if clicked
-            ImGui::BeginDisabled(); // This will gray out the button
-            bool clicked = ImGui::Button("Move Gantry to Clicked Position");
-            ImGui::EndDisabled();
-
-            if (clicked) {
-              ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
-                "Enable 'Click to Move Gantry' checkbox to use this feature");
-            }
+          if (mouseOverImage) {
+            drawList->AddLine(
+              ImVec2(cursorPos.x, mousePos.y),
+              ImVec2(cursorPos.x + displayWidth, mousePos.y),
+              IM_COL32(255, 255, 0, 255), 1.0f); // Horizontal line - yellow
+            drawList->AddLine(
+              ImVec2(mousePos.x, cursorPos.y),
+              ImVec2(mousePos.x, cursorPos.y + displayHeight),
+              IM_COL32(255, 255, 0, 255), 1.0f); // Vertical line - yellow
           }
         }
       }

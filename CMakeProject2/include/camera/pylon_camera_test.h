@@ -174,4 +174,16 @@ private:
 
 	bool m_controlWindowOpen = true;
 	bool m_imageWindowOpen = true;
+
+private:
+	// Cached UI calculations
+	mutable float m_cachedDisplayWidth = 0.0f;
+	mutable float m_cachedDisplayHeight = 0.0f;
+	mutable float m_cachedAspectRatio = 1.0f;
+	mutable uint32_t m_lastCachedWidth = 0;
+	mutable uint32_t m_lastCachedHeight = 0;
+
+	// Texture size tracking
+	uint32_t m_lastTextureWidth = 0;
+	uint32_t m_lastTextureHeight = 0;
 };

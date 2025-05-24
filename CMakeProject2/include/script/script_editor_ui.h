@@ -108,4 +108,6 @@ private:
 
   // Add member variable
   ScriptPrintViewer* m_printViewer;
+
+  std::string m_currentDirectory = "scripts/";  // Add this line
 };
