@@ -84,4 +84,20 @@ private:
   double PerformMeasurement(double x, double y, double z);
   bool IsPositionValid(double x, double y, double z);
   bool MoveToPosition(double x, double y, double z);
+
+
+private:
+  // Performance optimization members
+  std::chrono::steady_clock::time_point m_lastUIUpdate;
+  static constexpr int UI_UPDATE_INTERVAL_MS = 100; // Update UI every 100ms instead of every frame
+
+  // Cached values to avoid repeated expensive calls
+  double m_cachedCurrentValue = 0.0;
+  bool m_cachedCanStartScan = false;
+  bool m_cachedIsControllerMoving = false;
+  std::string m_cachedStatusText = "Ready";
+
+  // Helper methods
+  bool ShouldUpdateUI();
+  void UpdateCachedValues();
 };

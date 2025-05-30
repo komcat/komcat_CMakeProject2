@@ -14,6 +14,7 @@
 #include <mutex>
 #include <atomic>
 #include <deque>
+#include <chrono> // Add this for performance optimization
 
 class ScanningUI : public ITogglableUI {
 public:
@@ -78,6 +79,17 @@ private:
   std::deque<std::pair<double, PositionStruct>> m_recentMeasurements;
   std::mutex m_dataMutex; // Renamed from m_dataMutex to be more specific
 
+  // Performance optimization members
+  std::chrono::steady_clock::time_point m_lastUIUpdate;
+  static constexpr int UI_UPDATE_INTERVAL_MS = 100; // Update UI every 100ms instead of every frame
+
+  // Cached values to avoid repeated expensive calls
+  double m_cachedCurrentValue = 0.0;
+  bool m_cachedCanStartScan = false;
+  bool m_cachedIsControllerMoving = false;
+  bool m_cachedIsConnected = false;
+  std::string m_cachedStatusText = "Ready";
+
   // Simplified UI sections
   void RenderDeviceSelection();
   void RenderScanControls();
@@ -102,6 +114,10 @@ private:
 
   // Process batched measurements if needed
   void ProcessMeasurementBatch();
+
+  // Performance optimization helper methods
+  bool ShouldUpdateUI();
+  void UpdateCachedValues();
 
   // Step size presets
   struct StepSizePreset {

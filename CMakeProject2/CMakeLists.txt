@@ -131,6 +131,7 @@ set(PI_SOURCES
 add_executable(CMakeProject2 
     "CMakeProject2.cpp" 
     "CMakeProject2.h" 
+    "Version.h"
     "include/random.cpp" 
     "include/random.h"
     "include/randomwindow.cpp"

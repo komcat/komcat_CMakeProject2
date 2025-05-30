@@ -1,0 +1,57 @@
+#pragma once
+#include <string>
+
+// Version information - update these for each release
+#define VERSION_MAJOR 1
+#define VERSION_MINOR 0
+#define VERSION_PATCH 0
+#define VERSION_BUILD 0
+
+// Optional: Build information
+#define BUILD_DATE __DATE__
+#define BUILD_TIME __TIME__
+
+// Optional: Git commit hash (can be set by build system)
+#ifndef GIT_COMMIT_HASH
+#define GIT_COMMIT_HASH "unknown"
+#endif
+
+// Optional: Debug/Release configuration
+#ifdef _DEBUG
+#define BUILD_CONFIG "Debug"
+#else
+#define BUILD_CONFIG "Release"
+#endif
+
+class Version {
+public:
+  // Get version as string in format "1.0.0"
+  static std::string getVersionString() {
+    return std::to_string(VERSION_MAJOR) + "." +
+      std::to_string(VERSION_MINOR) + "." +
+      std::to_string(VERSION_PATCH);
+  }
+
+  // Get full version with build number "1.0.0.123"
+  static std::string getFullVersionString() {
+    return getVersionString() + "." + std::to_string(VERSION_BUILD);
+  }
+
+  // Get version with build info "1.0.0 (Debug, Dec 15 2024)"
+  static std::string getVersionWithBuildInfo() {
+    return getVersionString() + " (" + BUILD_CONFIG + ", " + BUILD_DATE + ")";
+  }
+
+  // Get complete title for window
+  static std::string getWindowTitle() {
+    return "Scan Data Visualization v" + getVersionString() + " - " + BUILD_CONFIG;
+  }
+
+  // Get detailed version info for about dialog or console
+  static std::string getDetailedVersionInfo() {
+    return "Scan Data Visualization\n"
+      "Version: " + getFullVersionString() + "\n"
+      "Build: " + BUILD_CONFIG + " (" + BUILD_DATE + " " + BUILD_TIME + ")\n"
+      "Commit: " + GIT_COMMIT_HASH;
+  }
+};

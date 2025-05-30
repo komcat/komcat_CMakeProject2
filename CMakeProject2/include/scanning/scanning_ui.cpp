@@ -47,8 +47,14 @@ ScanningUI::~ScanningUI() {
   m_logger->LogInfo("ScanningUI: Shutting down");
 }
 
+// Optimized RenderUI method:
 void ScanningUI::RenderUI() {
   if (!m_showWindow) return;
+
+  // Only update expensive values periodically
+  if (ShouldUpdateUI()) {
+    UpdateCachedValues();
+  }
 
   ImGui::Begin("Hexapod Optimizer", &m_showWindow);
 
@@ -70,13 +76,14 @@ void ScanningUI::RenderUI() {
   ImGui::End();
 }
 
+// Optimized RenderDeviceSelection:
 void ScanningUI::RenderDeviceSelection() {
   ImGui::Text("Select Hexapod Device");
 
   // Create a combo box for hexapod device selection
   if (ImGui::BeginCombo("Hexapod", m_selectedDevice.c_str())) {
     for (const auto& device : m_hexapodDevices) {
-      // Check if the device exists and has a PI controller
+      // Only check availability when combo is open (not every frame)
       PIController* controller = m_piControllerManager.GetController(device);
       bool deviceAvailable = (controller && controller->IsConnected());
 
@@ -104,12 +111,12 @@ void ScanningUI::RenderDeviceSelection() {
     ImGui::EndCombo();
   }
 
-  // Show connection status for the selected device
+  // Use cached connection status
   PIController* controller = GetSelectedController();
   if (controller) {
     ImGui::TextColored(
-      controller->IsConnected() ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) : ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
-      "Status: %s", controller->IsConnected() ? "Connected" : "Disconnected"
+      m_cachedIsConnected ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) : ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+      "Status: %s", m_cachedIsConnected ? "Connected" : "Disconnected"
     );
   }
   else {
@@ -131,57 +138,14 @@ void ScanningUI::RenderDeviceSelection() {
       ImGui::EndCombo();
     }
 
-    // Display current value from the selected channel
-    if (m_dataStore.HasValue(m_selectedDataChannel)) {
-      double currentValue = m_dataStore.GetValue(m_selectedDataChannel);
-      ImGui::Text("Current Value: %g", currentValue);
-    }
+    // Use cached current value (updated only periodically)
+    ImGui::Text("Current Value: %g", m_cachedCurrentValue);
   }
 }
 
-// Optimized RenderScanStatus method
-void ScanningUI::RenderScanStatus() {
-  // Get current progress - atomic access doesn't need lock
-  float progressBarValue = static_cast<float>(m_scanProgress.load());
-
-  // Get status string with minimal lock scope
-  std::string statusCopy;
-  {
-    std::lock_guard<std::mutex> lock(m_statusMutex);
-    statusCopy = m_scanStatus;
-  }
-
-  // Draw progress bar with the copied status
-  ImGui::ProgressBar(progressBarValue, ImVec2(-1, 0), statusCopy.c_str());
-
-  // Display current measurement - atomic access doesn't need lock
-  ImGui::Text("Current: %g", m_currentValue.load());
-
-  // Display peak information if available
-  double peakVal = m_peakValue.load();
-  if (peakVal > 0) {
-    ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "Best Value: %g", peakVal);
-
-    // Get peak position with minimal lock scope
-    PositionStruct peakPosCopy;
-    {
-      std::lock_guard<std::mutex> lock(m_dataMutex);
-      peakPosCopy = m_peakPosition;
-    }
-
-    ImGui::Text("Best Position: %s", FormatPosition(peakPosCopy).c_str());
-  }
-}
+// Optimized RenderScanControls:
 void ScanningUI::RenderScanControls() {
   ImGui::Text("Scan Controls");
-
-  // Check if we can start a scan
-  bool canStartScan = !m_selectedDevice.empty() &&
-    !m_selectedDataChannel.empty() &&
-    !m_parameters.axesToScan.empty() &&
-    !m_parameters.stepSizes.empty() &&
-    GetSelectedController() != nullptr &&
-    GetSelectedController()->IsConnected();
 
   // Add step size preset dropdown
   ImGui::Text("Step Size Preset:");
@@ -209,33 +173,22 @@ void ScanningUI::RenderScanControls() {
   }
   ImGui::Text("Step Sizes (mm): %s", stepsStr.c_str());
 
-  // Check if the controller is currently moving - this avoids lock contention
-  bool isControllerMoving = false;
-  if (canStartScan && GetSelectedController() != nullptr) {
-    for (const auto& axis : { "X", "Y", "Z", "U", "V", "W" }) {
-      if (GetSelectedController()->IsMoving(axis)) {
-        isControllerMoving = true;
-        break;
-      }
-    }
-  }
-
   // Get scan status atomically without locking
   bool isScanningNow = m_isScanning.load();
 
-  // Show reason why scan can't start
-  if (!canStartScan) {
+  // Use cached values instead of expensive real-time checks
+  if (!m_cachedCanStartScan) {
     if (m_selectedDevice.empty()) {
       ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Select a hexapod device first");
     }
-    else if (GetSelectedController() == nullptr || !GetSelectedController()->IsConnected()) {
+    else if (GetSelectedController() == nullptr || !m_cachedIsConnected) {
       ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Selected controller is not connected");
     }
     else if (m_selectedDataChannel.empty()) {
       ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Select a data channel first");
     }
   }
-  else if (isControllerMoving) {
+  else if (m_cachedIsControllerMoving) {
     ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "Controller is currently moving");
   }
   else {
@@ -246,7 +199,7 @@ void ScanningUI::RenderScanControls() {
   ImGui::BeginGroup();
 
   // Start scan button styling and state
-  if (!isScanningNow && canStartScan && !isControllerMoving) {
+  if (!isScanningNow && m_cachedCanStartScan && !m_cachedIsControllerMoving) {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.7f, 0.1f, 1.0f));
@@ -291,6 +244,33 @@ void ScanningUI::RenderScanControls() {
 
   // Add brief instructions
   ImGui::TextWrapped("This tool scans selected axes to find the position that maximizes the selected data channel reading. It's useful for optimizing alignment of optical components.");
+}
+
+// Optimized RenderScanStatus method
+void ScanningUI::RenderScanStatus() {
+  // Get current progress - atomic access doesn't need lock
+  float progressBarValue = static_cast<float>(m_scanProgress.load());
+
+  // Use cached status text
+  ImGui::ProgressBar(progressBarValue, ImVec2(-1, 0), m_cachedStatusText.c_str());
+
+  // Display current measurement - atomic access doesn't need lock
+  ImGui::Text("Current: %g", m_currentValue.load());
+
+  // Display peak information if available
+  double peakVal = m_peakValue.load();
+  if (peakVal > 0) {
+    ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "Best Value: %g", peakVal);
+
+    // Only update position display when UI updates
+    static PositionStruct cachedPeakPos;
+    if (ShouldUpdateUI()) {
+      std::lock_guard<std::mutex> lock(m_dataMutex);
+      cachedPeakPos = m_peakPosition;
+    }
+
+    ImGui::Text("Best Position: %s", FormatPosition(cachedPeakPos).c_str());
+  }
 }
 
 void ScanningUI::RefreshAvailableDevices() {
@@ -568,5 +548,54 @@ void ScanningUI::InitializeStepSizePresets() {
   // Initialize parameters with the first preset
   if (!m_stepSizePresets.empty()) {
     m_parameters.stepSizes = m_stepSizePresets[0].stepSizes;
+  }
+}
+
+
+bool ScanningUI::ShouldUpdateUI() {
+  auto now = std::chrono::steady_clock::now();
+  auto timeSinceUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastUIUpdate);
+
+  if (timeSinceUpdate.count() >= UI_UPDATE_INTERVAL_MS) {
+    m_lastUIUpdate = now;
+    return true;
+  }
+  return false;
+}
+
+void ScanningUI::UpdateCachedValues() {
+  // Only update expensive values when needed
+  if (m_dataStore.HasValue(m_selectedDataChannel)) {
+    m_cachedCurrentValue = m_dataStore.GetValue(m_selectedDataChannel);
+  }
+
+  PIController* controller = GetSelectedController();
+
+  // Cache controller connection status
+  m_cachedIsConnected = (controller && controller->IsConnected());
+
+  // Cache scan readiness
+  m_cachedCanStartScan = !m_selectedDevice.empty() &&
+    !m_selectedDataChannel.empty() &&
+    !m_parameters.axesToScan.empty() &&
+    !m_parameters.stepSizes.empty() &&
+    controller != nullptr &&
+    m_cachedIsConnected;
+
+  // Cache movement status (expensive call) - only check 3 axes instead of 6
+  m_cachedIsControllerMoving = false;
+  if (m_cachedCanStartScan && controller != nullptr) {
+    for (const auto& axis : { "X", "Y", "Z" }) { // Reduced from 6 to 3 axes
+      if (controller->IsMoving(axis)) {
+        m_cachedIsControllerMoving = true;
+        break;
+      }
+    }
+  }
+
+  // Cache status text
+  {
+    std::lock_guard<std::mutex> lock(m_statusMutex);
+    m_cachedStatusText = m_scanStatus;
   }
 }

@@ -58,12 +58,17 @@ OptimizedScanningUI::~OptimizedScanningUI() {
 void OptimizedScanningUI::RenderUI() {
   if (!m_showWindow) return;
 
+  // Only update expensive values periodically
+  if (ShouldUpdateUI()) {
+    UpdateCachedValues();
+  }
+
   ImGui::Begin("Optimized Hexapod Scanner", &m_showWindow);
 
   RenderDeviceSelection();
   ImGui::Separator();
 
-  // Show current parameters (matching your adjusted values)
+  // Use cached values instead of recalculating
   ImGui::Text("Z-axis steps: 0.005, 0.001, 0.0002 mm");
   ImGui::Text("XY-axis steps: 0.001, 0.0005, 0.0002 mm");
   ImGui::Text("Smart direction selection: Enabled");
@@ -78,12 +83,13 @@ void OptimizedScanningUI::RenderUI() {
 
   ImGui::End();
 }
-
+// Optimized RenderDeviceSelection:
 void OptimizedScanningUI::RenderDeviceSelection() {
   ImGui::Text("Select Hexapod Device");
 
   if (ImGui::BeginCombo("Hexapod", m_selectedDevice.c_str())) {
     for (const auto& device : m_hexapodDevices) {
+      // Only check availability when combo is open (not every frame)
       PIController* controller = m_piControllerManager.GetController(device);
       bool deviceAvailable = (controller && controller->IsConnected());
 
@@ -109,12 +115,22 @@ void OptimizedScanningUI::RenderDeviceSelection() {
     ImGui::EndCombo();
   }
 
-  // Show connection status
+  // Use cached connection status
   PIController* controller = GetSelectedController();
   if (controller) {
+    // Only check connection status when UI updates, not every frame
+    static bool lastConnectionStatus = false;
+    static auto lastConnectionCheck = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastConnectionCheck).count() > 500) {
+      lastConnectionStatus = controller->IsConnected();
+      lastConnectionCheck = now;
+    }
+
     ImGui::TextColored(
-      controller->IsConnected() ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) : ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
-      "Status: %s", controller->IsConnected() ? "Connected" : "Disconnected"
+      lastConnectionStatus ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) : ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+      "Status: %s", lastConnectionStatus ? "Connected" : "Disconnected"
     );
   }
   else {
@@ -136,59 +152,41 @@ void OptimizedScanningUI::RenderDeviceSelection() {
       ImGui::EndCombo();
     }
 
-    // Display current value
-    if (m_dataStore.HasValue(m_selectedDataChannel)) {
-      double currentValue = m_dataStore.GetValue(m_selectedDataChannel);
-      ImGui::Text("Current Value: %g", currentValue);
-    }
+    // Use cached current value (updated only periodically)
+    ImGui::Text("Current Value: %g", m_cachedCurrentValue);
   }
 }
 
+
+// Optimized RenderScanControls:
 void OptimizedScanningUI::RenderScanControls() {
   ImGui::Text("Scan Controls");
 
-  // Check if we can start a scan
-  bool canStartScan = !m_selectedDevice.empty() &&
-    !m_selectedDataChannel.empty() &&
-    GetSelectedController() != nullptr &&
-    GetSelectedController()->IsConnected();
-
-  // Check if controller is moving
-  bool isControllerMoving = false;
-  if (canStartScan && GetSelectedController() != nullptr) {
-    for (const auto& axis : { "X", "Y", "Z", "U", "V", "W" }) {
-      if (GetSelectedController()->IsMoving(axis)) {
-        isControllerMoving = true;
-        break;
-      }
-    }
-  }
-
   bool isScanningNow = m_isScanning.load();
 
-  // Show status
-  if (!canStartScan) {
+  // Use cached values instead of expensive real-time checks
+  if (!m_cachedCanStartScan) {
     if (m_selectedDevice.empty()) {
       ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Select a hexapod device first");
     }
-    else if (GetSelectedController() == nullptr || !GetSelectedController()->IsConnected()) {
+    else if (GetSelectedController() == nullptr) {
       ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Selected controller is not connected");
     }
     else if (m_selectedDataChannel.empty()) {
       ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Select a data channel first");
     }
   }
-  else if (isControllerMoving) {
+  else if (m_cachedIsControllerMoving) {
     ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "Controller is currently moving");
   }
   else {
     ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Ready");
   }
 
+  // Rest of button rendering (unchanged)
   ImGui::BeginGroup();
 
-  // Start scan button
-  if (!isScanningNow && canStartScan && !isControllerMoving) {
+  if (!isScanningNow && m_cachedCanStartScan && !m_cachedIsControllerMoving) {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.7f, 0.1f, 1.0f));
@@ -208,7 +206,6 @@ void OptimizedScanningUI::RenderScanControls() {
 
   ImGui::SameLine();
 
-  // Stop scan button
   if (isScanningNow) {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
@@ -232,16 +229,12 @@ void OptimizedScanningUI::RenderScanControls() {
   ImGui::TextWrapped("This optimized scanner uses smart direction selection and adaptive step sizes for faster convergence.");
 }
 
+// Optimized RenderScanStatus:
 void OptimizedScanningUI::RenderScanStatus() {
   float progressBarValue = static_cast<float>(m_scanProgress.load());
 
-  std::string statusCopy;
-  {
-    std::lock_guard<std::mutex> lock(m_statusMutex);
-    statusCopy = m_scanStatus;
-  }
-
-  ImGui::ProgressBar(progressBarValue, ImVec2(-1, 0), statusCopy.c_str());
+  // Use cached status text
+  ImGui::ProgressBar(progressBarValue, ImVec2(-1, 0), m_cachedStatusText.c_str());
 
   ImGui::Text("Current: %g", m_currentValue.load());
 
@@ -249,13 +242,14 @@ void OptimizedScanningUI::RenderScanStatus() {
   if (peakVal > 0) {
     ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "Best Value: %g", peakVal);
 
-    ScanStep peakPosCopy;
-    {
+    // Only update position display when UI updates
+    static ScanStep cachedPeakPos;
+    if (ShouldUpdateUI()) {
       std::lock_guard<std::mutex> lock(m_dataMutex);
-      peakPosCopy = m_peakPosition;
+      cachedPeakPos = m_peakPosition;
     }
 
-    ImGui::Text("Best Position: %s", FormatPosition(peakPosCopy).c_str());
+    ImGui::Text("Best Position: %s", FormatPosition(cachedPeakPos).c_str());
   }
 }
 
@@ -666,4 +660,46 @@ PIController* OptimizedScanningUI::GetSelectedController() const {
     return nullptr;
   }
   return m_piControllerManager.GetController(m_selectedDevice);
+}
+
+
+bool OptimizedScanningUI::ShouldUpdateUI() {
+  auto now = std::chrono::steady_clock::now();
+  auto timeSinceUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastUIUpdate);
+
+  if (timeSinceUpdate.count() >= UI_UPDATE_INTERVAL_MS) {
+    m_lastUIUpdate = now;
+    return true;
+  }
+  return false;
+}
+
+void OptimizedScanningUI::UpdateCachedValues() {
+  // Only update expensive values when needed
+  if (m_dataStore.HasValue(m_selectedDataChannel)) {
+    m_cachedCurrentValue = m_dataStore.GetValue(m_selectedDataChannel);
+  }
+
+  // Cache controller status
+  m_cachedCanStartScan = !m_selectedDevice.empty() &&
+    !m_selectedDataChannel.empty() &&
+    GetSelectedController() != nullptr &&
+    GetSelectedController()->IsConnected();
+
+  // Cache movement status (expensive call)
+  m_cachedIsControllerMoving = false;
+  if (m_cachedCanStartScan && GetSelectedController() != nullptr) {
+    for (const auto& axis : { "X", "Y", "Z" }) { // Reduced from 6 to 3 axes
+      if (GetSelectedController()->IsMoving(axis)) {
+        m_cachedIsControllerMoving = true;
+        break;
+      }
+    }
+  }
+
+  // Cache status text
+  {
+    std::lock_guard<std::mutex> lock(m_statusMutex);
+    m_cachedStatusText = m_scanStatus;
+  }
 }
