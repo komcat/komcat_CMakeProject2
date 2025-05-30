@@ -74,7 +74,7 @@
 #include "include/script/ScriptRunnerAdapter.h"
 #include "include/script/script_print_viewer.h"
 #include "include/camera/CameraExposureTestUI.h"
-
+#include "include/scanning/optimized_scanning_ui.h"
 
 #pragma region header functions
 
@@ -1002,6 +1002,12 @@ int main(int argc, char* argv[])
 	ScanningUI hexapodScanningUI(piControllerManager, dataStore);
 	logger->LogInfo("Hexapod Scanning UI initialized");
 
+
+	// ADD THIS NEW CODE:
+		// Create the Optimized Scanning UI
+	OptimizedScanningUI optimizedScanningUI(piControllerManager, dataStore);
+	logger->LogInfo("OptimizedScanningUI initialized");
+
 	// Log the loaded devices
 	const auto& devices = configManager.GetAllDevices();
 	logger->LogInfo("Loaded " + std::to_string(devices.size()) + " devices");
@@ -1243,7 +1249,10 @@ int main(int argc, char* argv[])
 
 	// Add direct access components to root level
 	toolbarVertical->AddReference(CreateHierarchicalUI(processControlPanel, "Process Control"));
-	toolbarVertical->AddReference(CreateHierarchicalUI(hexapodScanningUI, "Scanning Optimizer"));
+	toolbarVertical->AddReference(CreateHierarchicalUI(hexapodScanningUI, "Scanning V1"));
+	// ADD THIS LINE:
+	toolbarVertical->AddReference(CreateHierarchicalUI(optimizedScanningUI, "Scanning V2 (test)"));
+
 	toolbarVertical->AddReference(CreateHierarchicalUI(globalJogPanel, "Global Jog Panel"));
 	toolbarVertical->AddReference(CreatePylonCameraAdapter(pylonCameraTest, "Top Camera"));
 
@@ -1464,7 +1473,7 @@ int main(int argc, char* argv[])
 		// Render the new camera exposure test UI
 		cameraExposureTestUI.RenderUI();
 
-
+		optimizedScanningUI.RenderUI();
 
 
 

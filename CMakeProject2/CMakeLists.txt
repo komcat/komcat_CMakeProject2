@@ -264,7 +264,7 @@ add_executable(CMakeProject2
  "include/script/print_operation.cpp"
  "include/script/script_print_viewer.h"
  "include/script/script_print_viewer.cpp"
- "include/ui/ToolbarStateManager.h" "include/camera/CameraExposureManager.h" "include/camera/CameraExposureManager.cpp" "include/camera/CameraExposureTestUI.h" "include/camera/CameraExposureTestUI.cpp")
+ "include/ui/ToolbarStateManager.h" "include/camera/CameraExposureManager.h" "include/camera/CameraExposureManager.cpp" "include/camera/CameraExposureTestUI.h" "include/camera/CameraExposureTestUI.cpp" "include/scanning/SequentialOptimizedScanner.h" "include/scanning/SequentialOptimizedScanner.cpp" "include/scanning/optimized_scanning_ui.h" "include/scanning/optimized_scanning_ui.cpp")
 
 
 
