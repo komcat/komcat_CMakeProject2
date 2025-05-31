@@ -97,3 +97,64 @@ This project is proprietary software owned by Fabrinet.
 ## Support
 
 For technical support, contact the development team or create an issue in this repository.
+
+
+
+# Add this section to your existing README.md
+
+## Version Management
+
+This project includes an automated version management system that handles versioning seamlessly.
+
+### Current Version Display
+The application automatically displays the current version in the window title:
+```
+"Scan Data Visualization v1.0.0 - Debug"
+```
+
+### Automatic Build Increment
+Build numbers automatically increment during development:
+- Every CMake configure increments the build number
+- Format: `MAJOR.MINOR.PATCH.BUILD` (e.g., 1.0.0.15)
+
+### Manual Version Control
+
+#### Quick Commands (Recommended Method)
+```powershell
+# Navigate to CMakeProject2 folder first
+cd CMakeProject2
+
+# Check current version
+.\update_version.ps1 show
+
+# Release a bug fix
+.\update_version.ps1 patch
+
+# Release new features  
+.\update_version.ps1 minor
+
+# Major release
+.\update_version.ps1 major
+```
+
+#### Visual Studio Integration
+**Method 1**: Use PowerShell in VS Terminal
+1. View → Terminal (Ctrl+`)
+2. `cd CMakeProject2`  
+3. `.\update_version.ps1 patch`
+
+**Method 2**: Use CMake targets (if available)
+- Right-click solution → Find **CMakePredefinedTargets**
+- Build targets: `version-patch`, `version-minor`, `version-major`, `version-show`
+- *Note: If targets fail with "cache" error, use Method 1*
+
+### Documentation
+- 📋 [Complete Guide](VERSION_MANAGEMENT.md) - Full documentation
+- ⚡ [Quick Start](VERSION_QUICK_START.md) - 5-minute setup guide
+
+### Files
+- `Version.h` - Version definitions (auto-generated)
+- `update_version.ps1` - Version management script
+- `CMakeLists.txt` - CMake automation
+
+> **Note**: Never manually edit version numbers in `Version.h` - use the provided scripts instead.

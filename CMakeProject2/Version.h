@@ -6,7 +6,7 @@
 #define VERSION_MAJOR 2
 #define VERSION_MINOR 0
 #define VERSION_PATCH 0
-#define VERSION_BUILD 0
+#define VERSION_BUILD 3
 
 // Build information
 #define BUILD_DATE __DATE__
@@ -50,14 +50,31 @@ public:
     return getVersionString() + " (" + BUILD_CONFIG + ", " + BUILD_DATE + ")";
   }
 
-  // Get complete title for window
+  // Get complete title for window - NOW INCLUDES BUILD NUMBER
   static std::string getWindowTitle() {
-    return "Scan Data Visualization v" + getVersionString() + " - " + BUILD_CONFIG;
+    return "FWAAA v" + getFullVersionString() + " - " + BUILD_CONFIG;
+  }
+
+  // Alternative window title formats (choose one):
+
+  // Option 1: Compact format with build
+  static std::string getWindowTitleCompact() {
+    return "FWAAA v" + getVersionString() + " Build " + intToString(VERSION_BUILD) + " - " + BUILD_CONFIG;
+  }
+
+  // Option 2: Detailed format with build
+  static std::string getWindowTitleDetailed() {
+    return "FWAAA v" + getVersionString() + " (Build " + intToString(VERSION_BUILD) + ") - " + BUILD_CONFIG;
+  }
+
+  // Option 3: Short format
+  static std::string getWindowTitleShort() {
+    return "SDV v" + getFullVersionString() + " - " + BUILD_CONFIG;
   }
 
   // Get detailed version info for about dialog or console
   static std::string getDetailedVersionInfo() {
-    return "Scan Data Visualization\n"
+    return "FWAAA\n"
       "Version: " + getFullVersionString() + "\n"
       "Build: " + BUILD_CONFIG + " (" + BUILD_DATE + " " + BUILD_TIME + ")\n"
       "Branch: " + std::string(GIT_BRANCH) + "\n"
