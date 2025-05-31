@@ -265,7 +265,17 @@ add_executable(CMakeProject2
  "include/script/print_operation.cpp"
  "include/script/script_print_viewer.h"
  "include/script/script_print_viewer.cpp"
- "include/ui/ToolbarStateManager.h" "include/camera/CameraExposureManager.h" "include/camera/CameraExposureManager.cpp" "include/camera/CameraExposureTestUI.h" "include/camera/CameraExposureTestUI.cpp" "include/scanning/SequentialOptimizedScanner.h" "include/scanning/SequentialOptimizedScanner.cpp" "include/scanning/optimized_scanning_ui.h" "include/scanning/optimized_scanning_ui.cpp")
+ "include/ui/ToolbarStateManager.h" 
+ "include/camera/CameraExposureManager.h" 
+ "include/camera/CameraExposureManager.cpp" 
+ "include/camera/CameraExposureTestUI.h"
+ "include/camera/CameraExposureTestUI.cpp" 
+ "include/scanning/SequentialOptimizedScanner.h"
+ "include/scanning/SequentialOptimizedScanner.cpp"
+ "include/scanning/optimized_scanning_ui.h"
+ "include/scanning/optimized_scanning_ui.cpp"
+ "include/ModuleConfig.h"
+)
 
 
 
@@ -376,3 +386,111 @@ if(WIN32)
         )
     endif()
 endif()
+
+
+
+# ==== VERSION MANAGEMENT SECTION ====
+
+# Function to auto-increment build number
+function(auto_increment_build)
+    # Check if PowerShell is available
+    find_program(POWERSHELL_EXE powershell HINTS "C:/Windows/System32/WindowsPowerShell/v1.0/")
+    
+    if(POWERSHELL_EXE)
+        # Path to the update script (relative to CMakeProject2 folder)
+        set(UPDATE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/update_version.ps1")
+        
+        # Check if the script exists
+        if(EXISTS "${UPDATE_SCRIPT}")
+            message(STATUS "Auto-incrementing build number...")
+            
+            # Execute the PowerShell script to increment build
+            execute_process(
+                COMMAND ${POWERSHELL_EXE} -ExecutionPolicy Bypass -File "${UPDATE_SCRIPT}" build
+                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                OUTPUT_VARIABLE PS_OUTPUT
+                ERROR_VARIABLE PS_ERROR
+                RESULT_VARIABLE PS_RESULT
+            )
+            
+            if(PS_RESULT EQUAL 0)
+                message(STATUS "Build number incremented successfully")
+                # Parse the output to show the new version
+                string(REGEX MATCH "Updated to version: ([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)" 
+                       VERSION_MATCH "${PS_OUTPUT}")
+                if(VERSION_MATCH)
+                    message(STATUS "New version: ${CMAKE_MATCH_1}")
+                endif()
+            else()
+                message(WARNING "Failed to increment build number: ${PS_ERROR}")
+            endif()
+        else()
+            message(WARNING "update_version.ps1 not found at: ${UPDATE_SCRIPT}")
+        endif()
+    else()
+        message(WARNING "PowerShell not found - build number will not be auto-incremented")
+    endif()
+endfunction()
+
+# Auto-increment build number every time CMake runs
+auto_increment_build()
+
+# ==== CUSTOM TARGETS FOR MANUAL VERSION CONTROL ====
+
+# Add custom targets for version management
+if(POWERSHELL_EXE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/update_version.ps1")
+    set(UPDATE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/update_version.ps1")
+    
+    # Target to increment build number
+    add_custom_target(version-build
+        COMMAND ${POWERSHELL_EXE} -ExecutionPolicy Bypass -File "${UPDATE_SCRIPT}" build
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Incrementing build number"
+    )
+    
+    # Target to increment patch version
+    add_custom_target(version-patch
+        COMMAND ${POWERSHELL_EXE} -ExecutionPolicy Bypass -File "${UPDATE_SCRIPT}" patch
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Incrementing patch version"
+    )
+    
+    # Target to increment minor version
+    add_custom_target(version-minor
+        COMMAND ${POWERSHELL_EXE} -ExecutionPolicy Bypass -File "${UPDATE_SCRIPT}" minor
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Incrementing minor version"
+    )
+    
+    # Target to increment major version
+    add_custom_target(version-major
+        COMMAND ${POWERSHELL_EXE} -ExecutionPolicy Bypass -File "${UPDATE_SCRIPT}" major
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Incrementing major version"
+    )
+    
+    # Target to show current version
+    add_custom_target(version-show
+        COMMAND ${POWERSHELL_EXE} -ExecutionPolicy Bypass -File "${UPDATE_SCRIPT}" show
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Showing current version"
+    )
+    
+    message(STATUS "Version management targets added:")
+    message(STATUS "  - version-build  : Increment build number")
+    message(STATUS "  - version-patch  : Increment patch version") 
+    message(STATUS "  - version-minor  : Increment minor version")
+    message(STATUS "  - version-major  : Increment major version")
+    message(STATUS "  - version-show   : Show current version")
+endif()
+
+# ==== OPTIONAL: PRE-BUILD VERSION INCREMENT ====
+# Uncomment this section if you want the build number to increment before every build
+# (instead of every CMake configure)
+
+# add_custom_command(
+#     TARGET CMakeProject2 PRE_BUILD
+#     COMMAND ${POWERSHELL_EXE} -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/update_version.ps1" build
+#     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+#     COMMENT "Auto-incrementing build number before build"
+# )

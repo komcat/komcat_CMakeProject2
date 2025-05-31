@@ -1,0 +1,72 @@
+#pragma once
+#include <string>
+#include <sstream>
+
+// Version information - auto-generated from Version.h.in by CMake
+#define VERSION_MAJOR @VERSION_MAJOR@
+#define VERSION_MINOR @VERSION_MINOR@
+#define VERSION_PATCH @VERSION_PATCH@
+#define VERSION_BUILD @VERSION_BUILD@
+
+// Build information
+#define BUILD_DATE __DATE__
+#define BUILD_TIME __TIME__
+
+// Git information (set by build system)
+#define GIT_COMMIT_HASH "@GIT_COMMIT_HASH@"
+#define GIT_BRANCH "@GIT_BRANCH@"
+
+// Debug/Release configuration
+#ifdef _DEBUG
+#define BUILD_CONFIG "Debug"
+#else
+#define BUILD_CONFIG "Release"
+#endif
+
+class Version {
+private:
+    // Helper function to convert int to string
+    static std::string intToString(int value) {
+        std::ostringstream oss;
+        oss << value;
+        return oss.str();
+    }
+
+public:
+    // Get version as string in format "1.0.0"
+    static std::string getVersionString() {
+        return intToString(VERSION_MAJOR) + "." +
+               intToString(VERSION_MINOR) + "." +
+               intToString(VERSION_PATCH);
+    }
+
+    // Get full version with build number "1.0.0.123"
+    static std::string getFullVersionString() {
+        return getVersionString() + "." + intToString(VERSION_BUILD);
+    }
+
+    // Get version with build info "1.0.0 (Debug, Dec 15 2024)"
+    static std::string getVersionWithBuildInfo() {
+        return getVersionString() + " (" + BUILD_CONFIG + ", " + BUILD_DATE + ")";
+    }
+
+    // Get complete title for window
+    static std::string getWindowTitle() {
+        return "Scan Data Visualization v" + getVersionString() + " - " + BUILD_CONFIG;
+    }
+
+    // Get detailed version info for about dialog or console
+    static std::string getDetailedVersionInfo() {
+        return "Scan Data Visualization\n"
+               "Version: " + getFullVersionString() + "\n"
+               "Build: " + BUILD_CONFIG + " (" + BUILD_DATE + " " + BUILD_TIME + ")\n"
+               "Branch: " + std::string(GIT_BRANCH) + "\n"
+               "Commit: " + std::string(GIT_COMMIT_HASH);
+    }
+
+    // Get version components as integers
+    static int getMajor() { return VERSION_MAJOR; }
+    static int getMinor() { return VERSION_MINOR; }
+    static int getPatch() { return VERSION_PATCH; }
+    static int getBuild() { return VERSION_BUILD; }
+};

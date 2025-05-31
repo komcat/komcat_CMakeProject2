@@ -1,22 +1,22 @@
 #pragma once
 #include <string>
-#include <sstream>
 
-// Version information - manually set for now
-#define VERSION_MAJOR 2
+// Version information - update these for each release
+#define VERSION_MAJOR 1
 #define VERSION_MINOR 0
 #define VERSION_PATCH 0
-#define VERSION_BUILD 0
+#define VERSION_BUILD 1
 
-// Build information
+// Optional: Build information
 #define BUILD_DATE __DATE__
 #define BUILD_TIME __TIME__
 
-// Git information
+// Optional: Git commit hash (can be set by build system)
+#ifndef GIT_COMMIT_HASH
 #define GIT_COMMIT_HASH "unknown"
-#define GIT_BRANCH "unknown"
+#endif
 
-// Debug/Release configuration
+// Optional: Debug/Release configuration
 #ifdef _DEBUG
 #define BUILD_CONFIG "Debug"
 #else
@@ -24,25 +24,17 @@
 #endif
 
 class Version {
-private:
-  // Helper function to convert int to string
-  static std::string intToString(int value) {
-    std::ostringstream oss;
-    oss << value;
-    return oss.str();
-  }
-
 public:
   // Get version as string in format "1.0.0"
   static std::string getVersionString() {
-    return intToString(VERSION_MAJOR) + "." +
-      intToString(VERSION_MINOR) + "." +
-      intToString(VERSION_PATCH);
+    return std::to_string(VERSION_MAJOR) + "." +
+      std::to_string(VERSION_MINOR) + "." +
+      std::to_string(VERSION_PATCH);
   }
 
   // Get full version with build number "1.0.0.123"
   static std::string getFullVersionString() {
-    return getVersionString() + "." + intToString(VERSION_BUILD);
+    return getVersionString() + "." + std::to_string(VERSION_BUILD);
   }
 
   // Get version with build info "1.0.0 (Debug, Dec 15 2024)"
@@ -60,13 +52,6 @@ public:
     return "Scan Data Visualization\n"
       "Version: " + getFullVersionString() + "\n"
       "Build: " + BUILD_CONFIG + " (" + BUILD_DATE + " " + BUILD_TIME + ")\n"
-      "Branch: " + std::string(GIT_BRANCH) + "\n"
-      "Commit: " + std::string(GIT_COMMIT_HASH);
+      "Commit: " + GIT_COMMIT_HASH;
   }
-
-  // Get version components as integers
-  static int getMajor() { return VERSION_MAJOR; }
-  static int getMinor() { return VERSION_MINOR; }
-  static int getPatch() { return VERSION_PATCH; }
-  static int getBuild() { return VERSION_BUILD; }
 };

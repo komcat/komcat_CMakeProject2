@@ -75,6 +75,11 @@
 #include "include/script/script_print_viewer.h"
 #include "include/camera/CameraExposureTestUI.h"
 #include "include/scanning/optimized_scanning_ui.h"
+#include "include/ModuleConfig.h"
+#include "Version.h"
+
+
+
 
 #pragma region header functions
 
@@ -825,770 +830,754 @@ void CheckImGuiVersion() {
 
 int main(int argc, char* argv[])
 {
-
-
-	// Get the logger instance
-	Logger* logger = Logger::GetInstance();
-	logger->Log("Application started");
-
-	// Setup SDL
-	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
-	{
-		printf("Error: %s\n", SDL_GetError());
-		return -1;
-	}
-
-	// Setup SDL window
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-
-	// For a normal window with frame
-	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
-		SDL_WINDOW_ALLOW_HIGHDPI);
-
-	// Create window with proper size
-	SDL_Window* window = SDL_CreateWindow("Fabrinet West AAA",
-		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-		1280, 720, // Set your preferred default size here
-		window_flags);
-	if (window == nullptr)
-	{
-		printf("Error creating window: %s\n", SDL_GetError());
-		SDL_Quit();
-		return -1;
-	}
-
-	// Set application icon
-	SDL_Surface* iconSurface = SDL_LoadBMP("resources/icon.bmp");  // Adjust path as needed
-	if (iconSurface) {
-		SDL_SetWindowIcon(window, iconSurface);
-		SDL_FreeSurface(iconSurface);
-	}
-	else {
-		logger->LogWarning("Failed to load application icon: " + std::string(SDL_GetError()));
-	}
-
-	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-	SDL_GL_MakeCurrent(window, gl_context);
-	SDL_GL_SetSwapInterval(1); // Enable vsync
-
-	// Setup Dear ImGui context
-	IMGUI_CHECKVERSION();
-	CheckImGuiVersion();
-
-	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-
-
-	// Setup Dear ImGui style
-	//ImGui::StyleColorsDark();
-	ImGui::StyleColorsLight();
-
-	// Setup Platform/Renderer backends
-	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
-	ImGui_ImplOpenGL3_Init("#version 130");
-
-
-	// Setup style for docking
-	ImGuiStyle& style = ImGui::GetStyle();
-	// Update and Render additional Platform Windows
-	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-	{
-		SDL_Window* backup_current_window = SDL_GL_GetCurrentWindow();
-		SDL_GLContext backup_current_context = SDL_GL_GetCurrentContext();
-		ImGui::UpdatePlatformWindows();
-		ImGui::RenderPlatformWindowsDefault();
-		SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
-	}
-
-
-
-	// ADD THIS LINE RIGHT AFTER:
-	ImPlot::CreateContext();  // Initialize ImPlot
-
-
-
-
-	// Create Python Process Manager and start scripts
-	PythonProcessManager pythonManager;
-
-	// Start Python scripts
-	if (!pythonManager.StartCLD101xServer()) {
-		logger->LogWarning("Failed to start CLD101x server script, will continue without it");
-	}
-	else {
-		logger->LogInfo("CLD101x server script started successfully");
-	}
-
-
-
-
-
-
-
-	// For FPS calculation
-	float frameTime = 0.0f;
-	float fps = 0.0f;
-	float fpsUpdateInterval = 0.5f; // Update FPS display every half second
-	float fpsTimer = 0.0f;
-	int frameCounter = 0;
-	Uint64 lastFrameTime = SDL_GetPerformanceCounter();
-
-
-
-	// Add camera window instance
-
-
-	//load motion config json
-	 // Create path to the JSON configuration file
-	std::string configPath = "motion_config.json";
-
-	// Create the configuration manager and load the file
-	MotionConfigManager configManager(configPath);
-	// Create the configuration editor
-	MotionConfigEditor configEditor(configManager);
-	logger->LogInfo("MotionConfigEditor initialized");
-
-	// Create the graph visualizer
-	GraphVisualizer graphVisualizer(configManager);
-	logger->LogInfo("GraphVisualizer initialized");
-
-	PIControllerManager piControllerManager(configManager);
-	// Connect to all enabled controllers
-	if (piControllerManager.ConnectAll()) {
-		logger->LogInfo("Successfully connected to all enabled PI controllers");
-	}
-	else {
-		logger->LogWarning("Failed to connect to some PI controllers");
-	}
-
-	// Create the ACS Controller Manager
-	ACSControllerManager acsControllerManager(configManager);
-	// Connect to all enabled controllers
-	if (acsControllerManager.ConnectAll()) {
-		logger->LogInfo("Successfully connected to all enabled ACS controllers");
-	}
-	else {
-		logger->LogWarning("Failed to connect to some ACS controllers");
-	}
-
-	// Create the Motion Control Layer
-	MotionControlLayer motionControlLayer(configManager, piControllerManager, acsControllerManager);
-	logger->LogInfo("MotionControlLayer initialized");
-
-	// Set up callbacks for the Motion Control Layer
-	motionControlLayer.SetPathCompletionCallback([&logger](bool success) {
-		if (success) {
-			logger->LogInfo("Path execution completed successfully");
-		}
-		else {
-			logger->LogWarning("Path execution failed or was cancelled");
-		}
-	});
-
-	// Create the Global Data Store if not already created
-	GlobalDataStore& dataStore = *GlobalDataStore::GetInstance();
-	logger->LogInfo("GlobalDataStore initialized");
-
-	// Create the Scanning UI
-// Create the Hexapod Optimization UI
-	ScanningUI hexapodScanningUI(piControllerManager, dataStore);
-	logger->LogInfo("Hexapod Scanning UI initialized");
-
-
-	// ADD THIS NEW CODE:
-		// Create the Optimized Scanning UI
-	OptimizedScanningUI optimizedScanningUI(piControllerManager, dataStore);
-	logger->LogInfo("OptimizedScanningUI initialized");
-
-	// Log the loaded devices
-	const auto& devices = configManager.GetAllDevices();
-	logger->LogInfo("Loaded " + std::to_string(devices.size()) + " devices");
-
-	for (const auto& [name, device] : devices) {
-		std::string deviceInfo = "Device: " + name +
-			" (ID: " + std::to_string(device.Id) +
-			", IP: " + device.IpAddress +
-			", Enabled: " + (device.IsEnabled ? "Yes" : "No") + ")";
-		logger->LogInfo(deviceInfo);
-
-		// Log positions for each device
-		auto positionsOpt = configManager.GetDevicePositions(name);
-		if (positionsOpt.has_value()) {
-			const auto& positions = positionsOpt.value().get();
-			logger->LogInfo("  Positions: " + std::to_string(positions.size()));
-
-			for (const auto& [posName, pos] : positions) {
-				std::string posInfo = "    " + posName + ": (" +
-					std::to_string(pos.x) + ", " +
-					std::to_string(pos.y) + ", " +
-					std::to_string(pos.z);
-
-				// Add rotation values if any are non-zero
-				if (pos.u != 0.0 || pos.v != 0.0 || pos.w != 0.0) {
-					posInfo += ", " + std::to_string(pos.u) + ", " +
-						std::to_string(pos.v) + ", " +
-						std::to_string(pos.w);
-				}
-
-				posInfo += ")";
-				logger->LogInfo(posInfo);
-			}
-		}
-	}
-
-
-	// Log the loaded graphs
-	const auto& graphs = configManager.GetAllGraphs();
-	logger->LogInfo("Loaded " + std::to_string(graphs.size()) + " graphs");
-
-	for (const auto& [name, graph] : graphs) {
-		logger->LogInfo("Graph: " + name);
-		logger->LogInfo("  Nodes: " + std::to_string(graph.Nodes.size()));
-		logger->LogInfo("  Edges: " + std::to_string(graph.Edges.size()));
-	}
-
-	// Log the settings
-	const auto& settings = configManager.GetSettings();
-	logger->LogInfo("Settings:");
-	logger->LogInfo("  Default Speed: " + std::to_string(settings.DefaultSpeed));
-	logger->LogInfo("  Default Acceleration: " + std::to_string(settings.DefaultAcceleration));
-	logger->LogInfo("  Log Level: " + settings.LogLevel);
-
-	logger->LogInfo("Configuration loaded successfully");
-
-	// Create our PylonCameraTest instance
-	PylonCameraTest pylonCameraTest;
-	// In CMakeProject2.cpp, add the following in the main loop
-
-
-	//initialize EZIIO
-	//TODOload jsonconfig.
-	//TODO ioconfigjson...
-// Create the EziIO manager
-	EziIOManager ioManager;
-
-	// Initialize the manager
-	if (!ioManager.initialize()) {
-		std::cerr << "Failed to initialize EziIO manager" << std::endl;
-		return 1;
-	}
-	// Initialize and load the IO configuration
-	IOConfigManager ioconfigManager;
-	if (!ioconfigManager.loadConfig("IOConfig.json")) {
-		std::cerr << "Failed to load IO configuration, using default settings" << std::endl;
-	}
-
-	// Setup devices from config
-	ioconfigManager.initializeIOManager(ioManager);
-	// Create our IO Control Panel for quick output control
-	IOControlPanel ioControlPanel(ioManager);
-	logger->LogInfo("IOControlPanel initialized for quick output control");
-	// Optionally load a custom config file
-// ioControlPanel.LoadConfiguration("custom_io_panel_config.json");
-
-
-
-	// 3. Create and configure the Pneumatic Manager
-	PneumaticManager pneumaticManager(ioManager);
-	if (!ioconfigManager.initializePneumaticManager(pneumaticManager)) {
-		logger->LogWarning("Failed to initialize pneumatic manager");
-	}
-	// 4. Initialize the pneumatic manager and start status polling
-	pneumaticManager.initialize();
-	pneumaticManager.startPolling(50); // 50ms polling interval
-	// 5. Create the pneumatic UI
-	PneumaticUI pneumaticUI(pneumaticManager);
-	logger->LogInfo("Pneumatic control system initialized");
-
-	// Optional: Register for state change notifications
-	pneumaticManager.setStateChangeCallback([&logger](const std::string& slideName, SlideState state) {
-		std::string stateStr;
-		switch (state) {
-		case SlideState::EXTENDED: stateStr = "Extended (Down)"; break;
-		case SlideState::RETRACTED: stateStr = "Retracted (Up)"; break;
-		case SlideState::MOVING: stateStr = "Moving"; break;
-		case SlideState::P_ERROR: stateStr = "ERROR"; break;
-		default: stateStr = "Unknown";
-		}
-		logger->LogInfo("Pneumatic slide '" + slideName + "' changed state to: " + stateStr);
-	});
-
-
-	// Connect to all devices
-	if (!ioManager.connectAll()) {
-		std::cerr << "Failed to connect to all devices" << std::endl;
-		// Continue anyway
-	}
-	// Start the polling thread - 100ms refresh rate
-	ioManager.startPolling(100);
-	std::cout << "Status polling started in background thread" << std::endl;
-
-	// Create the EziIO UI
-	EziIO_UI ioUI(ioManager);
-	//TODO UI take ioconfigjson information about pin name and show on the status table.
-
-	// Set the config manager to enable named pins in the UI
-	ioUI.setConfigManager(&ioconfigManager);
-	if (ioUI.IsVisible())
-	{
-		ioUI.ToggleWindow();  // or similar method to hide the window
-		logger->LogInfo("EziIO UI initialized");
-	}
-
-
-
-	// In the main function, after initializing the ClientManager:
-// Create the DataClientManager with the config file path
-	DataClientManager dataClientManager("DataServerConfig.json");
-	logger->LogInfo("DataClientManager initialized");
-	dataClientManager.ConnectAutoClients();
-	dataClientManager.ToggleWindow();
-
-
-	// Create the ProductConfigManager instance
-	ProductConfigManager productConfigManager(configManager);
-	productConfigManager.ToggleWindow(); //default is oopen, make it close
-
-	// Create the CLD101x manager
-	CLD101xManager cld101xManager;
-	logger->LogInfo("CLD101xManager initialized");
-	// Create the CLD101xOperations instance
-	CLD101xOperations laserOps(cld101xManager);
-
-	logger->LogInfo("CLD101xOperations initialized");
-	// Initialize the manager (it will create a default client)
-	cld101xManager.Initialize();
-
-	// Later in the initialization section:
-	GlobalJogPanel globalJogPanel(configManager, piControllerManager, acsControllerManager);
-	logger->LogInfo("GlobalJogPanel initialized");
-
-
-
-	// Then in the initialization section, add:
-
-// Create a DataChartManager with the config file path
-	DataChartManager dataChartManager("data_display_config.json");
-	dataChartManager.ToggleWindow(); //default is close, make it close
-
-
-	// Update the MachineOperations construction to include the laser operations:
-	MachineOperations machineOps(
-		motionControlLayer,
-		piControllerManager,
-		ioManager,
-		pneumaticManager,
-		&laserOps,  // Pass the laser operations object
-		&pylonCameraTest
-	);
-
-	InitializationWindow initWindow(machineOps);
-
-	// Set up camera exposure logging callback
-	if (machineOps.GetCameraExposureManager()) {
-		machineOps.GetCameraExposureManager()->SetSettingsAppliedCallback(
-			[](const std::string& nodeId, const CameraExposureSettings& settings) {
-			std::cout << "Camera exposure updated for node " << nodeId << ":" << std::endl;
-			std::cout << "  - Exposure Time: " << settings.exposure_time << " μs" << std::endl;
-			std::cout << "  - Gain: " << settings.gain << " dB" << std::endl;
-			std::cout << "  - Auto Exposure: " << (settings.exposure_auto ? "On" : "Off") << std::endl;
-			std::cout << "  - Auto Gain: " << (settings.gain_auto ? "On" : "Off") << std::endl;
-			if (!settings.description.empty()) {
-				std::cout << "  - Description: " << settings.description << std::endl;
-			}
-		});
-
-		logger->LogInfo("Camera exposure integration configured");
-	}
-	// Create the camera exposure test UI
-	CameraExposureTestUI cameraExposureTestUI(machineOps);
-	logger->LogInfo("CameraExposureTestUI initialized");
-
-
-
-
-
-	ProcessControlPanel processControlPanel(machineOps);
-	logger->LogInfo("ProcessControlPanel initialized");
-
-
-	// Create the script print viewer
-	ScriptPrintViewer scriptPrintViewer;
-	logger->LogInfo("ScriptPrintViewer initialized");
-
-	ScriptEditorUI scriptEditor(machineOps, &scriptPrintViewer);
-	// Create the MotionGraphic instance after all dependencies are initialized
-	MotionGraphic motionGraphic(configManager, motionControlLayer, machineOps);
-	logger->LogInfo("MotionGraphic initialized");
-	// Add these lines:
-	ScriptRunner scriptRunner(machineOps, &scriptPrintViewer);
-	scriptRunner.ToggleWindow();
-	logger->LogInfo("ScriptRunner initialized");
-
-	// Create the vertical toolbar
-	auto toolbarVertical = std::make_unique<VerticalToolbarMenu>();
-	toolbarVertical->SetWidth(200); // Set toolbar width
-
-	// Initialize state tracking with your preferred config file path
-	toolbarVertical->InitializeStateTracking("toolbar_state.json");
-
-	// Create categories
-	auto motorsCategory = toolbarVertical->CreateCategory("Motors");
-	auto manualCategory = toolbarVertical->CreateCategory("Manual");
-	auto dataCategory = toolbarVertical->CreateCategory("Data");
-	auto productsCategory = toolbarVertical->CreateCategory("Products");
-	auto miscCategory = toolbarVertical->CreateCategory("General");
-
-	// Add direct access components to root level
-	toolbarVertical->AddReference(CreateHierarchicalUI(processControlPanel, "Process Control"));
-	toolbarVertical->AddReference(CreateHierarchicalUI(hexapodScanningUI, "Scanning V1"));
-	// ADD THIS LINE:
-	toolbarVertical->AddReference(CreateHierarchicalUI(optimizedScanningUI, "Scanning V2 (test)"));
-
-	toolbarVertical->AddReference(CreateHierarchicalUI(globalJogPanel, "Global Jog Panel"));
-	toolbarVertical->AddReference(CreatePylonCameraAdapter(pylonCameraTest, "Top Camera"));
-
-	// Add components to Motors category
-	// Now using the renamed hierarchical adapter functions with unique names
-	toolbarVertical->AddReferenceToCategory("Motors", CreateHierarchicalPIControllerAdapter(piControllerManager, "PI"));
-	toolbarVertical->AddReferenceToCategory("Motors", CreateHierarchicalACSControllerAdapter(acsControllerManager, "Gantry"));
-	toolbarVertical->AddReferenceToCategory("Motors", CreateHierarchicalMotionControlAdapter(motionControlLayer, "Motion Control"));
-
-	// Add components to Manual category
-	toolbarVertical->AddReferenceToCategory("Manual", CreateHierarchicalUI(ioUI, "IO Control"));
-	toolbarVertical->AddReferenceToCategory("Manual", CreateHierarchicalUI(pneumaticUI, "Pneumatic"));
-	toolbarVertical->AddReferenceToCategory("Manual", CreateHierarchicalUI(ioControlPanel, "IO Quick Control"));
-
-	// Add components to Data category
-	toolbarVertical->AddReferenceToCategory("Data", CreateHierarchicalUI(dataChartManager, "Data Chart"));
-	toolbarVertical->AddReferenceToCategory("Data", CreateHierarchicalUI(dataClientManager, "Data TCP/IP"));
-
-	// Add components to Products category
-	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(productConfigManager, "Products Config"));
-	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(configEditor, "Config Editor"));
-	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(graphVisualizer, "Graph Visualizer"));
-
-	// Add remaining components to the misc category
-	toolbarVertical->AddReferenceToCategory("General", CreateHierarchicalUI(cld101xManager, "Laser TEC Cntrl"));
-	// In your VerticalToolbarMenu setup:
-	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(scriptEditor, "Script Editor"));
-	// Add this right after it:
-	toolbarVertical->AddReferenceToCategory("Products", CreateScriptRunnerAdapter(scriptRunner, "Script Runner"));
-	// Add to the toolbar setup
-	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(scriptPrintViewer, "Script Output"));
-	// Add the MotionGraphic to your vertical toolbar
-	toolbarVertical->AddReferenceToCategory("Products", CreateHierarchicalUI(motionGraphic, "Motion Graphic"));
-
-	if (machineOps.GetCameraExposureManager()) {
-		toolbarVertical->AddReferenceToCategory("Products",
-			CreateHierarchicalUI(*machineOps.GetCameraExposureManager(), "Camera Exposure"));
-	}
-	// Add it to the vertical toolbar using the correct adapter
-	toolbarVertical->AddReferenceToCategory("Products",
-		CreateCameraExposureTestUIAdapter(cameraExposureTestUI, "Camera Testing"));
-
-	// Log successful initialization
-	logger->LogInfo("VerticalToolbarMenu initialized with " +
-		std::to_string(toolbarVertical->GetComponentCount()) +
-		" components");
-
-	// In your main render loop:
-	// toolbarVertical->RenderUI();
-
-
-
-
-
-
-// Main loop
-	bool done = false;
-	bool cameraDisconnectedWarningShown = false;  // To track if we've shown a notification
-	while (!done)
-	{
-		// Poll and handle events
-		SDL_Event event;
-		while (SDL_PollEvent(&event))
-		{
-			ImGui_ImplSDL2_ProcessEvent(&event);
-			if (event.type == SDL_QUIT)
-				done = true;
-			if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(window))
-				done = true;
-
-			//process key events
-			if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) {
-				globalJogPanel.ProcessKeyInput(
-					event.key.keysym.sym,
-					event.type == SDL_KEYDOWN
-				);
-			}
-		}
-
-
-		// Calculate delta time and FPS
-		Uint64 currentFrameTime = SDL_GetPerformanceCounter();
-		float deltaTime = (currentFrameTime - lastFrameTime) / (float)SDL_GetPerformanceFrequency();
-		lastFrameTime = currentFrameTime;
-
-		// Update frame counter
-		frameCounter++;
-		fpsTimer += deltaTime;
-
-		// Update FPS calculation every update interval
-		if (fpsTimer >= fpsUpdateInterval) {
-			fps = frameCounter / fpsTimer;
-			frameCounter = 0;
-			fpsTimer = 0;
-		}
-
-
-
-
-		// Start the Dear ImGui frame
-		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplSDL2_NewFrame();
-		ImGui::NewFrame();
-		// Create dockspace
-		ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);
-
-		RenderFPSoverlay(fps);
-
-		RenderMinimizeExitButtons(window, done);
-
-
-
-		// Corner parameter: 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right
-		RenderClockOverlay(3);
-		RenderDigitalDisplaySI("GPIB-Current");
-		// Render logger UI
-		logger->RenderUI();
-
-		toolbarVertical->RenderUI();
-
-		// Render motion configuration editor UI
-		configEditor.RenderUI();
-		graphVisualizer.RenderUI();
-
-
-
-		//PI hexapod
-		//controller.RenderUI();
-		piControllerManager.RenderUI();
-		//piAnalogManager.RenderUI();
-
-		// Add this to render each controller's individual UI window
-		// This is necessary because they won't render automatically
-		for (const auto& [name, device] : configManager.GetAllDevices()) {
-			// Check if it's a PI device
-			if (device.Port == 50000 && device.IsEnabled) {
-				PIController* controller = piControllerManager.GetController(name);
-				if (controller && controller->IsConnected()) {
-					controller->RenderUI();
-				}
-			}
-		}
-
-		// Render ACS controller manager UI
-		acsControllerManager.RenderUI();
-
-		// Add this to render each controller's individual UI window
-		// This is necessary because they won't render automatically
-		for (const auto& [name, device] : configManager.GetAllDevices()) {
-			// Check if it's an ACS device (non-PI port)
-			if (device.Port != 50000 && device.IsEnabled) {
-				ACSController* controller = acsControllerManager.GetController(name);
-				if (controller && controller->IsConnected()) {
-					controller->RenderUI();
-				}
-			}
-		}
-
-		// Render the Motion Control Layer UI
-		if (motionControlLayer.IsVisible()) {
-			motionControlLayer.RenderUI();
-		}
-
-
-		// Render Pylon Camera Test UI
-		//pylonCameraTest.RenderUI();
-
-		pylonCameraTest.RenderUIWithMachineOps(&machineOps);
-
-		// Render the EziIO UI
-		ioUI.RenderUI();
-		// In the main rendering loop
-		pneumaticUI.RenderUI();
-
-		// In the main loop, add this before your SDL_GL_SwapWindow(window) call:
-// Update the DataClientManager
-		dataClientManager.UpdateClients();
-		// Render DataClientManager UI
-		dataClientManager.RenderUI();
-
-		//product config manager
-		productConfigManager.RenderUI();
-		// Render IO Control Panel UI
-		ioControlPanel.RenderUI();
-		// Render CLD101xManager UI
-		cld101xManager.RenderUI();
-
-
-
-		// In your main loop where you render UIs:
-		globalJogPanel.RenderUI();
-
-
-		//RenderSimpleChart();
-
-		dataChartManager.Update();
-		dataChartManager.RenderUI();
-		//RenderValueDisplay();
-		hexapodScanningUI.RenderUI();
-
-		// Render our UI windows
-		initWindow.RenderUI();
-		//hexRightWindow.RenderUI();
-		//hexControllerWindow.RenderUI();
-		processControlPanel.RenderUI();
-
-
-		scriptEditor.RenderUI();
-		motionGraphic.RenderUI();
-		// Add this right after it:
-		scriptRunner.RenderUI();
-		scriptPrintViewer.RenderUI();
-		machineOps.GetCameraExposureManager()->RenderUI();
-
-
-
-
-		// Render the new camera exposure test UI
-		cameraExposureTestUI.RenderUI();
-
-		optimizedScanningUI.RenderUI();
-
-
-
-		// Rendering
-		ImGui::Render();
-		glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
-		glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
-		glClear(GL_COLOR_BUFFER_BIT);
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-		// Update and Render additional Platform Windows
-		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-		{
-			SDL_Window* backup_current_window = SDL_GL_GetCurrentWindow();
-			SDL_GLContext backup_current_context = SDL_GL_GetCurrentContext();
-			ImGui::UpdatePlatformWindows();
-			ImGui::RenderPlatformWindowsDefault();
-			SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
-		}
-
-		SDL_GL_SwapWindow(window);
-
-
-
-
-
-	}
-	// When exit is triggered:
-	logger->Log("Application shutting down");
-
-	logger->LogInfo("Stopping Camera Exposure Test UI...");
-
-
-	piControllerManager.~PIControllerManager();
-
-	// Stop Python scripts before other cleanup
-	logger->LogInfo("Stopping Python processes...");
-	pythonManager.StopAllProcesses();
-
-	logger->LogInfo("Wait 2 sec for python process to close.. (if they are closing)");
-	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-	logger->LogInfo("deconstruct MachineOperations..");
-	machineOps.~MachineOperations();
-	std::this_thread::sleep_for(std::chrono::milliseconds(500));
-	pylonCameraTest.GetCamera().StopGrabbing();
-	std::this_thread::sleep_for(std::chrono::milliseconds(3000));
-	pylonCameraTest.GetCamera().Disconnect();
-	if (pylonCameraTest.GetCamera().IsCameraDeviceRemoved())
-	{
-		std::cout << "Camera device removed" << std::endl;
-	}
-	else {
-		std::cout << "Camera device not removed" << std::endl;
-	}
-
-	// Disconnect all CLD101x clients
-	cld101xManager.DisconnectAll();
-
-
-	try
-	{
-		//piAnalogManager.ToggleWindow();
-		//piAnalogManager.stopPolling();
-
-		//// Clean up reader resources
-		//piAnalogManager.cleanupReaders();
-
-		// Clear the analog manager first (it depends on controller managers)
-				// Give a short delay to ensure all background operations complete
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-		// Or delete piAnalogManager; // If using raw pointer
-		//disconnect controller
-		piControllerManager.DisconnectAll();
-		acsControllerManager.DisconnectAll();
-
-
-
-	}
-	catch (const std::exception& e) {
-		std::cout << "Exception during shutdown: " << e.what() << std::endl;
-	}
-	catch (...) {
-		std::cout << "Unknown exception during shutdown" << std::endl;
-	}
-
-
-
-	// Before application exit
-	pneumaticManager.stopPolling();
-	// Stop the polling thread
-	ioManager.stopPolling();
-
-	// Disconnect from all devices
-	ioManager.disconnectAll();
-
-
-
-
-
-
-	// Cleanup - keep outside try-catch to ensure it always happens
-	ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplSDL2_Shutdown();
-	ImGui::DestroyContext();
-	// ADD THIS LINE RIGHT BEFORE:
-	ImPlot::DestroyContext();  // Clean up ImPlot
-	SDL_GL_DeleteContext(gl_context);
-	SDL_DestroyWindow(window);
-	SDL_Quit();
-
-
-
-	return 0;
+  // Initialize the module configuration system
+  ModuleConfig moduleConfig("module_config.ini");
+  moduleConfig.printConfig(); // Print current configuration to console
+
+  // Get the logger instance
+  Logger* logger = Logger::GetInstance();
+  logger->Log("Application started with module configuration");
+
+  // Setup SDL (always enabled)
+  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
+  {
+    printf("Error: %s\n", SDL_GetError());
+    return -1;
+  }
+
+  // Setup SDL window (always enabled)
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+  SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+  SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+
+  SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
+    SDL_WINDOW_ALLOW_HIGHDPI);
+
+  SDL_Window* window = SDL_CreateWindow(Version::getWindowTitle().c_str(),
+    SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    1280, 720,
+    window_flags);
+  if (window == nullptr)
+  {
+    printf("Error creating window: %s\n", SDL_GetError());
+    SDL_Quit();
+    return -1;
+  }
+
+  // Set application icon
+  SDL_Surface* iconSurface = SDL_LoadBMP("resources/icon.bmp");
+  if (iconSurface) {
+    SDL_SetWindowIcon(window, iconSurface);
+    SDL_FreeSurface(iconSurface);
+  }
+
+  SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+  SDL_GL_MakeCurrent(window, gl_context);
+  SDL_GL_SetSwapInterval(1);
+
+  // Setup Dear ImGui context (always enabled)
+  IMGUI_CHECKVERSION();
+  CheckImGuiVersion();
+  ImGui::CreateContext();
+  ImGuiIO& io = ImGui::GetIO(); (void)io;
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+  io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+  ImGui::StyleColorsLight();
+  ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
+  ImGui_ImplOpenGL3_Init("#version 130");
+
+  ImGuiStyle& style = ImGui::GetStyle();
+  if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+  {
+    SDL_Window* backup_current_window = SDL_GL_GetCurrentWindow();
+    SDL_GLContext backup_current_context = SDL_GL_GetCurrentContext();
+    ImGui::UpdatePlatformWindows();
+    ImGui::RenderPlatformWindowsDefault();
+    SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
+  }
+
+  ImPlot::CreateContext();
+
+  // Initialize Python Process Manager (conditionally)
+  std::unique_ptr<PythonProcessManager> pythonManager;
+  if (moduleConfig.isEnabled("PYTHON_PROCESS_MANAGER")) {
+    pythonManager = std::make_unique<PythonProcessManager>();
+
+    if (!pythonManager->StartCLD101xServer()) {
+      logger->LogWarning("Failed to start CLD101x server script, will continue without it");
+    }
+    else {
+      logger->LogInfo("CLD101x server script started successfully");
+    }
+  }
+  else {
+    logger->LogInfo("Python Process Manager disabled in configuration");
+  }
+
+  // FPS calculation variables (always enabled)
+  float frameTime = 0.0f;
+  float fps = 0.0f;
+  float fpsUpdateInterval = 0.5f;
+  float fpsTimer = 0.0f;
+  int frameCounter = 0;
+  Uint64 lastFrameTime = SDL_GetPerformanceCounter();
+
+  // Motion Configuration (always needed for other modules)
+  std::string configPath = "motion_config.json";
+  MotionConfigManager configManager(configPath);
+
+  // Motion Configuration Editor (conditional)
+  std::unique_ptr<MotionConfigEditor> configEditor;
+  if (moduleConfig.isEnabled("CONFIG_EDITOR")) {
+    configEditor = std::make_unique<MotionConfigEditor>(configManager);
+    logger->LogInfo("MotionConfigEditor initialized");
+  }
+
+  // Graph Visualizer (conditional)
+  std::unique_ptr<GraphVisualizer> graphVisualizer;
+  if (moduleConfig.isEnabled("GRAPH_VISUALIZER")) {
+    graphVisualizer = std::make_unique<GraphVisualizer>(configManager);
+    logger->LogInfo("GraphVisualizer initialized");
+  }
+
+  // PI Controller Manager (conditional)
+  std::unique_ptr<PIControllerManager> piControllerManager;
+  if (moduleConfig.isEnabled("PI_CONTROLLERS")) {
+    piControllerManager = std::make_unique<PIControllerManager>(configManager);
+    if (piControllerManager->ConnectAll()) {
+      logger->LogInfo("Successfully connected to all enabled PI controllers");
+    }
+    else {
+      logger->LogWarning("Failed to connect to some PI controllers");
+    }
+  }
+
+  // ACS Controller Manager (conditional)
+  std::unique_ptr<ACSControllerManager> acsControllerManager;
+  if (moduleConfig.isEnabled("ACS_CONTROLLERS")) {
+    acsControllerManager = std::make_unique<ACSControllerManager>(configManager);
+    if (acsControllerManager->ConnectAll()) {
+      logger->LogInfo("Successfully connected to all enabled ACS controllers");
+    }
+    else {
+      logger->LogWarning("Failed to connect to some ACS controllers");
+    }
+  }
+
+  // Motion Control Layer (conditional)
+  std::unique_ptr<MotionControlLayer> motionControlLayer;
+  if (moduleConfig.isEnabled("MOTION_CONTROL_LAYER") && piControllerManager && acsControllerManager) {
+    motionControlLayer = std::make_unique<MotionControlLayer>(
+      configManager, *piControllerManager, *acsControllerManager);
+
+    motionControlLayer->SetPathCompletionCallback([&logger](bool success) {
+      if (success) {
+        logger->LogInfo("Path execution completed successfully");
+      }
+      else {
+        logger->LogWarning("Path execution failed or was cancelled");
+      }
+    });
+    logger->LogInfo("MotionControlLayer initialized");
+  }
+
+  // Global Data Store (conditional)
+  GlobalDataStore* dataStore = nullptr;
+  if (moduleConfig.isEnabled("GLOBAL_DATA_STORE")) {
+    dataStore = GlobalDataStore::GetInstance();
+    logger->LogInfo("GlobalDataStore initialized");
+  }
+
+  // Scanning UIs (conditional)
+  std::unique_ptr<ScanningUI> hexapodScanningUI;
+  std::unique_ptr<OptimizedScanningUI> optimizedScanningUI;
+  if (moduleConfig.isEnabled("SCANNING_UI_V1") && piControllerManager && dataStore) {
+    hexapodScanningUI = std::make_unique<ScanningUI>(*piControllerManager, *dataStore);
+    logger->LogInfo("Hexapod Scanning UI initialized");
+  }
+  if (moduleConfig.isEnabled("OPTIMIZED_SCANNING_UI") && piControllerManager && dataStore) {
+    optimizedScanningUI = std::make_unique<OptimizedScanningUI>(*piControllerManager, *dataStore);
+    logger->LogInfo("OptimizedScanningUI initialized");
+  }
+
+  // Pylon Camera (conditional)
+  std::unique_ptr<PylonCameraTest> pylonCameraTest;
+  if (moduleConfig.isEnabled("PYLON_CAMERA")) {
+    pylonCameraTest = std::make_unique<PylonCameraTest>();
+    logger->LogInfo("PylonCameraTest initialized");
+  }
+
+  // EziIO Manager (conditional)
+  std::unique_ptr<EziIOManager> ioManager;
+  std::unique_ptr<IOConfigManager> ioconfigManager;
+  std::unique_ptr<IOControlPanel> ioControlPanel;
+  if (moduleConfig.isEnabled("EZIIO_MANAGER")) {
+    ioManager = std::make_unique<EziIOManager>();
+    if (!ioManager->initialize()) {
+      logger->LogError("Failed to initialize EziIO manager");
+    }
+    else {
+      ioconfigManager = std::make_unique<IOConfigManager>();
+      if (!ioconfigManager->loadConfig("IOConfig.json")) {
+        logger->LogWarning("Failed to load IO configuration, using default settings");
+      }
+      ioconfigManager->initializeIOManager(*ioManager);
+
+      if (moduleConfig.isEnabled("IO_CONTROL_PANEL")) {
+        ioControlPanel = std::make_unique<IOControlPanel>(*ioManager);
+        logger->LogInfo("IOControlPanel initialized for quick output control");
+      }
+
+      if (!ioManager->connectAll()) {
+        logger->LogWarning("Failed to connect to all IO devices");
+      }
+      ioManager->startPolling(100);
+      logger->LogInfo("EziIO system initialized");
+    }
+  }
+
+  // Pneumatic System (conditional)
+  std::unique_ptr<PneumaticManager> pneumaticManager;
+  std::unique_ptr<PneumaticUI> pneumaticUI;
+  if (moduleConfig.isEnabled("PNEUMATIC_SYSTEM") && ioManager && ioconfigManager) {
+    pneumaticManager = std::make_unique<PneumaticManager>(*ioManager);
+    if (!ioconfigManager->initializePneumaticManager(*pneumaticManager)) {
+      logger->LogWarning("Failed to initialize pneumatic manager");
+    }
+    else {
+      pneumaticManager->initialize();
+      pneumaticManager->startPolling(50);
+      pneumaticUI = std::make_unique<PneumaticUI>(*pneumaticManager);
+
+      pneumaticManager->setStateChangeCallback([&logger](const std::string& slideName, SlideState state) {
+        std::string stateStr;
+        switch (state) {
+        case SlideState::EXTENDED: stateStr = "Extended (Down)"; break;
+        case SlideState::RETRACTED: stateStr = "Retracted (Up)"; break;
+        case SlideState::MOVING: stateStr = "Moving"; break;
+        case SlideState::P_ERROR: stateStr = "ERROR"; break;
+        default: stateStr = "Unknown";
+        }
+        logger->LogInfo("Pneumatic slide '" + slideName + "' changed state to: " + stateStr);
+      });
+      logger->LogInfo("Pneumatic control system initialized");
+    }
+  }
+
+  // Data Systems (conditional)
+  std::unique_ptr<DataClientManager> dataClientManager;
+  std::unique_ptr<DataChartManager> dataChartManager;
+  if (moduleConfig.isEnabled("DATA_CLIENT_MANAGER")) {
+    dataClientManager = std::make_unique<DataClientManager>("DataServerConfig.json");
+    dataClientManager->ConnectAutoClients();
+    dataClientManager->ToggleWindow();
+    logger->LogInfo("DataClientManager initialized");
+  }
+  if (moduleConfig.isEnabled("DATA_CHART_MANAGER")) {
+    dataChartManager = std::make_unique<DataChartManager>("data_display_config.json");
+    dataChartManager->ToggleWindow();
+    logger->LogInfo("DataChartManager initialized");
+  }
+
+  // Product Config Manager (conditional)
+  std::unique_ptr<ProductConfigManager> productConfigManager;
+  if (moduleConfig.isEnabled("PRODUCT_CONFIG_MANAGER")) {
+    productConfigManager = std::make_unique<ProductConfigManager>(configManager);
+    productConfigManager->ToggleWindow();
+    logger->LogInfo("ProductConfigManager initialized");
+  }
+
+  // CLD101x System (conditional)
+  std::unique_ptr<CLD101xManager> cld101xManager;
+  std::unique_ptr<CLD101xOperations> laserOps;
+  if (moduleConfig.isEnabled("CLD101X_MANAGER")) {
+    cld101xManager = std::make_unique<CLD101xManager>();
+    cld101xManager->Initialize();
+    laserOps = std::make_unique<CLD101xOperations>(*cld101xManager);
+    logger->LogInfo("CLD101x system initialized");
+  }
+
+  // Global Jog Panel (conditional)
+  std::unique_ptr<GlobalJogPanel> globalJogPanel;
+  if (moduleConfig.isEnabled("GLOBAL_JOG_PANEL") && piControllerManager && acsControllerManager) {
+    globalJogPanel = std::make_unique<GlobalJogPanel>(
+      configManager, *piControllerManager, *acsControllerManager);
+    logger->LogInfo("GlobalJogPanel initialized");
+  }
+
+  // Machine Operations (conditional - needs multiple dependencies)
+  std::unique_ptr<MachineOperations> machineOps;
+  if (motionControlLayer && piControllerManager &&
+    (ioManager || !moduleConfig.isEnabled("EZIIO_MANAGER")) &&
+    (pneumaticManager || !moduleConfig.isEnabled("PNEUMATIC_SYSTEM"))) {
+
+    machineOps = std::make_unique<MachineOperations>(
+      *motionControlLayer,
+      *piControllerManager,
+      ioManager ? *ioManager : *(EziIOManager*)nullptr, // Handle null case properly
+      pneumaticManager ? *pneumaticManager : *(PneumaticManager*)nullptr,
+      laserOps.get(),
+      pylonCameraTest.get()
+    );
+    logger->LogInfo("MachineOperations initialized");
+  }
+
+  // Process Control Panel (conditional)
+  std::unique_ptr<ProcessControlPanel> processControlPanel;
+  if (moduleConfig.isEnabled("PROCESS_CONTROL_PANEL") && machineOps) {
+    processControlPanel = std::make_unique<ProcessControlPanel>(*machineOps);
+    logger->LogInfo("ProcessControlPanel initialized");
+  }
+
+  // Initialization Window (conditional)
+  std::unique_ptr<InitializationWindow> initWindow;
+  if (moduleConfig.isEnabled("INITIALIZATION_WINDOW") && machineOps) {
+    initWindow = std::make_unique<InitializationWindow>(*machineOps);
+    logger->LogInfo("InitializationWindow initialized");
+  }
+
+  // Script System (conditional)
+  std::unique_ptr<ScriptPrintViewer> scriptPrintViewer;
+  std::unique_ptr<ScriptEditorUI> scriptEditor;
+  std::unique_ptr<ScriptRunner> scriptRunner;
+  if (moduleConfig.isEnabled("SCRIPT_PRINT_VIEWER")) {
+    scriptPrintViewer = std::make_unique<ScriptPrintViewer>();
+    logger->LogInfo("ScriptPrintViewer initialized");
+  }
+  if (moduleConfig.isEnabled("SCRIPT_EDITOR") && machineOps && scriptPrintViewer) {
+    scriptEditor = std::make_unique<ScriptEditorUI>(*machineOps, scriptPrintViewer.get());
+    logger->LogInfo("ScriptEditorUI initialized");
+  }
+  if (moduleConfig.isEnabled("SCRIPT_RUNNER") && machineOps && scriptPrintViewer) {
+    scriptRunner = std::make_unique<ScriptRunner>(*machineOps, scriptPrintViewer.get());
+    scriptRunner->ToggleWindow();
+    logger->LogInfo("ScriptRunner initialized");
+  }
+
+  // Motion Graphic (conditional)
+  std::unique_ptr<MotionGraphic> motionGraphic;
+  if (moduleConfig.isEnabled("MOTION_GRAPHIC") && motionControlLayer && machineOps) {
+    motionGraphic = std::make_unique<MotionGraphic>(configManager, *motionControlLayer, *machineOps);
+    logger->LogInfo("MotionGraphic initialized");
+  }
+
+  // Camera Exposure Test UI (conditional)
+  std::unique_ptr<CameraExposureTestUI> cameraExposureTestUI;
+  if (moduleConfig.isEnabled("CAMERA_EXPOSURE_TEST") && machineOps) {
+    cameraExposureTestUI = std::make_unique<CameraExposureTestUI>(*machineOps);
+    logger->LogInfo("CameraExposureTestUI initialized");
+  }
+
+  // Vertical Toolbar (conditional)
+  std::unique_ptr<VerticalToolbarMenu> toolbarVertical;
+  if (moduleConfig.isEnabled("VERTICAL_TOOLBAR")) {
+    toolbarVertical = std::make_unique<VerticalToolbarMenu>();
+    toolbarVertical->SetWidth(200);
+    toolbarVertical->InitializeStateTracking("toolbar_state.json");
+
+    // Create categories
+    auto motorsCategory = toolbarVertical->CreateCategory("Motors");
+    auto manualCategory = toolbarVertical->CreateCategory("Manual");
+    auto dataCategory = toolbarVertical->CreateCategory("Data");
+    auto productsCategory = toolbarVertical->CreateCategory("Products");
+    auto miscCategory = toolbarVertical->CreateCategory("General");
+
+    // Add components conditionally based on what's enabled
+    if (processControlPanel) {
+      toolbarVertical->AddReference(CreateHierarchicalUI(*processControlPanel, "Process Control"));
+    }
+    if (hexapodScanningUI) {
+      toolbarVertical->AddReference(CreateHierarchicalUI(*hexapodScanningUI, "Scanning V1"));
+    }
+    if (optimizedScanningUI) {
+      toolbarVertical->AddReference(CreateHierarchicalUI(*optimizedScanningUI, "Scanning V2 (test)"));
+    }
+    if (globalJogPanel) {
+      toolbarVertical->AddReference(CreateHierarchicalUI(*globalJogPanel, "Global Jog Panel"));
+    }
+    if (pylonCameraTest) {
+      toolbarVertical->AddReference(CreatePylonCameraAdapter(*pylonCameraTest, "Top Camera"));
+    }
+
+    // Add components to Motors category
+    if (piControllerManager) {
+      toolbarVertical->AddReferenceToCategory("Motors",
+        CreateHierarchicalPIControllerAdapter(*piControllerManager, "PI"));
+    }
+    if (acsControllerManager) {
+      toolbarVertical->AddReferenceToCategory("Motors",
+        CreateHierarchicalACSControllerAdapter(*acsControllerManager, "Gantry"));
+    }
+    if (motionControlLayer) {
+      toolbarVertical->AddReferenceToCategory("Motors",
+        CreateHierarchicalMotionControlAdapter(*motionControlLayer, "Motion Control"));
+    }
+
+    // Add components to Manual category
+    if (ioManager) {
+      // Create EziIO_UI for the toolbar
+      auto ioUI = std::make_unique<EziIO_UI>(*ioManager);
+      if (ioconfigManager) {
+        ioUI->setConfigManager(ioconfigManager.get());
+      }
+      toolbarVertical->AddReferenceToCategory("Manual",
+        CreateHierarchicalUI(*ioUI, "IO Control"));
+    }
+    if (pneumaticUI) {
+      toolbarVertical->AddReferenceToCategory("Manual",
+        CreateHierarchicalUI(*pneumaticUI, "Pneumatic"));
+    }
+    if (ioControlPanel) {
+      toolbarVertical->AddReferenceToCategory("Manual",
+        CreateHierarchicalUI(*ioControlPanel, "IO Quick Control"));
+    }
+
+    // Add components to Data category
+    if (dataChartManager) {
+      toolbarVertical->AddReferenceToCategory("Data",
+        CreateHierarchicalUI(*dataChartManager, "Data Chart"));
+    }
+    if (dataClientManager) {
+      toolbarVertical->AddReferenceToCategory("Data",
+        CreateHierarchicalUI(*dataClientManager, "Data TCP/IP"));
+    }
+
+    // Add components to Products category
+    if (productConfigManager) {
+      toolbarVertical->AddReferenceToCategory("Products",
+        CreateHierarchicalUI(*productConfigManager, "Products Config"));
+    }
+    if (configEditor) {
+      toolbarVertical->AddReferenceToCategory("Products",
+        CreateHierarchicalUI(*configEditor, "Config Editor"));
+    }
+    if (graphVisualizer) {
+      toolbarVertical->AddReferenceToCategory("Products",
+        CreateHierarchicalUI(*graphVisualizer, "Graph Visualizer"));
+    }
+    if (scriptEditor) {
+      toolbarVertical->AddReferenceToCategory("Products",
+        CreateHierarchicalUI(*scriptEditor, "Script Editor"));
+    }
+    if (scriptRunner) {
+      toolbarVertical->AddReferenceToCategory("Products",
+        CreateScriptRunnerAdapter(*scriptRunner, "Script Runner"));
+    }
+    if (scriptPrintViewer) {
+      toolbarVertical->AddReferenceToCategory("Products",
+        CreateHierarchicalUI(*scriptPrintViewer, "Script Output"));
+    }
+    if (motionGraphic) {
+      toolbarVertical->AddReferenceToCategory("Products",
+        CreateHierarchicalUI(*motionGraphic, "Motion Graphic"));
+    }
+    if (cameraExposureTestUI) {
+      toolbarVertical->AddReferenceToCategory("Products",
+        CreateCameraExposureTestUIAdapter(*cameraExposureTestUI, "Camera Testing"));
+    }
+
+    // Add components to General category
+    if (cld101xManager) {
+      toolbarVertical->AddReferenceToCategory("General",
+        CreateHierarchicalUI(*cld101xManager, "Laser TEC Cntrl"));
+    }
+
+    if (machineOps && machineOps->GetCameraExposureManager()) {
+      toolbarVertical->AddReferenceToCategory("Products",
+        CreateHierarchicalUI(*machineOps->GetCameraExposureManager(), "Camera Exposure"));
+    }
+
+    logger->LogInfo("VerticalToolbarMenu initialized with " +
+      std::to_string(toolbarVertical->GetComponentCount()) + " components");
+  }
+
+  // Main loop
+  bool done = false;
+  bool cameraDisconnectedWarningShown = false;
+
+  while (!done)
+  {
+    // Poll and handle events
+    SDL_Event event;
+    while (SDL_PollEvent(&event))
+    {
+      ImGui_ImplSDL2_ProcessEvent(&event);
+      if (event.type == SDL_QUIT)
+        done = true;
+      if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE &&
+        event.window.windowID == SDL_GetWindowID(window))
+        done = true;
+
+      // Process key events for global jog panel
+      if (globalJogPanel && (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)) {
+        globalJogPanel->ProcessKeyInput(
+          event.key.keysym.sym,
+          event.type == SDL_KEYDOWN
+        );
+      }
+    }
+
+    // Calculate delta time and FPS
+    Uint64 currentFrameTime = SDL_GetPerformanceCounter();
+    float deltaTime = (currentFrameTime - lastFrameTime) / (float)SDL_GetPerformanceFrequency();
+    lastFrameTime = currentFrameTime;
+
+    frameCounter++;
+    fpsTimer += deltaTime;
+
+    if (fpsTimer >= fpsUpdateInterval) {
+      fps = frameCounter / fpsTimer;
+      frameCounter = 0;
+      fpsTimer = 0;
+    }
+
+    // Start the Dear ImGui frame
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL2_NewFrame();
+    ImGui::NewFrame();
+
+    // Create dockspace
+    ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);
+
+    // Render module configuration UI
+    moduleConfig.renderConfigUI();
+
+    // Render overlays (conditional)
+    if (moduleConfig.isEnabled("FPS_OVERLAY")) {
+      RenderFPSoverlay(fps);
+    }
+    if (moduleConfig.isEnabled("MINIMIZE_EXIT_BUTTONS")) {
+      RenderMinimizeExitButtons(window, done);
+    }
+    if (moduleConfig.isEnabled("CLOCK_OVERLAY")) {
+      RenderClockOverlay(3);
+    }
+    if (moduleConfig.isEnabled("DIGITAL_DISPLAY") && dataStore) {
+      RenderDigitalDisplaySI("GPIB-Current");
+    }
+
+    // Render logger UI (always enabled)
+    logger->RenderUI();
+
+    // Render component UIs conditionally
+    if (toolbarVertical) {
+      toolbarVertical->RenderUI();
+    }
+
+    if (configEditor) {
+      configEditor->RenderUI();
+    }
+    if (graphVisualizer) {
+      graphVisualizer->RenderUI();
+    }
+
+    // Render PI controllers
+    if (piControllerManager) {
+      piControllerManager->RenderUI();
+      for (const auto& [name, device] : configManager.GetAllDevices()) {
+        if (device.Port == 50000 && device.IsEnabled) {
+          PIController* controller = piControllerManager->GetController(name);
+          if (controller && controller->IsConnected()) {
+            controller->RenderUI();
+          }
+        }
+      }
+    }
+
+    // Render ACS controllers
+    if (acsControllerManager) {
+      acsControllerManager->RenderUI();
+      for (const auto& [name, device] : configManager.GetAllDevices()) {
+        if (device.Port != 50000 && device.IsEnabled) {
+          ACSController* controller = acsControllerManager->GetController(name);
+          if (controller && controller->IsConnected()) {
+            controller->RenderUI();
+          }
+        }
+      }
+    }
+
+    // Render motion control layer
+    if (motionControlLayer && motionControlLayer->IsVisible()) {
+      motionControlLayer->RenderUI();
+    }
+
+    // Render camera
+    if (pylonCameraTest && machineOps) {
+      pylonCameraTest->RenderUIWithMachineOps(machineOps.get());
+    }
+
+    // Render IO systems
+    if (ioManager) {
+      // Create and render EziIO_UI if not already in toolbar
+      static std::unique_ptr<EziIO_UI> mainIoUI;
+      if (!mainIoUI) {
+        mainIoUI = std::make_unique<EziIO_UI>(*ioManager);
+        if (ioconfigManager) {
+          mainIoUI->setConfigManager(ioconfigManager.get());
+        }
+        if (mainIoUI->IsVisible()) {
+          mainIoUI->ToggleWindow(); // Hide by default
+        }
+      }
+      mainIoUI->RenderUI();
+    }
+
+    if (pneumaticUI) {
+      pneumaticUI->RenderUI();
+    }
+    if (ioControlPanel) {
+      ioControlPanel->RenderUI();
+    }
+
+    // Update and render data systems
+    if (dataClientManager) {
+      dataClientManager->UpdateClients();
+      dataClientManager->RenderUI();
+    }
+    if (dataChartManager) {
+      dataChartManager->Update();
+      dataChartManager->RenderUI();
+    }
+
+    // Render other components
+    if (productConfigManager) {
+      productConfigManager->RenderUI();
+    }
+    if (cld101xManager) {
+      cld101xManager->RenderUI();
+    }
+    if (globalJogPanel) {
+      globalJogPanel->RenderUI();
+    }
+    if (hexapodScanningUI) {
+      hexapodScanningUI->RenderUI();
+    }
+    if (optimizedScanningUI) {
+      optimizedScanningUI->RenderUI();
+    }
+
+    // Render process windows
+    if (initWindow) {
+      initWindow->RenderUI();
+    }
+    if (processControlPanel) {
+      processControlPanel->RenderUI();
+    }
+
+    // Render script system
+    if (scriptEditor) {
+      scriptEditor->RenderUI();
+    }
+    if (scriptRunner) {
+      scriptRunner->RenderUI();
+    }
+    if (scriptPrintViewer) {
+      scriptPrintViewer->RenderUI();
+    }
+    if (motionGraphic) {
+      motionGraphic->RenderUI();
+    }
+
+    // Render camera exposure system
+    if (machineOps && machineOps->GetCameraExposureManager()) {
+      machineOps->GetCameraExposureManager()->RenderUI();
+    }
+    if (cameraExposureTestUI) {
+      cameraExposureTestUI->RenderUI();
+    }
+
+    // Rendering
+    ImGui::Render();
+    glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+    glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+    // Update and Render additional Platform Windows
+    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+    {
+      SDL_Window* backup_current_window = SDL_GL_GetCurrentWindow();
+      SDL_GLContext backup_current_context = SDL_GL_GetCurrentContext();
+      ImGui::UpdatePlatformWindows();
+      ImGui::RenderPlatformWindowsDefault();
+      SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
+    }
+
+    SDL_GL_SwapWindow(window);
+  }
+
+  // Cleanup phase
+  logger->Log("Application shutting down");
+
+  // Stop Python scripts first
+  if (pythonManager) {
+    logger->LogInfo("Stopping Python processes...");
+    pythonManager->StopAllProcesses();
+    logger->LogInfo("Wait 2 sec for python process to close..");
+    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+  }
+
+  // Cleanup machine operations
+  if (machineOps) {
+    logger->LogInfo("Deconstructing MachineOperations..");
+    machineOps.reset();
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }
+
+  // Cleanup camera
+  if (pylonCameraTest) {
+    pylonCameraTest->GetCamera().StopGrabbing();
+    std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+    pylonCameraTest->GetCamera().Disconnect();
+  }
+
+  // Cleanup laser system
+  if (cld101xManager) {
+    cld101xManager->DisconnectAll();
+  }
+
+  // Cleanup controllers
+  try {
+    if (piControllerManager) {
+      piControllerManager->DisconnectAll();
+    }
+    if (acsControllerManager) {
+      acsControllerManager->DisconnectAll();
+    }
+  }
+  catch (const std::exception& e) {
+    std::cout << "Exception during controller shutdown: " << e.what() << std::endl;
+  }
+
+  // Cleanup pneumatic system
+  if (pneumaticManager) {
+    pneumaticManager->stopPolling();
+  }
+
+  // Cleanup IO system
+  if (ioManager) {
+    ioManager->stopPolling();
+    ioManager->disconnectAll();
+  }
+
+  // Final ImGui cleanup
+  ImGui_ImplOpenGL3_Shutdown();
+  ImGui_ImplSDL2_Shutdown();
+  ImGui::DestroyContext();
+  ImPlot::DestroyContext();
+
+  SDL_GL_DeleteContext(gl_context);
+  SDL_DestroyWindow(window);
+  SDL_Quit();
+
+  return 0;
 }
-
 
 void RenderValueDisplay() {
 	// Access values from the global store
