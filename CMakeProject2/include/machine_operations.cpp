@@ -1469,34 +1469,34 @@ bool MachineOperations::GetDeviceCurrentPosition(const std::string& deviceName, 
   return true;
 }
 
-// Calculate the distance between two positions
-double MachineOperations::GetDistanceBetweenPositions(const PositionStruct& pos1,
-  const PositionStruct& pos2,
-  bool includeRotation) {
-  // Calculate Euclidean distance for XYZ
-  double dx = pos1.x - pos2.x;
-  double dy = pos1.y - pos2.y;
-  double dz = pos1.z - pos2.z;
-
-  double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
-
-  // If rotation should be included
-  if (includeRotation) {
-    double du = pos1.u - pos2.u;
-    double dv = pos1.v - pos2.v;
-    double dw = pos1.w - pos2.w;
-
-    // Add weighted rotation component to distance
-    // Weight rotation less than translation (scale factor 0.1)
-    double rotationFactor = 0.1;
-    double rotDistance = std::sqrt(du * du + dv * dv + dw * dw) * rotationFactor;
-
-    // Combine the distances
-    distance = std::sqrt(distance * distance + rotDistance * rotDistance);
-  }
-
-  return distance;
-}
+//// Calculate the distance between two positions
+//double MachineOperations::GetDistanceBetweenPositions(const PositionStruct& pos1,
+//  const PositionStruct& pos2,
+//  bool includeRotation) {
+//  // Calculate Euclidean distance for XYZ
+//  double dx = pos1.x - pos2.x;
+//  double dy = pos1.y - pos2.y;
+//  double dz = pos1.z - pos2.z;
+//
+//  double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+//
+//  // If rotation should be included
+//  if (includeRotation) {
+//    double du = pos1.u - pos2.u;
+//    double dv = pos1.v - pos2.v;
+//    double dw = pos1.w - pos2.w;
+//
+//    // Add weighted rotation component to distance
+//    // Weight rotation less than translation (scale factor 0.1)
+//    double rotationFactor = 0.1;
+//    double rotDistance = std::sqrt(du * du + dv * dv + dw * dw) * rotationFactor;
+//
+//    // Combine the distances
+//    distance = std::sqrt(distance * distance + rotDistance * rotDistance);
+//  }
+//
+//  return distance;
+//}
 
 
 // ADD these new methods at the end of machine_operations.cpp:
@@ -1555,4 +1555,225 @@ bool MachineOperations::ApplyDefaultCameraExposure() {
   }
 
   return success;
+}
+
+// machine_operations.cpp - FIXED implementation for the new position storage methods
+// Add these methods to your existing machine_operations.cpp file
+// REMOVE the duplicate CalculateDistanceFromStored method around line 1100
+
+// NEW: Temporary Position Storage Implementation
+// ==============================================
+
+bool MachineOperations::CaptureCurrentPosition(const std::string& deviceName, const std::string& label) {
+  if (label.empty()) {
+    m_logger->LogError("MachineOperations: Cannot capture position with empty label");
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: Capturing current position for device " + deviceName +
+    " with label '" + label + "'");
+
+  // Get current position
+  PositionStruct currentPosition;
+  if (!GetDeviceCurrentPosition(deviceName, currentPosition)) {
+    m_logger->LogError("MachineOperations: Failed to get current position for device " + deviceName);
+    return false;
+  }
+
+  // Store the position
+  {
+    std::lock_guard<std::mutex> lock(m_positionStorageMutex);
+    m_storedPositions[label] = StoredPositionInfo(deviceName, currentPosition);
+  }
+
+  m_logger->LogInfo("MachineOperations: Successfully stored position '" + label + "' for device " +
+    deviceName + " at coordinates: X=" + std::to_string(currentPosition.x) +
+    " Y=" + std::to_string(currentPosition.y) +
+    " Z=" + std::to_string(currentPosition.z));
+
+  return true;
+}
+
+bool MachineOperations::GetStoredPosition(const std::string& label, PositionStruct& position) const {
+  std::lock_guard<std::mutex> lock(m_positionStorageMutex);
+
+  auto it = m_storedPositions.find(label);
+  if (it == m_storedPositions.end()) {
+    m_logger->LogWarning("MachineOperations: Stored position '" + label + "' not found");
+    return false;
+  }
+
+  position = it->second.position;
+  return true;
+}
+
+std::vector<std::string> MachineOperations::GetStoredPositionLabels(const std::string& deviceNameFilter) const {
+  std::vector<std::string> labels;
+  std::lock_guard<std::mutex> lock(m_positionStorageMutex);
+
+  for (const auto& [label, info] : m_storedPositions) {
+    if (deviceNameFilter.empty() || info.deviceName == deviceNameFilter) {
+      labels.push_back(label);
+    }
+  }
+
+  return labels;
+}
+
+// FIXED: This method is NOT const because it calls GetDeviceCurrentPosition which is not const
+double MachineOperations::CalculateDistanceFromStored(const std::string& deviceName,
+  const std::string& storedLabel) {
+  // Get stored position
+  PositionStruct storedPosition;
+  if (!GetStoredPosition(storedLabel, storedPosition)) {
+    m_logger->LogError("MachineOperations: Cannot calculate distance - stored position '" +
+      storedLabel + "' not found");
+    return -1.0;
+  }
+
+  // Verify the stored position is for the correct device
+  {
+    std::lock_guard<std::mutex> lock(m_positionStorageMutex);
+    auto it = m_storedPositions.find(storedLabel);
+    if (it != m_storedPositions.end() && it->second.deviceName != deviceName) {
+      m_logger->LogWarning("MachineOperations: Stored position '" + storedLabel +
+        "' is for device '" + it->second.deviceName +
+        "', not '" + deviceName + "'");
+    }
+  }
+
+  // Get current position (this method is NOT const, so this method can't be const either)
+  PositionStruct currentPosition;
+  if (!GetDeviceCurrentPosition(deviceName, currentPosition)) {
+    m_logger->LogError("MachineOperations: Cannot get current position for device " + deviceName);
+    return -1.0;
+  }
+
+  // Calculate distance using the const method
+  double distance = GetDistanceBetweenPositions(currentPosition, storedPosition, false);
+
+  m_logger->LogInfo("MachineOperations: Distance from stored position '" + storedLabel +
+    "' to current position of " + deviceName + ": " +
+    std::to_string(distance) + " mm");
+
+  return distance;
+}
+
+// FIXED: This method is NOT const because it calls CalculateDistanceFromStored which is not const
+bool MachineOperations::HasMovedFromStored(const std::string& deviceName,
+  const std::string& storedLabel,
+  double tolerance) {
+  double distance = CalculateDistanceFromStored(deviceName, storedLabel);
+
+  if (distance < 0) {
+    // Error occurred in distance calculation
+    return false;
+  }
+
+  bool hasMoved = distance > tolerance;
+
+  if (hasMoved) {
+    m_logger->LogInfo("MachineOperations: Device " + deviceName + " has moved " +
+      std::to_string(distance) + " mm from stored position '" +
+      storedLabel + "' (tolerance: " + std::to_string(tolerance) + " mm)");
+  }
+
+  return hasMoved;
+}
+
+void MachineOperations::ClearStoredPositions(const std::string& deviceNameFilter) {
+  std::lock_guard<std::mutex> lock(m_positionStorageMutex);
+
+  if (deviceNameFilter.empty()) {
+    // Clear all stored positions
+    size_t clearedCount = m_storedPositions.size();
+    m_storedPositions.clear();
+    m_logger->LogInfo("MachineOperations: Cleared all " + std::to_string(clearedCount) +
+      " stored positions");
+  }
+  else {
+    // Clear positions for specific device
+    size_t clearedCount = 0;
+    auto it = m_storedPositions.begin();
+    while (it != m_storedPositions.end()) {
+      if (it->second.deviceName == deviceNameFilter) {
+        it = m_storedPositions.erase(it);
+        clearedCount++;
+      }
+      else {
+        ++it;
+      }
+    }
+    m_logger->LogInfo("MachineOperations: Cleared " + std::to_string(clearedCount) +
+      " stored positions for device '" + deviceNameFilter + "'");
+  }
+}
+
+void MachineOperations::ClearOldStoredPositions(int maxAgeMinutes) {
+  std::lock_guard<std::mutex> lock(m_positionStorageMutex);
+
+  auto cutoffTime = std::chrono::steady_clock::now() - std::chrono::minutes(maxAgeMinutes);
+  size_t clearedCount = 0;
+
+  auto it = m_storedPositions.begin();
+  while (it != m_storedPositions.end()) {
+    if (it->second.timestamp < cutoffTime) {
+      m_logger->LogInfo("MachineOperations: Removing old stored position '" + it->first +
+        "' for device '" + it->second.deviceName + "'");
+      it = m_storedPositions.erase(it);
+      clearedCount++;
+    }
+    else {
+      ++it;
+    }
+  }
+
+  if (clearedCount > 0) {
+    m_logger->LogInfo("MachineOperations: Cleared " + std::to_string(clearedCount) +
+      " stored positions older than " + std::to_string(maxAgeMinutes) + " minutes");
+  }
+}
+
+bool MachineOperations::GetStoredPositionInfo(const std::string& label,
+  std::string& deviceName,
+  std::chrono::steady_clock::time_point& timestamp) const {
+  std::lock_guard<std::mutex> lock(m_positionStorageMutex);
+
+  auto it = m_storedPositions.find(label);
+  if (it == m_storedPositions.end()) {
+    return false;
+  }
+
+  deviceName = it->second.deviceName;
+  timestamp = it->second.timestamp;
+  return true;
+}
+
+// FIXED: Make sure this implementation is marked as const (should already be in your file)
+double MachineOperations::GetDistanceBetweenPositions(const PositionStruct& pos1,
+  const PositionStruct& pos2,
+  bool includeRotation) const {
+  // Calculate Euclidean distance for XYZ
+  double dx = pos1.x - pos2.x;
+  double dy = pos1.y - pos2.y;
+  double dz = pos1.z - pos2.z;
+
+  double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+  // If rotation should be included
+  if (includeRotation) {
+    double du = pos1.u - pos2.u;
+    double dv = pos1.v - pos2.v;
+    double dw = pos1.w - pos2.w;
+
+    // Add weighted rotation component to distance
+    // Weight rotation less than translation (scale factor 0.1)
+    double rotationFactor = 0.1;
+    double rotDistance = std::sqrt(du * du + dv * dv + dw * dw) * rotationFactor;
+
+    // Combine the distances
+    distance = std::sqrt(distance * distance + rotDistance * rotDistance);
+  }
+
+  return distance;
 }

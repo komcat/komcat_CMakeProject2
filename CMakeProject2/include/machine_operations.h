@@ -1,4 +1,4 @@
-// machine_operations.h
+// machine_operations.h - FIXED VERSION
 #pragma once
 
 #include "include/motions/motion_control_layer.h"
@@ -15,9 +15,11 @@
 #include <chrono>
 #include <thread>
 #include <memory>
-// Forward declare CLD101xOperations instead of including the header
-class CLD101xOperations;  // Forward declaration
+#include <map>
+#include <mutex>
 
+// Forward declare CLD101xOperations instead of including the header
+class CLD101xOperations;
 
 class MachineOperations {
 public:
@@ -27,7 +29,7 @@ public:
 		EziIOManager& ioManager,
 		PneumaticManager& pneumaticManager,
 		CLD101xOperations* laserOps = nullptr,
-		PylonCameraTest* cameraTest = nullptr  // Add camera parameter
+		PylonCameraTest* cameraTest = nullptr
 	);
 
 	~MachineOperations();
@@ -40,10 +42,10 @@ public:
 		const std::string& startNodeId, const std::string& endNodeId,
 		bool blocking = true);
 
-	// In the public section of MachineOperations class in machine_operations.h
 	bool MoveToPointName(const std::string& deviceName, const std::string& positionName, bool blocking = true);
 	bool MoveRelative(const std::string& deviceName, const std::string& axis,
 		double distance, bool blocking = true);
+
 	// IO control methods
 	bool SetOutput(const std::string& deviceName, int outputPin, bool state);
 	bool SetOutput(int deviceId, int outputPin, bool state);
@@ -68,32 +70,6 @@ public:
 		const std::vector<double>& stepSizes, int settlingTimeMs,
 		const std::vector<std::string>& axesToScan = { "Z", "X", "Y" });
 
-	// Device status methods
-	bool IsDeviceConnected(const std::string& deviceName);
-	bool IsSlideExtended(const std::string& slideName);
-	bool IsSlideRetracted(const std::string& slideName);
-	bool IsSlideMoving(const std::string& slideName);
-	bool IsSlideInError(const std::string& slideName);
-
-	// Helper method to get EziIO device ID from name
-	int GetDeviceId(const std::string& deviceName);
-
-	// Laser and TEC control methods - add these new methods
-	bool LaserOn(const std::string& laserName = "");
-	bool LaserOff(const std::string& laserName = "");
-	bool TECOn(const std::string& laserName = "");
-	bool TECOff(const std::string& laserName = "");
-	bool SetLaserCurrent(float current, const std::string& laserName = "");
-	bool SetTECTemperature(float temperature, const std::string& laserName = "");
-	float GetLaserTemperature(const std::string& laserName = "");
-	float GetLaserCurrent(const std::string& laserName = "");
-	bool WaitForLaserTemperature(float targetTemp, float tolerance = 0.5f,
-		int timeoutMs = 30000, const std::string& laserName = "");
-
-
-	// Add these to the public section of MachineOperations class:
-
-// Scanning methods
 	bool StartScan(const std::string& deviceName, const std::string& dataChannel,
 		const std::vector<double>& stepSizes, int settlingTimeMs,
 		const std::vector<std::string>& axesToScan = { "Z", "X", "Y" });
@@ -108,12 +84,33 @@ public:
 	// Get scan results
 	bool GetScanPeak(const std::string& deviceName, double& value, PositionStruct& position) const;
 
-	bool MachineOperations::SafelyCleanupScanner(const std::string& deviceName);
+	// Device status methods
+	bool IsDeviceConnected(const std::string& deviceName);
+	bool IsSlideExtended(const std::string& slideName);
+	bool IsSlideRetracted(const std::string& slideName);
+	bool IsSlideMoving(const std::string& slideName);
+	bool IsSlideInError(const std::string& slideName);
 
-	bool MachineOperations::WaitForDeviceMotionCompletion(const std::string& deviceName, int timeoutMs);
-	bool MachineOperations::IsDeviceMoving(const std::string& deviceName);
+	// Helper method to get EziIO device ID from name
+	int GetDeviceId(const std::string& deviceName);
 
-	bool MachineOperations::IsDevicePIController(const std::string& deviceName) const;
+	// Laser and TEC control methods
+	bool LaserOn(const std::string& laserName = "");
+	bool LaserOff(const std::string& laserName = "");
+	bool TECOn(const std::string& laserName = "");
+	bool TECOff(const std::string& laserName = "");
+	bool SetLaserCurrent(float current, const std::string& laserName = "");
+	bool SetTECTemperature(float temperature, const std::string& laserName = "");
+	float GetLaserTemperature(const std::string& laserName = "");
+	float GetLaserCurrent(const std::string& laserName = "");
+	bool WaitForLaserTemperature(float targetTemp, float tolerance = 0.5f,
+		int timeoutMs = 30000, const std::string& laserName = "");
+
+	// Motion and device status methods
+	bool SafelyCleanupScanner(const std::string& deviceName);
+	bool WaitForDeviceMotionCompletion(const std::string& deviceName, int timeoutMs);
+	bool IsDeviceMoving(const std::string& deviceName);
+	bool IsDevicePIController(const std::string& deviceName) const;
 
 	// Public logging methods for operation classes to use
 	void LogInfo(const std::string& message) const {
@@ -146,59 +143,22 @@ public:
 
 	// Camera capture methods
 	bool CaptureImageToFile(const std::string& filename = "");
-	bool UpdateCameraDisplay(); // Call this from your main loop to update the camera display
-	bool MachineOperations::IntegrateCameraWithMotion(PylonCameraTest* cameraTest);
+	bool UpdateCameraDisplay();
+	bool IntegrateCameraWithMotion(PylonCameraTest* cameraTest);
 
 	// Get current position information
 	std::string GetDeviceCurrentNode(const std::string& deviceName, const std::string& graphName);
 	std::string GetDeviceCurrentPositionName(const std::string& deviceName);
 	bool GetDeviceCurrentPosition(const std::string& deviceName, PositionStruct& position);
 
-	// Get distance between positions
+	// FIXED: Only ONE declaration of GetDistanceBetweenPositions, marked as const
 	double GetDistanceBetweenPositions(const PositionStruct& pos1, const PositionStruct& pos2,
-		bool includeRotation = false);
+		bool includeRotation = false) const;
 
+	// Scanner cleanup methods
 	bool CleanupAllScanners();
-
 	bool ResetScanState(const std::string& deviceName);
-private:
-	MotionControlLayer& m_motionLayer;
-	PIControllerManager& m_piControllerManager;
-	EziIOManager& m_ioManager;
-	PneumaticManager& m_pneumaticManager;
-	Logger* m_logger;
-	CLD101xOperations* m_laserOps; // Add this member variable
 
-	// Helper methods
-	bool ConvertPinStateToBoolean(uint32_t inputs, int pin);
-
-	std::map<std::string, std::unique_ptr<ScanningAlgorithm>> m_activeScans;
-	std::mutex m_scanMutex; // For thread safety
-
-	// Scan status information (tracked per device)
-	struct ScanInfo {
-		std::atomic<bool> isActive{ false };
-		std::atomic<double> progress{ 0.0 };
-		std::string status;
-		mutable std::mutex statusMutex;  // Add mutable here
-		double peakValue{ 0.0 };
-		PositionStruct peakPosition;
-		mutable std::mutex peakMutex;    // Add mutable here
-	};
-	std::map<std::string, ScanInfo> m_scanInfo;
-
-	// Add camera reference
-	PylonCameraTest* m_cameraTest;
-
-
-	// 1. ADD to machine_operations.h (in private section):
-private:
-	// Camera exposure management
-	std::unique_ptr<CameraExposureManager> m_cameraExposureManager;
-	bool m_autoExposureEnabled = true;  // Enable auto exposure by default
-
-	// 2. ADD to machine_operations.h (in public section):
-public:
 	// Camera exposure control methods
 	bool ApplyCameraExposureForNode(const std::string& nodeId);
 	bool ApplyDefaultCameraExposure();
@@ -208,12 +168,6 @@ public:
 	void SetAutoExposureEnabled(bool enabled) { m_autoExposureEnabled = enabled; }
 	bool IsAutoExposureEnabled() const { return m_autoExposureEnabled; }
 
-
-
-
-
-	// ADD a new public method to MachineOperations for manual testing:
-public:
 	// Test method to verify current camera settings
 	void TestCameraSettings(const std::string& nodeId = "") {
 		if (!m_cameraTest || !m_cameraExposureManager) {
@@ -227,18 +181,89 @@ public:
 		}
 
 		if (nodeId.empty()) {
-			// Just read current settings
 			std::cout << "\n=== READING CURRENT CAMERA SETTINGS ===" << std::endl;
 			m_cameraExposureManager->ReadCurrentCameraSettings(m_cameraTest->GetCamera());
 		}
 		else {
-			// Apply and verify specific node settings
 			std::cout << "\n=== TESTING CAMERA SETTINGS FOR NODE " << nodeId << " ===" << std::endl;
 			ApplyCameraExposureForNode(nodeId);
 		}
 	}
 
+	// NEW: Temporary Position Storage for Process Sequences
+	// ====================================================
 
+	// Capture and store current position with a global label
+	bool CaptureCurrentPosition(const std::string& deviceName, const std::string& label);
 
+	// Retrieve stored position by label
+	bool GetStoredPosition(const std::string& label, PositionStruct& position) const;
 
+	// Get all stored position labels (optionally filtered by device)
+	std::vector<std::string> GetStoredPositionLabels(const std::string& deviceName = "") const;
+
+	// FIXED: Calculate distance from current position to stored position (NOT const)
+	double CalculateDistanceFromStored(const std::string& deviceName, const std::string& storedLabel);
+
+	// FIXED: Check if device has moved significantly from stored position (NOT const)
+	bool HasMovedFromStored(const std::string& deviceName, const std::string& storedLabel,
+		double tolerance = 0.001);
+
+	// Clear stored positions (all or by device filter)
+	void ClearStoredPositions(const std::string& deviceNameFilter = "");
+
+	// Clear positions older than specified minutes
+	void ClearOldStoredPositions(int maxAgeMinutes = 60);
+
+	// Get information about stored position (device name, timestamp, etc.)
+	bool GetStoredPositionInfo(const std::string& label, std::string& deviceName,
+		std::chrono::steady_clock::time_point& timestamp) const;
+
+private:
+	MotionControlLayer& m_motionLayer;
+	PIControllerManager& m_piControllerManager;
+	EziIOManager& m_ioManager;
+	PneumaticManager& m_pneumaticManager;
+	Logger* m_logger;
+	CLD101xOperations* m_laserOps;
+
+	// Helper methods
+	bool ConvertPinStateToBoolean(uint32_t inputs, int pin);
+
+	std::map<std::string, std::unique_ptr<ScanningAlgorithm>> m_activeScans;
+	std::mutex m_scanMutex;
+
+	// Scan status information (tracked per device)
+	struct ScanInfo {
+		std::atomic<bool> isActive{ false };
+		std::atomic<double> progress{ 0.0 };
+		std::string status;
+		mutable std::mutex statusMutex;
+		double peakValue{ 0.0 };
+		PositionStruct peakPosition;
+		mutable std::mutex peakMutex;
+	};
+	std::map<std::string, ScanInfo> m_scanInfo;
+
+	// Add camera reference
+	PylonCameraTest* m_cameraTest;
+
+	// Camera exposure management
+	std::unique_ptr<CameraExposureManager> m_cameraExposureManager;
+	bool m_autoExposureEnabled = true;
+
+	// NEW: Temporary position storage for process calculations
+	struct StoredPositionInfo {
+		std::string deviceName;
+		PositionStruct position;
+		std::chrono::steady_clock::time_point timestamp;
+
+		StoredPositionInfo() = default;
+		StoredPositionInfo(const std::string& device, const PositionStruct& pos)
+			: deviceName(device), position(pos), timestamp(std::chrono::steady_clock::now()) {
+		}
+	};
+
+	std::map<std::string, StoredPositionInfo> m_storedPositions;
+	mutable std::mutex m_positionStorageMutex;
 };

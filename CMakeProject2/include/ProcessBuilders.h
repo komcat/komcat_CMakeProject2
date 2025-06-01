@@ -113,4 +113,9 @@ namespace ProcessBuilders {
   // Debug method to print a sequence without executing it
   void DebugPrintSequence(const std::string& name, const std::unique_ptr<SequenceStep>& sequence);
 
+  // Build an enhanced needle XY calibration sequence  
+  std::unique_ptr<SequenceStep> BuildNeedleXYCalibrationSequenceEnhanced(
+    MachineOperations& machineOps, UserInteractionManager& uiManager);
+
+
 }

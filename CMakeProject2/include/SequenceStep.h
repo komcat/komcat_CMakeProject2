@@ -5,6 +5,13 @@
 #include <string>
 #include <functional>
 #include <memory>
+#include <fstream>           // Add this for file operations
+#include <nlohmann/json.hpp> // Add this for JSON operations
+#include <iostream>          // Add this for console output
+#include <iomanip>           // Add this for formatting
+
+
+
 
 // Represents an operation in a sequence
 class SequenceOperation {
@@ -863,4 +870,404 @@ public:
 
 private:
   bool m_enabled;
+};
+
+
+// SequenceStep.h - Add these new operation classes for needle calibration
+
+#include <fstream>
+#include <nlohmann/json.hpp>
+#include <iostream>
+#include <iomanip>
+
+// Calculate Needle Offset operation
+class CalculateNeedleOffsetOperation : public SequenceOperation {
+public:
+  CalculateNeedleOffsetOperation(const std::string& deviceName,
+    const std::string& pos1Label,
+    const std::string& pos2Label)
+    : m_deviceName(deviceName), m_pos1Label(pos1Label), m_pos2Label(pos2Label) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Get stored positions
+    PositionStruct pos1, pos2;
+    if (!ops.GetStoredPosition(m_pos1Label, pos1)) {
+      ops.LogError("Failed to get stored position: " + m_pos1Label);
+      return false;
+    }
+
+    if (!ops.GetStoredPosition(m_pos2Label, pos2)) {
+      ops.LogError("Failed to get stored position: " + m_pos2Label);
+      return false;
+    }
+
+    // Calculate needle offset = pos2 - pos1
+    double offsetX = pos2.x - pos1.x;
+    double offsetY = pos2.y - pos1.y;
+    double offsetZ = 0.0; // Always 0 for needle calibration as requested
+
+    // Display the calculated offset
+    std::cout << std::fixed << std::setprecision(6);
+    std::cout << "\n=== NEEDLE OFFSET CALCULATION ===" << std::endl;
+    std::cout << "Position 1 (before dot): X=" << pos1.x << ", Y=" << pos1.y << ", Z=" << pos1.z << std::endl;
+    std::cout << "Position 2 (after adjustment): X=" << pos2.x << ", Y=" << pos2.y << ", Z=" << pos2.z << std::endl;
+    std::cout << "Calculated Needle Offset:" << std::endl;
+    std::cout << "  X offset: " << offsetX << " mm" << std::endl;
+    std::cout << "  Y offset: " << offsetY << " mm" << std::endl;
+    std::cout << "  Z offset: " << offsetZ << " mm (fixed)" << std::endl;
+    std::cout << "=================================" << std::endl;
+
+    // Log the calculation
+    ops.LogInfo("Needle offset calculated: X=" + std::to_string(offsetX) +
+      ", Y=" + std::to_string(offsetY) + ", Z=" + std::to_string(offsetZ));
+
+    return true;
+  }
+
+  std::string GetDescription() const override {
+    return "Calculate needle offset from positions " + m_pos1Label + " and " + m_pos2Label;
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_pos1Label;
+  std::string m_pos2Label;
+};
+
+// Save Needle Offset operation
+class SaveNeedleOffsetOperation : public SequenceOperation {
+public:
+  SaveNeedleOffsetOperation(const std::string& deviceName,
+    const std::string& pos1Label,
+    const std::string& pos2Label)
+    : m_deviceName(deviceName), m_pos1Label(pos1Label), m_pos2Label(pos2Label) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    try {
+      // Get stored positions
+      PositionStruct pos1, pos2;
+      if (!ops.GetStoredPosition(m_pos1Label, pos1)) {
+        ops.LogError("Failed to get stored position: " + m_pos1Label);
+        return false;
+      }
+
+      if (!ops.GetStoredPosition(m_pos2Label, pos2)) {
+        ops.LogError("Failed to get stored position: " + m_pos2Label);
+        return false;
+      }
+
+      // Calculate needle offset = pos2 - pos1
+      double offsetX = pos2.x - pos1.x;
+      double offsetY = pos2.y - pos1.y;
+      double offsetZ = 0.0; // Always 0 for needle calibration
+
+      // Load existing camera_to_object_offset.json
+      std::string configPath = "camera_to_object_offset.json";
+      nlohmann::json config;
+
+      std::ifstream configFile(configPath);
+      if (configFile.is_open()) {
+        configFile >> config;
+        configFile.close();
+        ops.LogInfo("Loaded existing camera offset configuration");
+      }
+      else {
+        ops.LogWarning("Could not load existing config, creating new one");
+        // Create basic structure if file doesn't exist
+        config = {
+            {"camera_center", {
+                {"description", "Reference point (0,0,0) for all offset measurements"},
+                {"coordinates", {{"x", 0}, {"y", 0}, {"z", 0}}}
+            }},
+            {"hardware_offsets", nlohmann::json::object()},
+            {"calibration_info", {
+                {"coordinate_system", "right_handed"},
+                {"origin", "camera_optical_center"},
+                {"x_axis", "horizontal_left"},
+                {"y_axis", "horizontal_toward"},
+                {"z_axis", "vertical_up"},
+                {"precision", "±0.1mm"},
+                {"calibration_method", "automatic_needle_calibration"}
+            }}
+        };
+      }
+
+      // Get current timestamp
+      auto now = std::chrono::system_clock::now();
+      auto time_t = std::chrono::system_clock::to_time_t(now);
+      auto tm = *std::gmtime(&time_t);
+
+      char timestamp[32];
+      std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &tm);
+
+      // Update needle offset in config
+      config["hardware_offsets"]["needle"] = {
+          {"description", "Offset from camera center to needle tip"},
+          {"coordinates", {
+              {"x", offsetX},
+              {"y", offsetY},
+              {"z", offsetZ}
+          }},
+          {"units", "mm"},
+          {"last_calibrated", std::string(timestamp)},
+          {"calibration_method", "automatic_dispensing_calibration"}
+      };
+
+      // Save updated config
+      std::ofstream outFile(configPath);
+      if (outFile.is_open()) {
+        outFile << config.dump(2); // Pretty print with 2-space indentation
+        outFile.close();
+
+        ops.LogInfo("Successfully saved needle offset to " + configPath);
+        ops.LogInfo("Needle offset: X=" + std::to_string(offsetX) +
+          ", Y=" + std::to_string(offsetY) + ", Z=" + std::to_string(offsetZ));
+
+        std::cout << "\n=== CONFIGURATION SAVED ===" << std::endl;
+        std::cout << "Needle offset saved to: " << configPath << std::endl;
+        std::cout << "X offset: " << std::fixed << std::setprecision(6) << offsetX << " mm" << std::endl;
+        std::cout << "Y offset: " << offsetY << " mm" << std::endl;
+        std::cout << "Z offset: " << offsetZ << " mm" << std::endl;
+        std::cout << "Calibration timestamp: " << timestamp << std::endl;
+        std::cout << "============================" << std::endl;
+
+        return true;
+      }
+      else {
+        ops.LogError("Failed to open config file for writing: " + configPath);
+        return false;
+      }
+
+    }
+    catch (const std::exception& e) {
+      ops.LogError("Exception while saving needle offset: " + std::string(e.what()));
+      return false;
+    }
+  }
+
+  std::string GetDescription() const override {
+    return "Save calculated needle offset to camera_to_object_offset.json";
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_pos1Label;
+  std::string m_pos2Label;
+};
+
+// Load Camera Offset Config operation (utility for reading current values)
+class LoadCameraOffsetConfigOperation : public SequenceOperation {
+public:
+  LoadCameraOffsetConfigOperation() {}
+
+  bool Execute(MachineOperations& ops) override {
+    try {
+      std::string configPath = "camera_to_object_offset.json";
+      std::ifstream configFile(configPath);
+
+      if (!configFile.is_open()) {
+        ops.LogWarning("Camera offset config file not found: " + configPath);
+        return false;
+      }
+
+      nlohmann::json config;
+      configFile >> config;
+      configFile.close();
+
+      ops.LogInfo("Successfully loaded camera offset configuration");
+
+      // Display current needle offset if it exists
+      if (config.contains("hardware_offsets") &&
+        config["hardware_offsets"].contains("needle")) {
+
+        auto needle = config["hardware_offsets"]["needle"];
+        auto coords = needle["coordinates"];
+
+        std::cout << "\n=== CURRENT NEEDLE OFFSET ===" << std::endl;
+        std::cout << "X offset: " << coords["x"] << " mm" << std::endl;
+        std::cout << "Y offset: " << coords["y"] << " mm" << std::endl;
+        std::cout << "Z offset: " << coords["z"] << " mm" << std::endl;
+
+        if (needle.contains("last_calibrated")) {
+          std::cout << "Last calibrated: " << needle["last_calibrated"] << std::endl;
+        }
+        std::cout << "==============================" << std::endl;
+      }
+      else {
+        std::cout << "\n=== NO EXISTING NEEDLE OFFSET FOUND ===" << std::endl;
+      }
+
+      return true;
+
+    }
+    catch (const std::exception& e) {
+      ops.LogError("Exception while loading camera offset config: " + std::string(e.what()));
+      return false;
+    }
+  }
+
+  std::string GetDescription() const override {
+    return "Load and display current camera offset configuration";
+  }
+};
+
+
+
+// SequenceStep.h - Add these missing operation classes
+
+// Clear Stored Positions operation
+class ClearStoredPositionsOperation : public SequenceOperation {
+public:
+  ClearStoredPositionsOperation(const std::string& deviceNameFilter = "")
+    : m_deviceNameFilter(deviceNameFilter) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    ops.ClearStoredPositions(m_deviceNameFilter);
+    return true;
+  }
+
+  std::string GetDescription() const override {
+    return m_deviceNameFilter.empty() ?
+      "Clear all stored positions" :
+      "Clear stored positions for device '" + m_deviceNameFilter + "'";
+  }
+
+private:
+  std::string m_deviceNameFilter;
+};
+
+// Display Needle Offset operation
+class DisplayNeedleOffsetOperation : public SequenceOperation {
+public:
+  DisplayNeedleOffsetOperation() {}
+
+  bool Execute(MachineOperations& ops) override {
+    try {
+      std::string configPath = "camera_to_object_offset.json";
+      std::ifstream configFile(configPath);
+
+      if (!configFile.is_open()) {
+        ops.LogWarning("Camera offset config file not found: " + configPath);
+        std::cout << "\n=== NO EXISTING NEEDLE OFFSET FOUND ===" << std::endl;
+        std::cout << "This will be the first needle calibration." << std::endl;
+        std::cout << "========================================" << std::endl;
+        return true;
+      }
+
+      nlohmann::json config;
+      configFile >> config;
+      configFile.close();
+
+      ops.LogInfo("Successfully loaded camera offset configuration");
+
+      // Display current needle offset if it exists
+      if (config.contains("hardware_offsets") &&
+        config["hardware_offsets"].contains("needle")) {
+
+        auto needle = config["hardware_offsets"]["needle"];
+        auto coords = needle["coordinates"];
+
+        std::cout << "\n=== CURRENT NEEDLE OFFSET ===" << std::endl;
+        std::cout << "X offset: " << std::fixed << std::setprecision(6) << coords["x"] << " mm" << std::endl;
+        std::cout << "Y offset: " << coords["y"] << " mm" << std::endl;
+        std::cout << "Z offset: " << coords["z"] << " mm" << std::endl;
+
+        if (needle.contains("last_calibrated")) {
+          std::cout << "Last calibrated: " << needle["last_calibrated"] << std::endl;
+        }
+        if (needle.contains("calibration_method")) {
+          std::cout << "Method: " << needle["calibration_method"] << std::endl;
+        }
+        std::cout << "==============================" << std::endl;
+
+        ops.LogInfo("Current needle offset: X=" + std::to_string((double)coords["x"]) +
+          ", Y=" + std::to_string((double)coords["y"]) +
+          ", Z=" + std::to_string((double)coords["z"]));
+      }
+      else {
+        std::cout << "\n=== NO EXISTING NEEDLE OFFSET FOUND ===" << std::endl;
+        std::cout << "This will be the first needle calibration." << std::endl;
+        std::cout << "========================================" << std::endl;
+        ops.LogInfo("No existing needle offset found in configuration");
+      }
+
+      return true;
+
+    }
+    catch (const std::exception& e) {
+      ops.LogError("Exception while loading camera offset config: " + std::string(e.what()));
+      std::cout << "\n=== ERROR READING CONFIG ===" << std::endl;
+      std::cout << "Could not read existing configuration." << std::endl;
+      std::cout << "Will proceed with new calibration." << std::endl;
+      std::cout << "=============================" << std::endl;
+      return true; // Continue with calibration even if we can't read existing config
+    }
+  }
+
+  std::string GetDescription() const override {
+    return "Display current needle offset from camera configuration";
+  }
+};
+
+// Log Position Distance operation  
+class LogPositionDistanceOperation : public SequenceOperation {
+public:
+  LogPositionDistanceOperation(const std::string& deviceName, const std::string& storedLabel,
+    const std::string& description = "")
+    : m_deviceName(deviceName), m_storedLabel(storedLabel), m_description(description) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    double distance = ops.CalculateDistanceFromStored(m_deviceName, m_storedLabel);
+
+    if (distance < 0) {
+      ops.LogWarning("Could not calculate distance from stored position '" + m_storedLabel + "'");
+      return true; // Non-critical operation, continue sequence
+    }
+
+    std::string message = m_description.empty() ?
+      "Distance from stored position '" + m_storedLabel + "': " + std::to_string(distance) + " mm" :
+      m_description + ": " + std::to_string(distance) + " mm";
+
+    ops.LogInfo(message);
+
+    // Also display to console for user visibility
+    std::cout << ">>> " << message << std::endl;
+
+    return true;
+  }
+
+  std::string GetDescription() const override {
+    return "Log distance from " + m_deviceName + " to stored position '" + m_storedLabel + "'";
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_storedLabel;
+  std::string m_description;
+};
+
+// SequenceStep.h - Add this missing operation class
+
+// Capture Current Position operation
+class CapturePositionOperation : public SequenceOperation {
+public:
+  CapturePositionOperation(const std::string& deviceName, const std::string& label)
+    : m_deviceName(deviceName), m_label(label) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.CaptureCurrentPosition(m_deviceName, m_label);
+  }
+
+  std::string GetDescription() const override {
+    return "Capture current position of " + m_deviceName + " as '" + m_label + "'";
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_label;
 };

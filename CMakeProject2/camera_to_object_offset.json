@@ -1,0 +1,61 @@
+{
+  "camera_center": {
+    "description": "Reference point (0,0,0) for all offset measurements",
+    "coordinates": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    }
+  },
+  "hardware_offsets": {
+    "needle": {
+      "description": "Offset from camera center to needle tip",
+      "coordinates": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "units": "mm",
+      "last_calibrated": "2024-01-01T00:00:00Z"
+    },
+    "gripper_left": {
+      "description": "Offset from camera center to left gripper center",
+      "coordinates": {
+        "x": -15.5,
+        "y": 8.2,
+        "z": -2.1
+      },
+      "units": "mm",
+      "last_calibrated": "2024-01-01T00:00:00Z"
+    },
+    "gripper_right": {
+      "description": "Offset from camera center to right gripper center",
+      "coordinates": {
+        "x": 15.5,
+        "y": 8.2,
+        "z": -2.1
+      },
+      "units": "mm",
+      "last_calibrated": "2024-01-01T00:00:00Z"
+    },
+    "collet": {
+      "description": "Offset from camera center to collet center",
+      "coordinates": {
+        "x": 0.0,
+        "y": 12.7,
+        "z": -5.3
+      },
+      "units": "mm",
+      "last_calibrated": "2024-01-01T00:00:00Z"
+    }
+  },
+  "calibration_info": {
+    "coordinate_system": "right_handed",
+    "origin": "camera_optical_center",
+    "x_axis": "horizontal_left",
+    "y_axis": "horizontal_toward",
+    "z_axis": "vertical_up",
+    "precision": "±0.1mm",
+    "calibration_method": "manual_measurement"
+  }
+}

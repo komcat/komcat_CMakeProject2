@@ -48,14 +48,15 @@ private:
 
 	// Available processes list
 	std::vector<std::string> m_availableProcesses = {
-			"Initialization",
-			"InitializationParallel",
-			"Probing",
-			"PickPlaceLeftLens",
-			"PickPlaceRightLens",
-			"UVCuring",
-					"RejectLeftLens",
-		"RejectRightLens"  // Added the two new processes
+		"Initialization",
+		"InitializationParallel",
+		"Probing",
+		"PickPlaceLeftLens",
+		"PickPlaceRightLens",
+		"UVCuring",
+		"RejectLeftLens",
+		"RejectRightLens",  // Added the two new processes
+		"NeedleCalibration"  // ADD this new process
 	};
 
 	// Methods

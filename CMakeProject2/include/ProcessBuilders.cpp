@@ -504,7 +504,101 @@ namespace ProcessBuilders {
 		return sequence;
 	}
 
+	std::unique_ptr<SequenceStep> BuildNeedleXYCalibrationSequenceEnhanced(
+		MachineOperations& machineOps, UserInteractionManager& uiManager) {
 
+		auto sequence = std::make_unique<SequenceStep>("Enhanced Needle XY Calibration", machineOps);
+
+		// Clear any old stored positions at start
+		sequence->AddOperation(std::make_shared<ClearStoredPositionsOperation>());
+
+		// 0. Display current needle offset (if any)
+		sequence->AddOperation(std::make_shared<DisplayNeedleOffsetOperation>());
+
+		// 1. Move gantry-main to see dot position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_see_dot"));
+
+		// 2. Prompt user to confirm calibration
+		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
+			"Ready to start needle XY calibration? Make sure workspace is clear.", uiManager));
+
+		// 3. Store gantry-main position as pos1 (reference position)
+		sequence->AddOperation(std::make_shared<CapturePositionOperation>(
+			"gantry-main", "pos1"));
+
+		// 4. Log the reference position
+		sequence->AddOperation(std::make_shared<LogPositionDistanceOperation>(
+			"gantry-main", "pos1", "Reference position captured"));
+
+		// 5. Move gantry-main to needle caldot position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_needle_caldot"));
+
+		// 6. Prompt user before dispensing
+		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
+			"Ready to dispense calibration dot? Press confirm when ready.", uiManager));
+
+		// 7. Extend dispenser
+		sequence->AddOperation(std::make_shared<ExtendSlideOperation>("Dispenser_Head"));
+
+		// 8. Wait for dispenser to extend
+		sequence->AddOperation(std::make_shared<WaitOperation>(500));
+
+		// 9. Set output IOBottom dispenser (activate)
+		sequence->AddOperation(std::make_shared<SetOutputOperation>(
+			"IOBottom", 15, true)); // Assuming pin 15 for dispenser
+
+		// 10. Wait for dispensing
+		sequence->AddOperation(std::make_shared<WaitOperation>(100));
+
+		// 11. Clear output IOBottom dispenser (deactivate)
+		sequence->AddOperation(std::make_shared<SetOutputOperation>(
+			"IOBottom", 15, false));
+
+		// 12. Wait before retracting
+		sequence->AddOperation(std::make_shared<WaitOperation>(200));
+
+		// 13. Retract dispenser
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
+
+		// 14. Move gantry-main back to see dot position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_see_dot"));
+
+		// 15. Prompt user to adjust crosshair to dot center
+		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
+			"Use the camera view to center the crosshair on the dispensed dot, then confirm.", uiManager));
+
+		// 16. Store gantry-main position as pos2 (adjusted position)
+		sequence->AddOperation(std::make_shared<CapturePositionOperation>(
+			"gantry-main", "pos2"));
+
+		// 17. Calculate and display offset
+		sequence->AddOperation(std::make_shared<CalculateNeedleOffsetOperation>(
+			"gantry-main", "pos1", "pos2"));
+
+		// 18. Log the movement distance for verification
+		sequence->AddOperation(std::make_shared<LogPositionDistanceOperation>(
+			"gantry-main", "pos1", "Total adjustment distance from reference"));
+
+		// 19. Prompt user to save to config
+		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
+			"Save the calculated needle offset to configuration file?", uiManager));
+
+		// 20. Save needle offset to camera_to_object_offset.json
+		sequence->AddOperation(std::make_shared<SaveNeedleOffsetOperation>(
+			"gantry-main", "pos1", "pos2"));
+
+		// 21. Move back to safe position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe position
+
+		// Clear stored positions at end
+		sequence->AddOperation(std::make_shared<ClearStoredPositionsOperation>());
+
+		return sequence;
+	}
 
 	// Implementation in ProcessBuilders.cpp
 	void ProcessBuilders::DebugPrintSequence(const std::string& name, const std::unique_ptr<SequenceStep>& sequence) {
