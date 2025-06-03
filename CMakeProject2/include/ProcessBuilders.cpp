@@ -509,6 +509,13 @@ namespace ProcessBuilders {
 
 		auto sequence = std::make_unique<SequenceStep>("Enhanced Needle XY Calibration", machineOps);
 
+		// Alwasy move to safe
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"hex-left", "Process_Flow", "node_5531")); // reject position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"hex-right", "Process_Flow", "node_5190")); // reject position
 		// Clear any old stored positions at start
 		sequence->AddOperation(std::make_shared<ClearStoredPositionsOperation>());
 
@@ -517,23 +524,17 @@ namespace ProcessBuilders {
 
 		// 1. Move gantry-main to see dot position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"gantry-main", "Process_Flow", "node_see_dot"));
+			"gantry-main", "Process_Flow", "SeeCaldot"));
 
 		// 2. Prompt user to confirm calibration
 		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
 			"Ready to start needle XY calibration? Make sure workspace is clear.", uiManager));
 
-		// 3. Store gantry-main position as pos1 (reference position)
-		sequence->AddOperation(std::make_shared<CapturePositionOperation>(
-			"gantry-main", "pos1"));
 
-		// 4. Log the reference position
-		sequence->AddOperation(std::make_shared<LogPositionDistanceOperation>(
-			"gantry-main", "pos1", "Reference position captured"));
 
 		// 5. Move gantry-main to needle caldot position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"gantry-main", "Process_Flow", "node_needle_caldot"));
+			"gantry-main", "Process_Flow", "caldot"));
 
 		// 6. Prompt user before dispensing
 		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
@@ -562,9 +563,20 @@ namespace ProcessBuilders {
 		// 13. Retract dispenser
 		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
 
+		// 3. Store gantry-main position as pos1 (reference position)
+		sequence->AddOperation(std::make_shared<CapturePositionOperation>(
+			"gantry-main", "pos1"));
+
+		// 4. Log the reference position
+		sequence->AddOperation(std::make_shared<LogPositionDistanceOperation>(
+			"gantry-main", "pos1", "Reference position captured"));
+
+
+
+
 		// 14. Move gantry-main back to see dot position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"gantry-main", "Process_Flow", "node_see_dot"));
+			"gantry-main", "Process_Flow", "SeeCaldot")); // camera to see node_caldot
 
 		// 15. Prompt user to adjust crosshair to dot center
 		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
@@ -585,6 +597,10 @@ namespace ProcessBuilders {
 		// 19. Prompt user to save to config
 		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
 			"Save the calculated needle offset to configuration file?", uiManager));
+
+
+
+
 
 		// 20. Save needle offset to camera_to_object_offset.json
 		sequence->AddOperation(std::make_shared<SaveNeedleOffsetOperation>(
