@@ -7,7 +7,9 @@
 #include <thread>                   // For std::thread
 #include <algorithm>                // For std::transform
 #include <iostream>                 // For printf (if not already included)
-
+// Add this include at the top of MachineBlockUI.cpp
+#include <nlohmann/json.hpp>
+#include <fstream>
 
 MachineBlockUI::MachineBlockUI() {
   InitializePalette();
@@ -1133,22 +1135,166 @@ void MachineBlockUI::ClearAll() {
   printf("🧹 Cleared all blocks and connections\n");
 }
 
-// File operations (placeholder implementations)
-void MachineBlockUI::SaveProgram() {
-  if (!ValidateProgram()) {
-    printf("⚠️ Warning: Saving invalid program\n");
+
+
+std::string MachineBlockUI::BlockTypeToJsonString(BlockType type) const {
+  switch (type) {
+  case BlockType::START: return "START";
+  case BlockType::END: return "END";
+  case BlockType::MOVE_NODE: return "MOVE_NODE";
+  case BlockType::WAIT: return "WAIT";
+  case BlockType::SET_OUTPUT: return "SET_OUTPUT";
+  case BlockType::CLEAR_OUTPUT: return "CLEAR_OUTPUT";
+  default: return "UNKNOWN";
   }
-
-  printf("💾 Saving program with %zu blocks and %zu connections\n",
-    m_programBlocks.size(), m_connections.size());
-  // TODO: Implement actual file saving
 }
 
+// Helper method to convert string to BlockType for JSON
+BlockType MachineBlockUI::JsonStringToBlockType(const std::string& typeStr) const {
+  if (typeStr == "START") return BlockType::START;
+  if (typeStr == "END") return BlockType::END;
+  if (typeStr == "MOVE_NODE") return BlockType::MOVE_NODE;
+  if (typeStr == "WAIT") return BlockType::WAIT;
+  if (typeStr == "SET_OUTPUT") return BlockType::SET_OUTPUT;
+  if (typeStr == "CLEAR_OUTPUT") return BlockType::CLEAR_OUTPUT;
+  return BlockType::START;
+}
+
+
+
+// Save Program implementation
+void MachineBlockUI::SaveProgram() {
+  try {
+    nlohmann::json programJson;
+
+    // Save blocks
+    programJson["blocks"] = nlohmann::json::array();
+    for (const auto& block : m_programBlocks) {
+      nlohmann::json blockJson = {
+          {"id", block->id},
+          {"type", BlockTypeToJsonString(block->type)},
+          {"label", block->label},
+          {"position", {{"x", block->position.x}, {"y", block->position.y}}},
+          {"color", static_cast<unsigned int>(block->color)},
+          {"parameters", nlohmann::json::array()}
+      };
+
+      // Save parameters
+      for (const auto& param : block->parameters) {
+        blockJson["parameters"].push_back({
+            {"name", param.name},
+            {"value", param.value},
+            {"type", param.type},
+            {"description", param.description}
+          });
+      }
+
+      programJson["blocks"].push_back(blockJson);
+    }
+
+    // Save connections
+    programJson["connections"] = nlohmann::json::array();
+    for (const auto& connection : m_connections) {
+      programJson["connections"].push_back({
+          {"from_block_id", connection.fromBlockId},
+          {"to_block_id", connection.toBlockId}
+        });
+    }
+
+    // Write to file
+    std::ofstream outFile("program.json");
+    outFile << programJson.dump(2);
+    outFile.close();
+
+    printf("💾 Program saved to program.json\n");
+    printf("   Blocks: %zu, Connections: %zu\n", m_programBlocks.size(), m_connections.size());
+
+  }
+  catch (const std::exception& e) {
+    printf("❌ Error saving program: %s\n", e.what());
+  }
+}
+
+// Load Program implementation
 void MachineBlockUI::LoadProgram() {
-  printf("📁 Loading program...\n");
-  // TODO: Implement actual file loading
-}
+  try {
+    std::ifstream inFile("program.json");
+    if (!inFile.is_open()) {
+      printf("❌ Could not open program.json\n");
+      return;
+    }
 
+    nlohmann::json programJson;
+    inFile >> programJson;
+    inFile.close();
+
+    // Clear existing program
+    ClearAll();
+
+    // Load blocks
+    if (programJson.contains("blocks")) {
+      for (const auto& blockJson : programJson["blocks"]) {
+        auto newBlock = std::make_unique<MachineBlock>(
+          blockJson["id"],
+          JsonStringToBlockType(blockJson["type"]),
+          blockJson["label"],
+          blockJson["color"]
+        );
+
+        newBlock->position.x = blockJson["position"]["x"];
+        newBlock->position.y = blockJson["position"]["y"];
+
+        // Load parameters
+        if (blockJson.contains("parameters")) {
+          for (const auto& paramJson : blockJson["parameters"]) {
+            newBlock->parameters.push_back({
+                paramJson["name"],
+                paramJson["value"],
+                paramJson["type"],
+                paramJson["description"]
+              });
+          }
+        }
+
+        m_programBlocks.push_back(std::move(newBlock));
+      }
+    }
+
+    // Load connections
+    if (programJson.contains("connections")) {
+      for (const auto& connJson : programJson["connections"]) {
+        BlockConnection connection;
+        connection.fromBlockId = connJson["from_block_id"];
+        connection.toBlockId = connJson["to_block_id"];
+        m_connections.push_back(connection);
+
+        // Update block connection lists
+        for (auto& block : m_programBlocks) {
+          if (block->id == connection.fromBlockId) {
+            block->outputConnections.push_back(connection.toBlockId);
+          }
+          if (block->id == connection.toBlockId) {
+            block->inputConnections.push_back(connection.fromBlockId);
+          }
+        }
+      }
+    }
+
+    // Update next block ID to avoid conflicts
+    int maxId = 0;
+    for (const auto& block : m_programBlocks) {
+      if (block->id > maxId) maxId = block->id;
+    }
+    m_nextBlockId = maxId + 1;
+
+    printf("📁 Program loaded from program.json\n");
+    printf("   Blocks: %zu, Connections: %zu\n", m_programBlocks.size(), m_connections.size());
+
+  }
+  catch (const std::exception& e) {
+    printf("❌ Error loading program: %s\n", e.what());
+  }
+}
 
 
 void MachineBlockUI::ExecuteProgramAsSequence() {

@@ -10,7 +10,7 @@
 #include <functional>  // For std::function
 #include <thread>      // For std::thread
 #include <algorithm>   // For std::transform
-
+#include <nlohmann/json.hpp>
 
 
 
@@ -201,5 +201,8 @@ private:
   std::string GetParameterValue(const MachineBlock& block, const std::string& paramName) const;
 
 
+  // JSON helper methods
+  std::string BlockTypeToJsonString(BlockType type) const;
+  BlockType JsonStringToBlockType(const std::string& typeStr) const;
 
 };
