@@ -41,7 +41,7 @@ void MachineBlockUI::RenderUI() {
   bool isValid = ValidateProgram();
   if (!isValid) {
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
-    ImGui::Text("⚠ Program Invalid: ");
+    ImGui::Text("[WARNING] Program Invalid: ");
     ImGui::SameLine();
     if (CountBlocksOfType(BlockType::START) == 0) {
       ImGui::Text("Missing START block. ");
@@ -56,7 +56,7 @@ void MachineBlockUI::RenderUI() {
   }
   else {
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-    ImGui::Text("✓ Program Valid - Ready to Execute");
+    ImGui::Text("[OK] Program Valid - Ready to Execute");
     ImGui::PopStyleColor();
   }
 
@@ -175,10 +175,10 @@ void MachineBlockUI::RenderPaletteBlock(const MachineBlock& block, int index) {
   if (block.type == BlockType::START || block.type == BlockType::END) {
     ImGui::SameLine();
     if (block.type == BlockType::START) {
-      ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "▶");
+      ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "[ >> ]");
     }
     else {
-      ImGui::TextColored(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), "⏹");
+      ImGui::TextColored(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), "[ X ]");
     }
   }
 
@@ -248,12 +248,12 @@ void MachineBlockUI::RenderMiddlePanel() {
   // Program validation button
   if (ValidateProgram()) {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.6f, 0.0f, 1.0f));
-    ImGui::Button("✓ Valid");
+    ImGui::Button("[OK] Valid");
     ImGui::PopStyleColor();
   }
   else {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.0f, 0.0f, 1.0f));
-    ImGui::Button("⚠ Invalid");
+    ImGui::Button("[WARNING] Invalid");
     ImGui::PopStyleColor();
   }
 
@@ -533,11 +533,11 @@ void MachineBlockUI::RenderProgramBlock(const MachineBlock& block, const ImVec2&
   // Special indicators for START/END blocks
   if (block.type == BlockType::START) {
     drawList->AddText(ImVec2(screenPos.x + 5, screenPos.y + 5),
-      textColor, "⭐");
+      textColor, "*");
   }
   else if (block.type == BlockType::END) {
     drawList->AddText(ImVec2(screenPos.x + 5, screenPos.y + 5),
-      textColor, "🛑");
+      textColor, "@");
   }
 }
 
@@ -767,7 +767,7 @@ void MachineBlockUI::DeleteSelectedBlock() {
   }
 
   int blockId = m_selectedBlock->id;
-  printf("🗑️ Deleting block: %s (ID: %d)\n", m_selectedBlock->label.c_str(), blockId);
+  printf("[DEL] Deleting block: %s (ID: %d)\n", m_selectedBlock->label.c_str(), blockId);
 
   // CRITICAL: Clean up ALL pointers that might reference this block BEFORE deletion
 
@@ -794,7 +794,7 @@ void MachineBlockUI::DeleteSelectedBlock() {
 
   // Remove connections and update affected blocks
   for (const auto& conn : connectionsToRemove) {
-    printf("   Removing connection: %d → %d\n", conn.fromBlockId, conn.toBlockId);
+    printf("   Removing connection: %d -> %d\n", conn.fromBlockId, conn.toBlockId);
     DeleteConnection(conn.fromBlockId, conn.toBlockId);
   }
 
@@ -914,7 +914,7 @@ void MachineBlockUI::CompleteConnection(MachineBlock* toBlock) {
   m_connectionStart->outputConnections.push_back(toBlock->id);
   toBlock->inputConnections.push_back(m_connectionStart->id);
 
-  printf("[Success] Connected %s (ID: %d) → %s (ID: %d)\n",
+  printf("[Success] Connected %s (ID: %d) -> %s (ID: %d)\n",
     m_connectionStart->label.c_str(), m_connectionStart->id,
     toBlock->label.c_str(), toBlock->id);
 
@@ -1103,7 +1103,7 @@ void MachineBlockUI::QuickStart() {
     AddBlockToProgram(BlockType::END, ImVec2(50, 200));
   }
 
-  printf("🚀 Quick Start: Added essential START/END blocks\n");
+  printf(" Quick Start: Added essential START/END blocks\n");
 }
 
 void MachineBlockUI::ClearAll() {
@@ -1115,7 +1115,7 @@ void MachineBlockUI::ClearAll() {
   m_isDragging = false;
   m_draggedBlock = nullptr;
 
-  printf("🧹 Cleared all blocks and connections\n");
+  printf("Cleared all blocks and connections\n");
 }
 
 
@@ -1189,7 +1189,7 @@ void MachineBlockUI::SaveProgram() {
     outFile << programJson.dump(2);
     outFile.close();
 
-    printf("💾 Program saved to program.json\n");
+    printf("[Save] Program saved to program.json\n");
     printf("   Blocks: %zu, Connections: %zu\n", m_programBlocks.size(), m_connections.size());
 
   }
@@ -1270,7 +1270,7 @@ void MachineBlockUI::LoadProgram() {
     }
     m_nextBlockId = maxId + 1;
 
-    printf("📁 Program loaded from program.json\n");
+    printf("[Load] Program loaded from program.json\n");
     printf("   Blocks: %zu, Connections: %zu\n", m_programBlocks.size(), m_connections.size());
 
   }
@@ -1377,7 +1377,7 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
   m_isExecuting = true;
   m_executionStatus = "Executing...";
 
-  printf("\n🚀 EXECUTING BLOCK PROGRAM AS SEQUENCE:\n");
+  printf("\n EXECUTING BLOCK PROGRAM AS SEQUENCE:\n");
   printf("========================================\n");
   printf("Program: %s\n", programName.c_str());
   printf("Blocks: %zu operations\n", executionOrder.size());
@@ -1427,7 +1427,7 @@ void MachineBlockUI::ExecuteProgramDebugOnly() {
     return;
   }
 
-  printf("\n🚀 DEBUG MODE - SIMULATING PROGRAM EXECUTION:\n");
+  printf("\n DEBUG MODE - SIMULATING PROGRAM EXECUTION:\n");
   printf("========================================\n");
 
   for (size_t i = 0; i < executionOrder.size(); i++) {
@@ -1449,7 +1449,7 @@ void MachineBlockUI::ExecuteProgramDebugOnly() {
 
   printf("========================================\n");
   printf("[Success] Debug simulation completed! (%zu blocks)\n", executionOrder.size());
-  printf("💡 To execute for real, call SetMachineOperations() first.\n\n");
+  printf("Tips - To execute for real, call SetMachineOperations() first.\n\n");
 }
 
 
@@ -1543,7 +1543,7 @@ std::string MachineBlockUI::GetBlockDescription(const MachineBlock& block) const
       if (nodeId.length() > 10) {
         shortNodeId = nodeId.substr(0, 7) + "...";
       }
-      return deviceName + "\n→ " + shortNodeId;
+      return deviceName + "\n-> " + shortNodeId;
     }
     return "Move Node";
   }
@@ -1611,7 +1611,7 @@ void MachineBlockUI::ExecuteSingleBlock(MachineBlock* block) {
   }
   else {
     // Fall back to debug-only execution for single block
-    printf("\n🚀 DEBUG MODE - SIMULATING SINGLE BLOCK EXECUTION:\n");
+    printf("\n DEBUG MODE - SIMULATING SINGLE BLOCK EXECUTION:\n");
     printf("========================================\n");
     printf("Block: %s (ID: %d)\n", block->label.c_str(), block->id);
     printf("Type: %s\n", BlockTypeToString(block->type).c_str());
@@ -1625,7 +1625,7 @@ void MachineBlockUI::ExecuteSingleBlock(MachineBlock* block) {
     }
     printf("========================================\n");
     printf("[Success] Single block debug simulation completed!\n");
-    printf("💡 To execute for real, call SetMachineOperations() first.\n\n");
+    printf("Tips - To execute for real, call SetMachineOperations() first.\n\n");
   }
 }
 
@@ -1682,7 +1682,7 @@ void MachineBlockUI::ExecuteSingleBlockAsSequence(MachineBlock* block, std::func
   m_isExecuting = true;
   m_executionStatus = "Executing Single Block...";
 
-  printf("\n🚀 EXECUTING SINGLE BLOCK AS SEQUENCE:\n");
+  printf("\n EXECUTING SINGLE BLOCK AS SEQUENCE:\n");
   printf("========================================\n");
   printf("Block: %s (ID: %d)\n", block->label.c_str(), block->id);
   printf("Type: %s\n", BlockTypeToString(block->type).c_str());
