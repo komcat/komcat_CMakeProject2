@@ -160,6 +160,9 @@ private:
   void RenderConnections(const ImVec2& canvasPos);
   void RenderGrid(const ImVec2& canvasPos, const ImVec2& canvasSize);
 
+  // NEW: Add this method declaration
+  void RenderBlockHeader(MachineBlock* block);
+
   // Canvas utilities
   ImVec2 WorldToCanvas(const ImVec2& canvasPos, const ImVec2& worldPos) const;
   ImVec2 CanvasToWorld(const ImVec2& canvasPos, const ImVec2& canvasPos_) const;

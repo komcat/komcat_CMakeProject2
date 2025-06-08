@@ -1,5 +1,6 @@
 ﻿// MachineBlockUI.cpp
 #include "MachineBlockUI.h"
+#include "BlockPropertyRenderers.h"
 #include "BlockSequenceConverter.h"  // Your new converter class
 #include "include/SequenceStep.h"           // For sequence execution
 #include "include/machine_operations.h"     // For MachineOperations
@@ -604,9 +605,6 @@ void MachineBlockUI::RenderGrid(const ImVec2& canvasPos, const ImVec2& canvasSiz
   }
 }
 
-// Updated RenderRightPanel method for MachineBlockUI.cpp
-// Add this include at the top of MachineBlockUI.cpp if not already present:
-// #include "include/machine_operations.h"
 
 void MachineBlockUI::RenderRightPanel() {
   ImGui::Text("Properties");
@@ -619,200 +617,47 @@ void MachineBlockUI::RenderRightPanel() {
   ImGui::Separator();
 
   if (m_selectedBlock) {
-    ImGui::Text("Block: %s", m_selectedBlock->label.c_str());
-    ImGui::Text("Type: %s", BlockTypeToString(m_selectedBlock->type).c_str());
-    ImGui::Text("ID: %d", m_selectedBlock->id);
+    // Render block header information
+    RenderBlockHeader(m_selectedBlock);
 
-    // Show deletion restriction for START/END blocks
-    if (m_selectedBlock->type == BlockType::START) {
-      ImGui::Spacing();
-      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.0f, 1.0f)); // Orange
-      ImGui::TextWrapped("🚫 START blocks cannot be deleted");
-      ImGui::PopStyleColor();
-    }
-    else if (m_selectedBlock->type == BlockType::END) {
-      ImGui::Spacing();
-      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.0f, 1.0f)); // Orange
-      ImGui::TextWrapped("🚫 END blocks cannot be deleted");
-      ImGui::PopStyleColor();
-    }
+    // Get specialized renderer for this block type
+    auto renderer = BlockRendererFactory::CreateRenderer(m_selectedBlock->type);
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Text("Parameters:");
-
-    // Render parameters
-    for (auto& param : m_selectedBlock->parameters) {
-      ImGui::PushID(param.name.c_str());
-
-      ImGui::Text("%s:", param.name.c_str());
-
-      if (param.type == "bool") {
-        bool value = param.value == "true";
-        if (ImGui::Checkbox("##value", &value)) {
-          param.value = value ? "true" : "false";
-        }
-      }
-      else {
-        char buffer[256];
-        strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
-        buffer[sizeof(buffer) - 1] = '\0';
-
-        if (ImGui::InputText("##value", buffer, sizeof(buffer))) {
-          param.value = std::string(buffer);
-        }
-      }
-
-      if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", param.description.c_str());
-      }
-
-      ImGui::Spacing();
-      ImGui::PopID();
-    }
-
-    // NEW: Add Save Position button for MOVE_NODE blocks
-    if (m_selectedBlock->type == BlockType::MOVE_NODE) {
-      ImGui::Spacing();
-      ImGui::Separator();
-      ImGui::Text("Position Management:");
-
-      // Extract parameters for save position functionality
-      std::string deviceName = "";
-      std::string graphName = "";
-      std::string nodeId = "";
-
-      // Find device_name, graph_name, and node_id parameters
-      for (const auto& param : m_selectedBlock->parameters) {
-        if (param.name == "device_name") {
-          deviceName = param.value;
-        }
-        else if (param.name == "graph_name") {
-          graphName = param.value;
-        }
-        else if (param.name == "node_id") {
-          nodeId = param.value;
-        }
-      }
-
-      // Display current target info
-      if (!deviceName.empty() && !nodeId.empty() && !graphName.empty()) {
-        ImGui::TextWrapped("Device: %s", deviceName.c_str());
-        ImGui::TextWrapped("Graph: %s", graphName.c_str());
-        ImGui::TextWrapped("Target Node: %s", nodeId.c_str());
-
-        // NEW: Look up the actual position name from the graph
-        std::string actualPositionName = "";
-        if (m_machineOps) {
-          // We need to get the position name that this node refers to
-          // This requires access to the motion config to look up the node
-          // For now, we'll show both the node ID and indicate we're looking up the position
-          ImGui::TextWrapped("Position: Looking up from graph...");
-        }
-
-        ImGui::Spacing();
-
-        // Save Position Button - Updated text to indicate we're saving to the actual position
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 1.0f)); // Green
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.6f, 0.1f, 1.0f));
-
-        std::string buttonText = "Save Current Position (Node: " + nodeId + ")";
-
-        if (ImGui::Button(buttonText.c_str(), ImVec2(-1, 0))) {
-          // Call the save position functionality
-          // We need to pass the node information so the save function can look up the correct position name
-          if (m_machineOps) {
-            // NEW: Call a different method that takes graph and node info
-            bool success = m_machineOps->SaveCurrentPositionForNode(deviceName, graphName, nodeId);
-
-            if (success) {
-              printf("[SUCCESS] Position saved for node: %s (%s)\n",
-                nodeId.c_str(), deviceName.c_str());
-
-              // NEW: Force reload the motion configuration to refresh in-memory data
-              printf("[INFO] Reloading motion configuration...\n");
-              bool reloadSuccess = m_machineOps->ReloadMotionConfig();
-
-              if (reloadSuccess) {
-                printf("[SUCCESS] Motion configuration reloaded successfully\n");
-              }
-              else {
-                printf("[WARNING] Position saved but failed to reload configuration\n");
-              }
-
-              // Optional: Show success message in UI
-              ImGui::OpenPopup("Save Success");
-            }
-            else {
-              printf("[ERROR] Failed to save position for node: %s (%s)\n",
-                nodeId.c_str(), deviceName.c_str());
-
-              // Optional: Show error message in UI
-              ImGui::OpenPopup("Save Error");
-            }
-          }
-          else {
-            printf("[ERROR] MachineOperations not available for saving position\n");
-            ImGui::OpenPopup("Save Error");
-          }
-        }
-
-        ImGui::PopStyleColor(3);
-
-        // Tooltip for the save button
-        if (ImGui::IsItemHovered()) {
-          ImGui::SetTooltip("Save the current position of controller '%s' to the position\n"
-            "that node '%s' refers to in the motion graph.",
-            deviceName.c_str(), nodeId.c_str());
-        }
-
-        // Warning if device, graph, or node_id is empty
-        if (deviceName.empty() || graphName.empty() || nodeId.empty()) {
-          ImGui::Spacing();
-          ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
-          ImGui::TextWrapped("WARNING: Device name, graph name, and node ID must be set to save position");
-          ImGui::PopStyleColor();
-        }
-
-        // Additional helper text
-        ImGui::Spacing();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f)); // Gray
-        ImGui::TextWrapped("This will save the current physical position of the controller "
-          "to the position name that this node references in the motion graph.");
-        ImGui::PopStyleColor();
-      }
-
-      // Success/Error popup modals
-      if (ImGui::BeginPopupModal("Save Success", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
-        ImGui::Text("SUCCESS: Position saved!");
-        ImGui::PopStyleColor();
-        ImGui::Text("The current position has been saved to motion_config.json");
-        ImGui::Text("Configuration has been reloaded automatically");
-        ImGui::Spacing();
-        if (ImGui::Button("OK", ImVec2(120, 0))) {
-          ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-      }
-
-      if (ImGui::BeginPopupModal("Save Error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.2f, 0.2f, 1.0f)); // Red
-        ImGui::Text("ERROR: Failed to save position!");
-        ImGui::PopStyleColor();
-        ImGui::Text("Check that the device is connected and try again.");
-        ImGui::Spacing();
-        if (ImGui::Button("OK", ImVec2(120, 0))) {
-          ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-      }
-    }
+    // Render block-specific content using the specialized renderer
+    renderer->RenderProperties(m_selectedBlock, m_machineOps);
+    renderer->RenderActions(m_selectedBlock, m_machineOps);
+    renderer->RenderValidation(m_selectedBlock);
   }
   else {
     ImGui::TextWrapped("Select a block to view and edit its properties.");
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// NEW HELPER METHOD - ADD TO MachineBlockUI.cpp
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void MachineBlockUI::RenderBlockHeader(MachineBlock* block) {
+  ImGui::Text("Block: %s", block->label.c_str());
+  ImGui::Text("Type: %s", BlockTypeToString(block->type).c_str());
+  ImGui::Text("ID: %d", block->id);
+
+  // Show deletion restrictions for special blocks
+  if (block->type == BlockType::START) {
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.0f, 1.0f)); // Orange
+    ImGui::TextWrapped("START blocks cannot be deleted");
+    ImGui::PopStyleColor();
+  }
+  else if (block->type == BlockType::END) {
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.0f, 1.0f)); // Orange
+    ImGui::TextWrapped("END blocks cannot be deleted");
+    ImGui::PopStyleColor();
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
 }
 
 
@@ -835,14 +680,14 @@ ImVec2 MachineBlockUI::CanvasToWorld(const ImVec2& canvasPos, const ImVec2& canv
 void MachineBlockUI::AddBlockToProgram(BlockType type, const ImVec2& position) {
   // Prevent multiple START blocks
   if (type == BlockType::START && CountBlocksOfType(BlockType::START) > 0) {
-    printf("🚫 Only one START block allowed per program!\n");
+    printf("[STOP] Only one START block allowed per program!\n");
     printf("   A program can have exactly one START block.\n");
     return;
   }
 
   // OPTIONAL: Limit to one END block (uncomment if you want this restriction)
   // if (type == BlockType::END && CountBlocksOfType(BlockType::END) > 0) {
-  //   printf("🚫 Only one END block allowed per program!\n");
+  //   printf("[STOP] Only one END block allowed per program!\n");
   //   printf("   A program can have exactly one END block.\n");
   //   return;
   // }
@@ -854,7 +699,7 @@ void MachineBlockUI::AddBlockToProgram(BlockType type, const ImVec2& position) {
 
   m_programBlocks.push_back(std::move(newBlock));
 
-  printf("✅ Added %s block (ID: %d)\n", BlockTypeToString(type).c_str(), m_nextBlockId - 1);
+  printf("[Success] Added %s block (ID: %d)\n", BlockTypeToString(type).c_str(), m_nextBlockId - 1);
 }
 
 void MachineBlockUI::InitializeBlockParameters(MachineBlock& block) {
@@ -906,18 +751,18 @@ void MachineBlockUI::DeleteSelectedBlock() {
 
   // Prevent deletion during execution
   if (m_isExecuting) {
-    printf("⚠️ Cannot delete blocks during execution!\n");
+    printf("[Warning] Cannot delete blocks during execution!\n");
     return;
   }
 
   // PREVENT DELETION OF START AND END BLOCKS
   if (m_selectedBlock->type == BlockType::START) {
-    printf("🚫 Cannot delete START block! Every program needs exactly one START block.\n");
+    printf("[STOP] Cannot delete START block! Every program needs exactly one START block.\n");
     return;
   }
 
   if (m_selectedBlock->type == BlockType::END) {
-    printf("🚫 Cannot delete END block! Every program needs at least one END block.\n");
+    printf("[STOP] Cannot delete END block! Every program needs at least one END block.\n");
     return;
   }
 
@@ -987,7 +832,7 @@ void MachineBlockUI::DeleteSelectedBlock() {
     m_programBlocks.end()
   );
 
-  printf("✅ Block deleted successfully. Remaining blocks: %zu, connections: %zu\n",
+  printf("[Success] Block deleted successfully. Remaining blocks: %zu, connections: %zu\n",
     m_programBlocks.size(), m_connections.size());
 }
 
@@ -1029,13 +874,21 @@ ImVec2 MachineBlockUI::GetBlockOutputPoint(const MachineBlock& block, const ImVe
 }
 
 void MachineBlockUI::StartConnection(MachineBlock* fromBlock, const ImVec2& startPos) {
-  if (!CanBlockProvideOutput(*fromBlock)) return;
+  if (!fromBlock || !CanBlockProvideOutput(*fromBlock)) return;
+
+  // NEW: Check if block already has an output connection
+  if (!fromBlock->outputConnections.empty()) {
+    printf("[Warning] Block already has an output connection! Only one output per block allowed.\n");
+    printf("   %s (ID: %d) is already connected to block ID: %d\n",
+      fromBlock->label.c_str(), fromBlock->id, fromBlock->outputConnections[0]);
+    return;
+  }
 
   m_isConnecting = true;
   m_connectionStart = fromBlock;
   m_connectionStartPos = startPos;
 
-  printf("🔗 Starting connection from %s (ID: %d)\n", fromBlock->label.c_str(), fromBlock->id);
+  printf("[Link] Starting connection from %s (ID: %d)\n", fromBlock->label.c_str(), fromBlock->id);
 }
 
 void MachineBlockUI::CompleteConnection(MachineBlock* toBlock) {
@@ -1045,7 +898,7 @@ void MachineBlockUI::CompleteConnection(MachineBlock* toBlock) {
   // Check if connection already exists
   for (const auto& conn : m_connections) {
     if (conn.fromBlockId == m_connectionStart->id && conn.toBlockId == toBlock->id) {
-      printf("⚠️ Connection already exists!\n");
+      printf("[Warning] Connection already exists!\n");
       CancelConnection();
       return;
     }
@@ -1061,7 +914,7 @@ void MachineBlockUI::CompleteConnection(MachineBlock* toBlock) {
   m_connectionStart->outputConnections.push_back(toBlock->id);
   toBlock->inputConnections.push_back(m_connectionStart->id);
 
-  printf("✅ Connected %s (ID: %d) → %s (ID: %d)\n",
+  printf("[Success] Connected %s (ID: %d) → %s (ID: %d)\n",
     m_connectionStart->label.c_str(), m_connectionStart->id,
     toBlock->label.c_str(), toBlock->id);
 
@@ -1150,7 +1003,7 @@ std::vector<MachineBlock*> MachineBlockUI::GetExecutionOrder() {
   // Find START block
   MachineBlock* currentBlock = FindStartBlock();
   if (!currentBlock) {
-    printf("⚠️ No START block found for execution\n");
+    printf("[Warning] No START block found for execution\n");
     return executionOrder; // Return empty list instead of crashing
   }
 
@@ -1182,12 +1035,12 @@ std::vector<MachineBlock*> MachineBlockUI::GetExecutionOrder() {
       }
 
       if (!nextBlock) {
-        printf("⚠️ Warning: Connected block ID %d not found! Connection may be stale.\n", nextId);
+        printf("[Warning] Warning: Connected block ID %d not found! Connection may be stale.\n", nextId);
         break;
       }
     }
     else {
-      printf("⚠️ Warning: Block %s (ID: %d) has no output connections\n",
+      printf("[Warning] Warning: Block %s (ID: %d) has no output connections\n",
         currentBlock->label.c_str(), currentBlock->id);
       break;
     }
@@ -1196,7 +1049,7 @@ std::vector<MachineBlock*> MachineBlockUI::GetExecutionOrder() {
   }
 
   if (steps >= maxSteps) {
-    printf("⚠️ Warning: Execution stopped due to safety limit (possible infinite loop)\n");
+    printf("[Warning] Warning: Execution stopped due to safety limit (possible infinite loop)\n");
   }
 
   return executionOrder;
@@ -1341,7 +1194,7 @@ void MachineBlockUI::SaveProgram() {
 
   }
   catch (const std::exception& e) {
-    printf("❌ Error saving program: %s\n", e.what());
+    printf("[Failed] Error saving program: %s\n", e.what());
   }
 }
 
@@ -1350,7 +1203,7 @@ void MachineBlockUI::LoadProgram() {
   try {
     std::ifstream inFile("program.json");
     if (!inFile.is_open()) {
-      printf("❌ Could not open program.json\n");
+      printf("[Failed] Could not open program.json\n");
       return;
     }
 
@@ -1422,7 +1275,7 @@ void MachineBlockUI::LoadProgram() {
 
   }
   catch (const std::exception& e) {
-    printf("❌ Error loading program: %s\n", e.what());
+    printf("[Failed] Error loading program: %s\n", e.what());
   }
 }
 
@@ -1438,21 +1291,21 @@ void MachineBlockUI::ExecuteProgramAsSequence() {
 // IMPROVED: Safe execution with better error handling
 void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComplete) {
   if (!m_machineOps) {
-    printf("❌ Cannot execute: MachineOperations not set!\n");
+    printf("[Failed] Cannot execute: MachineOperations not set!\n");
     printf("   Call SetMachineOperations() first.\n");
     if (onComplete) onComplete(false);
     return;
   }
 
   if (m_isExecuting) {
-    printf("⚠️ Execution already in progress!\n");
+    printf("[Warning] Execution already in progress!\n");
     if (onComplete) onComplete(false);
     return;
   }
 
   // Enhanced validation with specific error messages
   if (!ValidateProgram()) {
-    printf("❌ Cannot execute: Program is invalid!\n");
+    printf("[Failed] Cannot execute: Program is invalid!\n");
 
     int startCount = CountBlocksOfType(BlockType::START);
     int endCount = CountBlocksOfType(BlockType::END);
@@ -1479,7 +1332,7 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 
   auto executionOrder = GetExecutionOrder();
   if (executionOrder.empty()) {
-    printf("❌ No execution path found!\n");
+    printf("[Failed] No execution path found!\n");
     printf("   - Make sure START block is connected to other blocks\n");
     printf("   - Ensure there's a path from START to END\n");
     if (onComplete) onComplete(false);
@@ -1493,7 +1346,7 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
   }
 
   if (!endsWithEndBlock) {
-    printf("⚠️ Warning: Execution path doesn't end with an END block\n");
+    printf("[Warning] Warning: Execution path doesn't end with an END block\n");
     printf("   This may cause unexpected behavior\n");
   }
 
@@ -1515,7 +1368,7 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
   m_currentSequence = converter.ConvertBlocksToSequence(executionOrder, programName);
 
   if (!m_currentSequence) {
-    printf("❌ Failed to convert blocks to sequence!\n");
+    printf("[Failed] Failed to convert blocks to sequence!\n");
     if (onComplete) onComplete(false);
     return;
   }
@@ -1529,7 +1382,7 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
   printf("Program: %s\n", programName.c_str());
   printf("Blocks: %zu operations\n", executionOrder.size());
   if (!endsWithEndBlock) {
-    printf("⚠️  Warning: No END block in execution path\n");
+    printf("[Warning]  Warning: No END block in execution path\n");
   }
   printf("========================================\n");
 
@@ -1560,7 +1413,7 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 // Rename the original method for debug purposes
 void MachineBlockUI::ExecuteProgramDebugOnly() {
   if (!ValidateProgram()) {
-    printf("❌ Cannot execute: Program is invalid!\n");
+    printf("[Failed] Cannot execute: Program is invalid!\n");
     printf("   - Ensure you have exactly one START block\n");
     printf("   - Ensure you have at least one END block\n");
     printf("   - Connect blocks to create a valid flow\n");
@@ -1570,7 +1423,7 @@ void MachineBlockUI::ExecuteProgramDebugOnly() {
   auto executionOrder = GetExecutionOrder();
 
   if (executionOrder.empty()) {
-    printf("❌ No execution path found! Make sure START block is connected.\n");
+    printf("[Failed] No execution path found! Make sure START block is connected.\n");
     return;
   }
 
@@ -1595,7 +1448,7 @@ void MachineBlockUI::ExecuteProgramDebugOnly() {
   }
 
   printf("========================================\n");
-  printf("✅ Debug simulation completed! (%zu blocks)\n", executionOrder.size());
+  printf("[Success] Debug simulation completed! (%zu blocks)\n", executionOrder.size());
   printf("💡 To execute for real, call SetMachineOperations() first.\n\n");
 }
 
@@ -1771,7 +1624,7 @@ void MachineBlockUI::ExecuteSingleBlock(MachineBlock* block) {
       }
     }
     printf("========================================\n");
-    printf("✅ Single block debug simulation completed!\n");
+    printf("[Success] Single block debug simulation completed!\n");
     printf("💡 To execute for real, call SetMachineOperations() first.\n\n");
   }
 }
@@ -1779,27 +1632,27 @@ void MachineBlockUI::ExecuteSingleBlock(MachineBlock* block) {
 // Execute single block as sequence (real execution)
 void MachineBlockUI::ExecuteSingleBlockAsSequence(MachineBlock* block, std::function<void(bool)> onComplete) {
   if (!m_machineOps) {
-    printf("❌ Cannot execute: MachineOperations not set!\n");
+    printf("[Failed] Cannot execute: MachineOperations not set!\n");
     printf("   Call SetMachineOperations() first.\n");
     if (onComplete) onComplete(false);
     return;
   }
 
   if (m_isExecuting) {
-    printf("⚠️ Execution already in progress!\n");
+    printf("[Warning] Execution already in progress!\n");
     if (onComplete) onComplete(false);
     return;
   }
 
   if (!block) {
-    printf("❌ Cannot execute: No block provided!\n");
+    printf("[Failed] Cannot execute: No block provided!\n");
     if (onComplete) onComplete(false);
     return;
   }
 
   // Skip START and END blocks for single execution
   if (block->type == BlockType::START || block->type == BlockType::END) {
-    printf("⚠️ Cannot execute START or END blocks individually\n");
+    printf("[Warning] Cannot execute START or END blocks individually\n");
     if (onComplete) onComplete(false);
     return;
   }
@@ -1808,7 +1661,7 @@ void MachineBlockUI::ExecuteSingleBlockAsSequence(MachineBlock* block, std::func
   auto executionOrder = CreateSingleBlockExecutionOrder(block);
 
   if (executionOrder.empty()) {
-    printf("❌ Failed to create execution order for single block!\n");
+    printf("[Failed] Failed to create execution order for single block!\n");
     if (onComplete) onComplete(false);
     return;
   }
@@ -1820,7 +1673,7 @@ void MachineBlockUI::ExecuteSingleBlockAsSequence(MachineBlock* block, std::func
   m_currentSequence = converter.ConvertBlocksToSequence(executionOrder, blockName);
 
   if (!m_currentSequence) {
-    printf("❌ Failed to convert block to sequence!\n");
+    printf("[Failed] Failed to convert block to sequence!\n");
     if (onComplete) onComplete(false);
     return;
   }
