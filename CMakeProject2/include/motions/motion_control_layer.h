@@ -99,6 +99,19 @@ public:
   ACSControllerManager& GetACSControllerManager() {
     return m_acsControllerManager;
   }
+
+
+  // Position management methods for saving current positions to configuration
+  bool SaveCurrentPositionToConfig(const std::string& deviceName, const std::string& positionName);
+  bool UpdateNamedPositionInConfig(const std::string& deviceName, const std::string& positionName);
+  bool SaveAllCurrentPositionsToConfig(const std::string& prefix = "current_");
+
+  // Configuration backup and management
+  bool BackupMotionConfig(const std::string& backupSuffix = "");
+  bool SaveMotionConfig();
+  bool ReloadMotionConfig();
+
+
 private:
   // References to managers
   MotionConfigManager& m_configManager;
@@ -163,4 +176,8 @@ private:
 
   // Friend declaration for the adapter class
   friend class MotionControlHierarchicalAdapter;
+
+
+
+
 };

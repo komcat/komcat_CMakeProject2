@@ -4,6 +4,12 @@
 #include <iostream>
 #include <sstream>
 #include <chrono>
+#include <filesystem>  // For backup file operations
+#include <iomanip>     // For timestamp formatting
+#include <chrono>      // For time operations
+#include <sstream>     // For string stream operations
+
+
 
 MotionControlLayer::MotionControlLayer(MotionConfigManager& configManager,
   PIControllerManager& piControllerManager,
@@ -1231,3 +1237,221 @@ bool MotionControlLayer::MoveRelative(const std::string& deviceName, const std::
   }
 }
 
+
+// =====================================
+// 2. ADD TO motion_control_layer.cpp
+// =====================================
+
+// Save current position of a specific device to motion configuration
+bool MotionControlLayer::SaveCurrentPositionToConfig(const std::string& deviceName, const std::string& positionName) {
+  m_logger->LogInfo("MotionControlLayer: Saving current position of " + deviceName +
+    " as named position '" + positionName + "' to configuration");
+
+  // Validate inputs
+  if (deviceName.empty() || positionName.empty()) {
+    m_logger->LogError("MotionControlLayer: Device name and position name cannot be empty");
+    return false;
+  }
+
+  // Get current position
+  PositionStruct currentPosition;
+  if (!GetCurrentPosition(deviceName, currentPosition)) {
+    m_logger->LogError("MotionControlLayer: Failed to get current position for device " + deviceName);
+    return false;
+  }
+
+  try {
+    // Create backup before modifying
+    if (!BackupMotionConfig("before_position_save")) {
+      m_logger->LogWarning("MotionControlLayer: Failed to create backup, proceeding anyway");
+    }
+
+    // Check if position name already exists
+    auto existingPosOpt = m_configManager.GetNamedPosition(deviceName, positionName);
+    if (existingPosOpt.has_value()) {
+      m_logger->LogWarning("MotionControlLayer: Position '" + positionName +
+        "' already exists for device " + deviceName + ", will be overwritten");
+    }
+
+    // Add the position to configuration
+    m_configManager.AddPosition(deviceName, positionName, currentPosition);
+    m_logger->LogInfo("MotionControlLayer: Successfully added position to config manager");
+
+    // Save the configuration to file
+    if (!m_configManager.SaveConfig()) {
+      m_logger->LogError("MotionControlLayer: Failed to save configuration file");
+      return false;
+    }
+
+    // Log success with detailed position information
+    std::stringstream positionInfo;
+    positionInfo << std::fixed << std::setprecision(6);
+    positionInfo << "Position '" << positionName << "' saved for device " << deviceName
+      << " - X:" << currentPosition.x << "mm"
+      << " Y:" << currentPosition.y << "mm"
+      << " Z:" << currentPosition.z << "mm";
+
+    if (currentPosition.u != 0.0 || currentPosition.v != 0.0 || currentPosition.w != 0.0) {
+      positionInfo << " U:" << currentPosition.u << "°"
+        << " V:" << currentPosition.v << "°"
+        << " W:" << currentPosition.w << "°";
+    }
+
+    m_logger->LogInfo("MotionControlLayer: " + positionInfo.str());
+    m_logger->LogInfo("MotionControlLayer: Configuration saved to motion_config.json");
+
+    return true;
+
+  }
+  catch (const std::exception& e) {
+    m_logger->LogError("MotionControlLayer: Exception while saving position to config: " + std::string(e.what()));
+    return false;
+  }
+}
+
+// Update an existing named position with current position
+bool MotionControlLayer::UpdateNamedPositionInConfig(const std::string& deviceName, const std::string& positionName) {
+  m_logger->LogInfo("MotionControlLayer: Updating named position '" + positionName +
+    "' for device " + deviceName + " with current position");
+
+  // Check if the named position exists
+  auto existingPosOpt = m_configManager.GetNamedPosition(deviceName, positionName);
+  if (!existingPosOpt.has_value()) {
+    m_logger->LogError("MotionControlLayer: Named position '" + positionName +
+      "' does not exist for device " + deviceName);
+    return false;
+  }
+
+  // Use the save method to update (AddPosition will overwrite existing position)
+  return SaveCurrentPositionToConfig(deviceName, positionName);
+}
+
+// Save current positions of all available devices to configuration
+bool MotionControlLayer::SaveAllCurrentPositionsToConfig(const std::string& prefix) {
+  m_logger->LogInfo("MotionControlLayer: Saving current positions of all devices to configuration");
+
+  // Get all available devices
+  std::vector<std::string> deviceList = GetAvailableDevices();
+
+  if (deviceList.empty()) {
+    m_logger->LogWarning("MotionControlLayer: No devices available to save positions");
+    return false;
+  }
+
+  // Create backup before bulk operation
+  if (!BackupMotionConfig("before_bulk_position_save")) {
+    m_logger->LogWarning("MotionControlLayer: Failed to create backup before bulk save");
+  }
+
+  bool allSuccess = true;
+  int successCount = 0;
+
+  // Generate timestamp for position names
+  auto now = std::chrono::system_clock::now();
+  auto time_t = std::chrono::system_clock::to_time_t(now);
+  auto tm = *std::localtime(&time_t);
+
+  std::stringstream timeString;
+  timeString << std::put_time(&tm, "%Y%m%d_%H%M%S");
+
+  // Save each device's current position
+  for (const auto& deviceName : deviceList) {
+    std::string positionName = prefix + timeString.str();
+
+    if (SaveCurrentPositionToConfig(deviceName, positionName)) {
+      successCount++;
+      m_logger->LogInfo("MotionControlLayer: Saved position for " + deviceName + " as '" + positionName + "'");
+    }
+    else {
+      allSuccess = false;
+      m_logger->LogError("MotionControlLayer: Failed to save position for " + deviceName);
+    }
+  }
+
+  m_logger->LogInfo("MotionControlLayer: Bulk position save completed - " +
+    std::to_string(successCount) + " out of " +
+    std::to_string(deviceList.size()) + " positions saved");
+
+  return allSuccess;
+}
+
+// Create backup of motion configuration file
+bool MotionControlLayer::BackupMotionConfig(const std::string& backupSuffix) {
+  try {
+    std::string configPath = "motion_config.json";
+
+    // Generate backup filename
+    std::string backupPath;
+    if (backupSuffix.empty()) {
+      auto now = std::chrono::system_clock::now();
+      auto time_t = std::chrono::system_clock::to_time_t(now);
+      auto tm = *std::localtime(&time_t);
+
+      std::stringstream timeString;
+      timeString << std::put_time(&tm, "%Y%m%d_%H%M%S");
+      backupPath = "motion_config_backup_" + timeString.str() + ".json";
+    }
+    else {
+      backupPath = "motion_config_backup_" + backupSuffix + ".json";
+    }
+
+    // Check if original file exists
+    if (!std::filesystem::exists(configPath)) {
+      m_logger->LogError("MotionControlLayer: Original config file not found: " + configPath);
+      return false;
+    }
+
+    // Copy file
+    std::filesystem::copy_file(configPath, backupPath, std::filesystem::copy_options::overwrite_existing);
+
+    m_logger->LogInfo("MotionControlLayer: Created backup: " + backupPath);
+    return true;
+
+  }
+  catch (const std::exception& e) {
+    m_logger->LogError("MotionControlLayer: Failed to create backup: " + std::string(e.what()));
+    return false;
+  }
+}
+
+// Save the motion configuration to file
+bool MotionControlLayer::SaveMotionConfig() {
+  m_logger->LogInfo("MotionControlLayer: Saving motion configuration to file");
+
+  try {
+    if (!m_configManager.SaveConfig()) {
+      m_logger->LogError("MotionControlLayer: Failed to save motion configuration");
+      return false;
+    }
+
+    m_logger->LogInfo("MotionControlLayer: Motion configuration saved successfully");
+    return true;
+
+  }
+  catch (const std::exception& e) {
+    m_logger->LogError("MotionControlLayer: Exception while saving configuration: " + std::string(e.what()));
+    return false;
+  }
+}
+
+// Reload motion configuration from file
+bool MotionControlLayer::ReloadMotionConfig() {
+  m_logger->LogInfo("MotionControlLayer: Reloading motion configuration from file");
+
+  try {
+    // Note: MotionConfigManager constructor loads the config, but we need a reload method
+    // For now, we'll log that manual restart is required
+    m_logger->LogWarning("MotionControlLayer: Configuration reload requires application restart");
+    m_logger->LogWarning("MotionControlLayer: Please restart the application to use updated configuration");
+
+    // TODO: Implement proper config reload if MotionConfigManager supports it
+    // This would require adding a reload method to MotionConfigManager
+
+    return true;
+
+  }
+  catch (const std::exception& e) {
+    m_logger->LogError("MotionControlLayer: Exception while reloading configuration: " + std::string(e.what()));
+    return false;
+  }
+}

@@ -574,8 +574,10 @@ void MachineBlockUI::RenderGrid(const ImVec2& canvasPos, const ImVec2& canvasSiz
   }
 }
 
-// IMPROVED: Enhanced program validation display
-// IMPROVED: Update right panel to show deletion restrictions
+// Updated RenderRightPanel method for MachineBlockUI.cpp
+// Add this include at the top of MachineBlockUI.cpp if not already present:
+// #include "include/machine_operations.h"
+
 void MachineBlockUI::RenderRightPanel() {
   ImGui::Text("Properties");
   ImGui::Separator();
@@ -638,49 +640,119 @@ void MachineBlockUI::RenderRightPanel() {
       ImGui::Spacing();
       ImGui::PopID();
     }
+
+    // NEW: Add Save Position button for MOVE_NODE blocks
+    if (m_selectedBlock->type == BlockType::MOVE_NODE) {
+      ImGui::Spacing();
+      ImGui::Separator();
+      ImGui::Text("Position Management:");
+
+      // Extract parameters for save position functionality
+      std::string deviceName = "";
+      std::string nodeId = "";
+
+      // Find device_name and node_id parameters
+      for (const auto& param : m_selectedBlock->parameters) {
+        if (param.name == "device_name") {
+          deviceName = param.value;
+        }
+        else if (param.name == "node_id") {
+          nodeId = param.value;
+        }
+      }
+
+      // Display current target info
+      if (!deviceName.empty() && !nodeId.empty()) {
+        ImGui::TextWrapped("Device: %s", deviceName.c_str());
+        ImGui::TextWrapped("Target Node: %s", nodeId.c_str());
+        ImGui::Spacing();
+
+        // Save Position Button
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 1.0f)); // Green
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.6f, 0.1f, 1.0f));
+
+        std::string buttonText = "Save Current Position to: " + nodeId;
+
+        if (ImGui::Button(buttonText.c_str(), ImVec2(-1, 0))) {
+          // Call the save position functionality
+          if (m_machineOps) {
+            bool success = m_machineOps->SaveCurrentPositionToConfig(deviceName, nodeId);
+
+            if (success) {
+              printf("[SUCCESS] Position saved: %s -> '%s'\n",
+                deviceName.c_str(), nodeId.c_str());
+
+              // Optional: Show success message in UI
+              ImGui::OpenPopup("Save Success");
+            }
+            else {
+              printf("[ERROR] Failed to save position: %s -> '%s'\n",
+                deviceName.c_str(), nodeId.c_str());
+
+              // Optional: Show error message in UI
+              ImGui::OpenPopup("Save Error");
+            }
+          }
+          else {
+            printf("[ERROR] MachineOperations not available for saving position\n");
+            ImGui::OpenPopup("Save Error");
+          }
+        }
+
+        ImGui::PopStyleColor(3);
+
+        // Tooltip for the save button
+        if (ImGui::IsItemHovered()) {
+          ImGui::SetTooltip("Save the current position of controller '%s' to the configuration file\n"
+            "as a named position '%s' that can be used by this motion block.",
+            deviceName.c_str(), nodeId.c_str());
+        }
+
+        // Warning if device or node_id is empty
+        if (deviceName.empty() || nodeId.empty()) {
+          ImGui::Spacing();
+          ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
+          ImGui::TextWrapped("WARNING: Device name and node ID must be set to save position");
+          ImGui::PopStyleColor();
+        }
+
+        // Additional helper text
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f)); // Gray
+        ImGui::TextWrapped("This will save the current physical position of the controller "
+          "and associate it with the node ID specified above.");
+        ImGui::PopStyleColor();
+      }
+
+      // Success/Error popup modals
+      if (ImGui::BeginPopupModal("Save Success", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+        ImGui::Text("SUCCESS: Position saved!");
+        ImGui::PopStyleColor();
+        ImGui::Text("The current position has been saved to motion_config.json");
+        ImGui::Spacing();
+        if (ImGui::Button("OK", ImVec2(120, 0))) {
+          ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+      }
+
+      if (ImGui::BeginPopupModal("Save Error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.2f, 0.2f, 1.0f)); // Red
+        ImGui::Text("ERROR: Failed to save position!");
+        ImGui::PopStyleColor();
+        ImGui::Text("Check that the device is connected and try again.");
+        ImGui::Spacing();
+        if (ImGui::Button("OK", ImVec2(120, 0))) {
+          ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+      }
+    }
   }
   else {
     ImGui::TextWrapped("Select a block to view and edit its properties.");
-
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Text("Program Info:");
-    ImGui::Text("Total Blocks: %zu", m_programBlocks.size());
-
-    int startCount = CountBlocksOfType(BlockType::START);
-    int endCount = CountBlocksOfType(BlockType::END);
-
-    // Show START block status
-    if (startCount == 1) {
-      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ START Blocks: %d", startCount);
-    }
-    else {
-      ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ START Blocks: %d (need 1)", startCount);
-    }
-
-    // Show END block status
-    if (endCount >= 1) {
-      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ END Blocks: %d", endCount);
-    }
-    else {
-      ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ END Blocks: %d (need ≥1)", endCount);
-    }
-
-    ImGui::Text("Connections: %zu", m_connections.size());
-
-    ImGui::Spacing();
-    if (ValidateProgram()) {
-      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Program is valid");
-    }
-    else {
-      ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "⚠ Program has issues");
-      if (startCount == 0) {
-        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "  - Add a START block");
-      }
-      if (endCount == 0) {
-        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "  - Add an END block");
-      }
-    }
   }
 }
 

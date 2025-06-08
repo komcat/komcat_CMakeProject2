@@ -1777,3 +1777,289 @@ double MachineOperations::GetDistanceBetweenPositions(const PositionStruct& pos1
 
   return distance;
 }
+
+// Updated machine_operations.cpp - Now using MotionControlLayer methods instead of direct config access
+
+// Save current position of a specific controller to motion_config.json as a named position
+bool MachineOperations::SaveCurrentPositionToConfig(const std::string& deviceName, const std::string& positionName) {
+  m_logger->LogInfo("MachineOperations: Delegating position save to MotionControlLayer");
+
+  // Validate device name and position name
+  if (deviceName.empty() || positionName.empty()) {
+    m_logger->LogError("MachineOperations: Device name and position name cannot be empty");
+    return false;
+  }
+
+  // Check if device is connected before attempting to save
+  if (!IsDeviceConnected(deviceName)) {
+    m_logger->LogError("MachineOperations: Device " + deviceName + " is not connected");
+    return false;
+  }
+
+  // Check if device is moving (optional safety check)
+  if (IsDeviceMoving(deviceName)) {
+    m_logger->LogWarning("MachineOperations: Device " + deviceName + " is currently moving, position may not be stable");
+  }
+
+  // Delegate to MotionControlLayer which has proper access to MotionConfigManager
+  bool success = m_motionLayer.SaveCurrentPositionToConfig(deviceName, positionName);
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully saved position '" + positionName +
+      "' for device " + deviceName + " to motion_config.json");
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to save position '" + positionName +
+      "' for device " + deviceName);
+  }
+
+  return success;
+}
+
+// Update an existing named position with current position
+bool MachineOperations::UpdateNamedPositionInConfig(const std::string& deviceName, const std::string& positionName) {
+  m_logger->LogInfo("MachineOperations: Delegating position update to MotionControlLayer");
+
+  // Validate inputs
+  if (deviceName.empty() || positionName.empty()) {
+    m_logger->LogError("MachineOperations: Device name and position name cannot be empty");
+    return false;
+  }
+
+  // Check if device is connected
+  if (!IsDeviceConnected(deviceName)) {
+    m_logger->LogError("MachineOperations: Device " + deviceName + " is not connected");
+    return false;
+  }
+
+  // Delegate to MotionControlLayer
+  bool success = m_motionLayer.UpdateNamedPositionInConfig(deviceName, positionName);
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully updated position '" + positionName +
+      "' for device " + deviceName);
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to update position '" + positionName +
+      "' for device " + deviceName);
+  }
+
+  return success;
+}
+
+// Save current positions of all connected controllers to config
+bool MachineOperations::SaveAllCurrentPositionsToConfig(const std::string& prefix) {
+  m_logger->LogInfo("MachineOperations: Delegating bulk position save to MotionControlLayer");
+
+  // Get current positions to check if any devices are available
+  auto allPositions = GetCurrentPositions();
+
+  if (allPositions.empty()) {
+    m_logger->LogWarning("MachineOperations: No controller positions available to save");
+    return false;
+  }
+
+  // Log what we're about to save
+  m_logger->LogInfo("MachineOperations: Saving positions for " +
+    std::to_string(allPositions.size()) + " devices");
+
+  // Delegate to MotionControlLayer
+  bool success = m_motionLayer.SaveAllCurrentPositionsToConfig(prefix);
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully saved all current positions to configuration");
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to save some current positions to configuration");
+  }
+
+  return success;
+}
+
+// Create backup of motion config file
+bool MachineOperations::BackupMotionConfig(const std::string& backupSuffix) {
+  m_logger->LogInfo("MachineOperations: Delegating config backup to MotionControlLayer");
+
+  bool success = m_motionLayer.BackupMotionConfig(backupSuffix);
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully created configuration backup");
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to create configuration backup");
+  }
+
+  return success;
+}
+
+// Restore motion config from backup
+bool MachineOperations::RestoreMotionConfigFromBackup(const std::string& backupSuffix) {
+  m_logger->LogInfo("MachineOperations: Restoring configuration from backup");
+
+  try {
+    std::string configPath = "motion_config.json";
+    std::string backupPath = "motion_config_backup_" + backupSuffix + ".json";
+
+    // Check if backup file exists
+    if (!std::filesystem::exists(backupPath)) {
+      m_logger->LogError("MachineOperations: Backup file not found: " + backupPath);
+      return false;
+    }
+
+    // Create backup of current config before restore
+    if (!m_motionLayer.BackupMotionConfig("before_restore")) {
+      m_logger->LogWarning("MachineOperations: Failed to backup current config before restore");
+    }
+
+    // Copy backup file over current config
+    std::filesystem::copy_file(backupPath, configPath, std::filesystem::copy_options::overwrite_existing);
+
+    m_logger->LogInfo("MachineOperations: Restored config from backup: " + backupPath);
+
+    // Notify about configuration reload requirement
+    m_logger->LogInfo("MachineOperations: Configuration file restored successfully");
+    m_logger->LogWarning("MachineOperations: Please restart application to use restored configuration");
+
+    return true;
+
+  }
+  catch (const std::exception& e) {
+    m_logger->LogError("MachineOperations: Failed to restore from backup: " + std::string(e.what()));
+    return false;
+  }
+}
+
+
+
+// Add these methods to machine_operations.cpp
+
+// Get current positions of all controllers and store in variable for other classes to use
+std::map<std::string, PositionStruct> MachineOperations::GetCurrentPositions() {
+  m_logger->LogInfo("MachineOperations: Getting current positions for all controllers");
+
+  std::lock_guard<std::mutex> lock(m_currentPositionsMutex);
+
+  // Check if cache is still valid (within timeout)
+  auto now = std::chrono::steady_clock::now();
+  if (now - m_lastPositionUpdate < POSITION_CACHE_TIMEOUT && !m_currentPositions.empty()) {
+    m_logger->LogInfo("MachineOperations: Returning cached positions (" +
+      std::to_string(m_currentPositions.size()) + " devices)");
+    return m_currentPositions;
+  }
+
+  // Clear existing positions
+  m_currentPositions.clear();
+
+  // Get all available devices from the motion layer
+  std::vector<std::string> deviceList = m_motionLayer.GetAvailableDevices();
+
+  if (deviceList.empty()) {
+    m_logger->LogWarning("MachineOperations: No devices available for position reading");
+    return m_currentPositions;
+  }
+
+  // Get current position for each connected device
+  int successCount = 0;
+  for (const auto& deviceName : deviceList) {
+    // Check if device is connected before trying to get position
+    if (!IsDeviceConnected(deviceName)) {
+      m_logger->LogWarning("MachineOperations: Device " + deviceName + " is not connected, skipping");
+      continue;
+    }
+
+    PositionStruct currentPosition;
+    if (GetDeviceCurrentPosition(deviceName, currentPosition)) {
+      m_currentPositions[deviceName] = currentPosition;
+      successCount++;
+
+      m_logger->LogInfo("MachineOperations: Got position for " + deviceName +
+        " - X:" + std::to_string(currentPosition.x) +
+        " Y:" + std::to_string(currentPosition.y) +
+        " Z:" + std::to_string(currentPosition.z));
+    }
+    else {
+      m_logger->LogError("MachineOperations: Failed to get current position for device " + deviceName);
+    }
+  }
+
+  // Update cache timestamp
+  m_lastPositionUpdate = now;
+
+  m_logger->LogInfo("MachineOperations: Successfully retrieved positions for " +
+    std::to_string(successCount) + " out of " +
+    std::to_string(deviceList.size()) + " devices");
+
+  return m_currentPositions;
+}
+
+// Update all current positions (refresh cache)
+bool MachineOperations::UpdateAllCurrentPositions() {
+  m_logger->LogInfo("MachineOperations: Updating all current positions (forced refresh)");
+
+  std::lock_guard<std::mutex> lock(m_currentPositionsMutex);
+
+  // Force cache invalidation by setting old timestamp
+  m_lastPositionUpdate = std::chrono::steady_clock::time_point{};
+
+  // Clear current cache
+  m_currentPositions.clear();
+
+  // Get all available devices
+  std::vector<std::string> deviceList = m_motionLayer.GetAvailableDevices();
+
+  if (deviceList.empty()) {
+    m_logger->LogWarning("MachineOperations: No devices available for position update");
+    return false;
+  }
+
+  // Update positions for all connected devices
+  int successCount = 0;
+  for (const auto& deviceName : deviceList) {
+    if (!IsDeviceConnected(deviceName)) {
+      continue;
+    }
+
+    PositionStruct currentPosition;
+    if (GetDeviceCurrentPosition(deviceName, currentPosition)) {
+      m_currentPositions[deviceName] = currentPosition;
+      successCount++;
+    }
+  }
+
+  // Update timestamp
+  m_lastPositionUpdate = std::chrono::steady_clock::now();
+
+  bool allSuccess = (successCount == static_cast<int>(deviceList.size()));
+  if (allSuccess) {
+    m_logger->LogInfo("MachineOperations: Successfully updated all " +
+      std::to_string(successCount) + " device positions");
+  }
+  else {
+    m_logger->LogWarning("MachineOperations: Updated " + std::to_string(successCount) +
+      " out of " + std::to_string(deviceList.size()) + " device positions");
+  }
+
+  return allSuccess;
+}
+
+// Get cached positions without updating (const method for other classes to use)
+const std::map<std::string, PositionStruct>& MachineOperations::GetCachedPositions() const {
+  std::lock_guard<std::mutex> lock(m_currentPositionsMutex);
+  return m_currentPositions;
+}
+
+// Force refresh position cache
+void MachineOperations::RefreshPositionCache() {
+  m_logger->LogInfo("MachineOperations: Refreshing position cache");
+
+  // Call GetCurrentPositions with forced refresh
+  std::lock_guard<std::mutex> lock(m_currentPositionsMutex);
+  m_lastPositionUpdate = std::chrono::steady_clock::time_point{}; // Force refresh
+
+  // Release lock and call GetCurrentPositions (which will reacquire lock)
+  {
+    std::unique_lock<std::mutex> tempLock(m_currentPositionsMutex);
+    tempLock.unlock();
+    GetCurrentPositions();
+  }
+}

@@ -219,6 +219,23 @@ public:
 	bool GetStoredPositionInfo(const std::string& label, std::string& deviceName,
 		std::chrono::steady_clock::time_point& timestamp) const;
 
+
+
+	// Position monitoring and storage methods
+	std::map<std::string, PositionStruct> GetCurrentPositions();
+	bool UpdateAllCurrentPositions();
+	const std::map<std::string, PositionStruct>& GetCachedPositions() const;
+	void RefreshPositionCache();
+
+	// Configuration management methods for saving positions
+	bool SaveCurrentPositionToConfig(const std::string& deviceName, const std::string& positionName);
+	bool UpdateNamedPositionInConfig(const std::string& deviceName, const std::string& positionName);
+	bool SaveAllCurrentPositionsToConfig(const std::string& prefix = "current_");
+
+	// Backup and restore config operations
+	bool BackupMotionConfig(const std::string& backupSuffix = "");
+	bool RestoreMotionConfigFromBackup(const std::string& backupSuffix);
+
 private:
 	MotionControlLayer& m_motionLayer;
 	PIControllerManager& m_piControllerManager;
@@ -226,6 +243,9 @@ private:
 	PneumaticManager& m_pneumaticManager;
 	Logger* m_logger;
 	CLD101xOperations* m_laserOps;
+
+
+
 
 	// Helper methods
 	bool ConvertPinStateToBoolean(uint32_t inputs, int pin);
@@ -266,4 +286,13 @@ private:
 
 	std::map<std::string, StoredPositionInfo> m_storedPositions;
 	mutable std::mutex m_positionStorageMutex;
+
+
+
+
+	// Current position cache for all controllers
+	std::map<std::string, PositionStruct> m_currentPositions;
+	mutable std::mutex m_currentPositionsMutex;
+	std::chrono::steady_clock::time_point m_lastPositionUpdate;
+	static constexpr std::chrono::milliseconds POSITION_CACHE_TIMEOUT{ 100 }; // 100ms cache timeout
 };
