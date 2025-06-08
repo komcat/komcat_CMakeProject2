@@ -1184,9 +1184,16 @@ int main(int argc, char* argv[])
   std::unique_ptr<MachineBlockUI> machineBlockUI;
   if (moduleConfig.isEnabled("MACHINE_BLOCK_UI")) {
     machineBlockUI = std::make_unique<MachineBlockUI>();
-    logger->LogInfo("MachineBlockUI initialized");
-  }
 
+    // CONNECT TO MACHINE OPERATIONS FOR REAL EXECUTION
+    if (machineOps) {
+      machineBlockUI->SetMachineOperations(machineOps.get());
+      logger->LogInfo("MachineBlockUI initialized with real execution enabled");
+    }
+    else {
+      logger->LogInfo("MachineBlockUI initialized in debug mode only");
+    }
+  }
 
 
 

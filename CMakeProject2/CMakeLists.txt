@@ -275,7 +275,7 @@ add_executable(CMakeProject2
  "include/scanning/optimized_scanning_ui.h"
  "include/scanning/optimized_scanning_ui.cpp"
  "include/ModuleConfig.h"
- "include/scanning/AdaptivePowerScanner.h" "include/scanning/AdaptivePowerScanner.cpp" "include/scanning/AdaptiveScanningUI.h" "include/scanning/AdaptiveScanningUI.cpp" "Programming/MachineBlockUI.h" "Programming/MachineBlockUI.cpp" "Programming/BlockSequenceConverter.h" "Programming/BlockSequenceConverter.cpp")
+ "include/scanning/AdaptivePowerScanner.h" "include/scanning/AdaptivePowerScanner.cpp" "include/scanning/AdaptiveScanningUI.h" "include/scanning/AdaptiveScanningUI.cpp" "Programming/MachineBlockUI.h" "Programming/MachineBlockUI.cpp" "Programming/BlockSequenceConverter.h" "Programming/BlockSequenceConverter.cpp"   )
 
 
 

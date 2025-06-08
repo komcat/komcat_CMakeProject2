@@ -1,4 +1,4 @@
-// MachineBlockUI.h - Fixed version
+﻿// MachineBlockUI.h - Fixed version
 #pragma once
 
 #include "imgui.h"
@@ -10,6 +10,9 @@
 #include <functional>  // For std::function
 #include <thread>      // For std::thread
 #include <algorithm>   // For std::transform
+
+
+
 
 // Forward declarations
 class MachineOperations;
@@ -119,12 +122,13 @@ private:
   const float CONNECTOR_RADIUS = 6.0f;
 
   // Colors - Enhanced with START/END
-  const ImU32 START_COLOR = IM_COL32(50, 205, 50, 255);      // Bright Green
-  const ImU32 END_COLOR = IM_COL32(220, 20, 60, 255);        // Crimson Red
-  const ImU32 MOVE_NODE_COLOR = IM_COL32(100, 149, 237, 255); // Cornflower Blue
-  const ImU32 WAIT_COLOR = IM_COL32(255, 165, 0, 255);        // Orange
-  const ImU32 SET_OUTPUT_COLOR = IM_COL32(50, 205, 50, 255);  // Lime Green
-  const ImU32 CLEAR_OUTPUT_COLOR = IM_COL32(255, 69, 0, 255); // Red Orange
+  // Colors - Muted/Professional versions
+  const ImU32 START_COLOR = IM_COL32(40, 150, 40, 255);      // Muted Green
+  const ImU32 END_COLOR = IM_COL32(180, 40, 60, 255);        // Muted Red
+  const ImU32 MOVE_NODE_COLOR = IM_COL32(70, 120, 180, 255); // Muted Blue
+  const ImU32 WAIT_COLOR = IM_COL32(200, 130, 40, 255);      // Muted Orange
+  const ImU32 SET_OUTPUT_COLOR = IM_COL32(40, 160, 90, 255); // Muted Lime Green
+  const ImU32 CLEAR_OUTPUT_COLOR = IM_COL32(200, 80, 40, 255); // Muted Red Orange
 
   // Canvas background colors
   const ImU32 CANVAS_BG_COLOR = IM_COL32(45, 45, 45, 255);
@@ -179,6 +183,7 @@ private:
   MachineBlock* FindStartBlock();
   std::vector<MachineBlock*> GetExecutionOrder();
   bool HasValidFlow() const;
+  bool HasValidExecutionPath() const;  // ADD THIS LINE
   int CountBlocksOfType(BlockType type) const;
   bool CanBlockAcceptInput(const MachineBlock& block) const;
   bool CanBlockProvideOutput(const MachineBlock& block) const;
@@ -190,4 +195,11 @@ private:
   // Quick actions
   void QuickStart();
   void ClearAll();
+
+  // Helper functions for block display
+  std::string GetBlockDescription(const MachineBlock& block) const;
+  std::string GetParameterValue(const MachineBlock& block, const std::string& paramName) const;
+
+
+
 };

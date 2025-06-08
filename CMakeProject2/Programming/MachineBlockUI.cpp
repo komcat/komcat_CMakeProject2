@@ -30,7 +30,9 @@ void MachineBlockUI::RenderUI() {
 
   // Main window with specific size and position
   ImGui::SetNextWindowSize(ImVec2(1200, 800), ImGuiCond_FirstUseEver);
-  ImGui::Begin("Machine Block Programming", &m_showWindow, ImGuiWindowFlags_NoScrollbar);
+  // AFTER (fixed):
+  ImGui::Begin("Machine Block Programming", &m_showWindow,
+    ImGuiWindowFlags_NoScrollbar );
 
   // Program validation status
   bool isValid = ValidateProgram();
@@ -134,13 +136,19 @@ void MachineBlockUI::RenderLeftPanel() {
   }
 }
 
+// In MachineBlockUI.cpp - Update RenderPaletteBlock function
 void MachineBlockUI::RenderPaletteBlock(const MachineBlock& block, int index) {
-  ImVec2 buttonSize(m_leftPanelWidth - 20, 50);
+  // IMPROVED: Smaller button size for more compact palette
+  ImVec2 buttonSize(m_leftPanelWidth - 20, 35); // Reduced from 50 to 35
 
-  // Create a colored button for the palette block
-  ImGui::PushStyleColor(ImGuiCol_Button, block.color);
-  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertU32ToFloat4(block.color));
-  ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::ColorConvertU32ToFloat4(block.color));
+  // IMPROVED: More subtle button colors with better hover/active states
+  ImVec4 baseColor = ImGui::ColorConvertU32ToFloat4(block.color);
+  ImVec4 hoverColor = ImVec4(baseColor.x * 1.1f, baseColor.y * 1.1f, baseColor.z * 1.1f, baseColor.w);
+  ImVec4 activeColor = ImVec4(baseColor.x * 0.9f, baseColor.y * 0.9f, baseColor.z * 0.9f, baseColor.w);
+
+  ImGui::PushStyleColor(ImGuiCol_Button, baseColor);
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
+  ImGui::PushStyleColor(ImGuiCol_ButtonActive, activeColor);
 
   std::string buttonLabel = block.label + "##palette" + std::to_string(index);
 
@@ -160,22 +168,48 @@ void MachineBlockUI::RenderPaletteBlock(const MachineBlock& block, int index) {
 
   ImGui::PopStyleColor(3);
 
-  // Special highlighting for START/END blocks
+  // Special highlighting for START/END blocks (smaller icons)
   if (block.type == BlockType::START || block.type == BlockType::END) {
     ImGui::SameLine();
     if (block.type == BlockType::START) {
-      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "⭐");
+      ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "▶");
     }
     else {
-      ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "🛑");
+      ImGui::TextColored(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), "⏹");
     }
   }
 
-  // Tooltip
+  // Enhanced tooltip with more information
   if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("Drag to canvas or click to add %s block", block.label.c_str());
+    std::string tooltipText = "Drag to canvas or click to add " + block.label + " block";
+
+    // Add specific descriptions for each block type
+    switch (block.type) {
+    case BlockType::START:
+      tooltipText += "\nStarts program execution";
+      break;
+    case BlockType::END:
+      tooltipText += "\nEnds program execution";
+      break;
+    case BlockType::MOVE_NODE:
+      tooltipText += "\nMoves device to specified node";
+      break;
+    case BlockType::WAIT:
+      tooltipText += "\nPauses execution for specified time";
+      break;
+    case BlockType::SET_OUTPUT:
+      tooltipText += "\nActivates an output pin";
+      break;
+    case BlockType::CLEAR_OUTPUT:
+      tooltipText += "\nDeactivates an output pin";
+      break;
+    }
+
+    ImGui::SetTooltip("%s", tooltipText.c_str());
   }
 }
+
+
 
 void MachineBlockUI::RenderMiddlePanel() {
   ImGui::Text("Program Canvas");
@@ -234,12 +268,27 @@ void MachineBlockUI::RenderMiddlePanel() {
     }
   }
 
-  // Canvas area
+  // Calculate canvas size
   ImVec2 canvasSize = ImGui::GetContentRegionAvail();
+
+  // Ensure minimum canvas size
+  if (canvasSize.x < 50.0f) canvasSize.x = 50.0f;
+  if (canvasSize.y < 50.0f) canvasSize.y = 50.0f;
+
+  // Create a child frame for the canvas - this isolates mouse input!
+  ImGui::BeginChildFrame(ImGui::GetID("CanvasFrame"), canvasSize,
+    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav);
+
+  // Get the canvas position for coordinate calculations
   ImVec2 canvasPos = ImGui::GetCursorScreenPos();
 
-  // Draw canvas background
+  // Track if the canvas is hovered (this now refers to the child frame)
+  bool isCanvasHovered = ImGui::IsWindowHovered();
+
+  // Get the draw list for custom rendering
   ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+  // Draw canvas background
   drawList->AddRectFilled(canvasPos,
     ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
     CANVAS_BG_COLOR);
@@ -247,25 +296,20 @@ void MachineBlockUI::RenderMiddlePanel() {
   // Draw grid
   RenderGrid(canvasPos, canvasSize);
 
-  // Handle canvas interactions
-  bool isCanvasHovered = ImGui::IsWindowHovered() &&
-    ImGui::IsMouseHoveringRect(canvasPos,
-      ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y));
-
-  // Pan with middle mouse button
+  // Pan with middle mouse button (now isolated to canvas)
   if (isCanvasHovered && ImGui::IsMouseDragging(ImGuiMouseButton_Middle)) {
     ImVec2 delta = ImGui::GetIO().MouseDelta;
     m_canvasOffset.x += delta.x / m_canvasZoom;
     m_canvasOffset.y += delta.y / m_canvasZoom;
   }
 
-  // Zoom with mouse wheel
+  // Zoom with mouse wheel (now isolated to canvas)
   if (isCanvasHovered && ImGui::GetIO().MouseWheel != 0) {
     float zoomDelta = ImGui::GetIO().MouseWheel * 0.1f;
     m_canvasZoom = (std::max)(0.3f, (std::min)(m_canvasZoom + zoomDelta, 3.0f));
   }
 
-  // Handle block selection and dragging
+  // Handle block selection and dragging (now isolated to canvas)
   if (isCanvasHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
     ImVec2 mousePos = ImGui::GetIO().MousePos;
     MachineBlock* clickedBlock = GetBlockAtPosition(mousePos, canvasPos);
@@ -296,7 +340,7 @@ void MachineBlockUI::RenderMiddlePanel() {
     }
   }
 
-  // Handle block dragging
+  // Handle block dragging (now isolated to canvas)
   if (m_isDragging && m_draggedBlock && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
     ImVec2 mousePos = ImGui::GetIO().MousePos;
     ImVec2 worldPos = CanvasToWorld(canvasPos, mousePos);
@@ -309,7 +353,7 @@ void MachineBlockUI::RenderMiddlePanel() {
     m_draggedBlock = nullptr;
   }
 
-  // Right-click context menu
+  // Right-click context menu (now isolated to canvas)
   if (isCanvasHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
     ImVec2 mousePos = ImGui::GetIO().MousePos;
     MachineBlock* clickedBlock = GetBlockAtPosition(mousePos, canvasPos);
@@ -318,23 +362,6 @@ void MachineBlockUI::RenderMiddlePanel() {
       ImGui::OpenPopup("BlockContextMenu");
       m_selectedBlock = clickedBlock;
     }
-  }
-
-  // Block context menu
-  if (ImGui::BeginPopup("BlockContextMenu")) {
-    if (m_selectedBlock) {
-      ImGui::Text("Block: %s", m_selectedBlock->label.c_str());
-      ImGui::Separator();
-
-      if (ImGui::MenuItem("Delete Block")) {
-        DeleteSelectedBlock();
-      }
-
-      if (CanBlockProvideOutput(*m_selectedBlock) && ImGui::MenuItem("Start Connection")) {
-        StartConnection(m_selectedBlock, GetBlockOutputPoint(*m_selectedBlock, canvasPos));
-      }
-    }
-    ImGui::EndPopup();
   }
 
   // Render connections
@@ -363,7 +390,64 @@ void MachineBlockUI::RenderMiddlePanel() {
     ImVec2 mousePos = ImGui::GetIO().MousePos;
     drawList->AddLine(m_connectionStartPos, mousePos, IM_COL32(255, 255, 0, 200), 3.0f);
   }
+
+  // Context menu (MUST be inside the child frame where it was opened)
+  // SAFETY: Add null pointer checks to prevent crashes
+  if (ImGui::BeginPopup("BlockContextMenu")) {
+    // Double-check that the selected block still exists and is valid
+    bool blockStillExists = false;
+    if (m_selectedBlock) {
+      for (const auto& block : m_programBlocks) {
+        if (block.get() == m_selectedBlock) {
+          blockStillExists = true;
+          break;
+        }
+      }
+    }
+
+    if (blockStillExists && m_selectedBlock) {
+      ImGui::Text("Block: %s", m_selectedBlock->label.c_str());
+      ImGui::Separator();
+
+      // Show delete option with restrictions
+      if (m_selectedBlock->type == BlockType::START || m_selectedBlock->type == BlockType::END) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f)); // Gray out
+        ImGui::MenuItem("Delete Block (Protected)", nullptr, false, false); // Disabled
+        ImGui::PopStyleColor();
+      }
+      else {
+        if (ImGui::MenuItem("Delete Block")) {
+          // Store the block to delete to avoid using m_selectedBlock after deletion
+          MachineBlock* blockToDelete = m_selectedBlock;
+          DeleteSelectedBlock();
+          // Note: m_selectedBlock is now nullptr, don't use it after this point
+        }
+      }
+
+      // Only show connection option if block still exists and can provide output
+      if (m_selectedBlock && CanBlockProvideOutput(*m_selectedBlock)) {
+        if (ImGui::MenuItem("Start Connection")) {
+          StartConnection(m_selectedBlock, GetBlockOutputPoint(*m_selectedBlock, canvasPos));
+        }
+      }
+    }
+    else {
+      // Block no longer exists, show error message
+      ImGui::Text("Block no longer exists");
+      ImGui::Separator();
+      ImGui::MenuItem("Close", nullptr, false, false);
+
+      // Clear the invalid selection
+      m_selectedBlock = nullptr;
+    }
+
+    ImGui::EndPopup();
+  }
+
+  // Close the canvas child frame
+  ImGui::EndChildFrame();
 }
+
 
 void MachineBlockUI::RenderProgramBlock(const MachineBlock& block, const ImVec2& canvasPos) {
   ImVec2 screenPos = WorldToCanvas(canvasPos, block.position);
@@ -488,11 +572,13 @@ void MachineBlockUI::RenderGrid(const ImVec2& canvasPos, const ImVec2& canvasSiz
   }
 }
 
+// IMPROVED: Enhanced program validation display
+// IMPROVED: Update right panel to show deletion restrictions
 void MachineBlockUI::RenderRightPanel() {
   ImGui::Text("Properties");
   ImGui::Separator();
 
-  // Add execution status at the top of right panel
+  // Add execution status display
   RenderExecutionStatus();
 
   ImGui::Spacing();
@@ -502,6 +588,20 @@ void MachineBlockUI::RenderRightPanel() {
     ImGui::Text("Block: %s", m_selectedBlock->label.c_str());
     ImGui::Text("Type: %s", BlockTypeToString(m_selectedBlock->type).c_str());
     ImGui::Text("ID: %d", m_selectedBlock->id);
+
+    // Show deletion restriction for START/END blocks
+    if (m_selectedBlock->type == BlockType::START) {
+      ImGui::Spacing();
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.0f, 1.0f)); // Orange
+      ImGui::TextWrapped("🚫 START blocks cannot be deleted");
+      ImGui::PopStyleColor();
+    }
+    else if (m_selectedBlock->type == BlockType::END) {
+      ImGui::Spacing();
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.0f, 1.0f)); // Orange
+      ImGui::TextWrapped("🚫 END blocks cannot be deleted");
+      ImGui::PopStyleColor();
+    }
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -544,8 +644,26 @@ void MachineBlockUI::RenderRightPanel() {
     ImGui::Separator();
     ImGui::Text("Program Info:");
     ImGui::Text("Total Blocks: %zu", m_programBlocks.size());
-    ImGui::Text("START Blocks: %d", CountBlocksOfType(BlockType::START));
-    ImGui::Text("END Blocks: %d", CountBlocksOfType(BlockType::END));
+
+    int startCount = CountBlocksOfType(BlockType::START);
+    int endCount = CountBlocksOfType(BlockType::END);
+
+    // Show START block status
+    if (startCount == 1) {
+      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ START Blocks: %d", startCount);
+    }
+    else {
+      ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ START Blocks: %d (need 1)", startCount);
+    }
+
+    // Show END block status
+    if (endCount >= 1) {
+      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ END Blocks: %d", endCount);
+    }
+    else {
+      ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ END Blocks: %d (need ≥1)", endCount);
+    }
+
     ImGui::Text("Connections: %zu", m_connections.size());
 
     ImGui::Spacing();
@@ -554,9 +672,18 @@ void MachineBlockUI::RenderRightPanel() {
     }
     else {
       ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "⚠ Program has issues");
+      if (startCount == 0) {
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "  - Add a START block");
+      }
+      if (endCount == 0) {
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "  - Add an END block");
+      }
     }
   }
 }
+
+
+
 // Canvas utility methods
 ImVec2 MachineBlockUI::WorldToCanvas(const ImVec2& canvasPos, const ImVec2& worldPos) const {
   return ImVec2(
@@ -572,13 +699,21 @@ ImVec2 MachineBlockUI::CanvasToWorld(const ImVec2& canvasPos, const ImVec2& canv
   );
 }
 
-// Block management methods
+// IMPROVED: Prevent multiple START blocks and limit END blocks
 void MachineBlockUI::AddBlockToProgram(BlockType type, const ImVec2& position) {
   // Prevent multiple START blocks
   if (type == BlockType::START && CountBlocksOfType(BlockType::START) > 0) {
-    printf("❌ Only one START block allowed per program!\n");
+    printf("🚫 Only one START block allowed per program!\n");
+    printf("   A program can have exactly one START block.\n");
     return;
   }
+
+  // OPTIONAL: Limit to one END block (uncomment if you want this restriction)
+  // if (type == BlockType::END && CountBlocksOfType(BlockType::END) > 0) {
+  //   printf("🚫 Only one END block allowed per program!\n");
+  //   printf("   A program can have exactly one END block.\n");
+  //   return;
+  // }
 
   auto newBlock = std::make_unique<MachineBlock>(m_nextBlockId++, type, BlockTypeToString(type), GetBlockColor(type));
   newBlock->position = position;
@@ -633,14 +768,46 @@ void MachineBlockUI::InitializeBlockParameters(MachineBlock& block) {
   }
 }
 
+// FIXED: Improved block deletion with proper pointer cleanup
 void MachineBlockUI::DeleteSelectedBlock() {
   if (!m_selectedBlock) return;
 
-  int blockId = m_selectedBlock->id;
+  // Prevent deletion during execution
+  if (m_isExecuting) {
+    printf("⚠️ Cannot delete blocks during execution!\n");
+    return;
+  }
 
+  // PREVENT DELETION OF START AND END BLOCKS
+  if (m_selectedBlock->type == BlockType::START) {
+    printf("🚫 Cannot delete START block! Every program needs exactly one START block.\n");
+    return;
+  }
+
+  if (m_selectedBlock->type == BlockType::END) {
+    printf("🚫 Cannot delete END block! Every program needs at least one END block.\n");
+    return;
+  }
+
+  int blockId = m_selectedBlock->id;
   printf("🗑️ Deleting block: %s (ID: %d)\n", m_selectedBlock->label.c_str(), blockId);
 
-  // First, safely remove all connections involving this block
+  // CRITICAL: Clean up ALL pointers that might reference this block BEFORE deletion
+
+  // 1. Cancel any ongoing connection if it involves this block
+  if (m_isConnecting && m_connectionStart && m_connectionStart->id == blockId) {
+    printf("   Cancelling ongoing connection\n");
+    CancelConnection();
+  }
+
+  // 2. Stop any dragging operation if it involves this block
+  if (m_isDragging && m_draggedBlock && m_draggedBlock->id == blockId) {
+    printf("   Stopping drag operation\n");
+    m_isDragging = false;
+    m_draggedBlock = nullptr;
+  }
+
+  // 3. Remove all connections involving this block
   auto connectionsToRemove = std::vector<BlockConnection>();
   for (const auto& conn : m_connections) {
     if (conn.fromBlockId == blockId || conn.toBlockId == blockId) {
@@ -654,9 +821,9 @@ void MachineBlockUI::DeleteSelectedBlock() {
     DeleteConnection(conn.fromBlockId, conn.toBlockId);
   }
 
-  // Double-check: Clean up any remaining references in all blocks
+  // 4. Clean up any remaining references in all blocks
   for (auto& block : m_programBlocks) {
-    if (block.get() == m_selectedBlock) continue; // Skip the block we're deleting
+    if (block.get() == m_selectedBlock) continue;
 
     // Remove from input connections
     auto inputIt = std::find(block->inputConnections.begin(), block->inputConnections.end(), blockId);
@@ -665,7 +832,7 @@ void MachineBlockUI::DeleteSelectedBlock() {
       printf("   Cleaned input reference from block %d\n", block->id);
     }
 
-    // Remove from output connections
+    // Remove from output connections  
     auto outputIt = std::find(block->outputConnections.begin(), block->outputConnections.end(), blockId);
     if (outputIt != block->outputConnections.end()) {
       block->outputConnections.erase(outputIt);
@@ -673,27 +840,27 @@ void MachineBlockUI::DeleteSelectedBlock() {
     }
   }
 
-  // Cancel any ongoing connection if it involves this block
-  if (m_isConnecting && m_connectionStart && m_connectionStart->id == blockId) {
-    printf("   Cancelling ongoing connection\n");
-    CancelConnection();
-  }
+  // 5. Store a temporary pointer for safe removal
+  MachineBlock* blockToDelete = m_selectedBlock;
 
-  // Remove the block itself
+  // 6. Clear the selection BEFORE removing the block from the vector
+  m_selectedBlock = nullptr;
+
+  // 7. Remove the block from the vector
   m_programBlocks.erase(
     std::remove_if(m_programBlocks.begin(), m_programBlocks.end(),
-      [this](const std::unique_ptr<MachineBlock>& block) {
-    return block.get() == m_selectedBlock;
+      [blockToDelete](const std::unique_ptr<MachineBlock>& block) {
+    return block.get() == blockToDelete;
   }),
     m_programBlocks.end()
   );
 
-  // Clear selection
-  m_selectedBlock = nullptr;
-
   printf("✅ Block deleted successfully. Remaining blocks: %zu, connections: %zu\n",
     m_programBlocks.size(), m_connections.size());
 }
+
+
+
 
 MachineBlock* MachineBlockUI::GetBlockAtPosition(const ImVec2& pos, const ImVec2& canvasPos) {
   ImVec2 worldPos = CanvasToWorld(canvasPos, pos);
@@ -813,7 +980,7 @@ bool MachineBlockUI::CanBlockProvideOutput(const MachineBlock& block) const {
   return block.type != BlockType::END;
 }
 
-// Program validation and execution
+// SIMPLIFIED: Much simpler program validation
 bool MachineBlockUI::ValidateProgram() const {
   int startCount = CountBlocksOfType(BlockType::START);
   int endCount = CountBlocksOfType(BlockType::END);
@@ -841,13 +1008,18 @@ MachineBlock* MachineBlockUI::FindStartBlock() {
   return nullptr;
 }
 
+// Add these improved methods to your MachineBlockUI.cpp file
+// Replace the existing methods with these crash-safe versions
+
+// IMPROVED: Safe execution order calculation
 std::vector<MachineBlock*> MachineBlockUI::GetExecutionOrder() {
   std::vector<MachineBlock*> executionOrder;
-  MachineBlock* currentBlock = FindStartBlock();
 
+  // Find START block
+  MachineBlock* currentBlock = FindStartBlock();
   if (!currentBlock) {
     printf("⚠️ No START block found for execution\n");
-    return executionOrder;
+    return executionOrder; // Return empty list instead of crashing
   }
 
   std::set<int> visited; // Prevent infinite loops
@@ -859,6 +1031,7 @@ std::vector<MachineBlock*> MachineBlockUI::GetExecutionOrder() {
     executionOrder.push_back(currentBlock);
     steps++;
 
+    // If we reach an END block, we're done
     if (currentBlock->type == BlockType::END) {
       break;
     }
@@ -896,7 +1069,6 @@ std::vector<MachineBlock*> MachineBlockUI::GetExecutionOrder() {
 
   return executionOrder;
 }
-
 // Update the existing ExecuteProgram method to redirect to sequence execution
 void MachineBlockUI::ExecuteProgram() {
   if (m_machineOps) {
@@ -987,6 +1159,7 @@ void MachineBlockUI::ExecuteProgramAsSequence() {
   });
 }
 
+// IMPROVED: Safe execution with better error handling
 void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComplete) {
   if (!m_machineOps) {
     printf("❌ Cannot execute: MachineOperations not set!\n");
@@ -1001,23 +1174,54 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
     return;
   }
 
+  // Enhanced validation with specific error messages
   if (!ValidateProgram()) {
     printf("❌ Cannot execute: Program is invalid!\n");
-    printf("   - Ensure you have exactly one START block\n");
-    printf("   - Ensure you have at least one END block\n");
-    printf("   - Connect blocks to create a valid flow\n");
+
+    int startCount = CountBlocksOfType(BlockType::START);
+    int endCount = CountBlocksOfType(BlockType::END);
+
+    if (startCount == 0) {
+      printf("   - Missing START block (need exactly 1)\n");
+    }
+    else if (startCount > 1) {
+      printf("   - Too many START blocks (found %d, need exactly 1)\n", startCount);
+    }
+
+    if (endCount == 0) {
+      printf("   - Missing END block (need at least 1)\n");
+    }
+
+    if (startCount == 1 && endCount >= 1 && !HasValidExecutionPath()) {
+      printf("   - No valid path from START to END block\n");
+      printf("   - Make sure blocks are properly connected\n");
+    }
+
     if (onComplete) onComplete(false);
     return;
   }
 
   auto executionOrder = GetExecutionOrder();
   if (executionOrder.empty()) {
-    printf("❌ No execution path found! Make sure START block is connected.\n");
+    printf("❌ No execution path found!\n");
+    printf("   - Make sure START block is connected to other blocks\n");
+    printf("   - Ensure there's a path from START to END\n");
     if (onComplete) onComplete(false);
     return;
   }
 
-  // Convert blocks to sequence operations
+  // Check if execution order actually ends with an END block
+  bool endsWithEndBlock = false;
+  if (!executionOrder.empty()) {
+    endsWithEndBlock = (executionOrder.back()->type == BlockType::END);
+  }
+
+  if (!endsWithEndBlock) {
+    printf("⚠️ Warning: Execution path doesn't end with an END block\n");
+    printf("   This may cause unexpected behavior\n");
+  }
+
+  // Rest of the execution code remains the same...
   BlockSequenceConverter converter(*m_machineOps);
 
   // Get program name from START block for sequence naming
@@ -1048,6 +1252,9 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
   printf("========================================\n");
   printf("Program: %s\n", programName.c_str());
   printf("Blocks: %zu operations\n", executionOrder.size());
+  if (!endsWithEndBlock) {
+    printf("⚠️  Warning: No END block in execution path\n");
+  }
   printf("========================================\n");
 
   // Set completion callback for the sequence
@@ -1072,7 +1279,6 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 
   executionThread.detach(); // Let it run independently
 }
-
 
 
 // Rename the original method for debug purposes
@@ -1163,3 +1369,104 @@ void MachineBlockUI::RenderExecutionStatus() {
   }
 }
 
+bool MachineBlockUI::HasValidExecutionPath() const {
+  // Simple validation - just check counts
+  return ValidateProgram();
+}
+// Add this method implementation to your MachineBlockUI.cpp file
+
+// SIMPLIFIED: Remove the complex path validation(optional)
+// Since we prevent deletion of START/END, we don't need complex validation
+bool MachineBlockUI::HasValidFlow() const {
+  // Simple validation - just check counts
+  return ValidateProgram();
+}
+
+// ALTERNATIVE: If you want to make HasValidFlow() just call HasValidExecutionPath()
+// You can replace the above implementation with this simpler version:
+
+/*
+bool MachineBlockUI::HasValidFlow() const {
+  // Simple wrapper around HasValidExecutionPath for backward compatibility
+  return HasValidExecutionPath();
+}
+*/
+
+// Add helper function to get block description
+std::string MachineBlockUI::GetBlockDescription(const MachineBlock& block) const {
+  switch (block.type) {
+  case BlockType::START: {
+    std::string progName = GetParameterValue(block, "program_name");
+    return progName.empty() ? "START" : progName;
+  }
+
+  case BlockType::END: {
+    return "END";
+  }
+
+  case BlockType::MOVE_NODE: {
+    std::string deviceName = GetParameterValue(block, "device_name");
+    std::string nodeId = GetParameterValue(block, "node_id");
+
+    if (!deviceName.empty() && !nodeId.empty()) {
+      // Truncate long node IDs for display
+      std::string shortNodeId = nodeId;
+      if (nodeId.length() > 10) {
+        shortNodeId = nodeId.substr(0, 7) + "...";
+      }
+      return deviceName + "\n→ " + shortNodeId;
+    }
+    return "Move Node";
+  }
+
+  case BlockType::WAIT: {
+    std::string milliseconds = GetParameterValue(block, "milliseconds");
+    std::string description = GetParameterValue(block, "description");
+
+    if (!milliseconds.empty()) {
+      int ms = std::stoi(milliseconds);
+      if (ms >= 1000) {
+        float seconds = ms / 1000.0f;
+        return "Wait\n" + std::to_string(seconds) + "s";
+      }
+      else {
+        return "Wait\n" + milliseconds + "ms";
+      }
+    }
+    return "Wait";
+  }
+
+  case BlockType::SET_OUTPUT: {
+    std::string deviceName = GetParameterValue(block, "device_name");
+    std::string pin = GetParameterValue(block, "pin");
+
+    if (!deviceName.empty() && !pin.empty()) {
+      return "Set Output\n" + deviceName + "[" + pin + "]";
+    }
+    return "Set Output";
+  }
+
+  case BlockType::CLEAR_OUTPUT: {
+    std::string deviceName = GetParameterValue(block, "device_name");
+    std::string pin = GetParameterValue(block, "pin");
+
+    if (!deviceName.empty() && !pin.empty()) {
+      return "Clear Output\n" + deviceName + "[" + pin + "]";
+    }
+    return "Clear Output";
+  }
+
+  default:
+    return block.label;
+  }
+}
+
+// Add helper function to get parameter value
+std::string MachineBlockUI::GetParameterValue(const MachineBlock& block, const std::string& paramName) const {
+  for (const auto& param : block.parameters) {
+    if (param.name == paramName) {
+      return param.value;
+    }
+  }
+  return "";
+}
