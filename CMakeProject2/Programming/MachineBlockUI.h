@@ -84,6 +84,12 @@ public:
   // Debug execution (simulation only)
   void ExecuteProgramDebugOnly();
 
+  // NEW: Single block execution capability
+  void ExecuteSingleBlock(MachineBlock* block);
+  void ExecuteSingleBlockAsSequence(MachineBlock* block, std::function<void(bool)> onComplete = nullptr);
+
+
+
 private:
   // UI state
   bool m_showWindow = true;
@@ -204,5 +210,6 @@ private:
   // JSON helper methods
   std::string BlockTypeToJsonString(BlockType type) const;
   BlockType JsonStringToBlockType(const std::string& typeStr) const;
-
+  // Helper method to create a single block sequence
+  std::vector<MachineBlock*> CreateSingleBlockExecutionOrder(MachineBlock* block);
 };

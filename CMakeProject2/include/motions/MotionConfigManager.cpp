@@ -548,3 +548,20 @@ std::optional<std::reference_wrapper<const std::map<std::string, PositionStruct>
   // This is just an alias for GetDevicePositions for better semantic clarity
   return GetDevicePositions(deviceName);
 }
+
+bool MotionConfigManager::ReloadConfig() {
+  try {
+    // Clear existing data
+    m_devices.clear();
+    m_graphs.clear();
+
+    // Reload from the same file path
+    LoadConfig(m_configFilePath);
+
+    return true;
+  }
+  catch (const std::exception& e) {
+    std::cerr << "Error reloading configuration: " << e.what() << std::endl;
+    return false;
+  }
+}

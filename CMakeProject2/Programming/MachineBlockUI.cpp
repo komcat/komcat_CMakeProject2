@@ -411,6 +411,36 @@ void MachineBlockUI::RenderMiddlePanel() {
       ImGui::Text("Block: %s", m_selectedBlock->label.c_str());
       ImGui::Separator();
 
+      // NEW: Execute Single Block option
+      if (m_selectedBlock->type != BlockType::START && m_selectedBlock->type != BlockType::END) {
+        if (!m_isExecuting) {
+          if (ImGui::MenuItem("Execute Block")) {
+            ExecuteSingleBlock(m_selectedBlock);
+            ImGui::CloseCurrentPopup();
+          }
+          ImGui::Separator();
+        }
+        else {
+          ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+          ImGui::MenuItem("Execute Block", nullptr, false, false);
+          ImGui::PopStyleColor();
+          if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Cannot execute while program is running");
+          }
+          ImGui::Separator();
+        }
+      }
+      else {
+        // Show why START/END blocks can't be executed individually
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+        ImGui::MenuItem("Execute Block", nullptr, false, false);
+        ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) {
+          ImGui::SetTooltip("START and END blocks cannot be executed individually");
+        }
+        ImGui::Separator();
+      }
+
       // Show delete option with restrictions
       if (m_selectedBlock->type == BlockType::START || m_selectedBlock->type == BlockType::END) {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f)); // Gray out
@@ -649,12 +679,16 @@ void MachineBlockUI::RenderRightPanel() {
 
       // Extract parameters for save position functionality
       std::string deviceName = "";
+      std::string graphName = "";
       std::string nodeId = "";
 
-      // Find device_name and node_id parameters
+      // Find device_name, graph_name, and node_id parameters
       for (const auto& param : m_selectedBlock->parameters) {
         if (param.name == "device_name") {
           deviceName = param.value;
+        }
+        else if (param.name == "graph_name") {
+          graphName = param.value;
         }
         else if (param.name == "node_id") {
           nodeId = param.value;
@@ -662,33 +696,57 @@ void MachineBlockUI::RenderRightPanel() {
       }
 
       // Display current target info
-      if (!deviceName.empty() && !nodeId.empty()) {
+      if (!deviceName.empty() && !nodeId.empty() && !graphName.empty()) {
         ImGui::TextWrapped("Device: %s", deviceName.c_str());
+        ImGui::TextWrapped("Graph: %s", graphName.c_str());
         ImGui::TextWrapped("Target Node: %s", nodeId.c_str());
+
+        // NEW: Look up the actual position name from the graph
+        std::string actualPositionName = "";
+        if (m_machineOps) {
+          // We need to get the position name that this node refers to
+          // This requires access to the motion config to look up the node
+          // For now, we'll show both the node ID and indicate we're looking up the position
+          ImGui::TextWrapped("Position: Looking up from graph...");
+        }
+
         ImGui::Spacing();
 
-        // Save Position Button
+        // Save Position Button - Updated text to indicate we're saving to the actual position
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 1.0f)); // Green
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.6f, 0.1f, 1.0f));
 
-        std::string buttonText = "Save Current Position to: " + nodeId;
+        std::string buttonText = "Save Current Position (Node: " + nodeId + ")";
 
         if (ImGui::Button(buttonText.c_str(), ImVec2(-1, 0))) {
           // Call the save position functionality
+          // We need to pass the node information so the save function can look up the correct position name
           if (m_machineOps) {
-            bool success = m_machineOps->SaveCurrentPositionToConfig(deviceName, nodeId);
+            // NEW: Call a different method that takes graph and node info
+            bool success = m_machineOps->SaveCurrentPositionForNode(deviceName, graphName, nodeId);
 
             if (success) {
-              printf("[SUCCESS] Position saved: %s -> '%s'\n",
-                deviceName.c_str(), nodeId.c_str());
+              printf("[SUCCESS] Position saved for node: %s (%s)\n",
+                nodeId.c_str(), deviceName.c_str());
+
+              // NEW: Force reload the motion configuration to refresh in-memory data
+              printf("[INFO] Reloading motion configuration...\n");
+              bool reloadSuccess = m_machineOps->ReloadMotionConfig();
+
+              if (reloadSuccess) {
+                printf("[SUCCESS] Motion configuration reloaded successfully\n");
+              }
+              else {
+                printf("[WARNING] Position saved but failed to reload configuration\n");
+              }
 
               // Optional: Show success message in UI
               ImGui::OpenPopup("Save Success");
             }
             else {
-              printf("[ERROR] Failed to save position: %s -> '%s'\n",
-                deviceName.c_str(), nodeId.c_str());
+              printf("[ERROR] Failed to save position for node: %s (%s)\n",
+                nodeId.c_str(), deviceName.c_str());
 
               // Optional: Show error message in UI
               ImGui::OpenPopup("Save Error");
@@ -704,16 +762,16 @@ void MachineBlockUI::RenderRightPanel() {
 
         // Tooltip for the save button
         if (ImGui::IsItemHovered()) {
-          ImGui::SetTooltip("Save the current position of controller '%s' to the configuration file\n"
-            "as a named position '%s' that can be used by this motion block.",
+          ImGui::SetTooltip("Save the current position of controller '%s' to the position\n"
+            "that node '%s' refers to in the motion graph.",
             deviceName.c_str(), nodeId.c_str());
         }
 
-        // Warning if device or node_id is empty
-        if (deviceName.empty() || nodeId.empty()) {
+        // Warning if device, graph, or node_id is empty
+        if (deviceName.empty() || graphName.empty() || nodeId.empty()) {
           ImGui::Spacing();
           ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
-          ImGui::TextWrapped("WARNING: Device name and node ID must be set to save position");
+          ImGui::TextWrapped("WARNING: Device name, graph name, and node ID must be set to save position");
           ImGui::PopStyleColor();
         }
 
@@ -721,7 +779,7 @@ void MachineBlockUI::RenderRightPanel() {
         ImGui::Spacing();
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f)); // Gray
         ImGui::TextWrapped("This will save the current physical position of the controller "
-          "and associate it with the node ID specified above.");
+          "to the position name that this node references in the motion graph.");
         ImGui::PopStyleColor();
       }
 
@@ -731,6 +789,7 @@ void MachineBlockUI::RenderRightPanel() {
         ImGui::Text("SUCCESS: Position saved!");
         ImGui::PopStyleColor();
         ImGui::Text("The current position has been saved to motion_config.json");
+        ImGui::Text("Configuration has been reloaded automatically");
         ImGui::Spacing();
         if (ImGui::Button("OK", ImVec2(120, 0))) {
           ImGui::CloseCurrentPopup();
@@ -755,7 +814,6 @@ void MachineBlockUI::RenderRightPanel() {
     ImGui::TextWrapped("Select a block to view and edit its properties.");
   }
 }
-
 
 
 // Canvas utility methods
@@ -1687,4 +1745,126 @@ std::string MachineBlockUI::GetParameterValue(const MachineBlock& block, const s
     }
   }
   return "";
+}
+
+
+// Add these methods to your MachineBlockUI.cpp file
+
+// Execute a single block only
+void MachineBlockUI::ExecuteSingleBlock(MachineBlock* block) {
+  if (m_machineOps) {
+    // Use the new single block sequence-based execution
+    ExecuteSingleBlockAsSequence(block);
+  }
+  else {
+    // Fall back to debug-only execution for single block
+    printf("\n🚀 DEBUG MODE - SIMULATING SINGLE BLOCK EXECUTION:\n");
+    printf("========================================\n");
+    printf("Block: %s (ID: %d)\n", block->label.c_str(), block->id);
+    printf("Type: %s\n", BlockTypeToString(block->type).c_str());
+
+    // Print key parameters for debugging
+    for (const auto& param : block->parameters) {
+      if (param.name == "device_name" || param.name == "node_id" ||
+        param.name == "milliseconds" || param.name == "program_name") {
+        printf("   %s = %s\n", param.name.c_str(), param.value.c_str());
+      }
+    }
+    printf("========================================\n");
+    printf("✅ Single block debug simulation completed!\n");
+    printf("💡 To execute for real, call SetMachineOperations() first.\n\n");
+  }
+}
+
+// Execute single block as sequence (real execution)
+void MachineBlockUI::ExecuteSingleBlockAsSequence(MachineBlock* block, std::function<void(bool)> onComplete) {
+  if (!m_machineOps) {
+    printf("❌ Cannot execute: MachineOperations not set!\n");
+    printf("   Call SetMachineOperations() first.\n");
+    if (onComplete) onComplete(false);
+    return;
+  }
+
+  if (m_isExecuting) {
+    printf("⚠️ Execution already in progress!\n");
+    if (onComplete) onComplete(false);
+    return;
+  }
+
+  if (!block) {
+    printf("❌ Cannot execute: No block provided!\n");
+    if (onComplete) onComplete(false);
+    return;
+  }
+
+  // Skip START and END blocks for single execution
+  if (block->type == BlockType::START || block->type == BlockType::END) {
+    printf("⚠️ Cannot execute START or END blocks individually\n");
+    if (onComplete) onComplete(false);
+    return;
+  }
+
+  // Create execution order with just this single block
+  auto executionOrder = CreateSingleBlockExecutionOrder(block);
+
+  if (executionOrder.empty()) {
+    printf("❌ Failed to create execution order for single block!\n");
+    if (onComplete) onComplete(false);
+    return;
+  }
+
+  // Convert to sequence
+  BlockSequenceConverter converter(*m_machineOps);
+  std::string blockName = "Single Block: " + block->label;
+
+  m_currentSequence = converter.ConvertBlocksToSequence(executionOrder, blockName);
+
+  if (!m_currentSequence) {
+    printf("❌ Failed to convert block to sequence!\n");
+    if (onComplete) onComplete(false);
+    return;
+  }
+
+  // Set up execution
+  m_isExecuting = true;
+  m_executionStatus = "Executing Single Block...";
+
+  printf("\n🚀 EXECUTING SINGLE BLOCK AS SEQUENCE:\n");
+  printf("========================================\n");
+  printf("Block: %s (ID: %d)\n", block->label.c_str(), block->id);
+  printf("Type: %s\n", BlockTypeToString(block->type).c_str());
+  printf("========================================\n");
+
+  // Set completion callback for the sequence
+  m_currentSequence->SetCompletionCallback([this, onComplete](bool success) {
+    m_isExecuting = false;
+    m_executionStatus = success ? "Single Block Completed" : "Single Block Failed";
+
+    printf("\n========================================\n");
+    printf("%s\n", m_executionStatus.c_str());
+    printf("========================================\n");
+
+    if (onComplete) {
+      onComplete(success);
+    }
+  });
+
+  // Execute the sequence asynchronously
+  std::thread executionThread([this]() {
+    bool success = m_currentSequence->Execute();
+    // The completion callback will be called automatically by SequenceStep
+  });
+
+  executionThread.detach(); // Let it run independently
+}
+
+// Helper method to create execution order for single block
+std::vector<MachineBlock*> MachineBlockUI::CreateSingleBlockExecutionOrder(MachineBlock* block) {
+  std::vector<MachineBlock*> executionOrder;
+
+  if (block && block->type != BlockType::START && block->type != BlockType::END) {
+    executionOrder.push_back(block);
+  }
+
+  return executionOrder;
 }

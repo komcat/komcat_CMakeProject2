@@ -231,10 +231,12 @@ public:
 	bool SaveCurrentPositionToConfig(const std::string& deviceName, const std::string& positionName);
 	bool UpdateNamedPositionInConfig(const std::string& deviceName, const std::string& positionName);
 	bool SaveAllCurrentPositionsToConfig(const std::string& prefix = "current_");
-
+	bool ReloadMotionConfig();
 	// Backup and restore config operations
 	bool BackupMotionConfig(const std::string& backupSuffix = "");
 	bool RestoreMotionConfigFromBackup(const std::string& backupSuffix);
+	// NEW: Save current position for a specific node (looks up correct position name from graph)
+	bool SaveCurrentPositionForNode(const std::string& deviceName, const std::string& graphName, const std::string& nodeId);
 
 private:
 	MotionControlLayer& m_motionLayer;

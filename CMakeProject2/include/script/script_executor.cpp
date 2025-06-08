@@ -305,7 +305,7 @@ void ScriptExecutor::ExecuteScriptInternal() {
       }
 
       // Update current line and operation
-      m_currentLine = i + 1;
+      m_currentLine = static_cast<int>(i + 1);
       m_currentOperation = operations[i]->GetDescription();
 
       Log("Executing: " + m_currentOperation);
@@ -579,7 +579,7 @@ void ScriptExecutor::ProcessForLoop(const std::string& condition, size_t& index,
     // Execute loop body (statements between FOR and ENDFOR)
     for (size_t i = forIndex + 1; i < endForIndex && !m_stopRequested; i++) {
       // Update current line and operation
-      m_currentLine = i + 1;
+      m_currentLine = static_cast<int>(i + 1);
       m_currentOperation = m_sequence->GetOperations()[i]->GetDescription();
 
       Log("Executing: " + m_currentOperation);
@@ -689,7 +689,7 @@ void ScriptExecutor::ProcessWhileLoop(const std::string& condition, size_t& inde
     // Execute loop body (statements between WHILE and ENDWHILE)
     for (size_t i = whileIndex + 1; i < endWhileIndex && !m_stopRequested; i++) {
       // Update current line and operation
-      m_currentLine = i + 1;
+      m_currentLine = static_cast<int>(i + 1);
       m_currentOperation = m_sequence->GetOperations()[i]->GetDescription();
 
       Log("Executing: " + m_currentOperation);

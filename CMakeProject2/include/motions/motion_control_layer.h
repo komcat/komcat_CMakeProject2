@@ -110,6 +110,8 @@ public:
   bool BackupMotionConfig(const std::string& backupSuffix = "");
   bool SaveMotionConfig();
   bool ReloadMotionConfig();
+  // NEW: Get access to the motion config manager for node lookups
+  const MotionConfigManager& GetMotionConfigManager() const { return m_configManager; }
 
 
 private:

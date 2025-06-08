@@ -997,7 +997,8 @@ public:
       // Get current timestamp
       auto now = std::chrono::system_clock::now();
       auto time_t = std::chrono::system_clock::to_time_t(now);
-      auto tm = *std::gmtime(&time_t);
+      std::tm tm;
+      gmtime_s(&tm, &time_t);
 
       char timestamp[32];
       std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &tm);

@@ -69,6 +69,9 @@ public:
     // Save the configuration to a file
     bool SaveConfig(const std::string& filePath = "");
 
+    // NEW: Reload configuration from file
+    bool ReloadConfig();
+
     void UpdateGraph(const std::string& graphName, const Graph& updatedGraph);
     // Add this to the public section of MotionConfigManager.h
 // Get all named positions for a device

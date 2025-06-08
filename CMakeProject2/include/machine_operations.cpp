@@ -2063,3 +2063,85 @@ void MachineOperations::RefreshPositionCache() {
     GetCurrentPositions();
   }
 }
+
+bool MachineOperations::ReloadMotionConfig() {
+  m_logger->LogInfo("MachineOperations: Forcing motion configuration reload");
+
+  bool success = m_motionLayer.ReloadMotionConfig();
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Motion configuration reloaded successfully");
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to reload motion configuration");
+  }
+
+  return success;
+}
+
+// 3. machine_operations.cpp - Implementation:
+bool MachineOperations::SaveCurrentPositionForNode(const std::string& deviceName, const std::string& graphName, const std::string& nodeId) {
+  m_logger->LogInfo("MachineOperations: Saving current position for node " + nodeId +
+    " in graph " + graphName + " for device " + deviceName);
+
+  // Validate inputs
+  if (deviceName.empty() || graphName.empty() || nodeId.empty()) {
+    m_logger->LogError("MachineOperations: Device name, graph name, and node ID cannot be empty");
+    return false;
+  }
+
+  // Check if device is connected
+  if (!IsDeviceConnected(deviceName)) {
+    m_logger->LogError("MachineOperations: Device " + deviceName + " is not connected");
+    return false;
+  }
+
+  try {
+    // Get the graph from config manager
+    auto graphOpt = m_motionLayer.GetMotionConfigManager().GetGraph(graphName);
+    if (!graphOpt.has_value()) {
+      m_logger->LogError("MachineOperations: Graph not found: " + graphName);
+      return false;
+    }
+
+    const auto& graph = graphOpt.value().get();
+
+    // Find the node in the graph
+    const Node* targetNode = nullptr;
+    for (const auto& node : graph.Nodes) {
+      if (node.Id == nodeId && node.Device == deviceName) {
+        targetNode = &node;
+        break;
+      }
+    }
+
+    if (!targetNode) {
+      m_logger->LogError("MachineOperations: Node " + nodeId + " not found for device " + deviceName + " in graph " + graphName);
+      return false;
+    }
+
+    // Get the actual position name from the node
+    std::string actualPositionName = targetNode->Position;
+
+    if (actualPositionName.empty()) {
+      m_logger->LogError("MachineOperations: Node " + nodeId + " has no position name defined");
+      return false;
+    }
+
+    m_logger->LogInfo("MachineOperations: Node " + nodeId + " refers to position '" + actualPositionName + "'");
+
+    // Now save the current position using the correct position name
+    bool success = m_motionLayer.SaveCurrentPositionToConfig(deviceName, actualPositionName);
+
+    if (success) {
+      m_logger->LogInfo("MachineOperations: Successfully saved current position of " + deviceName +
+        " to position '" + actualPositionName + "' (referenced by node " + nodeId + ")");
+    }
+
+    return success;
+  }
+  catch (const std::exception& e) {
+    m_logger->LogError("MachineOperations: Exception while saving position for node: " + std::string(e.what()));
+    return false;
+  }
+}

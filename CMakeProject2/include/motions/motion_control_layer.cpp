@@ -1439,14 +1439,13 @@ bool MotionControlLayer::ReloadMotionConfig() {
   m_logger->LogInfo("MotionControlLayer: Reloading motion configuration from file");
 
   try {
-    // Note: MotionConfigManager constructor loads the config, but we need a reload method
-    // For now, we'll log that manual restart is required
-    m_logger->LogWarning("MotionControlLayer: Configuration reload requires application restart");
-    m_logger->LogWarning("MotionControlLayer: Please restart the application to use updated configuration");
+    // Use the new reload method from MotionConfigManager
+    if (!m_configManager.ReloadConfig()) {
+      m_logger->LogError("MotionControlLayer: Failed to reload motion configuration");
+      return false;
+    }
 
-    // TODO: Implement proper config reload if MotionConfigManager supports it
-    // This would require adding a reload method to MotionConfigManager
-
+    m_logger->LogInfo("MotionControlLayer: Motion configuration reloaded successfully");
     return true;
 
   }
@@ -1455,3 +1454,4 @@ bool MotionControlLayer::ReloadMotionConfig() {
     return false;
   }
 }
+
