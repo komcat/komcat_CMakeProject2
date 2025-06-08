@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scan Files Browser</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .folder-path {
+            background: #ecf0f1;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            color: #34495e;
+            margin: 20px 0;
+            border-left: 4px solid #3498db;
+        }
+        .file-input-section {
+            background: #e8f4fd;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 2px dashed #3498db;
+        }
+        .file-list {
+            margin: 20px 0;
+        }
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            margin: 10px 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .file-item:hover {
+            background: #e3f2fd;
+            transform: translateX(5px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .file-icon {
+            font-size: 24px;
+            margin-right: 15px;
+            color: #3498db;
+        }
+        .file-info {
+            flex: 1;
+        }
+        .file-name {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        .file-details {
+            font-size: 12px;
+            color: #7f8c8d;
+            display: flex;
+            gap: 15px;
+        }
+        .file-stats {
+            display: flex;
+            gap: 20px;
+            margin-left: auto;
+            text-align: right;
+        }
+        .stat-item {
+            font-size: 12px;
+        }
+        .stat-label {
+            color: #7f8c8d;
+            display: block;
+        }
+        .stat-value {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .peak-value {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .analysis-container {
+            display: none;
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+        .back-button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .back-button:hover {
+            background: #2980b9;
+        }
+        .upload-area {
+            border: 2px dashed #3498db;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            background: #f8f9fa;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            background: #e3f2fd;
+            border-color: #2980b9;
+        }
+        .upload-area.dragover {
+            background: #e8f4fd;
+            border-color: #27ae60;
+        }
+        .hidden {
+            display: none;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #7f8c8d;
+        }
+        .error {
+            background: #ffe6e6;
+            color: #c0392b;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .status-good { color: #27ae60; }
+        .status-warning { color: #f39c12; }
+        .status-error { color: #e74c3c; }
+        
+        .filters-section {
+            background: #e8f4fd;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: none;
+        }
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .filter-group label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #2c3e50;
+        }
+        .filter-group select, .filter-group input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .filter-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .filter-btn:hover {
+            background: #2980b9;
+        }
+        .filter-btn.clear {
+            background: #95a5a6;
+        }
+        .filter-btn.clear:hover {
+            background: #7f8c8d;
+        }
+        .summary-stats {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: none;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        .stat-card {
+            text-align: center;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            📁 Scan Files Browser
+        </h1>
+        
+        <div class="folder-path">
+            📂 C:\Users\komgr\source\repos\komcat\3dev\out\build\x64-Debug\logs\scanning json folder
+        </div>
+
+        <div class="file-input-section">
+            <h3>🔄 Load Scan Files</h3>
+            <p>Upload your JSON scan files to analyze them:</p>
+            
+            <div class="upload-area" id="uploadArea">
+                <div>
+                    📤 Drop JSON files here or click to select
+                </div>
+                <input type="file" id="fileInput" multiple accept=".json" class="hidden">
+            </div>
+        </div>
+
+        <div class="summary-stats" id="summaryStats">
+            <h3>📊 Collection Summary</h3>
+            <div class="stats-grid" id="statsGrid"></div>
+        </div>
+
+        <div class="filters-section" id="filtersSection">
+            <h3>🔍 Filter & Sort</h3>
+            <div class="filters-grid">
+                <div class="filter-group">
+                    <label>Date Range</label>
+                    <input type="date" id="dateFrom" placeholder="From">
+                </div>
+                <div class="filter-group">
+                    <label>To Date</label>
+                    <input type="date" id="dateTo" placeholder="To">
+                </div>
+                <div class="filter-group">
+                    <label>Robot/Device</label>
+                    <select id="deviceFilter">
+                        <option value="">All Devices</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Sort By</label>
+                    <select id="sortBy">
+                        <option value="date-desc">Date (Newest First)</option>
+                        <option value="date-asc">Date (Oldest First)</option>
+                        <option value="peak-desc">Peak Value (Highest)</option>
+                        <option value="peak-asc">Peak Value (Lowest)</option>
+                        <option value="duration-desc">Duration (Longest)</option>
+                        <option value="duration-asc">Duration (Shortest)</option>
+                        <option value="measurements-desc">Measurements (Most)</option>
+                        <option value="measurements-asc">Measurements (Least)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="filter-buttons">
+                <button class="filter-btn" onclick="applyFilters()">Apply Filters</button>
+                <button class="filter-btn clear" onclick="clearFilters()">Clear All</button>
+                <span id="resultCount" style="margin-left: 10px; color: #7f8c8d;"></span>
+            </div>
+        </div>
+
+        <div id="fileList" class="file-list">
+            <div class="loading">
+                Upload JSON scan files to get started...
+            </div>
+        </div>
+
+        <div id="analysisContainer" class="analysis-container">
+            <button class="back-button" onclick="showFileList()">← Back to File List</button>
+            <div id="analysisContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let scanFiles = [];
+        let filteredFiles = [];
+        let currentAnalysis = null;
+
+        // File upload handling
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        // Value formatting functions
+        function formatValue(value) {
+            if (typeof value !== 'number') return 'N/A';
+            
+            if (value >= 1e-3) {
+                return `${(value * 1000).toFixed(2)}m`; // millimeters
+            } else if (value >= 1e-6) {
+                return `${(value * 1000000).toFixed(1)}μ`; // micrometers
+            } else if (value >= 1e-9) {
+                return `${(value * 1000000000).toFixed(0)}n`; // nanometers
+            } else {
+                return `${value.toExponential(2)}`;
+            }
+        }
+
+        function formatValueDetailed(value) {
+            if (typeof value !== 'number') return 'N/A';
+            
+            if (value >= 1e-3) {
+                return `${(value * 1000).toFixed(3)} mm`;
+            } else if (value >= 1e-6) {
+                return `${(value * 1000000).toFixed(2)} μm`;
+            } else if (value >= 1e-9) {
+                return `${(value * 1000000000).toFixed(1)} nm`;
+            } else {
+                return `${value.toExponential(3)}`;
+            }
+        }
+
+        function handleFiles(files) {
+            const jsonFiles = Array.from(files).filter(file => file.name.endsWith('.json'));
+            
+            if (jsonFiles.length === 0) {
+                showError('Please select JSON files.');
+                return;
+            }
+
+            loadFiles(jsonFiles);
+        }
+
+        async function loadFiles(files) {
+            fileList.innerHTML = '<div class="loading">Loading files...</div>';
+            scanFiles = [];
+
+            for (const file of files) {
+                try {
+                    const content = await file.text();
+                    const data = JSON.parse(content);
+                    
+                    const fileInfo = {
+                        name: file.name,
+                        data: data,
+                        size: file.size,
+                        lastModified: new Date(file.lastModified),
+                        scanDate: new Date(data.startTime || data.timestamp || file.lastModified),
+                        deviceId: data.deviceId || 'Unknown',
+                        peakValue: data.peak?.value || data.statistics?.maxValue || 0,
+                        duration: data.statistics?.totalDurationSeconds || 
+                                 Math.round((new Date(data.endTime || Date.now()) - new Date(data.startTime || Date.now())) / 1000),
+                        measurements: data.totalMeasurements || data.measurements?.length || 0
+                    };
+                    
+                    scanFiles.push(fileInfo);
+                } catch (error) {
+                    showError(`Error loading ${file.name}: ${error.message}`);
+                }
+            }
+
+            setupFilters();
+            filteredFiles = [...scanFiles];
+            displaySummaryStats();
+            displayFileList();
+            
+            // Show filters section
+            document.getElementById('filtersSection').style.display = 'block';
+            document.getElementById('summaryStats').style.display = 'block';
+        }
+
+        function setupFilters() {
+            // Populate device filter
+            const devices = [...new Set(scanFiles.map(f => f.deviceId))].sort();
+            const deviceSelect = document.getElementById('deviceFilter');
+            deviceSelect.innerHTML = '<option value="">All Devices</option>';
+            devices.forEach(device => {
+                deviceSelect.innerHTML += `<option value="${device}">${device}</option>`;
+            });
+
+            // Set date range defaults
+            const dates = scanFiles.map(f => f.scanDate).sort();
+            if (dates.length > 0) {
+                document.getElementById('dateFrom').value = dates[0].toISOString().split('T')[0];
+                document.getElementById('dateTo').value = dates[dates.length - 1].toISOString().split('T')[0];
+            }
+        }
+
+        function applyFilters() {
+            const dateFrom = document.getElementById('dateFrom').value;
+            const dateTo = document.getElementById('dateTo').value;
+            const deviceFilter = document.getElementById('deviceFilter').value;
+            const sortBy = document.getElementById('sortBy').value;
+
+            // Filter files
+            filteredFiles = scanFiles.filter(file => {
+                let include = true;
+
+                // Date filter
+                if (dateFrom && file.scanDate < new Date(dateFrom)) include = false;
+                if (dateTo && file.scanDate > new Date(dateTo + 'T23:59:59')) include = false;
+
+                // Device filter
+                if (deviceFilter && file.deviceId !== deviceFilter) include = false;
+
+                return include;
+            });
+
+            // Sort files
+            filteredFiles.sort((a, b) => {
+                switch (sortBy) {
+                    case 'date-desc': return b.scanDate - a.scanDate;
+                    case 'date-asc': return a.scanDate - b.scanDate;
+                    case 'peak-desc': return b.peakValue - a.peakValue;
+                    case 'peak-asc': return a.peakValue - b.peakValue;
+                    case 'duration-desc': return b.duration - a.duration;
+                    case 'duration-asc': return a.duration - b.duration;
+                    case 'measurements-desc': return b.measurements - a.measurements;
+                    case 'measurements-asc': return a.measurements - b.measurements;
+                    default: return b.scanDate - a.scanDate;
+                }
+            });
+
+            displayFileList();
+            updateResultCount();
+        }
+
+        function clearFilters() {
+            document.getElementById('dateFrom').value = '';
+            document.getElementById('dateTo').value = '';
+            document.getElementById('deviceFilter').value = '';
+            document.getElementById('sortBy').value = 'date-desc';
+            
+            filteredFiles = [...scanFiles];
+            displayFileList();
+            updateResultCount();
+        }
+
+        function updateResultCount() {
+            const count = filteredFiles.length;
+            const total = scanFiles.length;
+            document.getElementById('resultCount').textContent = 
+                `Showing ${count} of ${total} files`;
+        }
+
+        function displaySummaryStats() {
+            const totalFiles = scanFiles.length;
+            const devices = [...new Set(scanFiles.map(f => f.deviceId))].length;
+            const totalMeasurements = scanFiles.reduce((sum, f) => sum + f.measurements, 0);
+            const avgPeak = scanFiles.reduce((sum, f) => sum + f.peakValue, 0) / scanFiles.length;
+            const bestPeak = Math.max(...scanFiles.map(f => f.peakValue));
+            const totalDuration = scanFiles.reduce((sum, f) => sum + f.duration, 0);
+
+            const statsHTML = `
+                <div class="stat-card">
+                    <div class="stat-number">${totalFiles}</div>
+                    <div class="stat-label">Total Files</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${devices}</div>
+                    <div class="stat-label">Unique Devices</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${totalMeasurements.toLocaleString()}</div>
+                    <div class="stat-label">Total Measurements</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${formatValue(avgPeak)}</div>
+                    <div class="stat-label">Average Peak</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${formatValue(bestPeak)}</div>
+                    <div class="stat-label">Best Peak</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${Math.round(totalDuration / 60)}m</div>
+                    <div class="stat-label">Total Time</div>
+                </div>
+            `;
+
+            document.getElementById('statsGrid').innerHTML = statsHTML;
+        }
+
+        function displayFileList() {
+            if (filteredFiles.length === 0) {
+                fileList.innerHTML = '<div class="loading">No files match current filters.</div>';
+                return;
+            }
+
+            const html = filteredFiles.map((file, index) => {
+                const originalIndex = scanFiles.indexOf(file);
+                const stats = extractFileStats(file.data);
+                return `
+                    <div class="file-item" onclick="showAnalysis(${originalIndex})">
+                        <div class="file-icon">📄</div>
+                        <div class="file-info">
+                            <div class="file-name">${file.name}</div>
+                            <div class="file-details">
+                                <span>📅 ${file.scanDate.toLocaleDateString()}</span>
+                                <span>⏱️ ${file.duration}s</span>
+                                <span>📊 ${file.measurements} measurements</span>
+                                <span>🤖 ${file.deviceId}</span>
+                            </div>
+                        </div>
+                        <div class="file-stats">
+                            <div class="stat-item">
+                                <span class="stat-label">Peak Value</span>
+                                <span class="stat-value peak-value">${formatValue(file.peakValue)}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Status</span>
+                                <span class="stat-value ${stats.statusClass}">${stats.status}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            fileList.innerHTML = html;
+            updateResultCount();
+        }
+
+        function extractFileStats(data) {
+            let status = 'Good';
+            let statusClass = 'status-good';
+            
+            const measurements = data.totalMeasurements || data.measurements?.length || 0;
+            
+            if (measurements < 50) {
+                status = 'Short';
+                statusClass = 'status-warning';
+            } else if (measurements > 200) {
+                status = 'Long';
+                statusClass = 'status-warning';
+            }
+
+            return { status, statusClass };
+        }
+
+        function showAnalysis(fileIndex) {
+            const file = scanFiles[fileIndex];
+            currentAnalysis = file;
+            
+            document.getElementById('fileList').style.display = 'none';
+            document.getElementById('filtersSection').style.display = 'none';
+            document.getElementById('summaryStats').style.display = 'none';
+            document.getElementById('analysisContainer').style.display = 'block';
+            
+            generateAnalysis(file);
+        }
+
+        function showFileList() {
+            document.getElementById('fileList').style.display = 'block';
+            document.getElementById('filtersSection').style.display = 'block';
+            document.getElementById('summaryStats').style.display = 'block';
+            document.getElementById('analysisContainer').style.display = 'none';
+        }
+
+        function generateAnalysis(file) {
+            const data = file.data;
+            const sortedMeasurements = data.measurements.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            const peaks = sortedMeasurements.filter(m => m.isPeak);
+            
+            const stats = {
+                minValue: data.statistics.minValue,
+                maxValue: data.statistics.maxValue,
+                avgValue: data.statistics.averageValue,
+                stdDev: data.statistics.standardDeviation,
+                totalTime: Math.round((new Date(data.endTime) - new Date(data.startTime)) / 1000)
+            };
+
+            // Generate analysis HTML with proper formatting
+            const analysisHTML = `
+                <h1>🤖 Analysis: ${file.name}</h1>
+                
+                <h2>🎯 Peak Discovery Summary</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 20px 0;">
+                    ${peaks.map((peak, i) => `
+                        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px;">
+                            <h3>Peak ${i + 1}${i === peaks.length - 1 ? ' 🏆' : ''}</h3>
+                            <div style="font-size: 24px; font-weight: bold; margin: 10px 0;">${formatValueDetailed(peak.value)}</div>
+                            <div>Time: ${peak.timestamp.split(' ')[1]}</div>
+                            <div>Axis: ${peak.axis} ${peak.direction}</div>
+                            <div>Improvement: +${formatValueDetailed(peak.relativeImprovement)}</div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <h2>📊 Statistics</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0;">
+                    <div style="background: #ecf0f1; padding: 15px; border-radius: 5px; border-left: 4px solid #3498db;">
+                        <h3 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 14px;">Device ID</h3>
+                        <div style="font-size: 18px; font-weight: bold; color: #2c3e50;">${data.deviceId}</div>
+                    </div>
+                    <div style="background: #ecf0f1; padding: 15px; border-radius: 5px; border-left: 4px solid #3498db;">
+                        <h3 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 14px;">Duration</h3>
+                        <div style="font-size: 18px; font-weight: bold; color: #2c3e50;">${stats.totalTime} seconds</div>
+                    </div>
+                    <div style="background: #ecf0f1; padding: 15px; border-radius: 5px; border-left: 4px solid #3498db;">
+                        <h3 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 14px;">Measurements</h3>
+                        <div style="font-size: 18px; font-weight: bold; color: #2c3e50;">${data.totalMeasurements}</div>
+                    </div>
+                    <div style="background: #ecf0f1; padding: 15px; border-radius: 5px; border-left: 4px solid #3498db;">
+                        <h3 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 14px;">Peak Value</h3>
+                        <div style="font-size: 18px; font-weight: bold; color: #2c3e50;">${formatValueDetailed(data.peak.value)}</div>
+                    </div>
+                </div>
+
+                <h2>📊 Value Range</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0;">
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #27ae60;">
+                        <h3 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 14px;">Minimum</h3>
+                        <div style="font-size: 16px; font-weight: bold; color: #2c3e50;">${formatValueDetailed(stats.minValue)}</div>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #f39c12;">
+                        <h3 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 14px;">Average</h3>
+                        <div style="font-size: 16px; font-weight: bold; color: #2c3e50;">${formatValueDetailed(stats.avgValue)}</div>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #e74c3c;">
+                        <h3 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 14px;">Maximum</h3>
+                        <div style="font-size: 16px; font-weight: bold; color: #2c3e50;">${formatValueDetailed(stats.maxValue)}</div>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #9b59b6;">
+                        <h3 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 14px;">Std Deviation</h3>
+                        <div style="font-size: 16px; font-weight: bold; color: #2c3e50;">${formatValueDetailed(stats.stdDev)}</div>
+                    </div>
+                </div>
+
+                <h2>⏱️ Peak Timeline</h2>
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+                    ${peaks.map((peak, i) => `
+                        <div style="display: flex; align-items: center; margin: 8px 0; padding: 8px; background: white; border-radius: 5px; border-left: 3px solid ${i === peaks.length - 1 ? '#27ae60' : '#3498db'};">
+                            <div style="font-family: monospace; font-size: 11px; color: #666; width: 80px;">${peak.timestamp.split(' ')[1]}</div>
+                            <div style="width: 30px; text-align: center; font-weight: bold;">${peak.axis}</div>
+                            <div style="flex: 1; font-family: monospace; font-size: 12px;">
+                                <strong>${i === peaks.length - 1 ? '🏆 GLOBAL PEAK!' : `Peak ${i + 1}`}</strong> 
+                                Value: ${formatValueDetailed(peak.value)} 
+                                (${peak.direction} direction)
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 5px; text-align: center; color: #7f8c8d;">
+                    <small>📍 Final Peak: ${formatValueDetailed(data.peak.value)} at position X=${data.peak.position.x.toFixed(4)}, Y=${data.peak.position.y.toFixed(4)}, Z=${data.peak.position.z.toFixed(4)}</small>
+                </div>
+            `;
+
+            document.getElementById('analysisContent').innerHTML = analysisHTML;
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = message;
+            fileList.insertBefore(errorDiv, fileList.firstChild);
+            
+            setTimeout(() => errorDiv.remove(), 5000);
+        }
+    </script>
+
+    </script>
+</body>
+</html>

@@ -78,6 +78,10 @@
 #include "include/ModuleConfig.h"
 #include "Version.h"
 
+// CMakeProject2.cpp - MachineBlockUI Integration Example
+
+// Add this include at the top with other UI includes
+#include "Programming/MachineBlockUI.h"
 
 
 
@@ -1173,6 +1177,21 @@ int main(int argc, char* argv[])
     logger->LogInfo("CameraExposureTestUI initialized");
   }
 
+
+
+
+  // ADD MACHINE BLOCK UI INITIALIZATION
+  std::unique_ptr<MachineBlockUI> machineBlockUI;
+  if (moduleConfig.isEnabled("MACHINE_BLOCK_UI")) {
+    machineBlockUI = std::make_unique<MachineBlockUI>();
+    logger->LogInfo("MachineBlockUI initialized");
+  }
+
+
+
+
+
+
   // Vertical Toolbar (conditional)
   std::unique_ptr<VerticalToolbarMenu> toolbarVertical;
   if (moduleConfig.isEnabled("VERTICAL_TOOLBAR")) {
@@ -1276,6 +1295,12 @@ int main(int argc, char* argv[])
       toolbarVertical->AddReferenceToCategory("Products",
         CreateHierarchicalUI(*motionGraphic, "Motion Graphic"));
     }
+    // ADD MACHINE BLOCK UI TO TOOLBAR (in Products category)
+    if (machineBlockUI) {
+      toolbarVertical->AddReferenceToCategory("Products",
+        CreateHierarchicalUI(*machineBlockUI, "Block Programming"));
+    }
+
     if (cameraExposureTestUI) {
       toolbarVertical->AddReferenceToCategory("Products",
         CreateCameraExposureTestUIAdapter(*cameraExposureTestUI, "Camera Testing"));
@@ -1483,7 +1508,10 @@ int main(int argc, char* argv[])
     if (motionGraphic) {
       motionGraphic->RenderUI();
     }
-
+    // ADD MACHINE BLOCK UI RENDERING
+    if (machineBlockUI) {
+      machineBlockUI->RenderUI();
+    }
     // Render camera exposure system
     if (machineOps && machineOps->GetCameraExposureManager()) {
       machineOps->GetCameraExposureManager()->RenderUI();
