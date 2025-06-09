@@ -1057,11 +1057,15 @@ std::vector<MachineBlock*> MachineBlockUI::GetExecutionOrder() {
 // Update the existing ExecuteProgram method to redirect to sequence execution
 void MachineBlockUI::ExecuteProgram() {
   if (m_machineOps) {
-    // Use the new sequence-based execution
+    // Use real machine operations
     ExecuteProgramAsSequence();
   }
+  else if (m_virtualOps) {
+    // Use virtual machine operations - execute step by step
+    ExecuteProgramWithVirtualOps();
+  }
   else {
-    // Fall back to the original debug-only execution
+    // Fall back to debug simulation
     ExecuteProgramDebugOnly();
   }
 }
@@ -1720,4 +1724,76 @@ std::vector<MachineBlock*> MachineBlockUI::CreateSingleBlockExecutionOrder(Machi
   }
 
   return executionOrder;
+}
+
+void MachineBlockUI::ExecuteProgramWithVirtualOps() {
+  printf("\n🤖 EXECUTING WITH VIRTUAL MACHINE OPERATIONS:\n");
+  printf("================================================\n");
+
+  auto executionOrder = GetExecutionOrder();
+  if (executionOrder.empty()) {
+    printf("[Failed] No execution path found!\n");
+    return;
+  }
+
+  for (size_t i = 0; i < executionOrder.size(); ++i) {
+    auto block = executionOrder[i];
+    printf("%zu. [%s] %s (ID: %d)\n", i + 1,
+      BlockTypeToString(block->type).c_str(),
+      block->label.c_str(), block->id);
+
+    // Execute the actual virtual operation
+    bool success = ExecuteBlockWithVirtualOps(block);
+
+    if (!success) {
+      printf("[FAILED] Block execution failed, stopping program\n");
+      return;
+    }
+
+    printf("   ✅ Block completed successfully\n\n");
+  }
+
+  printf("🎉 [SUCCESS] Virtual program execution completed!\n");
+}
+
+bool MachineBlockUI::ExecuteBlockWithVirtualOps(MachineBlock* block) {
+  switch (block->type) {
+  case BlockType::START:
+    printf("   🟢 Starting program...\n");
+    return true;
+
+  case BlockType::END:
+    printf("   🔴 Program finished\n");
+    return true;
+
+  case BlockType::MOVE_NODE: {
+    std::string deviceName = GetParameterValue(*block, "device_name");
+    std::string graphName = GetParameterValue(*block, "graph_name");
+    std::string nodeId = GetParameterValue(*block, "node_id");
+
+    printf("   🏃 Moving %s to node %s...\n", deviceName.c_str(), nodeId.c_str());
+    return m_virtualOps->MoveDeviceToNode(deviceName, graphName, nodeId, true);
+  }
+
+  case BlockType::WAIT: {
+    int milliseconds = std::stoi(GetParameterValue(*block, "milliseconds"));
+    printf("   ⏱️  Waiting %d ms...\n", milliseconds);
+    m_virtualOps->Wait(milliseconds);
+    return true;
+  }
+
+  case BlockType::SET_OUTPUT: {
+    std::string deviceName = GetParameterValue(*block, "device_name");
+    int pin = std::stoi(GetParameterValue(*block, "pin"));
+    bool state = GetParameterValue(*block, "state") == "true";
+
+    printf("   🔌 Setting output %s pin %d to %s\n",
+      deviceName.c_str(), pin, state ? "HIGH" : "LOW");
+    return m_virtualOps->SetOutput(deviceName, pin, state);
+  }
+
+  default:
+    printf("   ❓ Unknown block type\n");
+    return true;
+  }
 }

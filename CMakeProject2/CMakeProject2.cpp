@@ -82,8 +82,8 @@
 
 // Add this include at the top with other UI includes
 #include "Programming/MachineBlockUI.h"
-
-
+#include "Programming/virtual_machine_operations.h"
+#include "Programming/virtual_machine_operations_adapter.h"
 
 #pragma region header functions
 
@@ -104,7 +104,7 @@ void RenderDraggableOverlay() {
 
 	// Your overlay content here
 	ImGui::Text("Drag me!");
-	ImGui::Text("Status: Connected");
+	ImGui::Text("Status: Connected"); 
 
 	ImGui::End();
 }
@@ -1114,21 +1114,29 @@ int main(int argc, char* argv[])
     logger->LogInfo("GlobalJogPanel initialized");
   }
 
-  // Machine Operations (conditional - needs multiple dependencies)
+  // Machine Operations - Real or Virtual based on configuration
   std::unique_ptr<MachineOperations> machineOps;
-  if (motionControlLayer && piControllerManager &&
+  std::unique_ptr<VirtualMachineOperationsAdapter> virtualOps;
+
+  bool useRealHardware = moduleConfig.isEnabled("REAL_HARDWARE");
+
+  if (useRealHardware && motionControlLayer && piControllerManager &&
     (ioManager || !moduleConfig.isEnabled("EZIIO_MANAGER")) &&
     (pneumaticManager || !moduleConfig.isEnabled("PNEUMATIC_SYSTEM"))) {
 
+    // Use real machine operations
     machineOps = std::make_unique<MachineOperations>(
-      *motionControlLayer,
-      *piControllerManager,
-      ioManager ? *ioManager : *(EziIOManager*)nullptr, // Handle null case properly
+      *motionControlLayer, *piControllerManager,
+      ioManager ? *ioManager : *(EziIOManager*)nullptr,
       pneumaticManager ? *pneumaticManager : *(PneumaticManager*)nullptr,
-      laserOps.get(),
-      pylonCameraTest.get()
+      laserOps.get(), pylonCameraTest.get()
     );
-    logger->LogInfo("MachineOperations initialized");
+    logger->LogInfo("Real MachineOperations initialized");
+  }
+  else {
+    // Use virtual machine operations
+    virtualOps = std::make_unique<VirtualMachineOperationsAdapter>();
+    logger->LogInfo("Virtual MachineOperations initialized");
   }
 
   // Process Control Panel (conditional)
@@ -1181,14 +1189,21 @@ int main(int argc, char* argv[])
 
 
   // ADD MACHINE BLOCK UI INITIALIZATION
+  // ADD MACHINE BLOCK UI INITIALIZATION
   std::unique_ptr<MachineBlockUI> machineBlockUI;
   if (moduleConfig.isEnabled("MACHINE_BLOCK_UI")) {
     machineBlockUI = std::make_unique<MachineBlockUI>();
 
-    // CONNECT TO MACHINE OPERATIONS FOR REAL EXECUTION
     if (machineOps) {
       machineBlockUI->SetMachineOperations(machineOps.get());
-      logger->LogInfo("MachineBlockUI initialized with real execution enabled");
+      logger->LogInfo("MachineBlockUI initialized with REAL machine operations");
+    }
+    else if (virtualOps) {
+      // For now, just log that virtual ops are ready
+      // You can extend MachineBlockUI to accept VirtualMachineOperationsAdapter
+      logger->LogInfo("MachineBlockUI initialized - Virtual operations available");
+      machineBlockUI->SetVirtualMachineOperations(virtualOps.get());
+      logger->LogInfo("Note: Extend MachineBlockUI to use VirtualMachineOperationsAdapter for real execution");
     }
     else {
       logger->LogInfo("MachineBlockUI initialized in debug mode only");

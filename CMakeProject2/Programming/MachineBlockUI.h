@@ -11,7 +11,8 @@
 #include <thread>      // For std::thread
 #include <algorithm>   // For std::transform
 #include <nlohmann/json.hpp>
-
+  // Add this include at the top
+#include "virtual_machine_operations_adapter.h"
 
 
 // Forward declarations
@@ -88,8 +89,13 @@ public:
   void ExecuteSingleBlock(MachineBlock* block);
   void ExecuteSingleBlockAsSequence(MachineBlock* block, std::function<void(bool)> onComplete = nullptr);
 
+  // Add this public method
+  void SetVirtualMachineOperations(VirtualMachineOperationsAdapter* virtualOps) {
+    m_virtualOps = virtualOps;
+  }
 
-
+  bool ExecuteBlockWithVirtualOps(MachineBlock* block);
+  void ExecuteProgramWithVirtualOps();
 private:
   // UI state
   bool m_showWindow = true;
@@ -215,4 +221,12 @@ private:
   BlockType JsonStringToBlockType(const std::string& typeStr) const;
   // Helper method to create a single block sequence
   std::vector<MachineBlock*> CreateSingleBlockExecutionOrder(MachineBlock* block);
+
+
+
+
+// Add this private member
+  VirtualMachineOperationsAdapter* m_virtualOps = nullptr;
+
+
 };
