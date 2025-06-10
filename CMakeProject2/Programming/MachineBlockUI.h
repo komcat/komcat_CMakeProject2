@@ -271,6 +271,7 @@ private:
   size_t m_currentBlockIndex = 0;
 
   void ExecuteSequenceWithMonitoring();
+  void ExecuteSequenceWithSimpleMonitoring();
   void MonitorSequenceProgress(std::atomic<bool>& executionComplete);
   int GetEstimatedBlockExecutionTime(MachineBlock* block);
 };

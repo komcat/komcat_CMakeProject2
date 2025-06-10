@@ -6,7 +6,7 @@
 #define VERSION_MAJOR 2
 #define VERSION_MINOR 0
 #define VERSION_PATCH 0
-#define VERSION_BUILD 30
+#define VERSION_BUILD 31
 
 // Build information
 #define BUILD_DATE __DATE__

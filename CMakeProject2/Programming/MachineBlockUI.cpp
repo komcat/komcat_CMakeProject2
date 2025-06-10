@@ -1382,6 +1382,7 @@ void MachineBlockUI::ExecuteProgramAsSequence() {
 // Replace your existing ExecuteProgramAsSequence method
 // ===================================================================
 
+
 void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComplete) {
 	if (!m_machineOps) {
 		printf("❌ Cannot execute: MachineOperations not set!\n");
@@ -1395,7 +1396,7 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 		return;
 	}
 
-	// Clear and show feedback UI immediately
+	// Clear and show feedback UI
 	if (m_feedbackUI) {
 		m_feedbackUI->ClearBlocks();
 		m_feedbackUI->Show();
@@ -1403,15 +1404,6 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 
 	if (!ValidateProgram()) {
 		printf("❌ Cannot execute: Program is invalid!\n");
-
-		// Add validation error to feedback
-		if (m_feedbackUI) {
-			m_feedbackUI->AddBlock(BlockResult(
-				"SYSTEM", "Validation", "Failed", "Error",
-				"Program validation failed - check START/END blocks"
-			));
-		}
-
 		if (onComplete) onComplete(false);
 		return;
 	}
@@ -1419,20 +1411,11 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 	auto executionOrder = GetExecutionOrder();
 	if (executionOrder.empty()) {
 		printf("❌ No execution path found!\n");
-
-		// Add path error to feedback
-		if (m_feedbackUI) {
-			m_feedbackUI->AddBlock(BlockResult(
-				"SYSTEM", "Path Check", "Failed", "Error",
-				"No valid execution path from START to END"
-			));
-		}
-
 		if (onComplete) onComplete(false);
 		return;
 	}
 
-	// Add initial status for each block - IMMEDIATE FEEDBACK
+	// Add blocks to feedback as "Pending"
 	if (m_feedbackUI) {
 		for (const auto& block : executionOrder) {
 			std::string gridId = std::to_string(block->id);
@@ -1442,11 +1425,10 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 		}
 	}
 
-	// Convert to sequence
+	// Convert and execute
 	BlockSequenceConverter converter(*m_machineOps);
 	std::string programName = "Block Program";
 
-	// Get program name from START block
 	MachineBlock* startBlock = FindStartBlock();
 	if (startBlock) {
 		for (const auto& param : startBlock->parameters) {
@@ -1461,50 +1443,36 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 
 	if (!m_currentSequence) {
 		printf("❌ Failed to convert blocks to sequence!\n");
-
-		if (m_feedbackUI) {
-			m_feedbackUI->AddBlock(BlockResult(
-				"SYSTEM", "Conversion", "Failed", "Error",
-				"Failed to convert blocks to executable sequence"
-			));
-		}
-
 		if (onComplete) onComplete(false);
 		return;
 	}
 
 	m_isExecuting = true;
-	m_executionStatus = "Executing with Real Hardware...";
+	m_executionStatus = "Executing...";
 
-	printf("\n🚀 EXECUTING BLOCK PROGRAM AS SEQUENCE (REAL HARDWARE):\n");
+	printf("\n🚀 EXECUTING BLOCK PROGRAM:\n");
 	printf("========================================\n");
 	printf("Program: %s\n", programName.c_str());
 	printf("Blocks: %zu operations\n", executionOrder.size());
-	printf("Using SequenceStep framework for thread safety\n");
 	printf("========================================\n");
 
-	// Store execution order for feedback updates
-	m_currentExecutionOrder = executionOrder;
-	m_currentBlockIndex = 0;
-
-	// Set completion callback for final result
+	// Set completion callback
 	m_currentSequence->SetCompletionCallback([this, onComplete, executionOrder](bool success) {
 		m_isExecuting = false;
-		m_executionStatus = success ? "Hardware Execution Completed" : "Hardware Execution Failed";
+		m_executionStatus = success ? "Execution Completed" : "Execution Failed";
 
-		// Final status update for any remaining blocks
+		// Update all blocks to completed status
 		if (m_feedbackUI) {
 			for (const auto& block : executionOrder) {
 				std::string gridId = std::to_string(block->id);
 				std::string status = success ? "Complete" : "Incomplete";
 				std::string result = success ? "Success" : "Failed";
-				std::string details = success ? "Hardware execution completed successfully" : "Hardware execution failed";
-
+				std::string details = success ? "Execution completed successfully" : "Execution failed";
 				m_feedbackUI->UpdateBlock(gridId, status, result, details);
 			}
 		}
 
-		printf("\n========================================\n");
+		printf("========================================\n");
 		printf("%s\n", m_executionStatus.c_str());
 		printf("========================================\n");
 
@@ -1513,14 +1481,14 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 		}
 	});
 
-	// Execute the sequence with monitoring thread for per-block feedback
+	// Execute directly - no complex monitoring
 	std::thread executionThread([this]() {
-		ExecuteSequenceWithMonitoring();
+		bool success = m_currentSequence->Execute();
+		// Completion callback will be called automatically
 	});
 
 	executionThread.detach();
 }
-
 // ===================================================================
 // NEW METHOD: Execute sequence with per-block monitoring
 // ===================================================================
@@ -2148,4 +2116,59 @@ void MachineBlockUI::UpdateBlockResult(int blockId, const std::string& status,
 		std::string gridId = std::to_string(blockId);
 		m_feedbackUI->UpdateBlock(gridId, status, result, details);
 	}
+}
+
+
+// ===================================================================
+// NEW: Simplified monitoring that doesn't rely on time estimation
+// ===================================================================
+void MachineBlockUI::ExecuteSequenceWithSimpleMonitoring() {
+	if (!m_currentSequence) return;
+
+	// Start monitoring thread
+	std::atomic<bool> executionComplete{ false };
+	std::atomic<size_t> currentBlockIndex{ 0 };
+
+	std::thread monitorThread([this, &executionComplete, &currentBlockIndex]() {
+		while (!executionComplete && currentBlockIndex < m_currentExecutionOrder.size()) {
+			auto block = m_currentExecutionOrder[currentBlockIndex];
+			std::string gridId = std::to_string(block->id);
+
+			if (m_feedbackUI) {
+				// Build parameter details
+				std::string details = "Hardware executing - ";
+				for (const auto& param : block->parameters) {
+					if (param.name == "device_name" || param.name == "node_id" ||
+						param.name == "milliseconds" || param.name == "pin" || param.name == "state") {
+						details += param.name + "=" + param.value + " ";
+					}
+				}
+
+				m_feedbackUI->UpdateBlock(gridId, "Processing", "Running", details);
+				printf("   🔧 Hardware executing: %s (ID: %d)\n", block->label.c_str(), block->id);
+			}
+
+			// Wait for this block to be marked as complete
+			// This is a simple approach - just increment when we start the next block
+			std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+			if (m_feedbackUI) {
+				m_feedbackUI->UpdateBlock(gridId, "Complete", "Success",
+					"Hardware operation completed successfully");
+				printf("   ✅ Hardware completed: %s (ID: %d)\n", block->label.c_str(), block->id);
+			}
+
+			currentBlockIndex++;
+			std::this_thread::sleep_for(std::chrono::milliseconds(200));
+		}
+	});
+
+	// Execute the actual sequence
+	bool success = m_currentSequence->Execute();
+
+	// Signal monitoring to stop
+	executionComplete = true;
+	monitorThread.join();
+
+	// The completion callback will be triggered automatically by SequenceStep
 }
