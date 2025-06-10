@@ -14,7 +14,7 @@
   // Add this include at the top
 #include "virtual_machine_operations_adapter.h"
 #include "ProgramManager.h"
-
+#include "FeedbackUI.h"  // Include the feedback UI
 // Forward declarations
 class MachineOperations;
 class SequenceStep;
@@ -96,6 +96,30 @@ public:
 
   bool ExecuteBlockWithVirtualOps(MachineBlock* block);
   void ExecuteProgramWithVirtualOps();
+
+  // Add these methods to your existing MachineBlockUI class
+  void ShowFeedbackWindow() {
+    if (m_feedbackUI) {
+      m_feedbackUI->Show();
+      m_showFeedbackWindow = true;
+    }
+  }
+
+  void HideFeedbackWindow() {
+    if (m_feedbackUI) {
+      m_feedbackUI->Hide();
+      m_showFeedbackWindow = false;
+    }
+  }
+
+  // Call this in your render loop
+  void RenderFeedback() {
+    if (m_feedbackUI) {
+      m_feedbackUI->Render();
+    }
+  }
+
+
 private:
   // UI state
   bool m_showWindow = true;
@@ -232,4 +256,21 @@ private:
   VirtualMachineOperationsAdapter* m_virtualOps = nullptr;
 
   std::unique_ptr<ProgramManager> m_programManager;
+
+
+  // Add these new members
+  std::unique_ptr<FeedbackUI> m_feedbackUI;
+  bool m_showFeedbackWindow = false;
+
+  void MachineBlockUI::UpdateBlockResult(int blockId, const std::string& status, 
+    const std::string& result, const std::string& details);
+
+
+
+  std::vector<MachineBlock*> m_currentExecutionOrder;
+  size_t m_currentBlockIndex = 0;
+
+  void ExecuteSequenceWithMonitoring();
+  void MonitorSequenceProgress(std::atomic<bool>& executionComplete);
+  int GetEstimatedBlockExecutionTime(MachineBlock* block);
 };
