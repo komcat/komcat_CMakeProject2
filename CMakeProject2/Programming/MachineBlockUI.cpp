@@ -1383,6 +1383,10 @@ void MachineBlockUI::ExecuteProgramAsSequence() {
 // ===================================================================
 
 
+// ===================================================================
+// 6. Updated MachineBlockUI::ExecuteProgramAsSequence method
+// ===================================================================
+
 void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComplete) {
 	if (!m_machineOps) {
 		printf("❌ Cannot execute: MachineOperations not set!\n");
@@ -1415,20 +1419,34 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 		return;
 	}
 
-	// Add blocks to feedback as "Pending"
+	// Add initial status for each block
 	if (m_feedbackUI) {
 		for (const auto& block : executionOrder) {
 			std::string gridId = std::to_string(block->id);
 			m_feedbackUI->AddBlock(BlockResult(
-				gridId, block->label, "Pending", "Waiting", "Queued for hardware execution"
+				gridId, block->label, "Pending", "Waiting", "Queued for execution"
 			));
 		}
 	}
 
-	// Convert and execute
+	// Convert to sequence with progress tracking
 	BlockSequenceConverter converter(*m_machineOps);
-	std::string programName = "Block Program";
 
+	// SET UP PROGRESS CALLBACK - This is the key!
+	converter.SetProgressCallback([this](int blockId, const std::string& blockName,
+		const std::string& status, const std::string& details) {
+		if (m_feedbackUI) {
+			std::string gridId = std::to_string(blockId);
+			std::string result = (status == "Complete") ? "Success" :
+				(status == "Failed") ? "Error" : "Running";
+			m_feedbackUI->UpdateBlock(gridId, status, result, details);
+
+			printf("📊 Block Progress: %s (ID: %d) - %s: %s\n",
+				blockName.c_str(), blockId, status.c_str(), details.c_str());
+		}
+	});
+
+	std::string programName = "Block Program";
 	MachineBlock* startBlock = FindStartBlock();
 	if (startBlock) {
 		for (const auto& param : startBlock->parameters) {
@@ -1448,31 +1466,20 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 	}
 
 	m_isExecuting = true;
-	m_executionStatus = "Executing...";
+	m_executionStatus = "Executing with Real-Time Feedback...";
 
-	printf("\n🚀 EXECUTING BLOCK PROGRAM:\n");
+	printf("\n🚀 EXECUTING BLOCK PROGRAM WITH REAL-TIME FEEDBACK:\n");
 	printf("========================================\n");
 	printf("Program: %s\n", programName.c_str());
 	printf("Blocks: %zu operations\n", executionOrder.size());
 	printf("========================================\n");
 
 	// Set completion callback
-	m_currentSequence->SetCompletionCallback([this, onComplete, executionOrder](bool success) {
+	m_currentSequence->SetCompletionCallback([this, onComplete](bool success) {
 		m_isExecuting = false;
 		m_executionStatus = success ? "Execution Completed" : "Execution Failed";
 
-		// Update all blocks to completed status
-		if (m_feedbackUI) {
-			for (const auto& block : executionOrder) {
-				std::string gridId = std::to_string(block->id);
-				std::string status = success ? "Complete" : "Incomplete";
-				std::string result = success ? "Success" : "Failed";
-				std::string details = success ? "Execution completed successfully" : "Execution failed";
-				m_feedbackUI->UpdateBlock(gridId, status, result, details);
-			}
-		}
-
-		printf("========================================\n");
+		printf("\n========================================\n");
 		printf("%s\n", m_executionStatus.c_str());
 		printf("========================================\n");
 
@@ -1481,14 +1488,18 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 		}
 	});
 
-	// Execute directly - no complex monitoring
+	// Execute the sequence - now with real-time per-block feedback!
 	std::thread executionThread([this]() {
 		bool success = m_currentSequence->Execute();
-		// Completion callback will be called automatically
 	});
 
 	executionThread.detach();
 }
+
+
+
+
+
 // ===================================================================
 // NEW METHOD: Execute sequence with per-block monitoring
 // ===================================================================

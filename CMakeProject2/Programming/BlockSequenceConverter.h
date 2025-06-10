@@ -6,12 +6,20 @@
 #include "include/machine_operations.h"
 #include <memory>
 #include <string>
+#include <functional>
 
 class BlockSequenceConverter {
 public:
   BlockSequenceConverter(MachineOperations& machineOps)
     : m_machineOps(machineOps) {
   }
+
+  // NEW: Progress callback type for real-time feedback
+  using ProgressCallback = std::function<void(int blockId, const std::string& blockName,
+    const std::string& status, const std::string& details)>;
+
+  // NEW: Set progress callback for real-time block execution feedback
+  void SetProgressCallback(ProgressCallback callback) { m_progressCallback = callback; }
 
   // Convert machine blocks to executable sequence
   std::unique_ptr<SequenceStep> ConvertBlocksToSequence(
@@ -20,6 +28,9 @@ public:
 
 private:
   MachineOperations& m_machineOps;
+
+  // NEW: Progress callback member
+  ProgressCallback m_progressCallback;
 
   // Convert individual block types to sequence operations
   std::shared_ptr<SequenceOperation> ConvertMoveNodeBlock(const MachineBlock& block);
