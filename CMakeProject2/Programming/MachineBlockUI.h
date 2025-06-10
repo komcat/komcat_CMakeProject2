@@ -13,7 +13,7 @@
 #include <nlohmann/json.hpp>
   // Add this include at the top
 #include "virtual_machine_operations_adapter.h"
-
+#include "ProgramManager.h"
 
 // Forward declarations
 class MachineOperations;
@@ -204,8 +204,11 @@ private:
   bool CanBlockProvideOutput(const MachineBlock& block) const;
 
   // File operations
-  void SaveProgram();
-  void LoadProgram();
+// OR add overloaded versions to maintain compatibility:
+  void SaveProgram();  // Calls SaveProgram("default")
+  void SaveProgram(const std::string& programName);
+  void LoadProgram();  // Calls LoadProgram("default") 
+  void LoadProgram(const std::string& programName);
 
   // Quick actions
   void QuickStart();
@@ -228,5 +231,5 @@ private:
 // Add this private member
   VirtualMachineOperationsAdapter* m_virtualOps = nullptr;
 
-
+  std::unique_ptr<ProgramManager> m_programManager;
 };
