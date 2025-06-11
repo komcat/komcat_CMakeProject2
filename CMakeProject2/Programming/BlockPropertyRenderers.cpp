@@ -506,7 +506,691 @@ std::unique_ptr<BlockPropertyRenderer> BlockRendererFactory::CreateRenderer(Bloc
     return std::make_unique<SetOutputRenderer>();
   case BlockType::CLEAR_OUTPUT:
     return std::make_unique<ClearOutputRenderer>();
+  case BlockType::EXTEND_SLIDE:    // NEW
+    return std::make_unique<ExtendSlideRenderer>();
+  case BlockType::RETRACT_SLIDE:   // NEW
+    return std::make_unique<RetractSlideRenderer>();
+
+
+  case BlockType::SET_LASER_CURRENT:    // NEW
+    return std::make_unique<SetLaserCurrentRenderer>();
+  case BlockType::LASER_ON:             // NEW
+    return std::make_unique<LaserOnRenderer>();
+  case BlockType::LASER_OFF:            // NEW
+    return std::make_unique<LaserOffRenderer>();
+  case BlockType::SET_TEC_TEMPERATURE:  // NEW
+    return std::make_unique<SetTECTemperatureRenderer>();
+  case BlockType::TEC_ON:               // NEW
+    return std::make_unique<TECOnRenderer>();
+  case BlockType::TEC_OFF:              // NEW
+    return std::make_unique<TECOffRenderer>();
+
+
+
   default:
     return std::make_unique<DefaultRenderer>();
+  }
+}
+
+
+
+
+// Step 15: Implement ExtendSlideRenderer methods in BlockPropertyRenderers.cpp
+void ExtendSlideRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("EXTEND SLIDE Block Properties:");
+  ImGui::Separator();
+
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+  ImGui::TextWrapped("Extends a pneumatic slide to its extended position.");
+  ImGui::PopStyleColor();
+
+  ImGui::Spacing();
+  RenderStandardParameters(block);
+}
+
+void ExtendSlideRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("Extend Slide Actions:");
+
+  std::string slideName = ExtractSlideName(block);
+
+  if (!slideName.empty()) {
+    RenderTestButton(slideName, machineOps);
+  }
+  else {
+    ImGui::TextWrapped("Set slide name to enable test functionality.");
+  }
+}
+
+void ExtendSlideRenderer::RenderValidation(MachineBlock* block) {
+  std::string slideName = ExtractSlideName(block);
+
+  if (slideName.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
+    ImGui::TextWrapped("WARNING: Slide name must be specified");
+    ImGui::PopStyleColor();
+  }
+  else {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+    ImGui::TextWrapped("EXTEND_SLIDE parameters are valid.");
+    ImGui::PopStyleColor();
+  }
+}
+
+std::string ExtendSlideRenderer::ExtractSlideName(MachineBlock* block) {
+  for (const auto& param : block->parameters) {
+    if (param.name == "slide_name") {
+      return param.value;
+    }
+  }
+  return "";
+}
+
+void ExtendSlideRenderer::RenderTestButton(const std::string& slideName, MachineOperations* machineOps) {
+  if (ImGui::Button("Test Extend Slide", ImVec2(-1, 0))) {
+    if (machineOps) {
+      printf("[TEST] Extending slide: %s\n", slideName.c_str());
+      machineOps->ExtendSlide(slideName, true);
+    }
+    else {
+      printf("[TEST] Would extend slide: %s\n", slideName.c_str());
+    }
+  }
+
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Test extending slide: %s", slideName.c_str());
+  }
+}
+
+// Step 16: Implement RetractSlideRenderer methods in BlockPropertyRenderers.cpp
+void RetractSlideRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("RETRACT SLIDE Block Properties:");
+  ImGui::Separator();
+
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f)); // Light red
+  ImGui::TextWrapped("Retracts a pneumatic slide to its retracted position.");
+  ImGui::PopStyleColor();
+
+  ImGui::Spacing();
+  RenderStandardParameters(block);
+}
+
+void RetractSlideRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("Retract Slide Actions:");
+
+  std::string slideName = ExtractSlideName(block);
+
+  if (!slideName.empty()) {
+    RenderTestButton(slideName, machineOps);
+  }
+  else {
+    ImGui::TextWrapped("Set slide name to enable test functionality.");
+  }
+}
+
+void RetractSlideRenderer::RenderValidation(MachineBlock* block) {
+  std::string slideName = ExtractSlideName(block);
+
+  if (slideName.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
+    ImGui::TextWrapped("WARNING: Slide name must be specified");
+    ImGui::PopStyleColor();
+  }
+  else {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+    ImGui::TextWrapped("RETRACT_SLIDE parameters are valid.");
+    ImGui::PopStyleColor();
+  }
+}
+
+std::string RetractSlideRenderer::ExtractSlideName(MachineBlock* block) {
+  for (const auto& param : block->parameters) {
+    if (param.name == "slide_name") {
+      return param.value;
+    }
+  }
+  return "";
+}
+
+void RetractSlideRenderer::RenderTestButton(const std::string& slideName, MachineOperations* machineOps) {
+  if (ImGui::Button("Test Retract Slide", ImVec2(-1, 0))) {
+    if (machineOps) {
+      printf("[TEST] Retracting slide: %s\n", slideName.c_str());
+      machineOps->RetractSlide(slideName, true);
+    }
+    else {
+      printf("[TEST] Would retract slide: %s\n", slideName.c_str());
+    }
+  }
+
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Test retracting slide: %s", slideName.c_str());
+  }
+}
+
+
+// BlockPropertyRenderers.cpp - Laser and TEC Control Block Renderers Implementation
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// SET LASER CURRENT RENDERER
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void SetLaserCurrentRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("SET LASER CURRENT Block Properties:");
+  ImGui::Separator();
+
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.6f, 0.2f, 1.0f)); // Orange
+  ImGui::TextWrapped("Sets the laser current in milliamps (mA).");
+  ImGui::TextWrapped("Typical range: 0.050 - 0.300 mA");
+  ImGui::PopStyleColor();
+
+  ImGui::Spacing();
+  RenderStandardParameters(block);
+
+  // Show current value prominently
+  auto [current, laserName] = ExtractLaserCurrentParameters(block);
+  if (!current.empty()) {
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+    ImGui::Text("Current Setting: %s mA", current.c_str());
+    if (!laserName.empty()) {
+      ImGui::Text("Laser: %s", laserName.c_str());
+    }
+    ImGui::PopStyleColor();
+  }
+}
+
+void SetLaserCurrentRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("Laser Current Actions:");
+
+  auto [current, laserName] = ExtractLaserCurrentParameters(block);
+
+  if (!current.empty()) {
+    RenderTestButton(current, laserName, machineOps);
+  }
+  else {
+    ImGui::TextWrapped("Set laser current to enable test functionality.");
+  }
+
+  ImGui::Spacing();
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f)); // Yellow
+  ImGui::TextWrapped("⚠️  Safety: Ensure TEC is on and stable before setting high current!");
+  ImGui::PopStyleColor();
+}
+
+void SetLaserCurrentRenderer::RenderValidation(MachineBlock* block) {
+  auto [current, laserName] = ExtractLaserCurrentParameters(block);
+
+  if (current.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
+    ImGui::TextWrapped("WARNING: Laser current must be specified");
+    ImGui::PopStyleColor();
+    return;
+  }
+
+  try {
+    float currentValue = std::stof(current);
+
+    if (currentValue < 0.0f) {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.2f, 0.2f, 1.0f)); // Red
+      ImGui::TextWrapped("ERROR: Current cannot be negative");
+      ImGui::PopStyleColor();
+    }
+    else if (currentValue > 0.500f) {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
+      ImGui::TextWrapped("WARNING: High current (>0.500 mA) - Use with caution!");
+      ImGui::PopStyleColor();
+    }
+    else {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+      ImGui::TextWrapped("SET_LASER_CURRENT parameters are valid.");
+      ImGui::PopStyleColor();
+    }
+  }
+  catch (const std::exception&) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.2f, 0.2f, 1.0f)); // Red
+    ImGui::TextWrapped("ERROR: Invalid current value format");
+    ImGui::PopStyleColor();
+  }
+}
+
+std::tuple<std::string, std::string> SetLaserCurrentRenderer::ExtractLaserCurrentParameters(MachineBlock* block) {
+  std::string current, laserName;
+  for (const auto& param : block->parameters) {
+    if (param.name == "current_ma") current = param.value;
+    else if (param.name == "laser_name") laserName = param.value;
+  }
+  return { current, laserName };
+}
+
+void SetLaserCurrentRenderer::RenderTestButton(const std::string& current, const std::string& laserName, MachineOperations* machineOps) {
+  if (ImGui::Button("Test Set Laser Current", ImVec2(-1, 0))) {
+    if (machineOps) {
+      float currentValue = std::stof(current);
+      printf("[TEST] Setting laser current: %s mA%s\n",
+        current.c_str(),
+        laserName.empty() ? "" : (" for " + laserName).c_str());
+      machineOps->SetLaserCurrent(currentValue);
+    }
+    else {
+      printf("[TEST] Would set laser current: %s mA%s\n",
+        current.c_str(),
+        laserName.empty() ? "" : (" for " + laserName).c_str());
+    }
+  }
+
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Test setting laser current to %s mA", current.c_str());
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// LASER ON RENDERER
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void LaserOnRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("LASER ON Block Properties:");
+  ImGui::Separator();
+
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f)); // Red
+  ImGui::TextWrapped("Turns the laser ON.");
+  ImGui::TextWrapped("⚠️ Ensure current is set and TEC is stable first!");
+  ImGui::PopStyleColor();
+
+  ImGui::Spacing();
+  RenderStandardParameters(block);
+
+  std::string laserName = ExtractLaserName(block);
+  if (!laserName.empty()) {
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+    ImGui::Text("Target Laser: %s", laserName.c_str());
+    ImGui::PopStyleColor();
+  }
+}
+
+void LaserOnRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("Laser Control Actions:");
+
+  std::string laserName = ExtractLaserName(block);
+  RenderTestButton(laserName, machineOps);
+
+  ImGui::Spacing();
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.2f, 0.2f, 1.0f)); // Red
+  ImGui::TextWrapped("🚨 DANGER: Laser radiation when ON!");
+  ImGui::PopStyleColor();
+}
+
+void LaserOnRenderer::RenderValidation(MachineBlock* block) {
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+  ImGui::TextWrapped("LASER_ON block is ready to execute.");
+  ImGui::PopStyleColor();
+
+  ImGui::Spacing();
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f)); // Yellow
+  ImGui::TextWrapped("💡 Tip: Use SET_LASER_CURRENT before LASER_ON");
+  ImGui::PopStyleColor();
+}
+
+std::string LaserOnRenderer::ExtractLaserName(MachineBlock* block) {
+  for (const auto& param : block->parameters) {
+    if (param.name == "laser_name") {
+      return param.value;
+    }
+  }
+  return "";
+}
+
+void LaserOnRenderer::RenderTestButton(const std::string& laserName, MachineOperations* machineOps) {
+  if (ImGui::Button("Test Laser ON", ImVec2(-1, 0))) {
+    if (machineOps) {
+      printf("[TEST] Turning laser ON%s\n",
+        laserName.empty() ? "" : (" for " + laserName).c_str());
+      machineOps->LaserOn(laserName);
+    }
+    else {
+      printf("[TEST] Would turn laser ON%s\n",
+        laserName.empty() ? "" : (" for " + laserName).c_str());
+    }
+  }
+
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Test turning laser ON%s",
+      laserName.empty() ? "" : (" for " + laserName).c_str());
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// LASER OFF RENDERER
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void LaserOffRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("LASER OFF Block Properties:");
+  ImGui::Separator();
+
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f)); // Gray
+  ImGui::TextWrapped("Turns the laser OFF safely.");
+  ImGui::TextWrapped("✅ Safe operation - stops laser emission.");
+  ImGui::PopStyleColor();
+
+  ImGui::Spacing();
+  RenderStandardParameters(block);
+
+  std::string laserName = ExtractLaserName(block);
+  if (!laserName.empty()) {
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+    ImGui::Text("Target Laser: %s", laserName.c_str());
+    ImGui::PopStyleColor();
+  }
+}
+
+void LaserOffRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("Laser Control Actions:");
+
+  std::string laserName = ExtractLaserName(block);
+  RenderTestButton(laserName, machineOps);
+
+  ImGui::Spacing();
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+  ImGui::TextWrapped("✅ Safe operation - turns laser OFF");
+  ImGui::PopStyleColor();
+}
+
+void LaserOffRenderer::RenderValidation(MachineBlock* block) {
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+  ImGui::TextWrapped("LASER_OFF block is ready to execute.");
+  ImGui::PopStyleColor();
+}
+
+std::string LaserOffRenderer::ExtractLaserName(MachineBlock* block) {
+  for (const auto& param : block->parameters) {
+    if (param.name == "laser_name") {
+      return param.value;
+    }
+  }
+  return "";
+}
+
+void LaserOffRenderer::RenderTestButton(const std::string& laserName, MachineOperations* machineOps) {
+  if (ImGui::Button("Test Laser OFF", ImVec2(-1, 0))) {
+    if (machineOps) {
+      printf("[TEST] Turning laser OFF%s\n",
+        laserName.empty() ? "" : (" for " + laserName).c_str());
+      machineOps->LaserOff(laserName);
+    }
+    else {
+      printf("[TEST] Would turn laser OFF%s\n",
+        laserName.empty() ? "" : (" for " + laserName).c_str());
+    }
+  }
+
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Test turning laser OFF%s",
+      laserName.empty() ? "" : (" for " + laserName).c_str());
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// SET TEC TEMPERATURE RENDERER
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void SetTECTemperatureRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("SET TEC TEMPERATURE Block Properties:");
+  ImGui::Separator();
+
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.6f, 1.0f, 1.0f)); // Blue
+  ImGui::TextWrapped("Sets the TEC (Thermoelectric Cooler) target temperature.");
+  ImGui::TextWrapped("Typical range: 15°C - 35°C");
+  ImGui::PopStyleColor();
+
+  ImGui::Spacing();
+  RenderStandardParameters(block);
+
+  auto [temperature, laserName] = ExtractTECTemperatureParameters(block);
+  if (!temperature.empty()) {
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+    ImGui::Text("Target Temperature: %s°C", temperature.c_str());
+    if (!laserName.empty()) {
+      ImGui::Text("Laser/TEC: %s", laserName.c_str());
+    }
+    ImGui::PopStyleColor();
+  }
+}
+
+void SetTECTemperatureRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("TEC Temperature Actions:");
+
+  auto [temperature, laserName] = ExtractTECTemperatureParameters(block);
+
+  if (!temperature.empty()) {
+    RenderTestButton(temperature, laserName, machineOps);
+  }
+  else {
+    ImGui::TextWrapped("Set target temperature to enable test functionality.");
+  }
+
+  ImGui::Spacing();
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f)); // Yellow
+  ImGui::TextWrapped("💡 Note: Temperature stabilization may take time");
+  ImGui::PopStyleColor();
+}
+
+void SetTECTemperatureRenderer::RenderValidation(MachineBlock* block) {
+  auto [temperature, laserName] = ExtractTECTemperatureParameters(block);
+
+  if (temperature.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
+    ImGui::TextWrapped("WARNING: Target temperature must be specified");
+    ImGui::PopStyleColor();
+    return;
+  }
+
+  try {
+    float tempValue = std::stof(temperature);
+
+    if (tempValue < 10.0f || tempValue > 50.0f) {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
+      ImGui::TextWrapped("WARNING: Temperature outside typical range (10-50°C)");
+      ImGui::PopStyleColor();
+    }
+    else {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+      ImGui::TextWrapped("SET_TEC_TEMPERATURE parameters are valid.");
+      ImGui::PopStyleColor();
+    }
+  }
+  catch (const std::exception&) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.2f, 0.2f, 1.0f)); // Red
+    ImGui::TextWrapped("ERROR: Invalid temperature value format");
+    ImGui::PopStyleColor();
+  }
+}
+
+std::tuple<std::string, std::string> SetTECTemperatureRenderer::ExtractTECTemperatureParameters(MachineBlock* block) {
+  std::string temperature, laserName;
+  for (const auto& param : block->parameters) {
+    if (param.name == "temperature_c") temperature = param.value;
+    else if (param.name == "laser_name") laserName = param.value;
+  }
+  return { temperature, laserName };
+}
+
+void SetTECTemperatureRenderer::RenderTestButton(const std::string& temperature, const std::string& laserName, MachineOperations* machineOps) {
+  if (ImGui::Button("Test Set TEC Temperature", ImVec2(-1, 0))) {
+    if (machineOps) {
+      float tempValue = std::stof(temperature);
+      printf("[TEST] Setting TEC temperature: %s°C%s\n",
+        temperature.c_str(),
+        laserName.empty() ? "" : (" for " + laserName).c_str());
+      machineOps->SetTECTemperature(tempValue);
+    }
+    else {
+      printf("[TEST] Would set TEC temperature: %s°C%s\n",
+        temperature.c_str(),
+        laserName.empty() ? "" : (" for " + laserName).c_str());
+    }
+  }
+
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Test setting TEC temperature to %s°C", temperature.c_str());
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// TEC ON RENDERER
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void TECOnRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("TEC ON Block Properties:");
+  ImGui::Separator();
+
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.8f, 1.0f, 1.0f)); // Light blue
+  ImGui::TextWrapped("Turns the TEC (Thermoelectric Cooler) ON.");
+  ImGui::TextWrapped("✅ Required before laser operation for temperature stability.");
+  ImGui::PopStyleColor();
+
+  ImGui::Spacing();
+  RenderStandardParameters(block);
+
+  std::string laserName = ExtractLaserName(block);
+  if (!laserName.empty()) {
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+    ImGui::Text("Target Laser/TEC: %s", laserName.c_str());
+    ImGui::PopStyleColor();
+  }
+}
+
+void TECOnRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("TEC Control Actions:");
+
+  std::string laserName = ExtractLaserName(block);
+  RenderTestButton(laserName, machineOps);
+
+  ImGui::Spacing();
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f)); // Yellow
+  ImGui::TextWrapped("💡 Best Practice: Turn TEC ON → Set Temperature → Wait for Stability");
+  ImGui::PopStyleColor();
+}
+
+void TECOnRenderer::RenderValidation(MachineBlock* block) {
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+  ImGui::TextWrapped("TEC_ON block is ready to execute.");
+  ImGui::PopStyleColor();
+}
+
+std::string TECOnRenderer::ExtractLaserName(MachineBlock* block) {
+  for (const auto& param : block->parameters) {
+    if (param.name == "laser_name") {
+      return param.value;
+    }
+  }
+  return "";
+}
+
+void TECOnRenderer::RenderTestButton(const std::string& laserName, MachineOperations* machineOps) {
+  if (ImGui::Button("Test TEC ON", ImVec2(-1, 0))) {
+    if (machineOps) {
+      printf("[TEST] Turning TEC ON%s\n",
+        laserName.empty() ? "" : (" for " + laserName).c_str());
+      machineOps->TECOn(laserName);
+    }
+    else {
+      printf("[TEST] Would turn TEC ON%s\n",
+        laserName.empty() ? "" : (" for " + laserName).c_str());
+    }
+  }
+
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Test turning TEC ON%s",
+      laserName.empty() ? "" : (" for " + laserName).c_str());
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// TEC OFF RENDERER
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void TECOffRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("TEC OFF Block Properties:");
+  ImGui::Separator();
+
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.7f, 1.0f)); // Dark blue
+  ImGui::TextWrapped("Turns the TEC (Thermoelectric Cooler) OFF.");
+  ImGui::TextWrapped("⚠️ Use after turning laser OFF to save power.");
+  ImGui::PopStyleColor();
+
+  ImGui::Spacing();
+  RenderStandardParameters(block);
+
+  std::string laserName = ExtractLaserName(block);
+  if (!laserName.empty()) {
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+    ImGui::Text("Target Laser/TEC: %s", laserName.c_str());
+    ImGui::PopStyleColor();
+  }
+}
+
+void TECOffRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("TEC Control Actions:");
+
+  std::string laserName = ExtractLaserName(block);
+  RenderTestButton(laserName, machineOps);
+
+  ImGui::Spacing();
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f)); // Yellow
+  ImGui::TextWrapped("💡 Recommended: Turn Laser OFF before TEC OFF");
+  ImGui::PopStyleColor();
+}
+
+void TECOffRenderer::RenderValidation(MachineBlock* block) {
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+  ImGui::TextWrapped("TEC_OFF block is ready to execute.");
+  ImGui::PopStyleColor();
+}
+
+std::string TECOffRenderer::ExtractLaserName(MachineBlock* block) {
+  for (const auto& param : block->parameters) {
+    if (param.name == "laser_name") {
+      return param.value;
+    }
+  }
+  return "";
+}
+
+void TECOffRenderer::RenderTestButton(const std::string& laserName, MachineOperations* machineOps) {
+  if (ImGui::Button("Test TEC OFF", ImVec2(-1, 0))) {
+    if (machineOps) {
+      printf("[TEST] Turning TEC OFF%s\n",
+        laserName.empty() ? "" : (" for " + laserName).c_str());
+      machineOps->TECOff(laserName);
+    }
+    else {
+      printf("[TEST] Would turn TEC OFF%s\n",
+        laserName.empty() ? "" : (" for " + laserName).c_str());
+    }
+  }
+
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Test turning TEC OFF%s",
+      laserName.empty() ? "" : (" for " + laserName).c_str());
   }
 }

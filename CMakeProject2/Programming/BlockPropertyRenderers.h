@@ -117,3 +117,94 @@ public:
   // FIXED: Add static keyword
   static std::unique_ptr<BlockPropertyRenderer> CreateRenderer(BlockType type);
 };
+
+
+class ExtendSlideRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+
+private:
+  std::string ExtractSlideName(MachineBlock* block);
+  void RenderTestButton(const std::string& slideName, MachineOperations* machineOps);
+};
+
+class RetractSlideRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+
+private:
+  std::string ExtractSlideName(MachineBlock* block);
+  void RenderTestButton(const std::string& slideName, MachineOperations* machineOps);
+};
+
+
+// Step 13: Add property renderers for laser/TEC blocks in BlockPropertyRenderers.h
+class SetLaserCurrentRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+
+private:
+  std::tuple<std::string, std::string> ExtractLaserCurrentParameters(MachineBlock* block);
+  void RenderTestButton(const std::string& current, const std::string& laserName, MachineOperations* machineOps);
+};
+
+class LaserOnRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+
+private:
+  std::string ExtractLaserName(MachineBlock* block);
+  void RenderTestButton(const std::string& laserName, MachineOperations* machineOps);
+};
+
+class LaserOffRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+
+private:
+  std::string ExtractLaserName(MachineBlock* block);
+  void RenderTestButton(const std::string& laserName, MachineOperations* machineOps);
+};
+
+class SetTECTemperatureRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+
+private:
+  std::tuple<std::string, std::string> ExtractTECTemperatureParameters(MachineBlock* block);
+  void RenderTestButton(const std::string& temperature, const std::string& laserName, MachineOperations* machineOps);
+};
+
+class TECOnRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+
+private:
+  std::string ExtractLaserName(MachineBlock* block);
+  void RenderTestButton(const std::string& laserName, MachineOperations* machineOps);
+};
+
+class TECOffRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+
+private:
+  std::string ExtractLaserName(MachineBlock* block);
+  void RenderTestButton(const std::string& laserName, MachineOperations* machineOps);
+};

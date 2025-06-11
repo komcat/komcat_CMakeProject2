@@ -25,7 +25,16 @@ enum class BlockType {
   MOVE_NODE,
   WAIT,
   SET_OUTPUT,
-  CLEAR_OUTPUT
+  CLEAR_OUTPUT,
+  EXTEND_SLIDE,    // NEW: Extend pneumatic slide
+  RETRACT_SLIDE,
+  SET_LASER_CURRENT,    // NEW: Set laser current (mA)
+  LASER_ON,             // NEW: Turn laser on
+  LASER_OFF,            // NEW: Turn laser off
+  SET_TEC_TEMPERATURE,  // NEW: Set TEC temperature (°C)
+  TEC_ON,               // NEW: Turn TEC on
+  TEC_OFF               // NEW: Turn TEC off
+
 };
 
 struct BlockParameter {
@@ -165,6 +174,14 @@ private:
   const ImU32 WAIT_COLOR = IM_COL32(200, 130, 40, 255);      // Muted Orange
   const ImU32 SET_OUTPUT_COLOR = IM_COL32(40, 160, 90, 255); // Muted Lime Green
   const ImU32 CLEAR_OUTPUT_COLOR = IM_COL32(200, 80, 40, 255); // Muted Red Orange
+  const ImU32 EXTEND_SLIDE_COLOR = IM_COL32(100, 200, 100, 255);   // Light green
+  const ImU32 RETRACT_SLIDE_COLOR = IM_COL32(200, 100, 100, 255);  // Light red
+  const ImU32 SET_LASER_CURRENT_COLOR = IM_COL32(255, 150, 50, 255);   // Orange
+  const ImU32 LASER_ON_COLOR = IM_COL32(255, 100, 100, 255);           // Red
+  const ImU32 LASER_OFF_COLOR = IM_COL32(150, 150, 150, 255);          // Gray
+  const ImU32 SET_TEC_TEMPERATURE_COLOR = IM_COL32(100, 150, 255, 255); // Blue
+  const ImU32 TEC_ON_COLOR = IM_COL32(100, 200, 255, 255);             // Light blue
+  const ImU32 TEC_OFF_COLOR = IM_COL32(120, 120, 180, 255);            // Dark blue
 
   // Canvas background colors
   const ImU32 CANVAS_BG_COLOR = IM_COL32(45, 45, 45, 255);
@@ -192,7 +209,7 @@ private:
 
   // NEW: Add this method declaration
   void RenderBlockHeader(MachineBlock* block);
-
+  void UpdateBlockLabel(MachineBlock& block);
   // Canvas utilities
   ImVec2 WorldToCanvas(const ImVec2& canvasPos, const ImVec2& worldPos) const;
   ImVec2 CanvasToWorld(const ImVec2& canvasPos, const ImVec2& canvasPos_) const;

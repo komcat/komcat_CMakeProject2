@@ -43,6 +43,25 @@ void MachineBlockUI::InitializePalette() {
 	m_paletteBlocks.emplace_back(0, BlockType::SET_OUTPUT, "Set Output", SET_OUTPUT_COLOR);
 	m_paletteBlocks.emplace_back(0, BlockType::CLEAR_OUTPUT, "Clear Output", CLEAR_OUTPUT_COLOR);
 	m_paletteBlocks.emplace_back(0, BlockType::END, "END", END_COLOR);
+
+	// NEW: Add slide control blocks
+	m_paletteBlocks.emplace_back(7, BlockType::EXTEND_SLIDE, "Extend Slide", GetBlockColor(BlockType::EXTEND_SLIDE));
+	m_paletteBlocks.emplace_back(8, BlockType::RETRACT_SLIDE, "Retract Slide", GetBlockColor(BlockType::RETRACT_SLIDE));
+
+	// NEW: Add laser and TEC control blocks
+	m_paletteBlocks.emplace_back(9, BlockType::SET_LASER_CURRENT, "Set Laser Current", GetBlockColor(BlockType::SET_LASER_CURRENT));
+	m_paletteBlocks.emplace_back(10, BlockType::LASER_ON, "Laser ON", GetBlockColor(BlockType::LASER_ON));
+	m_paletteBlocks.emplace_back(11, BlockType::LASER_OFF, "Laser OFF", GetBlockColor(BlockType::LASER_OFF));
+	m_paletteBlocks.emplace_back(12, BlockType::SET_TEC_TEMPERATURE, "Set TEC Temp", GetBlockColor(BlockType::SET_TEC_TEMPERATURE));
+	m_paletteBlocks.emplace_back(13, BlockType::TEC_ON, "TEC ON", GetBlockColor(BlockType::TEC_ON));
+	m_paletteBlocks.emplace_back(14, BlockType::TEC_OFF, "TEC OFF", GetBlockColor(BlockType::TEC_OFF));
+
+
+
+	// Initialize parameters for each block type
+	for (auto& block : m_paletteBlocks) {
+		InitializeBlockParameters(block);
+	}
 }
 
 void MachineBlockUI::RenderUI() {
@@ -165,37 +184,50 @@ void MachineBlockUI::RenderLeftPanel() {
 	ImGui::Text("Block Palette");
 	ImGui::Separator();
 
+	// Add descriptive text
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f)); // Gray
 	ImGui::TextWrapped("Essential blocks for program flow:");
-	ImGui::Spacing();
-
-	// Instructions for START/END usage
-	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f));
-	ImGui::TextWrapped("• START: Every program needs exactly one START block");
 	ImGui::PopStyleColor();
 
-	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.0f, 0.0f, 1.0f));
-	ImGui::TextWrapped("• END: Every program should end with an END block");
+	ImGui::Spacing();
+
+	// START block description
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+	ImGui::TextWrapped("★ START: Every program needs exactly one START block");
+	ImGui::PopStyleColor();
+
+	// END block description  
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.0f, 0.0f, 1.0f)); // Red
+	ImGui::TextWrapped("★ END: Every program should end with an END block");
 	ImGui::PopStyleColor();
 
 	ImGui::Spacing();
 	ImGui::Separator();
 
-	// Render palette blocks
-	for (size_t i = 0; i < m_paletteBlocks.size(); i++) {
-		RenderPaletteBlock(m_paletteBlocks[i], static_cast<int>(i));
-		ImGui::Spacing();
+	// FIXED: Add scrollable child window for the block palette
+	// Calculate available height for the scrollable area
+	float availableHeight = ImGui::GetContentRegionAvail().y - 100.0f; // Leave space for buttons
+
+	// Create scrollable child window for block palette
+	if (ImGui::BeginChild("BlockPaletteScroll", ImVec2(0, availableHeight), true, ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
+
+		// FIXED: Render all palette blocks with correct function signature
+		for (size_t i = 0; i < m_paletteBlocks.size(); i++) {
+			RenderPaletteBlock(m_paletteBlocks[i], static_cast<int>(i));  // FIXED: Added index parameter
+			ImGui::Spacing(); // Add some space between blocks
+		}
+
 	}
+	ImGui::EndChild();
 
+	// Add control buttons at the bottom (outside scroll area)
 	ImGui::Separator();
 
-	// Program controls
+	// Quick action buttons
 	if (ImGui::Button("Clear All", ImVec2(-1, 0))) {
 		ClearAll();
 	}
 
-	ImGui::Spacing();
-
-	// Quick Start button
 	if (ImGui::Button("Quick Start", ImVec2(-1, 0))) {
 		QuickStart();
 	}
@@ -205,6 +237,7 @@ void MachineBlockUI::RenderLeftPanel() {
 
 	ImGui::Spacing();
 
+	// Program management buttons
 	if (ImGui::Button("Save Program", ImVec2(-1, 0))) {
 		SaveProgram();
 	}
@@ -213,7 +246,6 @@ void MachineBlockUI::RenderLeftPanel() {
 		LoadProgram();
 	}
 }
-
 // In MachineBlockUI.cpp - Update RenderPaletteBlock function
 void MachineBlockUI::RenderPaletteBlock(const MachineBlock& block, int index) {
 	// IMPROVED: Smaller button size for more compact palette
@@ -817,6 +849,43 @@ void MachineBlockUI::InitializeBlockParameters(MachineBlock& block) {
 		block.parameters.push_back({ "pin", "0", "int", "Output pin number to clear" });
 		block.parameters.push_back({ "delay_ms", "100", "int", "Delay after clearing (ms)" });
 		break;
+
+
+	case BlockType::EXTEND_SLIDE:  // NEW
+		block.parameters.push_back({ "slide_name", "", "string", "Name of the pneumatic slide to extend" });
+		break;
+
+	case BlockType::RETRACT_SLIDE:  // NEW
+		block.parameters.push_back({ "slide_name", "", "string", "Name of the pneumatic slide to retract" });
+		break;
+	
+
+	case BlockType::SET_LASER_CURRENT:  // NEW
+		block.parameters.push_back({ "current_ma", "0.150", "float", "Laser current in milliamps (e.g., 0.150)" });
+		block.parameters.push_back({ "laser_name", "", "string", "Name of laser (optional, leave empty for default)" });
+		break;
+
+	case BlockType::LASER_ON:  // NEW
+		block.parameters.push_back({ "laser_name", "", "string", "Name of laser (optional, leave empty for default)" });
+		break;
+
+	case BlockType::LASER_OFF:  // NEW
+		block.parameters.push_back({ "laser_name", "", "string", "Name of laser (optional, leave empty for default)" });
+		break;
+
+	case BlockType::SET_TEC_TEMPERATURE:  // NEW
+		block.parameters.push_back({ "temperature_c", "25.0", "float", "Target temperature in Celsius (e.g., 25.0)" });
+		block.parameters.push_back({ "laser_name", "", "string", "Name of laser/TEC (optional, leave empty for default)" });
+		break;
+
+	case BlockType::TEC_ON:  // NEW
+		block.parameters.push_back({ "laser_name", "", "string", "Name of laser/TEC (optional, leave empty for default)" });
+		break;
+
+	case BlockType::TEC_OFF:  // NEW
+		block.parameters.push_back({ "laser_name", "", "string", "Name of laser/TEC (optional, leave empty for default)" });
+		break;
+
 	}
 }
 
@@ -1161,6 +1230,14 @@ std::string MachineBlockUI::BlockTypeToString(BlockType type) const {
 	case BlockType::WAIT: return "Wait";
 	case BlockType::SET_OUTPUT: return "Set Output";
 	case BlockType::CLEAR_OUTPUT: return "Clear Output";
+	case BlockType::EXTEND_SLIDE: return "Extend Slide";    // NEW
+	case BlockType::RETRACT_SLIDE: return "Retract Slide";  // NEW
+	case BlockType::SET_LASER_CURRENT: return "Set Laser Current";    // NEW
+	case BlockType::LASER_ON: return "Laser ON";                     // NEW
+	case BlockType::LASER_OFF: return "Laser OFF";                   // NEW
+	case BlockType::SET_TEC_TEMPERATURE: return "Set TEC Temp";      // NEW
+	case BlockType::TEC_ON: return "TEC ON";                         // NEW
+	case BlockType::TEC_OFF: return "TEC OFF";                       // NEW
 	default: return "Unknown";
 	}
 }
@@ -1173,6 +1250,15 @@ ImU32 MachineBlockUI::GetBlockColor(BlockType type) const {
 	case BlockType::WAIT: return WAIT_COLOR;
 	case BlockType::SET_OUTPUT: return SET_OUTPUT_COLOR;
 	case BlockType::CLEAR_OUTPUT: return CLEAR_OUTPUT_COLOR;
+	case BlockType::EXTEND_SLIDE: return EXTEND_SLIDE_COLOR;     // NEW
+	case BlockType::RETRACT_SLIDE: return RETRACT_SLIDE_COLOR;   // NEW
+	case BlockType::SET_LASER_CURRENT: return SET_LASER_CURRENT_COLOR;    // NEW
+	case BlockType::LASER_ON: return LASER_ON_COLOR;                     // NEW
+	case BlockType::LASER_OFF: return LASER_OFF_COLOR;                   // NEW
+	case BlockType::SET_TEC_TEMPERATURE: return SET_TEC_TEMPERATURE_COLOR; // NEW
+	case BlockType::TEC_ON: return TEC_ON_COLOR;                         // NEW
+	case BlockType::TEC_OFF: return TEC_OFF_COLOR;                       // NEW
+
 	default: return IM_COL32(128, 128, 128, 255);
 	}
 }
@@ -1214,6 +1300,14 @@ std::string MachineBlockUI::BlockTypeToJsonString(BlockType type) const {
 	case BlockType::WAIT: return "WAIT";
 	case BlockType::SET_OUTPUT: return "SET_OUTPUT";
 	case BlockType::CLEAR_OUTPUT: return "CLEAR_OUTPUT";
+	case BlockType::EXTEND_SLIDE: return "EXTEND_SLIDE";    // NEW
+	case BlockType::RETRACT_SLIDE: return "RETRACT_SLIDE";  // NEW
+	case BlockType::SET_LASER_CURRENT: return "SET_LASER_CURRENT";    // NEW
+	case BlockType::LASER_ON: return "LASER_ON";                     // NEW
+	case BlockType::LASER_OFF: return "LASER_OFF";                   // NEW
+	case BlockType::SET_TEC_TEMPERATURE: return "SET_TEC_TEMPERATURE"; // NEW
+	case BlockType::TEC_ON: return "TEC_ON";                         // NEW
+	case BlockType::TEC_OFF: return "TEC_OFF";                       // NEW
 	default: return "UNKNOWN";
 	}
 }
@@ -1226,6 +1320,14 @@ BlockType MachineBlockUI::JsonStringToBlockType(const std::string& typeStr) cons
 	if (typeStr == "WAIT") return BlockType::WAIT;
 	if (typeStr == "SET_OUTPUT") return BlockType::SET_OUTPUT;
 	if (typeStr == "CLEAR_OUTPUT") return BlockType::CLEAR_OUTPUT;
+	if (typeStr == "EXTEND_SLIDE") return BlockType::EXTEND_SLIDE;    // NEW
+	if (typeStr == "RETRACT_SLIDE") return BlockType::RETRACT_SLIDE;  // NEW
+	if (typeStr == "SET_LASER_CURRENT") return BlockType::SET_LASER_CURRENT;    // NEW
+	if (typeStr == "LASER_ON") return BlockType::LASER_ON;                     // NEW
+	if (typeStr == "LASER_OFF") return BlockType::LASER_OFF;                   // NEW
+	if (typeStr == "SET_TEC_TEMPERATURE") return BlockType::SET_TEC_TEMPERATURE; // NEW
+	if (typeStr == "TEC_ON") return BlockType::TEC_ON;                         // NEW
+	if (typeStr == "TEC_OFF") return BlockType::TEC_OFF;                       // NEW
 	return BlockType::START;
 }
 
@@ -1844,7 +1946,72 @@ std::string MachineBlockUI::GetParameterValue(const MachineBlock& block, const s
 }
 
 
-// Add these methods to your MachineBlockUI.cpp file
+// Step 9: Update the RenderProgramBlock method in MachineBlockUI.cpp to show slide names
+// Add this helper method to update block labels based on parameters:
+void MachineBlockUI::UpdateBlockLabel(MachineBlock& block) {
+	switch (block.type) {
+	case BlockType::EXTEND_SLIDE: {
+		std::string slideName = GetParameterValue(block, "slide_name");
+		if (!slideName.empty()) {
+			block.label = "Extend\n" + slideName;
+		}
+		else {
+			block.label = "Extend Slide";
+		}
+		break;
+	}
+
+	case BlockType::RETRACT_SLIDE: {
+		std::string slideName = GetParameterValue(block, "slide_name");
+		if (!slideName.empty()) {
+			block.label = "Retract\n" + slideName;
+		}
+		else {
+			block.label = "Retract Slide";
+		}
+		break;
+	}
+	case BlockType::SET_LASER_CURRENT: {  // NEW
+		std::string current = GetParameterValue(block, "current_ma");
+		block.label = current.empty() ? "Set Laser\nCurrent" : "Set Laser\n" + current + " mA";
+		break;
+	}
+
+	case BlockType::LASER_ON: {  // NEW
+		std::string laserName = GetParameterValue(block, "laser_name");
+		block.label = laserName.empty() ? "Laser ON" : "Laser ON\n" + laserName;
+		break;
+	}
+
+	case BlockType::LASER_OFF: {  // NEW
+		std::string laserName = GetParameterValue(block, "laser_name");
+		block.label = laserName.empty() ? "Laser OFF" : "Laser OFF\n" + laserName;
+		break;
+	}
+
+	case BlockType::SET_TEC_TEMPERATURE: {  // NEW
+		std::string temp = GetParameterValue(block, "temperature_c");
+		block.label = temp.empty() ? "Set TEC\nTemp" : "Set TEC\n" + temp + "°C";
+		break;
+	}
+
+	case BlockType::TEC_ON: {  // NEW
+		std::string laserName = GetParameterValue(block, "laser_name");
+		block.label = laserName.empty() ? "TEC ON" : "TEC ON\n" + laserName;
+		break;
+	}
+
+	case BlockType::TEC_OFF: {  // NEW
+		std::string laserName = GetParameterValue(block, "laser_name");
+		block.label = laserName.empty() ? "TEC OFF" : "TEC OFF\n" + laserName;
+		break;
+	}
+	default:
+		// Other block types handle their own labeling
+		break;
+	}
+}
+
 
 // Execute a single block only
 void MachineBlockUI::ExecuteSingleBlock(MachineBlock* block) {
@@ -2183,3 +2350,4 @@ void MachineBlockUI::ExecuteSequenceWithSimpleMonitoring() {
 
 	// The completion callback will be triggered automatically by SequenceStep
 }
+

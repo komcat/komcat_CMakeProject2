@@ -1,4 +1,4 @@
-// BlockSequenceConverter.h
+﻿// BlockSequenceConverter.h
 #pragma once
 
 #include "MachineBlockUI.h"
@@ -37,9 +37,21 @@ private:
   std::shared_ptr<SequenceOperation> ConvertWaitBlock(const MachineBlock& block);
   std::shared_ptr<SequenceOperation> ConvertSetOutputBlock(const MachineBlock& block);
   std::shared_ptr<SequenceOperation> ConvertClearOutputBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertExtendSlideBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertRetractSlideBlock(const MachineBlock& block);
+  // NEW: Convert laser and TEC block types to sequence operations
+  std::shared_ptr<SequenceOperation> ConvertSetLaserCurrentBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertLaserOnBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertLaserOffBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertSetTECTemperatureBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertTECOnBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertTECOffBlock(const MachineBlock& block);
+
 
   // Helper methods
   std::string GetParameterValue(const MachineBlock& block, const std::string& paramName);
   int GetParameterValueAsInt(const MachineBlock& block, const std::string& paramName, int defaultValue = 0);
   bool GetParameterValueAsBool(const MachineBlock& block, const std::string& paramName, bool defaultValue = false);
+
+
 };

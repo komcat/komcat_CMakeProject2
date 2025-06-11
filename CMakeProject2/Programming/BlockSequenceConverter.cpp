@@ -103,6 +103,37 @@ std::unique_ptr<SequenceStep> BlockSequenceConverter::ConvertBlocksToSequence(
     case BlockType::CLEAR_OUTPUT:
       operation = ConvertClearOutputBlock(*block);
       break;
+    case BlockType::EXTEND_SLIDE:    // NEW
+      operation = ConvertExtendSlideBlock(*block);
+      break;
+
+    case BlockType::RETRACT_SLIDE:   // NEW
+      operation = ConvertRetractSlideBlock(*block);
+      break;
+
+    case BlockType::SET_LASER_CURRENT:    // NEW
+      operation = ConvertSetLaserCurrentBlock(*block);
+      break;
+
+    case BlockType::LASER_ON:             // NEW
+      operation = ConvertLaserOnBlock(*block);
+      break;
+
+    case BlockType::LASER_OFF:            // NEW
+      operation = ConvertLaserOffBlock(*block);
+      break;
+
+    case BlockType::SET_TEC_TEMPERATURE:  // NEW
+      operation = ConvertSetTECTemperatureBlock(*block);
+      break;
+
+    case BlockType::TEC_ON:               // NEW
+      operation = ConvertTECOnBlock(*block);
+      break;
+
+    case BlockType::TEC_OFF:              // NEW
+      operation = ConvertTECOffBlock(*block);
+      break;
 
     default:
       m_machineOps.LogWarning("Unknown block type encountered: " +
@@ -243,4 +274,86 @@ bool BlockSequenceConverter::GetParameterValueAsBool(const MachineBlock& block, 
     m_machineOps.LogWarning("Invalid boolean value for parameter " + paramName + ": " + value);
     return defaultValue;
   }
+}
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertExtendSlideBlock(const MachineBlock& block) {
+  std::string slideName = GetParameterValue(block, "slide_name");
+
+  if (slideName.empty()) {
+    m_machineOps.LogWarning("EXTEND_SLIDE block missing slide_name parameter");
+    return nullptr;
+  }
+
+  m_machineOps.LogInfo("Converting EXTEND_SLIDE block for slide: " + slideName);
+  return std::make_shared<ExtendSlideOperation>(slideName);
+}
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertRetractSlideBlock(const MachineBlock& block) {
+  std::string slideName = GetParameterValue(block, "slide_name");
+
+  if (slideName.empty()) {
+    m_machineOps.LogWarning("RETRACT_SLIDE block missing slide_name parameter");
+    return nullptr;
+  }
+
+  m_machineOps.LogInfo("Converting RETRACT_SLIDE block for slide: " + slideName);
+  return std::make_shared<RetractSlideOperation>(slideName);
+}
+
+
+// Step 11: Add converter methods in BlockSequenceConverter.cpp
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertSetLaserCurrentBlock(const MachineBlock& block) {
+  std::string currentStr = GetParameterValue(block, "current_ma");
+  std::string laserName = GetParameterValue(block, "laser_name");
+
+  if (currentStr.empty()) {
+    m_machineOps.LogWarning("SET_LASER_CURRENT block missing current_ma parameter");
+    return nullptr;
+  }
+
+  float current = std::stof(currentStr);
+  m_machineOps.LogInfo("Converting SET_LASER_CURRENT block: " + currentStr + " mA");
+  return std::make_shared<SetLaserCurrentOperation>(current);
+}
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertLaserOnBlock(const MachineBlock& block) {
+  std::string laserName = GetParameterValue(block, "laser_name");
+
+  m_machineOps.LogInfo("Converting LASER_ON block" + (laserName.empty() ? "" : " for: " + laserName));
+  return std::make_shared<LaserOnOperation>(laserName);
+}
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertLaserOffBlock(const MachineBlock& block) {
+  std::string laserName = GetParameterValue(block, "laser_name");
+
+  m_machineOps.LogInfo("Converting LASER_OFF block" + (laserName.empty() ? "" : " for: " + laserName));
+  return std::make_shared<LaserOffOperation>(laserName);
+}
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertSetTECTemperatureBlock(const MachineBlock& block) {
+  std::string tempStr = GetParameterValue(block, "temperature_c");
+  std::string laserName = GetParameterValue(block, "laser_name");
+
+  if (tempStr.empty()) {
+    m_machineOps.LogWarning("SET_TEC_TEMPERATURE block missing temperature_c parameter");
+    return nullptr;
+  }
+
+  float temperature = std::stof(tempStr);
+  m_machineOps.LogInfo("Converting SET_TEC_TEMPERATURE block: " + tempStr + "°C");
+  return std::make_shared<SetTECTemperatureOperation>(temperature);
+}
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertTECOnBlock(const MachineBlock& block) {
+  std::string laserName = GetParameterValue(block, "laser_name");
+
+  m_machineOps.LogInfo("Converting TEC_ON block" + (laserName.empty() ? "" : " for: " + laserName));
+  return std::make_shared<TECOnOperation>(laserName);
+}
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertTECOffBlock(const MachineBlock& block) {
+  std::string laserName = GetParameterValue(block, "laser_name");
+
+  m_machineOps.LogInfo("Converting TEC_OFF block" + (laserName.empty() ? "" : " for: " + laserName));
+  return std::make_shared<TECOffOperation>(laserName);
 }
