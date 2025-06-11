@@ -9,7 +9,7 @@
 #include <nlohmann/json.hpp> // Add this for JSON operations
 #include <iostream>          // Add this for console output
 #include <iomanip>           // Add this for formatting
-
+#include "Programming/UserPromptUI.h"
 
 
 
@@ -1271,4 +1271,102 @@ public:
 private:
   std::string m_deviceName;
   std::string m_label;
+};
+
+
+
+// Problem: ImGui::OpenPopup() is being called from background thread
+// Solution: Use a flag-based approach instead of direct ImGui calls
+
+// ===================================================================
+// CORRECTED UserPromptOperation for SequenceStep.h
+// ===================================================================
+
+class UserPromptOperation : public SequenceOperation {
+public:
+  UserPromptOperation(const std::string& title, const std::string& message, UserPromptUI& promptUI)
+    : m_title(title), m_message(message), m_promptUI(promptUI), m_completed(false), m_result(PromptResult::PENDING) {
+  }
+
+  // FIXED: Remove "UserPromptOperation::" - it's already inside the class
+  bool Execute(MachineOperations& ops) override {
+    ops.LogInfo("Requesting user prompt: " + m_title);
+
+    // Reset completion state
+    m_completed = false;
+    m_result = PromptResult::PENDING;
+
+    // Use RequestPrompt (thread-safe) instead of ShowPrompt
+    m_promptUI.RequestPrompt(m_title, m_message, [this](PromptResult result) {
+      m_result = result;
+      m_completed = true;
+    });
+
+    // Wait for user response with timeout
+    int timeoutSeconds = 30; // 30 second timeout
+    int waitedMs = 0;
+    while (!m_completed && waitedMs < (timeoutSeconds * 1000)) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      waitedMs += 100;
+    }
+
+    if (!m_completed) {
+      ops.LogWarning("User prompt timed out after " + std::to_string(timeoutSeconds) + " seconds");
+      return false;
+    }
+
+    // Handle result
+    switch (m_result) {
+    case PromptResult::YES:
+      ops.LogInfo("User confirmed YES - continuing execution");
+      return true;
+    case PromptResult::NO:
+      ops.LogWarning("User selected NO - stopping execution");
+      return false;
+    case PromptResult::CANCELLED:
+      ops.LogWarning("User cancelled prompt - stopping execution");
+      return false;
+    default:
+      ops.LogError("Unknown prompt result - stopping execution");
+      return false;
+    }
+  }
+
+  std::string GetDescription() const override {
+    return "User prompt: " + m_title;
+  }
+
+private:
+  std::string m_title;
+  std::string m_message;
+  UserPromptUI& m_promptUI;
+  std::atomic<bool> m_completed;
+  std::atomic<PromptResult> m_result;
+};
+
+
+// Add this to SequenceStep.h or create a new file:
+class MockUserPromptOperation : public SequenceOperation {
+public:
+  MockUserPromptOperation(const std::string& title, const std::string& message)
+    : m_title(title), m_message(message) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    ops.LogInfo("MOCK PROMPT: " + m_title);
+    ops.LogInfo("Message: " + m_message);
+    ops.LogInfo("Auto-answering YES for testing (implement real UserPromptUI for interactive prompts)");
+
+    // For now, always return true (YES) so execution continues
+    // TODO: Replace with real UserPromptUI implementation
+    return true;
+  }
+
+  std::string GetDescription() const override {
+    return "Mock user prompt: " + m_title;
+  }
+
+private:
+  std::string m_title;
+  std::string m_message;
 };

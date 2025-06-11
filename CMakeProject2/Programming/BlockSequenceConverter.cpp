@@ -135,6 +135,11 @@ std::unique_ptr<SequenceStep> BlockSequenceConverter::ConvertBlocksToSequence(
       operation = ConvertTECOffBlock(*block);
       break;
 
+    case BlockType::PROMPT:  // NEW
+      operation = ConvertPromptBlock(*block);
+      break;
+
+
     default:
       m_machineOps.LogWarning("Unknown block type encountered: " +
         std::to_string(static_cast<int>(block->type)));
@@ -356,4 +361,27 @@ std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertTECOffBlock(co
 
   m_machineOps.LogInfo("Converting TEC_OFF block" + (laserName.empty() ? "" : " for: " + laserName));
   return std::make_shared<TECOffOperation>(laserName);
+}
+
+// Add this method to BlockSequenceConverter.cpp:
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertPromptBlock(const MachineBlock& block) {
+  std::string title = GetParameterValue(block, "title");
+  std::string message = GetParameterValue(block, "message");
+
+  if (title.empty()) {
+    title = "User Confirmation";
+  }
+
+  if (message.empty()) {
+    message = "Do you want to continue?";
+  }
+
+  if (!m_promptUI) {
+    m_machineOps.LogError("PROMPT block requires UserPromptUI - creating mock operation");
+    // Return a mock operation that always succeeds for now
+    return std::make_shared<WaitOperation>(100); // Just wait 100ms as fallback
+  }
+
+  m_machineOps.LogInfo("Converting PROMPT block: " + title);
+  return std::make_shared<UserPromptOperation>(title, message, *m_promptUI);
 }

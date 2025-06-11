@@ -7,11 +7,11 @@
 #include <memory>
 #include <string>
 #include <functional>
-
+#include "UserPromptUI.h"
 class BlockSequenceConverter {
 public:
-  BlockSequenceConverter(MachineOperations& machineOps)
-    : m_machineOps(machineOps) {
+  BlockSequenceConverter(MachineOperations& machineOps, UserPromptUI* promptUI = nullptr)
+    : m_machineOps(machineOps), m_promptUI(promptUI) {
   }
 
   // NEW: Progress callback type for real-time feedback
@@ -28,7 +28,9 @@ public:
 
 private:
   MachineOperations& m_machineOps;
+  UserPromptUI* m_promptUI;  // NEW: Reference to prompt UI
 
+  
   // NEW: Progress callback member
   ProgressCallback m_progressCallback;
 
@@ -46,7 +48,8 @@ private:
   std::shared_ptr<SequenceOperation> ConvertSetTECTemperatureBlock(const MachineBlock& block);
   std::shared_ptr<SequenceOperation> ConvertTECOnBlock(const MachineBlock& block);
   std::shared_ptr<SequenceOperation> ConvertTECOffBlock(const MachineBlock& block);
-
+  // NEW: Convert prompt blocks
+  std::shared_ptr<SequenceOperation> ConvertPromptBlock(const MachineBlock& block);
 
   // Helper methods
   std::string GetParameterValue(const MachineBlock& block, const std::string& paramName);

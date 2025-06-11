@@ -13,6 +13,7 @@
 #include <fstream>
 
 #include "ProgramManager.h"
+#include "UserPromptUI.h"
 
 MachineBlockUI::MachineBlockUI() {
 	InitializePalette();
@@ -21,6 +22,8 @@ MachineBlockUI::MachineBlockUI() {
 	// Initialize feedback UI
 	m_feedbackUI = std::make_unique<FeedbackUI>();
 	m_feedbackUI->SetTitle("Block Execution Results");
+	m_promptUI = std::make_unique<UserPromptUI>();  // NEW: Initialize prompt UI
+
 
 	// Set up callbacks for program manager integration
 	m_programManager->SetLoadCallback([this](const std::string& filename) {
@@ -56,7 +59,7 @@ void MachineBlockUI::InitializePalette() {
 	m_paletteBlocks.emplace_back(13, BlockType::TEC_ON, "TEC ON", GetBlockColor(BlockType::TEC_ON));
 	m_paletteBlocks.emplace_back(14, BlockType::TEC_OFF, "TEC OFF", GetBlockColor(BlockType::TEC_OFF));
 
-
+	m_paletteBlocks.emplace_back(15, BlockType::PROMPT, "User Prompt", GetBlockColor(BlockType::PROMPT));  // NEW
 
 	// Initialize parameters for each block type
 	for (auto& block : m_paletteBlocks) {
@@ -175,7 +178,10 @@ void MachineBlockUI::RenderUI() {
 	ImGui::EndChild();
 
 	RenderFeedback();
-	
+	// At the END of RenderUI(), add:
+	if (m_promptUI) {
+		m_promptUI->Render();
+	}
 	ImGui::End();
 }
 
@@ -886,6 +892,10 @@ void MachineBlockUI::InitializeBlockParameters(MachineBlock& block) {
 		block.parameters.push_back({ "laser_name", "", "string", "Name of laser/TEC (optional, leave empty for default)" });
 		break;
 
+	case BlockType::PROMPT:  // NEW
+		block.parameters.push_back({ "title", "Confirm Operation", "string", "Title for the confirmation dialog" });
+		block.parameters.push_back({ "message", "Do you want to continue with the next operation?", "string", "Message to display to the user" });
+		break;
 	}
 }
 
@@ -1238,6 +1248,7 @@ std::string MachineBlockUI::BlockTypeToString(BlockType type) const {
 	case BlockType::SET_TEC_TEMPERATURE: return "Set TEC Temp";      // NEW
 	case BlockType::TEC_ON: return "TEC ON";                         // NEW
 	case BlockType::TEC_OFF: return "TEC OFF";                       // NEW
+	case BlockType::PROMPT: return "User Prompt";  // NEW
 	default: return "Unknown";
 	}
 }
@@ -1258,7 +1269,7 @@ ImU32 MachineBlockUI::GetBlockColor(BlockType type) const {
 	case BlockType::SET_TEC_TEMPERATURE: return SET_TEC_TEMPERATURE_COLOR; // NEW
 	case BlockType::TEC_ON: return TEC_ON_COLOR;                         // NEW
 	case BlockType::TEC_OFF: return TEC_OFF_COLOR;                       // NEW
-
+	case BlockType::PROMPT: return PROMPT_COLOR;  // NEW
 	default: return IM_COL32(128, 128, 128, 255);
 	}
 }
@@ -1308,6 +1319,7 @@ std::string MachineBlockUI::BlockTypeToJsonString(BlockType type) const {
 	case BlockType::SET_TEC_TEMPERATURE: return "SET_TEC_TEMPERATURE"; // NEW
 	case BlockType::TEC_ON: return "TEC_ON";                         // NEW
 	case BlockType::TEC_OFF: return "TEC_OFF";                       // NEW
+	case BlockType::PROMPT: return "PROMPT";  // NEW
 	default: return "UNKNOWN";
 	}
 }
@@ -1328,6 +1340,7 @@ BlockType MachineBlockUI::JsonStringToBlockType(const std::string& typeStr) cons
 	if (typeStr == "SET_TEC_TEMPERATURE") return BlockType::SET_TEC_TEMPERATURE; // NEW
 	if (typeStr == "TEC_ON") return BlockType::TEC_ON;                         // NEW
 	if (typeStr == "TEC_OFF") return BlockType::TEC_OFF;                       // NEW
+	if (typeStr == "PROMPT") return BlockType::PROMPT;  // NEW
 	return BlockType::START;
 }
 
@@ -1489,6 +1502,7 @@ void MachineBlockUI::ExecuteProgramAsSequence() {
 // 6. Updated MachineBlockUI::ExecuteProgramAsSequence method
 // ===================================================================
 
+// CORRECTED VERSION: ExecuteProgramAsSequence method
 void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComplete) {
 	if (!m_machineOps) {
 		printf("❌ Cannot execute: MachineOperations not set!\n");
@@ -1531,8 +1545,8 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 		}
 	}
 
-	// Convert to sequence with progress tracking
-	BlockSequenceConverter converter(*m_machineOps);
+	// FIXED: Only one BlockSequenceConverter declaration with prompt UI support
+	BlockSequenceConverter converter(*m_machineOps, m_promptUI.get());
 
 	// SET UP PROGRESS CALLBACK - This is the key!
 	converter.SetProgressCallback([this](int blockId, const std::string& blockName,
@@ -1542,7 +1556,6 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 			std::string result = (status == "Complete") ? "Success" :
 				(status == "Failed") ? "Error" : "Running";
 			m_feedbackUI->UpdateBlock(gridId, status, result, details);
-
 			printf("📊 Block Progress: %s (ID: %d) - %s: %s\n",
 				blockName.c_str(), blockId, status.c_str(), details.c_str());
 		}
@@ -1597,7 +1610,6 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 
 	executionThread.detach();
 }
-
 
 
 

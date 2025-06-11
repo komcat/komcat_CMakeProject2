@@ -25,3 +25,6 @@ void RenderGlobalDataValue(const std::string& dataName);
 void RenderGlobalDataValueSI(const std::string& dataName);
 void RenderMinimizeExitButtons(SDL_Window* window, bool& done);
 void RenderFPSoverlay(float m_fps);
+
+void DebugImGuiIDs();
+void DisableImGuiIDConflictWarnings();

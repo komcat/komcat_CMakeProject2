@@ -208,3 +208,16 @@ private:
   std::string ExtractLaserName(MachineBlock* block);
   void RenderTestButton(const std::string& laserName, MachineOperations* machineOps);
 };
+
+
+// Add to BlockPropertyRenderers.h:
+class PromptRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+
+private:
+  std::tuple<std::string, std::string> ExtractPromptParameters(MachineBlock* block);
+  void RenderPreviewButton(const std::string& title, const std::string& message);
+};

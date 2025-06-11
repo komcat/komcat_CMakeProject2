@@ -15,6 +15,8 @@
 #include "virtual_machine_operations_adapter.h"
 #include "ProgramManager.h"
 #include "FeedbackUI.h"  // Include the feedback UI
+#include "UserPromptUI.h"  // Include the user prompt UI
+
 // Forward declarations
 class MachineOperations;
 class SequenceStep;
@@ -33,8 +35,8 @@ enum class BlockType {
   LASER_OFF,            // NEW: Turn laser off
   SET_TEC_TEMPERATURE,  // NEW: Set TEC temperature (°C)
   TEC_ON,               // NEW: Turn TEC on
-  TEC_OFF               // NEW: Turn TEC off
-
+  TEC_OFF,               // NEW: Turn TEC off
+  PROMPT             // NEW: User confirmation prompt
 };
 
 struct BlockParameter {
@@ -127,7 +129,12 @@ public:
       m_feedbackUI->Render();
     }
   }
-
+  // Add this public method
+  void RenderPromptUI() {
+    if (m_promptUI) {
+      m_promptUI->Render();
+    }
+  }
 
 private:
   // UI state
@@ -182,6 +189,8 @@ private:
   const ImU32 SET_TEC_TEMPERATURE_COLOR = IM_COL32(100, 150, 255, 255); // Blue
   const ImU32 TEC_ON_COLOR = IM_COL32(100, 200, 255, 255);             // Light blue
   const ImU32 TEC_OFF_COLOR = IM_COL32(120, 120, 180, 255);            // Dark blue
+  const ImU32 PROMPT_COLOR = IM_COL32(255, 200, 50, 255);  // Gold/Yellow
+
 
   // Canvas background colors
   const ImU32 CANVAS_BG_COLOR = IM_COL32(45, 45, 45, 255);
@@ -291,4 +300,7 @@ private:
   void ExecuteSequenceWithSimpleMonitoring();
   void MonitorSequenceProgress(std::atomic<bool>& executionComplete);
   int GetEstimatedBlockExecutionTime(MachineBlock* block);
+
+
+  std::unique_ptr<UserPromptUI> m_promptUI;
 };

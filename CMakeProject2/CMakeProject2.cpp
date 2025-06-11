@@ -775,59 +775,29 @@ void RenderFPSoverlay(float m_fps)
 
 	ImGui::End();
 }
-// Example of how to create a custom process step with specific behavior
-class CustomProcessStep : public ProcessStep {
-public:
-	CustomProcessStep(MachineOperations& machineOps)
-		: ProcessStep("CustomProcess", machineOps) {
-	}
 
-	bool Execute() override {
-		LogInfo("Starting custom process");
-
-		// Example of a more complex process with conditional logic
-
-		// 1. Move gantry to safe position
-		if (!m_machineOps.MoveDeviceToNode("gantry-main", "Process_Flow", "node_4027", true)) {
-			LogError("Failed to move gantry to safe position");
-			NotifyCompletion(false);
-			return false;
-		}
-
-		// 2. Read a sensor to determine next step
-		bool sensorState = false;
-		if (!m_machineOps.ReadInput("IOBottom", 5, sensorState)) {
-			LogError("Failed to read sensor");
-			NotifyCompletion(false);
-			return false;
-		}
-
-		// 3. Conditional branching based on sensor state
-		if (sensorState) {
-			LogInfo("Sensor active, moving to position A");
-			if (!m_machineOps.MoveDeviceToNode("hex-left", "Process_Flow", "node_5557", true)) {
-				LogError("Failed to move to position A");
-				NotifyCompletion(false);
-				return false;
-			}
-		}
-		else {
-			LogInfo("Sensor inactive, moving to position B");
-			if (!m_machineOps.MoveDeviceToNode("hex-left", "Process_Flow", "node_5620", true)) {
-				LogError("Failed to move to position B");
-				NotifyCompletion(false);
-				return false;
-			}
-		}
-
-		LogInfo("Custom process completed successfully");
-		NotifyCompletion(true);
-		return true;
-	}
-};
 
 void CheckImGuiVersion() {
 	std::cout << "ImGui Version: " << IMGUI_VERSION << std::endl;
+}
+
+
+void DebugImGuiIDs() {
+  // Enable ImGui debug logging
+  static bool enableDebug = true;
+  if (enableDebug) {
+    // This will print ID stack information to help find conflicts
+    if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D)) {
+      printf("=== ImGui ID Stack Debug ===\n");
+      // Toggle debug mode
+      enableDebug = !enableDebug;
+    }
+  }
+}
+
+void DisableImGuiIDConflictWarnings() {
+  // This will stop the annoying error popup
+  ImGui::GetIO().ConfigDebugHighlightIdConflicts = false;
 }
 #pragma endregion
 
@@ -887,6 +857,7 @@ int main(int argc, char* argv[])
   IMGUI_CHECKVERSION();
   CheckImGuiVersion();
   ImGui::CreateContext();
+	DisableImGuiIDConflictWarnings();
   ImGuiIO& io = ImGui::GetIO(); (void)io;
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
   io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -1369,6 +1340,10 @@ int main(int argc, char* argv[])
       }
     }
 
+
+    // ADD DEBUG FUNCTION HERE - at the start of each frame
+    DebugImGuiIDs();
+
     // Calculate delta time and FPS
     Uint64 currentFrameTime = SDL_GetPerformanceCounter();
     float deltaTime = (currentFrameTime - lastFrameTime) / (float)SDL_GetPerformanceFrequency();
@@ -1530,9 +1505,14 @@ int main(int argc, char* argv[])
     if (motionGraphic) {
       motionGraphic->RenderUI();
     }
+
+
+
     // ADD MACHINE BLOCK UI RENDERING
     if (machineBlockUI) {
       machineBlockUI->RenderUI();
+      // CRITICAL: Add this line to render the prompt UI
+      machineBlockUI->RenderPromptUI();
     }
     // Render camera exposure system
     if (machineOps && machineOps->GetCameraExposureManager()) {
@@ -1706,3 +1686,6 @@ void RenderSimpleChart() {
 
 // Then in your main loop, add:
 // RenderSimpleChart();
+
+
+

@@ -525,7 +525,8 @@ std::unique_ptr<BlockPropertyRenderer> BlockRendererFactory::CreateRenderer(Bloc
   case BlockType::TEC_OFF:              // NEW
     return std::make_unique<TECOffRenderer>();
 
-
+  case BlockType::PROMPT:  // NEW
+    return std::make_unique<PromptRenderer>();
 
   default:
     return std::make_unique<DefaultRenderer>();
@@ -1192,5 +1193,74 @@ void TECOffRenderer::RenderTestButton(const std::string& laserName, MachineOpera
   if (ImGui::IsItemHovered()) {
     ImGui::SetTooltip("Test turning TEC OFF%s",
       laserName.empty() ? "" : (" for " + laserName).c_str());
+  }
+}
+
+
+// Add to BlockPropertyRenderers.cpp:
+void PromptRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("USER PROMPT Block Properties:");
+  ImGui::Separator();
+
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f)); // Gold
+  ImGui::TextWrapped("💭 Pauses program execution and waits for user confirmation.");
+  ImGui::TextWrapped("⚠️ Program will STOP if user selects NO or CANCEL.");
+  ImGui::PopStyleColor();
+
+  ImGui::Spacing();
+  RenderStandardParameters(block);
+}
+
+void PromptRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("Prompt Actions:");
+
+  auto [title, message] = ExtractPromptParameters(block);
+  RenderPreviewButton(title, message);
+}
+
+void PromptRenderer::RenderValidation(MachineBlock* block) {
+  auto [title, message] = ExtractPromptParameters(block);
+
+  if (title.empty() || message.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
+    ImGui::TextWrapped("WARNING: Title and message should be specified for better user experience");
+    ImGui::PopStyleColor();
+  }
+  else {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+    ImGui::TextWrapped("PROMPT parameters are valid.");
+    ImGui::PopStyleColor();
+  }
+}
+
+std::tuple<std::string, std::string> PromptRenderer::ExtractPromptParameters(MachineBlock* block) {
+  std::string title, message;
+  for (const auto& param : block->parameters) {
+    if (param.name == "title") title = param.value;
+    else if (param.name == "message") message = param.value;
+  }
+  return { title, message };
+}
+
+void PromptRenderer::RenderPreviewButton(const std::string& title, const std::string& message) {
+  if (ImGui::Button("Preview Prompt", ImVec2(-1, 0))) {
+    ImGui::OpenPopup("Prompt Preview");
+  }
+
+  if (ImGui::BeginPopupModal("Prompt Preview", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Title: %s", title.empty() ? "User Confirmation" : title.c_str());
+    ImGui::Separator();
+    ImGui::TextWrapped("Message: %s", message.empty() ? "Do you want to continue?" : message.c_str());
+    ImGui::Spacing();
+    if (ImGui::Button("Close Preview", ImVec2(-1, 0))) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Preview how the prompt will appear to users");
   }
 }
