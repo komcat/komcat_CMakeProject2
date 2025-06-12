@@ -19,6 +19,34 @@
       "enable": true
     },
     {
+      "id": "SMU1_V",
+      "displayName": "SMU1 Voltage",
+      "unit": "V",
+      "displayUnitSuffix": true,
+      "enable": true
+    },
+    {
+      "id": "SMU1_A",
+      "displayName": "SMU1 Current",
+      "unit": "A",
+      "displayUnitSuffix": true,
+      "enable": true
+    },
+    {
+      "id": "SMU1_R",
+      "displayName": "SMU1 Resistance",
+      "unit": "Ohms",
+      "displayUnitSuffix": true,
+      "enable": false
+    },
+    {
+      "id": "SMU1_P",
+      "displayName": "SMU1 Power",
+      "unit": "Watts",
+      "displayUnitSuffix": true,
+      "enable": false
+    },
+    {
       "id": "Virtual_1",
       "displayName": "Virtual Channel 1",
       "unit": "V",

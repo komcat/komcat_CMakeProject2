@@ -1,9 +1,14 @@
 ﻿#include <algorithm> // For std::min and std::max 
+#include <fstream>
+#include <nlohmann/json.hpp>
 #include "CMakeProject2.h"
 //#include "include/client_manager.h" // Replace tcp_client.h with our new manager
 #include "include/cld101x_client.h"
 #include "include/cld101x_manager.h"
 #include "include/data/data_client_manager.h"  // Add this at the top with other includes
+
+#include "include/SMU/keithley2400_client.h"
+#include "include/SMU/keithley2400_manager.h"
 
 #include "include/logger.h" // Include our new logger header
 #include "include/motions/MotionTypes.h"  // Add this line - include MotionTypes.h first
@@ -410,176 +415,292 @@ void RenderGlobalDataValueSI(const std::string& dataName) {
 }
 
 void RenderDigitalDisplaySI(const std::string& dataName) {
-	// Get the value from the global data store
-	float value = GlobalDataStore::GetInstance()->GetValue(dataName);
-	bool isNegative = (value < 0);
-	float absValue = std::abs(value);
+  // Static variables to persist between calls
+  static std::string selectedDataName = dataName;
+  static std::vector<std::pair<std::string, std::string>> availableChannels;
+  static bool channelsLoaded = false;
+  static bool showPopup = false;
 
-	// Name and unit mapping with SI prefixes
-	std::string displayName = dataName;
+  // Load channels from config file on first call or when right-clicked
+  auto loadChannelsFromConfig = []() {
+    availableChannels.clear();
+    try {
+      std::ifstream configFile("data_display_config.json");
+      if (configFile.is_open()) {
+        nlohmann::json config;
+        configFile >> config;
 
-	// Units and prefixes mapping
-	struct UnitInfo {
-		std::string baseUnit;
-		std::vector<std::pair<float, std::string>> prefixes;
-	};
+        if (config.contains("channels") && config["channels"].is_array()) {
+          for (const auto& channel : config["channels"]) {
+            std::string id = channel.value("id", "");
+            std::string displayName = channel.value("displayName", id);
+            bool enabled = channel.value("enable", true);
 
-	std::map<std::string, UnitInfo> unitsMap = {
-			{"GPIB-Current", {"A", {
-					{1e-12, "pA"},
-					{1e-9, "nA"},
-					{1e-6, "uA"},
-					{1e-3, "mA"},
-					{1, "A"}
-			}}},
-			{"hex-right-A-5", {"V", {
-					{1e-12, "pV"},
-					{1e-9, "nV"},
-					{1e-6, "uV"},
-					{1e-3, "mV"},
-					{1, "V"}
-			}}},
-			{"gantry", {"", {
-					{1, ""}  // No unit for gantry
-			}}},
-		// Add more units as needed
-	};
+            if (!id.empty() && enabled) {
+              availableChannels.emplace_back(id, displayName);
+            }
+          }
+        }
+        configFile.close();
+      }
+    }
+    catch (const std::exception& e) {
+      // Fallback if config loading fails
+      availableChannels = {
+        {"GPIB-Current", "Current Reading"},
+        {"SMU1-Current", "SMU1 Current"},
+        {"SMU1-Voltage", "SMU1 Voltage"},
+        {"SMU1-Resistance", "SMU1 Resistance"},
+        {"SMU1-Power", "SMU1 Power"}
+      };
+    }
+    channelsLoaded = true;
+  };
 
-	// Display name mapping
-	std::map<std::string, std::string> displayMap = {
-			{"GPIB-Current", "Current"},
-			{"hex-right-A-5", "Voltage R5"},
-			{"gantry", "gantry"},
-			// Add more mappings as needed
-	};
+  // Load channels if not loaded yet
+  if (!channelsLoaded) {
+    loadChannelsFromConfig();
+    selectedDataName = dataName; // Initialize with passed dataName
+  }
 
-	// Look up display name if available
-	auto nameIt = displayMap.find(dataName);
-	if (nameIt != displayMap.end()) {
-		displayName = nameIt->second;
-	}
+  // Use the selected data name for display
+  std::string currentDataName = selectedDataName;
 
-	// Get unit info and scale value
-	std::string unitDisplay = "";
-	float scaledValue = absValue;
+  // Get the value from the global data store
+  float value = GlobalDataStore::GetInstance()->GetValue(currentDataName);
+  bool isNegative = (value < 0);
+  float absValue = std::abs(value);
 
-	auto unitIt = unitsMap.find(dataName);
-	if (unitIt != unitsMap.end()) {
-		auto& prefixes = unitIt->second.prefixes;
+  // Name and unit mapping with SI prefixes
+  std::string displayName = currentDataName;
 
-		// Modified logic for SI prefix selection based on requirements:
-		// 1. Stay in current unit unless value >= 2000 times the unit
-		// 2. When scaling up, use the next prefix
-		// 3. No automatic scaling down
+  // Units and prefixes mapping
+  struct UnitInfo {
+    std::string baseUnit;
+    std::vector<std::pair<float, std::string>> prefixes;
+  };
 
-		// Find the appropriate SI prefix
-		for (size_t i = 0; i < prefixes.size(); i++) {
-			const auto& prefix = prefixes[i];
-			float threshold = 2000.0f; // Threshold to move to next unit
+  std::map<std::string, UnitInfo> unitsMap = {
+      {"GPIB-Current", {"A", {
+          {1e-12, "pA"},
+          {1e-9, "nA"},
+          {1e-6, "uA"},
+          {1e-3, "mA"},
+          {1, "A"}
+      }}},
+      {"SMU1-Current", {"A", {
+          {1e-12, "pA"},
+          {1e-9, "nA"},
+          {1e-6, "uA"},
+          {1e-3, "mA"},
+          {1, "A"}
+      }}},
+      {"SMU1-Voltage", {"V", {
+          {1e-12, "pV"},
+          {1e-9, "nV"},
+          {1e-6, "uV"},
+          {1e-3, "mV"},
+          {1, "V"}
+      }}},
+      {"SMU1-Resistance", {"Ω", {
+          {1e-3, "mΩ"},
+          {1, "Ω"},
+          {1e3, "kΩ"},
+          {1e6, "MΩ"}
+      }}},
+      {"SMU1-Power", {"W", {
+          {1e-12, "pW"},
+          {1e-9, "nW"},
+          {1e-6, "uW"},
+          {1e-3, "mW"},
+          {1, "W"}
+      }}},
+      {"hex-right-A-5", {"V", {
+          {1e-12, "pV"},
+          {1e-9, "nV"},
+          {1e-6, "uV"},
+          {1e-3, "mV"},
+          {1, "V"}
+      }}},
+      {"gantry", {"", {
+          {1, ""}  // No unit for gantry
+      }}},
+    // Add more units as needed
+  };
 
-			// Check if this is the correct unit for the value
-			if (i < prefixes.size() - 1) {
-				// If value is less than threshold times this unit, use this unit
-				if (absValue < prefix.first * threshold) {
-					unitDisplay = prefix.second;
-					scaledValue = absValue / prefix.first;
-					break;
-				}
-				// Otherwise, try the next larger unit
-			}
-			else {
-				// Last prefix in the list, use it regardless
-				unitDisplay = prefix.second;
-				scaledValue = absValue / prefix.first;
-				break;
-			}
-		}
-	}
+  // Display name mapping
+  std::map<std::string, std::string> displayMap = {
+      {"GPIB-Current", "Current"},
+      {"SMU1-Current", "SMU1 Current"},
+      {"SMU1-Voltage", "SMU1 Voltage"},
+      {"SMU1-Resistance", "SMU1 Resistance"},
+      {"SMU1-Power", "SMU1 Power"},
+      {"hex-right-A-5", "Voltage R5"},
+      {"gantry", "gantry"},
+      // Add more mappings as needed
+  };
 
-	// Create window name
-	std::string windowName = "Digital_" + dataName;
+  // Look up display name if available
+  auto nameIt = displayMap.find(currentDataName);
+  if (nameIt != displayMap.end()) {
+    displayName = nameIt->second;
+  }
 
-	// Set window appearance
-	ImGui::SetNextWindowPos(ImVec2(50, 50), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowSize(ImVec2(280, 120), ImGuiCond_FirstUseEver);
-	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.2f, 0.95f)); // Dark blue/gray
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f); // Sharp corners
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f); // Thin border
+  // Get unit info and scale value
+  std::string unitDisplay = "";
+  float scaledValue = absValue;
 
-	// Create window - WITHOUT the ImGuiWindowFlags_NoResize flag
-	ImGui::Begin(windowName.c_str(), nullptr,
-		ImGuiWindowFlags_NoTitleBar |
-		// ImGuiWindowFlags_NoResize | <- REMOVE THIS LINE to make it resizable
-		ImGuiWindowFlags_NoScrollbar |
-		ImGuiWindowFlags_NoCollapse);
+  auto unitIt = unitsMap.find(currentDataName);
+  if (unitIt != unitsMap.end()) {
+    auto& prefixes = unitIt->second.prefixes;
 
-	// Display name on left
-	// Push custom color for display name
-	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.7f, 1.0f, 1.0f)); // Blue color
-	// Display name on left
-	ImGui::SetWindowFontScale(2.0f); // Make it larger
-	ImGui::Text("%s", displayName.c_str());
-	// Pop color
-	ImGui::PopStyleColor();
+    // Modified logic for SI prefix selection based on requirements:
+    // 1. Stay in current unit unless value >= 2000 times the unit
+    // 2. When scaling up, use the next prefix
+    // 3. No automatic scaling down
 
-	// Display unit on right (if any)
-	if (!unitDisplay.empty()) {
-		float windowWidth = ImGui::GetWindowSize().x;
-		ImGui::SameLine(windowWidth - ImGui::CalcTextSize(unitDisplay.c_str()).x - 20);
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.7f, 1.0f, 1.0f)); // Blue color
-		ImGui::SetWindowFontScale(2.0f); // Make it larger
-		ImGui::Text("%s", unitDisplay.c_str());
-		ImGui::PopStyleColor();
-	}
+    // Find the appropriate SI prefix
+    for (size_t i = 0; i < prefixes.size(); i++) {
+      const auto& prefix = prefixes[i];
+      float threshold = 2000.0f; // Threshold to move to next unit
 
-	// Add separator line
-	ImGui::Separator();
+      // Check if this is the correct unit for the value
+      if (i < prefixes.size() - 1) {
+        // If value is less than threshold times this unit, use this unit
+        if (absValue < prefix.first * threshold) {
+          unitDisplay = prefix.second;
+          scaledValue = absValue / prefix.first;
+          break;
+        }
+        // Otherwise, try the next larger unit
+      }
+      else {
+        // Last prefix in the list, use it regardless
+        unitDisplay = prefix.second;
+        scaledValue = absValue / prefix.first;
+        break;
+      }
+    }
+  }
 
-	// Format value with only 1 decimal place
-	char valueStr[32];
-	snprintf(valueStr, sizeof(valueStr), "%.2f", scaledValue);
+  // Create window name
+  std::string windowName = "Digital_" + currentDataName;
 
-	// Set a monospaced font and large size for the digital display look
-	ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Assume monospace font
-	ImGui::SetWindowFontScale(7.0f); // Make it larger
+  // Set window appearance
+  ImGui::SetNextWindowPos(ImVec2(50, 50), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(280, 120), ImGuiCond_FirstUseEver);
+  ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.2f, 0.95f)); // Dark blue/gray
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f); // Sharp corners
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f); // Thin border
 
-	// Calculate width for right alignment of the value
-	float windowWidth = ImGui::GetWindowSize().x;
-	float valueWidth = ImGui::CalcTextSize(valueStr).x;
-	float signWidth = ImGui::CalcTextSize("-").x;
+  // Create window - WITHOUT the ImGuiWindowFlags_NoResize flag
+  ImGui::Begin(windowName.c_str(), nullptr,
+    ImGuiWindowFlags_NoTitleBar |
+    // ImGuiWindowFlags_NoResize | <- REMOVE THIS LINE to make it resizable
+    ImGuiWindowFlags_NoScrollbar |
+    ImGuiWindowFlags_NoCollapse);
 
-	// Display negative sign separately if needed
-	if (isNegative) {
-		// Position for the negative sign
-		ImGui::SetCursorPosX((windowWidth - valueWidth - signWidth) * 0.5f);
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f)); // Red for negative
-		ImGui::Text("-");
-		ImGui::PopStyleColor();
+  // Check for right-click to open selection menu
+  if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+    showPopup = true;
+    loadChannelsFromConfig(); // Reload config when right-clicked
+    ImGui::OpenPopup("SelectDataSource");
+  }
 
-		// Position for the value (aligned right after the sign)
-		ImGui::SameLine(0, 0);
-	}
-	else {
-		// Position for positive value (centered, with space for a potential sign)
-		ImGui::SetCursorPosX((windowWidth - valueWidth) * 0.5f + (signWidth * 0.5f));
-	}
+  // Render the popup menu
+  if (ImGui::BeginPopup("SelectDataSource")) {
+    ImGui::Text("Select Data Source:");
+    ImGui::Separator();
 
-	// Draw the digital-style text in white
-	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f)); // Bright white text
-	ImGui::Text("%s", valueStr);
-	ImGui::PopStyleColor();
+    for (const auto& [id, displayName] : availableChannels) {
+      bool isSelected = (id == currentDataName);
 
-	// Reset font settings
-	ImGui::SetWindowFontScale(1.0f);
-	ImGui::PopFont();
+      if (ImGui::Selectable((displayName + "##" + id).c_str(), isSelected)) {
+        selectedDataName = id;
+        showPopup = false;
+      }
 
-	ImGui::End();
+      // Show the ID in smaller text
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("ID: %s", id.c_str());
+      }
+    }
 
-	// Pop styles
-	ImGui::PopStyleVar(2);
-	ImGui::PopStyleColor();
+    // Add option to reload config
+    ImGui::Separator();
+    if (ImGui::Selectable("Reload Config")) {
+      loadChannelsFromConfig();
+    }
+
+    ImGui::EndPopup();
+  }
+
+  // Display name on left
+  // Push custom color for display name
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.7f, 1.0f, 1.0f)); // Blue color
+  // Display name on left
+  ImGui::SetWindowFontScale(2.0f); // Make it larger
+  ImGui::Text("%s", displayName.c_str());
+  // Pop color
+  ImGui::PopStyleColor();
+
+  // Display unit on right (if any)
+  if (!unitDisplay.empty()) {
+    float windowWidth = ImGui::GetWindowSize().x;
+    ImGui::SameLine(windowWidth - ImGui::CalcTextSize(unitDisplay.c_str()).x - 20);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.7f, 1.0f, 1.0f)); // Blue color
+    ImGui::SetWindowFontScale(2.0f); // Make it larger
+    ImGui::Text("%s", unitDisplay.c_str());
+    ImGui::PopStyleColor();
+  }
+
+  // Add separator line
+  ImGui::Separator();
+
+  // Format value with only 1 decimal place
+  char valueStr[32];
+  snprintf(valueStr, sizeof(valueStr), "%.2f", scaledValue);
+
+  // Set a monospaced font and large size for the digital display look
+  ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Assume monospace font
+  ImGui::SetWindowFontScale(7.0f); // Make it larger
+
+  // Calculate width for right alignment of the value
+  float windowWidth = ImGui::GetWindowSize().x;
+  float valueWidth = ImGui::CalcTextSize(valueStr).x;
+  float signWidth = ImGui::CalcTextSize("-").x;
+
+  // Display negative sign separately if needed
+  if (isNegative) {
+    // Position for the negative sign
+    ImGui::SetCursorPosX((windowWidth - valueWidth - signWidth) * 0.5f);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f)); // Red for negative
+    ImGui::Text("-");
+    ImGui::PopStyleColor();
+
+    // Position for the value (aligned right after the sign)
+    ImGui::SameLine(0, 0);
+  }
+  else {
+    // Position for positive value (centered, with space for a potential sign)
+    ImGui::SetCursorPosX((windowWidth - valueWidth) * 0.5f + (signWidth * 0.5f));
+  }
+
+  // Draw the digital-style text in white
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f)); // Bright white text
+  ImGui::Text("%s", valueStr);
+  ImGui::PopStyleColor();
+
+  // Reset font settings
+  ImGui::SetWindowFontScale(1.0f);
+  ImGui::PopFont();
+
+  ImGui::End();
+
+  // Pop styles
+  ImGui::PopStyleVar(2);
+  ImGui::PopStyleColor();
 }
-
 
 void RenderDigitalDisplay(const std::string& dataName) {
 	// Get the value from the global data store
@@ -1077,6 +1198,36 @@ int main(int argc, char* argv[])
     logger->LogInfo("CLD101x system initialized");
   }
 
+  // Keithley 2400 Manager (conditional)
+  std::unique_ptr<Keithley2400Manager> keithleyManager;
+  if (moduleConfig.isEnabled("KEITHLEY_2400_MANAGER")) {
+    keithleyManager = std::make_unique<Keithley2400Manager>();
+
+    // Initialize from config file
+    if (keithleyManager->Initialize("smu_config.json")) {
+      logger->LogInfo("Keithley2400Manager initialized from config file");
+
+      // Try to connect based on config
+      if (keithleyManager->ConnectAll()) {
+        logger->LogInfo("Successfully connected to Keithley 2400 servers");
+        //keithleyManager->StartAllPolling(1000); // Poll every 1 second
+      }
+      else {
+        logger->LogWarning("Failed to connect to some Keithley 2400 servers");
+      }
+    }
+    else {
+      logger->LogWarning("Failed to load Keithley config, using defaults");
+      // Fallback to manual setup if config fails
+      keithleyManager->AddClient("Keithley-Main", "127.0.0.101", 8888);
+      if (keithleyManager->ConnectAll()) {
+        logger->LogInfo("Successfully connected to Keithley 2400 servers (fallback)");
+        keithleyManager->StartAllPolling(1000);
+      }
+    }
+  }
+
+
   // Global Jog Panel (conditional)
   std::unique_ptr<GlobalJogPanel> globalJogPanel;
   if (moduleConfig.isEnabled("GLOBAL_JOG_PANEL") && piControllerManager && acsControllerManager) {
@@ -1258,6 +1409,11 @@ int main(int argc, char* argv[])
       toolbarVertical->AddReferenceToCategory("Data",
         CreateHierarchicalUI(*dataClientManager, "Data TCP/IP"));
     }
+    // Add Keithley to Data category in toolbar
+    if (keithleyManager) {
+      toolbarVertical->AddReferenceToCategory("Data",
+        CreateHierarchicalUI(*keithleyManager, "Keithley 2400"));
+    }
 
     // Add components to Products category
     if (productConfigManager) {
@@ -1381,10 +1537,13 @@ int main(int argc, char* argv[])
     }
     if (moduleConfig.isEnabled("DIGITAL_DISPLAY") && dataStore) {
       RenderDigitalDisplaySI("GPIB-Current");
+      //RenderDigitalDisplaySI("SMU1-Voltage");
     }
 
     // Render logger UI (always enabled)
     logger->RenderUI();
+
+
 
     // Render component UIs conditionally
     if (toolbarVertical) {
@@ -1465,6 +1624,18 @@ int main(int argc, char* argv[])
     if (dataChartManager) {
       dataChartManager->Update();
       dataChartManager->RenderUI();
+    }
+    // Render Keithley system
+    if (keithleyManager) {
+      keithleyManager->RenderUI();
+
+      // Render individual client UIs
+      for (const auto& clientName : keithleyManager->GetClientNames()) {
+        Keithley2400Client* client = keithleyManager->GetClient(clientName);
+        if (client && client->IsVisible()) {
+          client->RenderUI();
+        }
+      }
     }
 
     // Render other components
@@ -1571,7 +1742,12 @@ int main(int argc, char* argv[])
   if (cld101xManager) {
     cld101xManager->DisconnectAll();
   }
-
+  // Cleanup Keithley system
+  if (keithleyManager) {
+    logger->LogInfo("Shutting down Keithley 2400 system...");
+    keithleyManager->StopAllPolling();
+    keithleyManager->DisconnectAll();
+  }
   // Cleanup controllers
   try {
     if (piControllerManager) {

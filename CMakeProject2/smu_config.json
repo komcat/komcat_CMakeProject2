@@ -1,0 +1,22 @@
+{
+  "manager_settings": {
+    "auto_connect": true,
+    "default_polling_interval": 200,
+    "bulk_voltage": 0.0,
+    "bulk_current": 0.001,
+    "bulk_compliance": 0.1,
+    "bulk_source_mode": 0
+  },
+  "clients": [
+    {
+      "name": "SMU1",
+      "display_name": "Keithley 2400 SMU1",
+      "ip": "127.0.0.101",
+      "port": 8888,
+      "auto_connect": true,
+      "enabled": true,
+      "polling_interval": 120,
+      "description": "SMU1 Keithley 2400"
+    }
+  ]
+}
