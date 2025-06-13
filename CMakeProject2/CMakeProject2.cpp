@@ -89,7 +89,7 @@
 #include "Programming/MachineBlockUI.h"
 #include "Programming/virtual_machine_operations.h"
 #include "Programming/virtual_machine_operations_adapter.h"
-
+#include "include/data/DigitalDisplayWithChart.h"
 #pragma region header functions
 
 
@@ -421,9 +421,12 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
   static bool channelsLoaded = false;
   static bool showPopup = false;
 
-  // Load channels from config file on first call or when right-clicked
+  // Load channels from config file AND global data store
   auto loadChannelsFromConfig = []() {
     availableChannels.clear();
+    std::set<std::string> channelIds; // To track duplicates
+
+    // First, load from config file
     try {
       std::ifstream configFile("data_display_config.json");
       if (configFile.is_open()) {
@@ -438,6 +441,7 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
 
             if (!id.empty() && enabled) {
               availableChannels.emplace_back(id, displayName);
+              channelIds.insert(id); // Track this ID as already added
             }
           }
         }
@@ -445,7 +449,44 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
       }
     }
     catch (const std::exception& e) {
-      // Fallback if config loading fails
+      // If config loading fails, we'll still add global store channels below
+    }
+
+    // Second, add channels from global data store that aren't in the config
+    if (GlobalDataStore::GetInstance()) {
+      std::vector<std::string> globalChannels = GlobalDataStore::GetInstance()->GetAvailableChannels();
+
+      for (const std::string& channelId : globalChannels) {
+        // Only add if not already in the list from config file
+        if (channelIds.find(channelId) == channelIds.end()) {
+          // Use the channel ID as display name, but make it more readable
+          std::string displayName = channelId;
+
+          // Optional: Make display names more readable
+          // Replace underscores with spaces and capitalize
+          std::replace(displayName.begin(), displayName.end(), '_', ' ');
+          std::replace(displayName.begin(), displayName.end(), '-', ' ');
+
+          // Capitalize first letter of each word
+          bool capitalizeNext = true;
+          for (char& c : displayName) {
+            if (capitalizeNext && std::isalpha(c)) {
+              c = std::toupper(c);
+              capitalizeNext = false;
+            }
+            else if (c == ' ') {
+              capitalizeNext = true;
+            }
+          }
+
+          availableChannels.emplace_back(channelId, displayName + " (Auto)");
+          channelIds.insert(channelId); // Track this ID
+        }
+      }
+    }
+
+    // Fallback channels if both config and global store are empty
+    if (availableChannels.empty()) {
       availableChannels = {
         {"GPIB-Current", "Current Reading"},
         {"SMU1-Current", "SMU1 Current"},
@@ -454,6 +495,7 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
         {"SMU1-Power", "SMU1 Power"}
       };
     }
+
     channelsLoaded = true;
   };
 
@@ -522,10 +564,31 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
           {1e-3, "mV"},
           {1, "V"}
       }}},
+      {"hex-left-A-5", {"V", {
+          {1e-12, "pV"},
+          {1e-9, "nV"},
+          {1e-6, "uV"},
+          {1e-3, "mV"},
+          {1, "V"}
+      }}},
+      {"hex-right-A-6", {"V", {
+          {1e-12, "pV"},
+          {1e-9, "nV"},
+          {1e-6, "uV"},
+          {1e-3, "mV"},
+          {1, "V"}
+      }}},
+      {"hex-left-A-6", {"V", {
+          {1e-12, "pV"},
+          {1e-9, "nV"},
+          {1e-6, "uV"},
+          {1e-3, "mV"},
+          {1, "V"}
+      }}},
       {"gantry", {"", {
           {1, ""}  // No unit for gantry
       }}},
-    // Add more units as needed
+    // Add more units as needed - the function will auto-detect channels not listed here
   };
 
   // Display name mapping
@@ -536,6 +599,9 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
       {"SMU1-Resistance", "SMU1 Resistance"},
       {"SMU1-Power", "SMU1 Power"},
       {"hex-right-A-5", "Voltage R5"},
+      {"hex-left-A-5", "Voltage L5"},
+      {"hex-right-A-6", "Voltage R6"},
+      {"hex-left-A-6", "Voltage L6"},
       {"gantry", "gantry"},
       // Add more mappings as needed
   };
@@ -553,11 +619,6 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
   auto unitIt = unitsMap.find(currentDataName);
   if (unitIt != unitsMap.end()) {
     auto& prefixes = unitIt->second.prefixes;
-
-    // Modified logic for SI prefix selection based on requirements:
-    // 1. Stay in current unit unless value >= 2000 times the unit
-    // 2. When scaling up, use the next prefix
-    // 3. No automatic scaling down
 
     // Find the appropriate SI prefix
     for (size_t i = 0; i < prefixes.size(); i++) {
@@ -582,6 +643,55 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
       }
     }
   }
+  else {
+    // For unknown channels, try to guess the unit based on the name
+    std::string lowerName = currentDataName;
+    std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+
+    if (lowerName.find("current") != std::string::npos || lowerName.find("ampere") != std::string::npos) {
+      // Assume it's current
+      if (absValue < 1e-9) {
+        scaledValue = absValue * 1e12;
+        unitDisplay = "pA";
+      }
+      else if (absValue < 1e-6) {
+        scaledValue = absValue * 1e9;
+        unitDisplay = "nA";
+      }
+      else if (absValue < 1e-3) {
+        scaledValue = absValue * 1e6;
+        unitDisplay = "uA";
+      }
+      else if (absValue < 1) {
+        scaledValue = absValue * 1e3;
+        unitDisplay = "mA";
+      }
+      else {
+        scaledValue = absValue;
+        unitDisplay = "A";
+      }
+    }
+    else if (lowerName.find("voltage") != std::string::npos || lowerName.find("volt") != std::string::npos) {
+      // Assume it's voltage
+      if (absValue < 1e-3) {
+        scaledValue = absValue * 1e6;
+        unitDisplay = "uV";
+      }
+      else if (absValue < 1) {
+        scaledValue = absValue * 1e3;
+        unitDisplay = "mV";
+      }
+      else {
+        scaledValue = absValue;
+        unitDisplay = "V";
+      }
+    }
+    else {
+      // Unknown unit, just display the raw value
+      scaledValue = absValue;
+      unitDisplay = "";
+    }
+  }
 
   // Create window name
   std::string windowName = "Digital_" + currentDataName;
@@ -593,17 +703,16 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
   ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f); // Sharp corners
   ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f); // Thin border
 
-  // Create window - WITHOUT the ImGuiWindowFlags_NoResize flag
+  // Create window - resizable
   ImGui::Begin(windowName.c_str(), nullptr,
     ImGuiWindowFlags_NoTitleBar |
-    // ImGuiWindowFlags_NoResize | <- REMOVE THIS LINE to make it resizable
     ImGuiWindowFlags_NoScrollbar |
     ImGuiWindowFlags_NoCollapse);
 
   // Check for right-click to open selection menu
   if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
     showPopup = true;
-    loadChannelsFromConfig(); // Reload config when right-clicked
+    loadChannelsFromConfig(); // Reload config and global store channels when right-clicked
     ImGui::OpenPopup("SelectDataSource");
   }
 
@@ -612,23 +721,67 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
     ImGui::Text("Select Data Source:");
     ImGui::Separator();
 
+    // Group channels by source (config vs auto-detected)
+    bool hasConfigChannels = false;
+    bool hasAutoChannels = false;
+
+    // Check what types of channels we have
     for (const auto& [id, displayName] : availableChannels) {
-      bool isSelected = (id == currentDataName);
-
-      if (ImGui::Selectable((displayName + "##" + id).c_str(), isSelected)) {
-        selectedDataName = id;
-        showPopup = false;
+      if (displayName.find("(Auto)") != std::string::npos) {
+        hasAutoChannels = true;
       }
-
-      // Show the ID in smaller text
-      if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("ID: %s", id.c_str());
+      else {
+        hasConfigChannels = true;
       }
     }
 
-    // Add option to reload config
+    // Show config channels first
+    if (hasConfigChannels) {
+      ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "Configured Channels:");
+      for (const auto& [id, displayName] : availableChannels) {
+        if (displayName.find("(Auto)") == std::string::npos) {
+          bool isSelected = (id == currentDataName);
+
+          if (ImGui::Selectable((displayName + "##" + id).c_str(), isSelected)) {
+            selectedDataName = id;
+            showPopup = false;
+          }
+
+          // Show the ID in tooltip
+          if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("ID: %s", id.c_str());
+          }
+        }
+      }
+    }
+
+    // Show auto-detected channels
+    if (hasAutoChannels) {
+      if (hasConfigChannels) {
+        ImGui::Separator();
+      }
+      ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.0f, 1.0f), "Auto-detected Channels:");
+      for (const auto& [id, displayName] : availableChannels) {
+        if (displayName.find("(Auto)") != std::string::npos) {
+          bool isSelected = (id == currentDataName);
+
+          if (ImGui::Selectable((displayName + "##" + id).c_str(), isSelected)) {
+            selectedDataName = id;
+            showPopup = false;
+          }
+
+          // Show the ID in tooltip
+          if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("ID: %s", id.c_str());
+          }
+        }
+      }
+    }
+
+    // Add option to reload config and refresh global store
     ImGui::Separator();
-    if (ImGui::Selectable("Reload Config")) {
+    if (ImGui::Selectable("Refresh All Channels")) {
+      channelsLoaded = false; // Force reload on next call
       loadChannelsFromConfig();
     }
 
@@ -657,7 +810,7 @@ void RenderDigitalDisplaySI(const std::string& dataName) {
   // Add separator line
   ImGui::Separator();
 
-  // Format value with only 1 decimal place
+  // Format value with only 2 decimal places
   char valueStr[32];
   snprintf(valueStr, sizeof(valueStr), "%.2f", scaledValue);
 
@@ -1470,6 +1623,13 @@ int main(int argc, char* argv[])
       std::to_string(toolbarVertical->GetComponentCount()) + " components");
   }
 
+  // Create one display for current monitoring
+  auto currentDisplay = std::make_unique<DigitalDisplayWithChart>("GPIB-Current");
+
+
+
+
+
   // Main loop
   bool done = false;
   bool cameraDisconnectedWarningShown = false;
@@ -1543,7 +1703,7 @@ int main(int argc, char* argv[])
     // Render logger UI (always enabled)
     logger->RenderUI();
 
-
+    currentDisplay->Render();
 
     // Render component UIs conditionally
     if (toolbarVertical) {

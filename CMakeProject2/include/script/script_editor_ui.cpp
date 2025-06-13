@@ -139,7 +139,7 @@ void ScriptEditorUI::RenderUI() {
       if (ImGui::MenuItem("New")) {
         memset(m_editorBuffer, 0, EDITOR_BUFFER_SIZE);
         m_script.clear();
-        strcpy(m_editorBuffer, "# New script");
+        strcpy_s(m_editorBuffer, sizeof(m_editorBuffer), "# New script");
       }
       if (ImGui::MenuItem("Open...")) {
         ShowOpenDialog();
@@ -269,7 +269,7 @@ void ScriptEditorUI::RenderUI() {
 void ScriptEditorUI::RenderEditorSection() {
   // Ensure editor buffer has content from m_script
   if (strlen(m_editorBuffer) == 0 && !m_script.empty()) {
-    strncpy(m_editorBuffer, m_script.c_str(), EDITOR_BUFFER_SIZE - 1);
+    strncpy_s(m_editorBuffer, EDITOR_BUFFER_SIZE, m_script.c_str(), EDITOR_BUFFER_SIZE - 1);
     m_editorBuffer[EDITOR_BUFFER_SIZE - 1] = '\0';
   }
 
@@ -565,7 +565,7 @@ void ScriptEditorUI::RenderCommandHelpSection() {
         }
         newText += help.example;
         if (newText.length() < EDITOR_BUFFER_SIZE - 1) {
-          strcpy(m_editorBuffer, newText.c_str());
+          strcpy_s(m_editorBuffer, sizeof(m_editorBuffer), newText.c_str());
           m_script = newText;
         }
       }
@@ -825,7 +825,7 @@ void ScriptEditorUI::SetScript(const std::string& script) {
   m_script = script;
 
   // Update editor buffer
-  strncpy(m_editorBuffer, script.c_str(), EDITOR_BUFFER_SIZE - 1);
+  strncpy_s(m_editorBuffer, EDITOR_BUFFER_SIZE, script.c_str(), EDITOR_BUFFER_SIZE - 1);
   m_editorBuffer[EDITOR_BUFFER_SIZE - 1] = '\0';
 }
 
@@ -836,17 +836,17 @@ void ScriptEditorUI::AddSampleScript(const std::string& name, const std::string&
 void ScriptEditorUI::ShowOpenDialog() {
   m_showFileDialog = true;
   m_isOpenDialog = true;
-  strcpy(m_filePathBuffer, "scripts/");
+  strcpy_s(m_filePathBuffer, sizeof(m_filePathBuffer), "scripts/");
 }
 
 void ScriptEditorUI::ShowSaveDialog() {
   m_showFileDialog = true;
   m_isOpenDialog = false;
   if (m_currentFilePath.empty()) {
-    strcpy(m_filePathBuffer, "scripts/new_script.aas");
+    strcpy_s(m_filePathBuffer, sizeof(m_filePathBuffer), "scripts/new_script.aas");
   }
   else {
-    strcpy(m_filePathBuffer, m_currentFilePath.c_str());
+    strcpy_s(m_filePathBuffer, sizeof(m_filePathBuffer), "scripts/new_script.aas");
   }
 }
 
@@ -945,7 +945,7 @@ void ScriptEditorUI::RenderFileDialog() {
       if (ImGui::Selectable(fileName.c_str(), isSelected)) {
         // When a file is selected, update the file path buffer
         std::string fullPath = file.path().string();
-        strncpy(m_filePathBuffer, fullPath.c_str(), sizeof(m_filePathBuffer) - 1);
+        strncpy_s(m_filePathBuffer, sizeof(m_filePathBuffer), fullPath.c_str(), sizeof(m_filePathBuffer) - 1);
         m_filePathBuffer[sizeof(m_filePathBuffer) - 1] = '\0';
       }
 
@@ -972,7 +972,13 @@ void ScriptEditorUI::RenderFileDialog() {
           auto time_t = std::chrono::system_clock::to_time_t(sctp);
 
           ImGui::Text("Size: %zu bytes", fileSize);
-          ImGui::Text("Modified: %s", std::ctime(&time_t));
+          char timeBuffer[26];  // ctime_s requires a 26-character buffer
+          if (ctime_s(timeBuffer, sizeof(timeBuffer), &time_t) == 0) {
+            ImGui::Text("Modified: %s", timeBuffer);
+          }
+          else {
+            ImGui::Text("Modified: [Invalid time]");
+          }
         }
         catch (...) {
           ImGui::Text("File information unavailable");
@@ -1007,7 +1013,7 @@ void ScriptEditorUI::RenderFileDialog() {
     if (!filePath.empty() && filePath.find(".aas") == std::string::npos &&
       filePath.find(".") == std::string::npos) {
       filePath += ".aas";
-      strncpy(m_filePathBuffer, filePath.c_str(), sizeof(m_filePathBuffer) - 1);
+      strcpy_s(m_filePathBuffer, sizeof(m_filePathBuffer), filePath.c_str());
       m_filePathBuffer[sizeof(m_filePathBuffer) - 1] = '\0';
     }
   }
@@ -1058,9 +1064,15 @@ void ScriptEditorUI::RenderFileDialog() {
     auto now = std::chrono::system_clock::now();
     auto time = std::chrono::system_clock::to_time_t(now);
     std::stringstream ss;
-    ss << currentDir << "script_" << std::put_time(std::localtime(&time), "%Y%m%d_%H%M%S") << ".aas";
+    struct tm timeinfo;
+    if (localtime_s(&timeinfo, &time) == 0) {
+      ss << currentDir << "script_" << std::put_time(&timeinfo, "%Y%m%d_%H%M%S") << ".aas";
+    }
+    else {
+      ss << currentDir << "script_" << "default" << ".aas";  // fallback name
+    }
     std::string newFile = ss.str();
-    strncpy(m_filePathBuffer, newFile.c_str(), sizeof(m_filePathBuffer) - 1);
+    strcpy_s(m_filePathBuffer, sizeof(m_filePathBuffer), newFile.c_str());
     m_filePathBuffer[sizeof(m_filePathBuffer) - 1] = '\0';
   }
 

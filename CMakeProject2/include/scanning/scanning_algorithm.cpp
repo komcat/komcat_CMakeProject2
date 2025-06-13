@@ -207,7 +207,7 @@ bool ScanningAlgorithm::ExecuteScanSequence() {
 
       // Calculate progress
       size_t currentStep = axisIndex + stepIndex * m_parameters.axesToScan.size();
-      double totalSteps = m_parameters.axesToScan.size() * m_parameters.stepSizes.size();
+      double totalSteps = static_cast<double>(m_parameters.axesToScan.size() * m_parameters.stepSizes.size());
       double progress = static_cast<double>(currentStep) / totalSteps;
 
       std::stringstream progressMsg;

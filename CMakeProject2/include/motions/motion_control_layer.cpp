@@ -1349,7 +1349,12 @@ bool MotionControlLayer::SaveAllCurrentPositionsToConfig(const std::string& pref
   // Generate timestamp for position names
   auto now = std::chrono::system_clock::now();
   auto time_t = std::chrono::system_clock::to_time_t(now);
-  auto tm = *std::localtime(&time_t);
+  std::tm tm;
+#ifdef _WIN32
+  localtime_s(&tm, &time_t);
+#else
+  localtime_r(&time_t, &tm);
+#endif
 
   std::stringstream timeString;
   timeString << std::put_time(&tm, "%Y%m%d_%H%M%S");
@@ -1385,7 +1390,12 @@ bool MotionControlLayer::BackupMotionConfig(const std::string& backupSuffix) {
     if (backupSuffix.empty()) {
       auto now = std::chrono::system_clock::now();
       auto time_t = std::chrono::system_clock::to_time_t(now);
-      auto tm = *std::localtime(&time_t);
+      std::tm tm;
+#ifdef _WIN32
+      localtime_s(&tm, &time_t);
+#else
+      localtime_r(&time_t, &tm);
+#endif
 
       std::stringstream timeString;
       timeString << std::put_time(&tm, "%Y%m%d_%H%M%S");

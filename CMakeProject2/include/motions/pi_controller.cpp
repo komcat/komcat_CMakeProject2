@@ -1,5 +1,7 @@
 ﻿// pi_controller.cpp
 #include "../include/motions/pi_controller.h"
+#include "include/data/global_data_store.h"  // Add this include
+
 #include "imgui.h"
 #include <iostream>
 #include <chrono>
@@ -7,27 +9,31 @@
 #include <algorithm>
 
 // Modify the constructor to initialize timestamps
+// Updated constructor - initialize analog reading
 PIController::PIController()
 	: m_controllerId(-1),
 	m_port(50000),
 	m_lastStatusUpdate(std::chrono::steady_clock::now()),
 	m_lastPositionUpdate(std::chrono::steady_clock::now()) {
 
-	// Initialize atomic variables correctly
+	// Initialize atomic variables
 	m_isConnected.store(false);
 	m_threadRunning.store(false);
 	m_terminateThread.store(false);
+	m_enableAnalogReading.store(true);  // Enable analog reading by default
 
 	m_logger = Logger::GetInstance();
 	m_logger->LogInfo("PIController: Initializing controller");
 
-	// Initialize available axes with correct identifiers for C-887
-	m_availableAxes = { "X", "Y", "Z", "U", "V", "W" };  // Hexapod axes
+	// Get global data store instance
+	m_dataStore = GlobalDataStore::GetInstance();
+
+	// Initialize available axes
+	m_availableAxes = { "X", "Y", "Z", "U", "V", "W" };
 
 	// Start communication thread
 	StartCommunicationThread();
 }
-
 
 PIController::~PIController() {
 	m_logger->LogInfo("PIController: Shutting down controller");
@@ -70,61 +76,33 @@ void PIController::StopCommunicationThread() {
 
 // Add this improved version to the CommunicationThreadFunc
 // 4. Update CommunicationThreadFunc in pi_controller.cpp
+// Updated communication thread - now includes analog reading
 void PIController::CommunicationThreadFunc() {
-	// Reduce update rate from 10Hz to 5Hz
-	// 200 =  5hz
-	// 100 = 10hz
-	// 50 = 20hz
-	const auto updateInterval = std::chrono::milliseconds(50);  // 5Hz update rate
-
-	// Implement frame skipping for less important updates
+	const auto updateInterval = std::chrono::milliseconds(50);  // 20Hz update rate
 	int frameCounter = 0;
+
 	while (!m_terminateThread) {
-		// Only update if connected
 		if (m_isConnected) {
 			frameCounter++;
 
-			// Always update positions (but use batch query instead of individual queries)
+			// Always update positions
 			std::map<std::string, double> positions;
 			if (GetPositions(positions)) {
 				std::lock_guard<std::mutex> lock(m_mutex);
 				m_axisPositions = positions;
 			}
 
-			// More frequent status updates - once every frame
-			// This ensures we catch short movements in jogging
+			// Update motion status
 			{
-				// Instead of iterating through each axis individually, 
-				// query all axes at once for more efficiency
-				const char* allAxes = "X Y Z U V W";  // All hexapod axes
+				const char* allAxes = "X Y Z U V W";
 				BOOL isMovingArray[6] = { FALSE, FALSE, FALSE, FALSE, FALSE, FALSE };
 
-				bool success = PI_IsMoving(m_controllerId, allAxes, isMovingArray);
-
-				if (success) {
+				if (PI_IsMoving(m_controllerId, allAxes, isMovingArray)) {
 					std::lock_guard<std::mutex> lock(m_mutex);
-
-					// Map results to individual axes
 					const std::vector<std::string> axisNames = { "X", "Y", "Z", "U", "V", "W" };
-					bool anyAxisMoving = false;
-
-					// Only output detailed status logs if verbose debugging is enabled
-					if (m_debugVerbose) {
-						std::cout << "Movement status update:" << std::endl;
-					}
 
 					for (int i = 0; i < 6; i++) {
 						m_axisMoving[axisNames[i]] = (isMovingArray[i] == TRUE);
-						if (isMovingArray[i]) anyAxisMoving = true;
-
-						if (m_debugVerbose) {
-							std::cout << "  Axis " << axisNames[i] << ": "
-								<< (isMovingArray[i] ? "MOVING" : "IDLE") << std::endl;
-						}
-					}
-
-					if (m_debugVerbose) {
-						std::cout << "System status: " << (anyAxisMoving ? "MOVING" : "IDLE") << std::endl;
 					}
 				}
 			}
@@ -139,6 +117,11 @@ void PIController::CommunicationThreadFunc() {
 					}
 				}
 			}
+
+			// NEW: Update analog readings every frame (if enabled)
+			if (m_enableAnalogReading && frameCounter % 2 == 0) {  // Update analog every other frame (10Hz)
+				UpdateAnalogReadings();
+			}
 		}
 
 		// Wait for next update or termination
@@ -147,10 +130,98 @@ void PIController::CommunicationThreadFunc() {
 	}
 }
 
+// NEW: Update analog readings in communication thread
+void PIController::UpdateAnalogReadings() {
+	if (!m_isConnected || !m_enableAnalogReading || m_activeAnalogChannels.empty()) {
+		return;
+	}
+
+	std::map<int, double> voltages;
+	if (GetAnalogVoltages(m_activeAnalogChannels, voltages)) {
+		// Update cached values
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			m_analogVoltages = voltages;
+		}
+
+		// Update global data store
+		if (m_dataStore && !m_deviceName.empty()) {
+			for (const auto& [channel, voltage] : voltages) {
+				std::string dataKey = m_deviceName + "-A-" + std::to_string(channel);
+				m_dataStore->SetValue(dataKey, static_cast<float>(voltage));
+			}
+		}
+	}
+}
+
+// NEW: Get analog channel count
+bool PIController::GetAnalogChannelCount(int& numChannels) {
+	if (!m_isConnected) {
+		return false;
+	}
+
+	if (!PI_qTAC(m_controllerId, &numChannels)) {
+		int error = PI_GetError(m_controllerId);
+		if (m_debugVerbose) {
+			m_logger->LogError("PIController: Failed to get analog channel count. Error: " + std::to_string(error));
+		}
+		return false;
+	}
+
+	return true;
+}
+
+// NEW: Get single analog voltage
+bool PIController::GetAnalogVoltage(int channel, double& voltage) {
+	if (!m_isConnected) {
+		return false;
+	}
+
+	int channelId = channel;
+	if (!PI_qTAV(m_controllerId, &channelId, &voltage, 1)) {
+		int error = PI_GetError(m_controllerId);
+		if (m_debugVerbose) {
+			m_logger->LogError("PIController: Failed to read analog channel " + std::to_string(channel) +
+				". Error: " + std::to_string(error));
+		}
+		return false;
+	}
+
+	return true;
+}
+
+// NEW: Get multiple analog voltages
+bool PIController::GetAnalogVoltages(std::vector<int> channels, std::map<int, double>& voltages) {
+	if (!m_isConnected || channels.empty()) {
+		return false;
+	}
+
+	// Convert vector to array
+	std::vector<int> channelIds = channels;
+	std::vector<double> values(channels.size(), 0.0);
+
+	if (!PI_qTAV(m_controllerId, channelIds.data(), values.data(), static_cast<int>(channels.size()))) {
+		int error = PI_GetError(m_controllerId);
+		if (m_debugVerbose) {
+			m_logger->LogError("PIController: Failed to read analog channels. Error: " + std::to_string(error));
+		}
+		return false;
+	}
+
+	// Convert to map
+	voltages.clear();
+	for (size_t i = 0; i < channels.size(); i++) {
+		voltages[channels[i]] = values[i];
+	}
+
+	return true;
+}
+
 // Also enhance the Connect function to check connection details
 // Modified Connect function to initialize status structures
+
+// Updated Connect method - initialize analog channels
 bool PIController::Connect(const std::string& ipAddress, int port) {
-	// Check if already connected
 	if (m_isConnected) {
 		m_logger->LogWarning("PIController: Already connected to a controller");
 		return true;
@@ -158,58 +229,40 @@ bool PIController::Connect(const std::string& ipAddress, int port) {
 
 	m_logger->LogInfo("PIController: Connecting to controller at " + ipAddress + ":" + std::to_string(port));
 
-	// Store connection parameters
 	m_ipAddress = ipAddress;
 	m_port = port;
 
-	// Attempt to connect to the controller
+	// Attempt to connect
 	m_controllerId = PI_ConnectTCPIP(m_ipAddress.c_str(), m_port);
 
 	if (m_controllerId < 0) {
 		int errorCode = PI_GetInitError();
-		std::string errorMsg = "PIController: Failed to connect to controller. Error code: " + std::to_string(errorCode);
-		m_logger->LogError(errorMsg);
+		m_logger->LogError("PIController: Failed to connect. Error code: " + std::to_string(errorCode));
 		return false;
 	}
 
 	m_isConnected.store(true);
-	m_logger->LogInfo("PIController: Successfully connected to controller (ID: " + std::to_string(m_controllerId) + ")");
+	m_logger->LogInfo("PIController: Successfully connected (ID: " + std::to_string(m_controllerId) + ")");
 
 	// Initialize the position and status maps
 	{
 		std::lock_guard<std::mutex> lock(m_mutex);
-
-		// Initialize position map with zeros
 		for (const auto& axis : m_availableAxes) {
 			m_axisPositions[axis] = 0.0;
 			m_axisMoving[axis] = false;
 			m_axisServoEnabled[axis] = false;
 		}
-
-		// Reset timestamps
 		m_lastStatusUpdate = std::chrono::steady_clock::now();
 		m_lastPositionUpdate = std::chrono::steady_clock::now();
 	}
 
-	// Initialize controller for all axes
-	bool initResult = PI_INI(m_controllerId, NULL);
+	// Initialize controller
+	PI_INI(m_controllerId, NULL);
 
-	if (!initResult) {
-		// Log error and try to get error code
-		int error = 0;
-		PI_qERR(m_controllerId, &error);
-		m_logger->LogError("PIController: Initialization failed with error code: " + std::to_string(error));
+	// NEW: Initialize analog channels
+	InitializeAnalogChannels();
 
-		// Try individual axis initialization instead of all at once
-		for (const auto& axis : m_availableAxes) {
-			bool axisInitResult = PI_INI(m_controllerId, axis.c_str());
-			if (axisInitResult) {
-				m_logger->LogInfo("PIController: Successfully initialized axis " + axis);
-			}
-		}
-	}
-
-	// Immediately update cached positions and statuses
+	// Update cached positions and statuses
 	std::map<std::string, double> positions;
 	if (GetPositions(positions)) {
 		std::lock_guard<std::mutex> lock(m_mutex);
@@ -218,6 +271,30 @@ bool PIController::Connect(const std::string& ipAddress, int port) {
 
 	return true;
 }
+
+// NEW: Initialize analog channels
+void PIController::InitializeAnalogChannels() {
+	if (!m_isConnected || !m_enableAnalogReading) {
+		return;
+	}
+
+	// Get number of analog channels
+	if (GetAnalogChannelCount(m_numAnalogChannels)) {
+		m_logger->LogInfo("PIController: Found " + std::to_string(m_numAnalogChannels) + " analog channels");
+
+		// Initialize analog voltage cache
+		std::lock_guard<std::mutex> lock(m_mutex);
+		for (int channel : m_activeAnalogChannels) {
+			if (channel <= m_numAnalogChannels) {
+				m_analogVoltages[channel] = 0.0;
+			}
+		}
+	}
+	else {
+		m_logger->LogWarning("PIController: Could not determine number of analog channels");
+	}
+}
+
 
 
 
@@ -700,6 +777,7 @@ bool PIController::WaitForMotionCompletion(const std::string& axis, double timeo
 //
 // Updated ConfigureFromDevice method for PIController to handle space-separated InstalledAxes
 //
+// Updated ConfigureFromDevice - set device name for data store
 bool PIController::ConfigureFromDevice(const MotionDevice& device) {
 	if (m_isConnected) {
 		m_logger->LogWarning("PIController: Cannot configure from device while connected");
@@ -708,24 +786,21 @@ bool PIController::ConfigureFromDevice(const MotionDevice& device) {
 
 	m_logger->LogInfo("PIController: Configuring from device: " + device.Name);
 
-	// Store the IP address and port from the device configuration
+	// Store device name for data store keys
+	m_deviceName = device.Name;
+
+	// Store connection info
 	m_ipAddress = device.IpAddress;
 	m_port = device.Port;
 
-	// Define available axes based on device's InstalledAxes configuration
+	// Configure axes
 	m_availableAxes.clear();
-
-	// If InstalledAxes is specified, use it
 	if (!device.InstalledAxes.empty()) {
-		// Since InstalledAxes may be space-separated (e.g., "X Y Z U V W"),
-		// we need to parse it differently from the single-character version
-
 		std::string axisStr = device.InstalledAxes;
 		std::string delimiter = " ";
 		size_t pos = 0;
 		std::string token;
 
-		// Parse the space-separated string
 		while ((pos = axisStr.find(delimiter)) != std::string::npos) {
 			token = axisStr.substr(0, pos);
 			if (!token.empty()) {
@@ -734,28 +809,26 @@ bool PIController::ConfigureFromDevice(const MotionDevice& device) {
 			axisStr.erase(0, pos + delimiter.length());
 		}
 
-		// Add the last token if there is one
 		if (!axisStr.empty()) {
 			m_availableAxes.push_back(axisStr);
 		}
 
-		// Log the configured axes
 		std::string axesList;
 		for (const auto& axis : m_availableAxes) {
 			if (!axesList.empty()) axesList += " ";
 			axesList += axis;
 		}
-
-		m_logger->LogInfo("PIController: Configured with specified axes: " + axesList);
+		m_logger->LogInfo("PIController: Configured with axes: " + axesList);
 	}
-	// Otherwise, use defaults based on device type (historically hexapods have 6 axes)
 	else {
 		m_availableAxes = { "X", "Y", "Z", "U", "V", "W" };
-		m_logger->LogInfo("PIController: Configured with default hexapod axes (X Y Z U V W)");
+		m_logger->LogInfo("PIController: Using default hexapod axes");
 	}
 
 	return true;
 }
+
+
 
 bool PIController::MoveToNamedPosition(const std::string& deviceName, const std::string& positionName) {
 	// This is a placeholder implementation - you'll need to flesh this out
@@ -977,6 +1050,51 @@ void PIController::RenderUI() {
 				std::cout << "PIController: Verbose debugging DISABLED" << std::endl;
 			}
 		}
+
+		// NEW: Analog reading controls
+		bool analogEnabled = m_enableAnalogReading;
+		if (ImGui::Checkbox("Enable Analog Reading", &analogEnabled)) {
+			EnableAnalogReading(analogEnabled);
+			if (analogEnabled && m_isConnected) {
+				InitializeAnalogChannels();
+			}
+		}
+
+		// NEW: Display analog readings
+		if (m_enableAnalogReading && m_numAnalogChannels > 0) {
+			ImGui::Separator();
+			ImGui::Text("Analog Channels (%d total)", m_numAnalogChannels);
+
+			std::map<int, double> analogCopy;
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				analogCopy = m_analogVoltages;
+			}
+
+			if (!analogCopy.empty()) {
+				if (ImGui::BeginTable("AnalogTable", 3, ImGuiTableFlags_Borders)) {
+					ImGui::TableSetupColumn("Channel");
+					ImGui::TableSetupColumn("Voltage");
+					ImGui::TableSetupColumn("Data Store Key");
+					ImGui::TableHeadersRow();
+
+					for (const auto& [channel, voltage] : analogCopy) {
+						ImGui::TableNextRow();
+						ImGui::TableNextColumn();
+						ImGui::Text("Ch %d", channel);
+						ImGui::TableNextColumn();
+						ImGui::Text("%.4f V", voltage);
+						ImGui::TableNextColumn();
+						std::string dataKey = m_deviceName + "-A-" + std::to_string(channel);
+						ImGui::Text("%s", dataKey.c_str());
+					}
+
+					ImGui::EndTable();
+				}
+			}
+		}
+
+
 		// *** ENHANCED MOTION STATUS INDICATOR (TOP) ***
 		// Get motion status of all axes
 		bool anyAxisMoving = false;
@@ -1064,7 +1182,7 @@ void PIController::RenderUI() {
 
 			// *** ENHANCED MOTION STATUS INDICATOR (IN DETAILED POPUP) ***
 			ImGui::PushStyleColor(ImGuiCol_Text, statusColor);
-			ImGui::Text("●");
+			ImGui::Text("*");
 			ImGui::SameLine();
 			ImGui::TextColored(statusColor, "%s", anyAxisMoving ? "SYSTEM MOVING" : "SYSTEM IDLE");
 			ImGui::PopStyleColor();
@@ -1121,7 +1239,7 @@ void PIController::RenderUI() {
 						? ImVec4(1.0f, 0.5f, 0.0f, 1.0f)  // Orange for moving
 						: ImVec4(0.0f, 0.8f, 0.0f, 1.0f); // Green for idle
 
-					ImGui::TextColored(axisStatusColor, "●");
+					ImGui::TextColored(axisStatusColor, "*");
 					ImGui::SameLine();
 					ImGui::TextColored(axisStatusColor, "%s", isAxisMoving ? "Moving" : "Idle");
 
@@ -1202,6 +1320,8 @@ void PIController::RenderUI() {
 			}
 		}
 		ImGui::PopStyleColor(2);
+
+
 		// Use the correct axis names directly
 		for (const auto& axisPair : axisLabels) {
 			const std::string& axis = axisPair.first;
@@ -1221,7 +1341,7 @@ void PIController::RenderUI() {
 				? ImVec4(1.0f, 0.5f, 0.0f, 1.0f)  // Orange for moving
 				: ImVec4(0.0f, 0.8f, 0.0f, 1.0f); // Green for idle
 
-			ImGui::TextColored(axisStatusColor, "●");
+			ImGui::TextColored(axisStatusColor, "*");
 			ImGui::SameLine();
 
 			// Display axis info with proper label
