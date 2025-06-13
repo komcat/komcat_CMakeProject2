@@ -1,6 +1,7 @@
 // src/data/global_data_store.cpp 
 #include "include/data/global_data_store.h"
-
+#include <vector>
+#include <mutex>
 // Initialize static instance
 GlobalDataStore* GlobalDataStore::s_instance = nullptr;
 
@@ -28,4 +29,15 @@ float GlobalDataStore::GetValue(const std::string& serverId, float defaultValue)
 bool GlobalDataStore::HasValue(const std::string& serverId) {
   std::lock_guard<std::mutex> lock(m_mutex);
   return m_latestValues.find(serverId) != m_latestValues.end();
+}
+
+std::vector<std::string> GlobalDataStore::GetAvailableChannels() const {
+  std::lock_guard<std::mutex> lock(m_mutex);
+  std::vector<std::string> channels;
+
+  for (const auto& [key, value] : m_latestValues) {
+    channels.push_back(key);
+  }
+
+  return channels;
 }

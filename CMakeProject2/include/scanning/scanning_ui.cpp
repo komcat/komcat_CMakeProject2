@@ -290,25 +290,15 @@ void ScanningUI::RefreshAvailableDevices() {
 }
 
 void ScanningUI::RefreshAvailableDataChannels() {
-  m_availableDataChannels.clear();
+  // Get all available channels from GlobalDataStore
+  m_availableDataChannels = m_dataStore.GetAvailableChannels();
 
-  // Based on the selected hexapod, add appropriate channels
-  if (m_selectedDevice == "hex-left") {
-    m_availableDataChannels.push_back("hex-left-Analog-Ch5");
-    m_availableDataChannels.push_back("hex-left-Analog-Ch6");
-    m_availableDataChannels.push_back("GPIB-Current");
-  }
-  else if (m_selectedDevice == "hex-right") {
-    m_availableDataChannels.push_back("hex-right-Analog-Ch5");
-    m_availableDataChannels.push_back("hex-right-Analog-Ch6");
-    m_availableDataChannels.push_back("GPIB-Current");
-  }
-  else {
-    // Default channels if no device selected
+  // If no channels available, add a default
+  if (m_availableDataChannels.empty()) {
     m_availableDataChannels.push_back("GPIB-Current");
   }
 
-  // If no channel selected yet but channels available, select first one
+  // Keep current selection if still valid, otherwise select first available
   if (m_selectedDataChannel.empty() && !m_availableDataChannels.empty()) {
     m_selectedDataChannel = m_availableDataChannels[0];
   }
@@ -318,6 +308,7 @@ void ScanningUI::RefreshAvailableDataChannels() {
     m_selectedDataChannel = m_availableDataChannels[0];
   }
 }
+
 
 // StartScan method - set up callbacks with optimized handlers
 void ScanningUI::StartScan() {
@@ -541,8 +532,8 @@ void ScanningUI::InitializeStepSizePresets() {
   m_stepSizePresets = {
      {"Coarse (0.005, 0.001, 0.0005mm)", {0.005,0.001, 0.0005}},
     {"Normal (0.002, 0.001, 0.0005, 0.0002 mm)", {0.002, 0.001, 0.0005, 0.0002}},
-    {"Fine (0.005, 0.0002 mm)", {0.001, 0.0002}},
-    {"Ultra (0.0002, 0.0001 mm)", {0.0003, 0.0001}}
+    {"Fine (0.0005, 0.0002 mm)", {0.0005, 0.0002}},
+    {"Ultra (0.0002, 0.0001 mm)", {0.0002, 0.0001}}
   };
 
   // Initialize parameters with the first preset
