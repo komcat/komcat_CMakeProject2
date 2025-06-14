@@ -13,14 +13,18 @@ void BlockPropertyRenderer::RenderStandardParameters(MachineBlock* block) {
   }
 }
 
+
 void BlockPropertyRenderer::RenderParameter(BlockParameter& param) {
   ImGui::PushID(param.name.c_str());
   ImGui::Text("%s:", param.name.c_str());
+
+  bool paramChanged = false; // Track if parameter was modified
 
   if (param.type == "bool") {
     bool value = param.value == "true";
     if (ImGui::Checkbox("##value", &value)) {
       param.value = value ? "true" : "false";
+      paramChanged = true;
     }
   }
   else {
@@ -30,7 +34,16 @@ void BlockPropertyRenderer::RenderParameter(BlockParameter& param) {
 
     if (ImGui::InputText("##value", buffer, sizeof(buffer))) {
       param.value = std::string(buffer);
+      paramChanged = true;
     }
+  }
+
+  // NEW: If parameter changed, update the block label
+  if (paramChanged) {
+    // We need access to the parent block to update its label
+    // This requires passing the block pointer to RenderParameter
+    // For now, we'll handle this in the main UI update loop
+    printf("DEBUG: Parameter %s changed to %s\n", param.name.c_str(), param.value.c_str());
   }
 
   if (ImGui::IsItemHovered()) {
@@ -527,7 +540,11 @@ std::unique_ptr<BlockPropertyRenderer> BlockRendererFactory::CreateRenderer(Bloc
 
   case BlockType::PROMPT:  // NEW
     return std::make_unique<PromptRenderer>();
-
+    // ADD THESE MISSING CASES:
+  case BlockType::MOVE_TO_POSITION:
+    return std::make_unique<MoveToPositionRenderer>();
+  case BlockType::MOVE_RELATIVE_AXIS:
+    return std::make_unique<MoveRelativeAxisRenderer>();
   default:
     return std::make_unique<DefaultRenderer>();
   }
@@ -1262,5 +1279,222 @@ void PromptRenderer::RenderPreviewButton(const std::string& title, const std::st
 
   if (ImGui::IsItemHovered()) {
     ImGui::SetTooltip("Preview how the prompt will appear to users");
+  }
+}
+
+
+void MoveToPositionRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("MOVE TO POSITION Block Properties:");
+  ImGui::Separator();
+
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.7f, 1.0f, 1.0f)); // Light blue
+  ImGui::TextWrapped("Moves a controller to a saved position by name.");
+  ImGui::TextWrapped("💡 Use 'Save Current Position' to create named positions first.");
+  ImGui::PopStyleColor();
+
+  ImGui::Spacing();
+  RenderStandardParameters(block);
+
+  auto [controllerName, positionName, blocking] = ExtractMoveToPositionParameters(block);
+  if (!controllerName.empty() && !positionName.empty()) {
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+    ImGui::Text("Controller: %s", controllerName.c_str());
+    ImGui::Text("Target Position: %s", positionName.c_str());
+    ImGui::Text("Blocking: %s", blocking ? "Yes" : "No");
+    ImGui::PopStyleColor();
+  }
+}
+
+void MoveToPositionRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("Position Actions:");
+
+  auto [controllerName, positionName, blocking] = ExtractMoveToPositionParameters(block);
+
+  if (!controllerName.empty() && !positionName.empty()) {
+    RenderTestButton(controllerName, positionName, blocking, machineOps);
+  }
+  else {
+    ImGui::TextWrapped("Set controller name and position name to enable test functionality.");
+  }
+
+  ImGui::Spacing();
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f)); // Yellow
+  ImGui::TextWrapped("💡 Tip: Create named positions using MOVE_NODE blocks first.");
+  ImGui::PopStyleColor();
+}
+
+void MoveToPositionRenderer::RenderValidation(MachineBlock* block) {
+  auto [controllerName, positionName, blocking] = ExtractMoveToPositionParameters(block);
+
+  if (controllerName.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
+    ImGui::TextWrapped("WARNING: Controller name must be specified");
+    ImGui::PopStyleColor();
+  }
+  else if (positionName.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
+    ImGui::TextWrapped("WARNING: Position name must be specified");
+    ImGui::PopStyleColor();
+  }
+  else {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+    ImGui::TextWrapped("MOVE_TO_POSITION parameters are valid.");
+    ImGui::PopStyleColor();
+  }
+}
+
+std::tuple<std::string, std::string, bool> MoveToPositionRenderer::ExtractMoveToPositionParameters(MachineBlock* block) {
+  std::string controllerName, positionName;
+  bool blocking = true;
+
+  for (const auto& param : block->parameters) {
+    if (param.name == "controller_name") controllerName = param.value;
+    else if (param.name == "position_name") positionName = param.value;
+    else if (param.name == "blocking") blocking = (param.value == "true");
+  }
+  return { controllerName, positionName, blocking };
+}
+
+void MoveToPositionRenderer::RenderTestButton(const std::string& controllerName, const std::string& positionName,
+  bool blocking, MachineOperations* machineOps) {
+  if (ImGui::Button("Test Move to Position", ImVec2(-1, 0))) {
+    if (machineOps) {
+      printf("[TEST] Moving %s to position '%s' (blocking: %s)\n",
+        controllerName.c_str(), positionName.c_str(), blocking ? "true" : "false");
+      machineOps->MoveToPointName(controllerName, positionName, blocking);
+    }
+    else {
+      printf("[TEST] Would move %s to position '%s' (blocking: %s)\n",
+        controllerName.c_str(), positionName.c_str(), blocking ? "true" : "false");
+    }
+  }
+
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Test moving %s to position '%s'", controllerName.c_str(), positionName.c_str());
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// MOVE RELATIVE AXIS RENDERER
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void MoveRelativeAxisRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("MOVE RELATIVE AXIS Block Properties:");
+  ImGui::Separator();
+
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.4f, 1.0f, 1.0f)); // Light purple
+  ImGui::TextWrapped("Moves a controller relative to its current position on a specific axis.");
+  ImGui::TextWrapped("💡 Use positive values to move in + direction, negative for - direction.");
+  ImGui::PopStyleColor();
+
+  ImGui::Spacing();
+  RenderStandardParameters(block);
+
+  auto [controllerName, axisName, distance, blocking] = ExtractMoveRelativeAxisParameters(block);
+  if (!controllerName.empty() && !axisName.empty() && !distance.empty()) {
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+    ImGui::Text("Controller: %s", controllerName.c_str());
+    ImGui::Text("Axis: %s", axisName.c_str());
+    ImGui::Text("Distance: %s mm", distance.c_str());
+    ImGui::Text("Blocking: %s", blocking ? "Yes" : "No");
+    ImGui::PopStyleColor();
+  }
+}
+
+void MoveRelativeAxisRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("Relative Movement Actions:");
+
+  auto [controllerName, axisName, distance, blocking] = ExtractMoveRelativeAxisParameters(block);
+
+  if (!controllerName.empty() && !axisName.empty() && !distance.empty()) {
+    RenderTestButton(controllerName, axisName, distance, blocking, machineOps);
+  }
+  else {
+    ImGui::TextWrapped("Set controller name, axis, and distance to enable test functionality.");
+  }
+
+  ImGui::Spacing();
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f)); // Yellow
+  ImGui::TextWrapped("⚠️ Safety: Small movements first! Start with 0.1mm to test.");
+  ImGui::PopStyleColor();
+}
+
+void MoveRelativeAxisRenderer::RenderValidation(MachineBlock* block) {
+  auto [controllerName, axisName, distance, blocking] = ExtractMoveRelativeAxisParameters(block);
+
+  if (controllerName.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
+    ImGui::TextWrapped("WARNING: Controller name must be specified");
+    ImGui::PopStyleColor();
+  }
+  else if (axisName.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
+    ImGui::TextWrapped("WARNING: Axis name must be specified (X, Y, Z, U, V, W)");
+    ImGui::PopStyleColor();
+  }
+  else if (distance.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
+    ImGui::TextWrapped("WARNING: Distance must be specified");
+    ImGui::PopStyleColor();
+  }
+  else {
+    // Validate distance is a valid number
+    try {
+      float distValue = std::stof(distance);
+      if (std::abs(distValue) > 100.0f) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
+        ImGui::TextWrapped("WARNING: Large movement (>100mm) - Use with caution!");
+        ImGui::PopStyleColor();
+      }
+      else {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
+        ImGui::TextWrapped("MOVE_RELATIVE_AXIS parameters are valid.");
+        ImGui::PopStyleColor();
+      }
+    }
+    catch (const std::exception&) {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.2f, 0.2f, 1.0f)); // Red
+      ImGui::TextWrapped("ERROR: Invalid distance format - must be a number");
+      ImGui::PopStyleColor();
+    }
+  }
+}
+
+std::tuple<std::string, std::string, std::string, bool> MoveRelativeAxisRenderer::ExtractMoveRelativeAxisParameters(MachineBlock* block) {
+  std::string controllerName, axisName, distance;
+  bool blocking = true;
+
+  for (const auto& param : block->parameters) {
+    if (param.name == "controller_name") controllerName = param.value;
+    else if (param.name == "axis_name") axisName = param.value;
+    else if (param.name == "distance_mm") distance = param.value;
+    else if (param.name == "blocking") blocking = (param.value == "true");
+  }
+  return { controllerName, axisName, distance, blocking };
+}
+
+void MoveRelativeAxisRenderer::RenderTestButton(const std::string& controllerName, const std::string& axisName,
+  const std::string& distance, bool blocking, MachineOperations* machineOps) {
+  if (ImGui::Button("Test Relative Move", ImVec2(-1, 0))) {
+    if (machineOps) {
+      float distValue = std::stof(distance);
+      printf("[TEST] Moving %s relative on %s axis by %s mm (blocking: %s)\n",
+        controllerName.c_str(), axisName.c_str(), distance.c_str(), blocking ? "true" : "false");
+      machineOps->MoveRelative(controllerName, axisName, distValue, blocking);
+    }
+    else {
+      printf("[TEST] Would move %s relative on %s axis by %s mm (blocking: %s)\n",
+        controllerName.c_str(), axisName.c_str(), distance.c_str(), blocking ? "true" : "false");
+    }
+  }
+
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Test moving %s on %s axis by %s mm", controllerName.c_str(), axisName.c_str(), distance.c_str());
   }
 }

@@ -60,6 +60,9 @@ void MachineBlockUI::InitializePalette() {
 	m_paletteBlocks.emplace_back(14, BlockType::TEC_OFF, "TEC OFF", GetBlockColor(BlockType::TEC_OFF));
 
 	m_paletteBlocks.emplace_back(15, BlockType::PROMPT, "User Prompt", GetBlockColor(BlockType::PROMPT));  // NEW
+	// NEW: Add these blocks to the palette
+	m_paletteBlocks.emplace_back(16, BlockType::MOVE_TO_POSITION, "Move to Position", GetBlockColor(BlockType::MOVE_TO_POSITION));
+	m_paletteBlocks.emplace_back(17, BlockType::MOVE_RELATIVE_AXIS, "Move Relative", GetBlockColor(BlockType::MOVE_RELATIVE_AXIS));
 
 	// Initialize parameters for each block type
 	for (auto& block : m_paletteBlocks) {
@@ -730,6 +733,19 @@ void MachineBlockUI::RenderRightPanel() {
 	ImGui::Separator();
 
 	if (m_selectedBlock) {
+		// DEBUG: Show block and parameter info
+		ImGui::Text("DEBUG - Selected Block Info:");
+		ImGui::Text("Block ID: %d", m_selectedBlock->id);
+		ImGui::Text("Block Type: %d (%s)", static_cast<int>(m_selectedBlock->type), BlockTypeToString(m_selectedBlock->type).c_str());
+		ImGui::Text("Parameter Count: %zu", m_selectedBlock->parameters.size());
+
+		// DEBUG: Show current parameter values and addresses
+		for (size_t i = 0; i < m_selectedBlock->parameters.size(); i++) {
+			const auto& param = m_selectedBlock->parameters[i];
+			ImGui::Text("Param[%zu]: %s = '%s' (addr: %p)", i, param.name.c_str(), param.value.c_str(), &param);
+		}
+		ImGui::Separator();
+
 		// Render block header information
 		RenderBlockHeader(m_selectedBlock);
 
@@ -738,8 +754,28 @@ void MachineBlockUI::RenderRightPanel() {
 
 		// Render block-specific content using the specialized renderer
 		renderer->RenderProperties(m_selectedBlock, m_machineOps);
+
+		// Check if we need to update the block label (call this every frame when a block is selected)
+		static std::string lastParameterValues;
+
+		// Create a hash of current parameter values
+		std::string currentParameterValues;
+		for (const auto& param : m_selectedBlock->parameters) {
+			currentParameterValues += param.name + "=" + param.value + ";";
+		}
+
+		// If parameters changed, update the label
+		if (currentParameterValues != lastParameterValues) {
+			UpdateBlockLabel(*m_selectedBlock);
+			lastParameterValues = currentParameterValues;
+		}
+
+
 		renderer->RenderActions(m_selectedBlock, m_machineOps);
 		renderer->RenderValidation(m_selectedBlock);
+
+		
+
 	}
 	else {
 		ImGui::TextWrapped("Select a block to view and edit its properties.");
@@ -806,9 +842,17 @@ void MachineBlockUI::AddBlockToProgram(BlockType type, const ImVec2& position) {
 	// }
 
 	auto newBlock = std::make_unique<MachineBlock>(m_nextBlockId++, type, BlockTypeToString(type), GetBlockColor(type));
+	printf("DEBUG: Created block with type %d, string: %s\n", static_cast<int>(type), BlockTypeToString(type).c_str());
+
 	newBlock->position = position;
 
 	InitializeBlockParameters(*newBlock);
+	// DEBUG: Print parameter addresses to verify independence
+	printf("DEBUG: Block ID %d (%s) created with parameters:\n", newBlock->id, BlockTypeToString(type).c_str());
+	for (const auto& param : newBlock->parameters) {
+		printf("  %s = %s (address: %p)\n", param.name.c_str(), param.value.c_str(), &param);
+	}
+	printf("\n");
 
 	m_programBlocks.push_back(std::move(newBlock));
 
@@ -896,6 +940,30 @@ void MachineBlockUI::InitializeBlockParameters(MachineBlock& block) {
 		block.parameters.push_back({ "title", "Confirm Operation", "string", "Title for the confirmation dialog" });
 		block.parameters.push_back({ "message", "Do you want to continue with the next operation?", "string", "Message to display to the user" });
 		break;
+
+		// NEW: Add these cases
+	case BlockType::MOVE_RELATIVE_AXIS:
+		printf("DEBUG: Creating MOVE_RELATIVE_AXIS parameters\n");
+		// Create completely new parameter objects for each block
+		block.parameters.push_back(BlockParameter{ "controller_name", "gantry-main", "string", "Name of the controller/device" });
+		block.parameters.push_back(BlockParameter{ "axis_name", "X", "string", "Axis name (X, Y, Z, U, V, W)" });
+		block.parameters.push_back(BlockParameter{ "distance_mm", "0.0", "float", "Distance to move in millimeters (+ or -)" });
+		block.parameters.push_back(BlockParameter{ "blocking", "true", "bool", "Wait for movement completion" });
+
+		// DEBUG: Print addresses of the newly created parameters
+		for (const auto& param : block.parameters) {
+			printf("  Created param %s = %s at address %p\n", param.name.c_str(), param.value.c_str(), &param);
+		}
+		break;
+
+	case BlockType::MOVE_TO_POSITION:
+		printf("DEBUG: Creating MOVE_TO_POSITION parameters\n");
+		block.parameters.push_back(BlockParameter{ "controller_name", "gantry-main", "string", "Name of the controller/device" });
+		block.parameters.push_back(BlockParameter{ "position_name", "", "string", "Name of the saved position to move to" });
+		block.parameters.push_back(BlockParameter{ "blocking", "true", "bool", "Wait for movement completion" });
+		break;
+
+
 	}
 }
 
@@ -1249,6 +1317,9 @@ std::string MachineBlockUI::BlockTypeToString(BlockType type) const {
 	case BlockType::TEC_ON: return "TEC ON";                         // NEW
 	case BlockType::TEC_OFF: return "TEC OFF";                       // NEW
 	case BlockType::PROMPT: return "User Prompt";  // NEW
+	case BlockType::MOVE_TO_POSITION: return "Move to Position";
+	case BlockType::MOVE_RELATIVE_AXIS: return "Move Relative";
+
 	default: return "Unknown";
 	}
 }
@@ -1270,6 +1341,9 @@ ImU32 MachineBlockUI::GetBlockColor(BlockType type) const {
 	case BlockType::TEC_ON: return TEC_ON_COLOR;                         // NEW
 	case BlockType::TEC_OFF: return TEC_OFF_COLOR;                       // NEW
 	case BlockType::PROMPT: return PROMPT_COLOR;  // NEW
+	case BlockType::MOVE_TO_POSITION: return MOVE_TO_POSITION_COLOR;
+	case BlockType::MOVE_RELATIVE_AXIS: return MOVE_RELATIVE_AXIS_COLOR;
+
 	default: return IM_COL32(128, 128, 128, 255);
 	}
 }
@@ -1320,6 +1394,9 @@ std::string MachineBlockUI::BlockTypeToJsonString(BlockType type) const {
 	case BlockType::TEC_ON: return "TEC_ON";                         // NEW
 	case BlockType::TEC_OFF: return "TEC_OFF";                       // NEW
 	case BlockType::PROMPT: return "PROMPT";  // NEW
+	case BlockType::MOVE_TO_POSITION: return "MOVE_TO_POSITION";
+	case BlockType::MOVE_RELATIVE_AXIS: return "MOVE_RELATIVE_AXIS";
+
 	default: return "UNKNOWN";
 	}
 }
@@ -1341,6 +1418,9 @@ BlockType MachineBlockUI::JsonStringToBlockType(const std::string& typeStr) cons
 	if (typeStr == "TEC_ON") return BlockType::TEC_ON;                         // NEW
 	if (typeStr == "TEC_OFF") return BlockType::TEC_OFF;                       // NEW
 	if (typeStr == "PROMPT") return BlockType::PROMPT;  // NEW
+	if (typeStr == "MOVE_TO_POSITION") return BlockType::MOVE_TO_POSITION;
+	if (typeStr == "MOVE_RELATIVE_AXIS") return BlockType::MOVE_RELATIVE_AXIS;
+
 	return BlockType::START;
 }
 
@@ -1958,10 +2038,82 @@ std::string MachineBlockUI::GetParameterValue(const MachineBlock& block, const s
 }
 
 
-// Step 9: Update the RenderProgramBlock method in MachineBlockUI.cpp to show slide names
-// Add this helper method to update block labels based on parameters:
+// ===============================================
+// UPDATE BLOCK LABELS in MachineBlockUI.cpp
+// ===============================================
+
+// Update the UpdateBlockLabel() method in MachineBlockUI.cpp:
+
 void MachineBlockUI::UpdateBlockLabel(MachineBlock& block) {
 	switch (block.type) {
+
+	case BlockType::MOVE_NODE: {
+		std::string deviceName = GetParameterValue(block, "device_name");
+		std::string nodeId = GetParameterValue(block, "node_id");
+
+		if (!deviceName.empty() && !nodeId.empty()) {
+			// Truncate long node IDs for display
+			std::string shortNodeId = nodeId;
+			if (nodeId.length() > 10) {
+				shortNodeId = nodeId.substr(0, 7) + "...";
+			}
+			block.label = deviceName + "\n-> " + shortNodeId;
+		}
+		else {
+			block.label = "Move Node";
+		}
+		break;
+	}
+
+	case BlockType::SET_OUTPUT: {
+		std::string deviceName = GetParameterValue(block, "device_name");
+		std::string pin = GetParameterValue(block, "pin");
+
+		if (!deviceName.empty() && !pin.empty()) {
+			block.label = "Set Output\n" + deviceName + "[" + pin + "]";
+		}
+		else {
+			block.label = "Set Output";
+		}
+		break;
+	}
+
+	case BlockType::CLEAR_OUTPUT: {
+		std::string deviceName = GetParameterValue(block, "device_name");
+		std::string pin = GetParameterValue(block, "pin");
+
+		if (!deviceName.empty() && !pin.empty()) {
+			block.label = "Clear Output\n" + deviceName + "[" + pin + "]";
+		}
+		else {
+			block.label = "Clear Output";
+		}
+		break;
+	}
+
+	case BlockType::WAIT: {
+		std::string milliseconds = GetParameterValue(block, "milliseconds");
+		if (!milliseconds.empty()) {
+			try {
+				int ms = std::stoi(milliseconds);
+				if (ms >= 1000) {
+					float seconds = ms / 1000.0f;
+					block.label = "Wait\n" + std::to_string(seconds) + "s";
+				}
+				else {
+					block.label = "Wait\n" + milliseconds + "ms";
+				}
+			}
+			catch (...) {
+				block.label = "Wait";
+			}
+		}
+		else {
+			block.label = "Wait";
+		}
+		break;
+	}
+
 	case BlockType::EXTEND_SLIDE: {
 		std::string slideName = GetParameterValue(block, "slide_name");
 		if (!slideName.empty()) {
@@ -1983,44 +2135,152 @@ void MachineBlockUI::UpdateBlockLabel(MachineBlock& block) {
 		}
 		break;
 	}
-	case BlockType::SET_LASER_CURRENT: {  // NEW
+
+	case BlockType::SET_LASER_CURRENT: {
 		std::string current = GetParameterValue(block, "current_ma");
 		block.label = current.empty() ? "Set Laser\nCurrent" : "Set Laser\n" + current + " mA";
 		break;
 	}
 
-	case BlockType::LASER_ON: {  // NEW
+	case BlockType::LASER_ON: {
 		std::string laserName = GetParameterValue(block, "laser_name");
 		block.label = laserName.empty() ? "Laser ON" : "Laser ON\n" + laserName;
 		break;
 	}
 
-	case BlockType::LASER_OFF: {  // NEW
+	case BlockType::LASER_OFF: {
 		std::string laserName = GetParameterValue(block, "laser_name");
 		block.label = laserName.empty() ? "Laser OFF" : "Laser OFF\n" + laserName;
 		break;
 	}
 
-	case BlockType::SET_TEC_TEMPERATURE: {  // NEW
+	case BlockType::SET_TEC_TEMPERATURE: {
 		std::string temp = GetParameterValue(block, "temperature_c");
 		block.label = temp.empty() ? "Set TEC\nTemp" : "Set TEC\n" + temp + "°C";
 		break;
 	}
 
-	case BlockType::TEC_ON: {  // NEW
+	case BlockType::TEC_ON: {
 		std::string laserName = GetParameterValue(block, "laser_name");
 		block.label = laserName.empty() ? "TEC ON" : "TEC ON\n" + laserName;
 		break;
 	}
 
-	case BlockType::TEC_OFF: {  // NEW
+	case BlockType::TEC_OFF: {
 		std::string laserName = GetParameterValue(block, "laser_name");
 		block.label = laserName.empty() ? "TEC OFF" : "TEC OFF\n" + laserName;
 		break;
 	}
-	default:
-		// Other block types handle their own labeling
+
+												 // ═══════════════════════════════════════════════════════════════════════════════════════
+												 // NEW: Enhanced Move To Position Label
+												 // ═══════════════════════════════════════════════════════════════════════════════════════
+	case BlockType::MOVE_TO_POSITION: {
+		std::string controllerName = GetParameterValue(block, "controller_name");
+		std::string positionName = GetParameterValue(block, "position_name");
+
+		if (positionName.empty()) {
+			block.label = "Move to\nPosition";
+		}
+		else {
+			// Show controller and position name
+			std::string shortController = controllerName;
+			if (controllerName.length() > 8) {
+				shortController = controllerName.substr(0, 6) + "..";
+			}
+
+			// Truncate long position names
+			std::string shortPosition = positionName;
+			if (positionName.length() > 10) {
+				shortPosition = positionName.substr(0, 8) + "..";
+			}
+
+			block.label = shortController + "\n-> " + shortPosition;
+		}
 		break;
+	}
+
+																	// ═══════════════════════════════════════════════════════════════════════════════════════
+																	// NEW: Enhanced Move Relative Axis Label - Show "Move X +5mm" format
+																	// ═══════════════════════════════════════════════════════════════════════════════════════
+	case BlockType::MOVE_RELATIVE_AXIS: {
+		std::string controllerName = GetParameterValue(block, "controller_name");
+		std::string axisName = GetParameterValue(block, "axis_name");
+		std::string distance = GetParameterValue(block, "distance_mm");
+
+		if (axisName.empty() || distance.empty()) {
+			block.label = "Move\nRelative";
+		}
+		else {
+			try {
+				// Parse the distance to format it nicely
+				float distValue = std::stof(distance);
+
+				// Format the distance with appropriate precision
+				std::string formattedDistance;
+				if (std::abs(distValue) >= 10.0f) {
+					// For large values, show no decimals: "15mm"
+					formattedDistance = std::to_string(static_cast<int>(distValue));
+				}
+				else if (std::abs(distValue) >= 1.0f) {
+					// For medium values, show 1 decimal: "5.5mm"
+					formattedDistance = std::to_string(distValue);
+					// Remove trailing zeros
+					formattedDistance.erase(formattedDistance.find_last_not_of('0') + 1, std::string::npos);
+					formattedDistance.erase(formattedDistance.find_last_not_of('.') + 1, std::string::npos);
+				}
+				else {
+					// For small values, show 2-3 decimals: "0.25mm"
+					char buffer[32];
+					sprintf(buffer, "%.3f", distValue);
+					formattedDistance = buffer;
+					// Remove trailing zeros
+					std::string temp(formattedDistance);
+					temp.erase(temp.find_last_not_of('0') + 1, std::string::npos);
+					temp.erase(temp.find_last_not_of('.') + 1, std::string::npos);
+					formattedDistance = temp;
+				}
+
+				// Add + sign for positive values
+				if (distValue > 0) {
+					formattedDistance = "+" + formattedDistance;
+				}
+
+				// Create the final label: "Move X\n+5mm"
+				block.label = "Move " + axisName + "\n" + formattedDistance + "mm";
+			}
+			catch (...) {
+				// If parsing fails, fall back to simple format
+				block.label = "Move " + axisName + "\n" + distance + "mm";
+			}
+		}
+		break;
+	}
+
+	default:
+		// Other block types keep their default labeling
+		break;
+	}
+}
+
+// ===============================================
+// IMPORTANT: Call UpdateBlockLabel when parameters change
+// ===============================================
+
+// Add this method to automatically update labels when parameters change:
+void MachineBlockUI::UpdateBlockLabelIfNeeded(MachineBlock* block) {
+	if (!block) return;
+
+	// Store old label
+	std::string oldLabel = block->label;
+
+	// Update label based on current parameters
+	UpdateBlockLabel(*block);
+
+	// Debug output if label changed
+	if (oldLabel != block->label) {
+		printf("DEBUG: Updated block %d label from '%s' to '%s'\n",
+			block->id, oldLabel.c_str(), block->label.c_str());
 	}
 }
 

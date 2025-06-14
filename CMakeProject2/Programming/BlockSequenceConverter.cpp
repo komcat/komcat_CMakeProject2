@@ -138,7 +138,14 @@ std::unique_ptr<SequenceStep> BlockSequenceConverter::ConvertBlocksToSequence(
     case BlockType::PROMPT:  // NEW
       operation = ConvertPromptBlock(*block);
       break;
+      // NEW: Add these cases
+    case BlockType::MOVE_TO_POSITION:
+      operation = ConvertMoveToPositionBlock(*block);
+      break;
 
+    case BlockType::MOVE_RELATIVE_AXIS:
+      operation = ConvertMoveRelativeAxisBlock(*block);
+      break;
 
     default:
       m_machineOps.LogWarning("Unknown block type encountered: " +
@@ -384,4 +391,57 @@ std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertPromptBlock(co
 
   m_machineOps.LogInfo("Converting PROMPT block: " + title);
   return std::make_shared<UserPromptOperation>(title, message, *m_promptUI);
+}
+
+// Add these method implementations to BlockSequenceConverter.cpp:
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertMoveToPositionBlock(const MachineBlock& block) {
+  std::string controllerName = GetParameterValue(block, "controller_name");
+  std::string positionName = GetParameterValue(block, "position_name");
+  bool blocking = GetParameterValue(block, "blocking") == "true";
+
+  if (controllerName.empty()) {
+    m_machineOps.LogWarning("MOVE_TO_POSITION block missing controller_name parameter");
+    return nullptr;
+  }
+
+  if (positionName.empty()) {
+    m_machineOps.LogWarning("MOVE_TO_POSITION block missing position_name parameter");
+    return nullptr;
+  }
+
+  return std::make_shared<MoveToPositionOperation>(controllerName, positionName, blocking);
+}
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertMoveRelativeAxisBlock(const MachineBlock& block) {
+  std::string controllerName = GetParameterValue(block, "controller_name");
+  std::string axisName = GetParameterValue(block, "axis_name");
+  std::string distanceStr = GetParameterValue(block, "distance_mm");
+  bool blocking = GetParameterValue(block, "blocking") == "true";
+
+  if (controllerName.empty()) {
+    m_machineOps.LogWarning("MOVE_RELATIVE_AXIS block missing controller_name parameter");
+    return nullptr;
+  }
+
+  if (axisName.empty()) {
+    m_machineOps.LogWarning("MOVE_RELATIVE_AXIS block missing axis_name parameter");
+    return nullptr;
+  }
+
+  if (distanceStr.empty()) {
+    m_machineOps.LogWarning("MOVE_RELATIVE_AXIS block missing distance_mm parameter");
+    return nullptr;
+  }
+
+  double distance = 0.0;
+  try {
+    distance = std::stod(distanceStr);
+  }
+  catch (const std::exception& e) {
+    m_machineOps.LogWarning("MOVE_RELATIVE_AXIS block has invalid distance_mm parameter: " + distanceStr);
+    return nullptr;
+  }
+
+  return std::make_shared<MoveRelativeAxisOperation>(controllerName, axisName, distance, blocking);
 }

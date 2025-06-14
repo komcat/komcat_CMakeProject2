@@ -221,3 +221,30 @@ private:
   std::tuple<std::string, std::string> ExtractPromptParameters(MachineBlock* block);
   void RenderPreviewButton(const std::string& title, const std::string& message);
 };
+
+
+// Add these class declarations to BlockPropertyRenderers.h:
+
+class MoveToPositionRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+
+private:
+  std::tuple<std::string, std::string, bool> ExtractMoveToPositionParameters(MachineBlock* block);
+  void RenderTestButton(const std::string& controllerName, const std::string& positionName,
+    bool blocking, MachineOperations* machineOps);
+};
+
+class MoveRelativeAxisRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+
+private:
+  std::tuple<std::string, std::string, std::string, bool> ExtractMoveRelativeAxisParameters(MachineBlock* block);
+  void RenderTestButton(const std::string& controllerName, const std::string& axisName,
+    const std::string& distance, bool blocking, MachineOperations* machineOps);
+};

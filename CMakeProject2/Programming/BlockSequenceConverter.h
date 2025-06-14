@@ -50,6 +50,8 @@ private:
   std::shared_ptr<SequenceOperation> ConvertTECOffBlock(const MachineBlock& block);
   // NEW: Convert prompt blocks
   std::shared_ptr<SequenceOperation> ConvertPromptBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertMoveToPositionBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertMoveRelativeAxisBlock(const MachineBlock& block);
 
   // Helper methods
   std::string GetParameterValue(const MachineBlock& block, const std::string& paramName);

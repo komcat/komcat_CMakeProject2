@@ -1370,3 +1370,58 @@ private:
   std::string m_title;
   std::string m_message;
 };
+
+
+class MoveToPositionOperation : public SequenceOperation {
+public:
+  MoveToPositionOperation(const std::string& controllerName, const std::string& positionName, bool blocking = true)
+    : m_controllerName(controllerName), m_positionName(positionName), m_blocking(blocking) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Validate position name exists
+    if (m_positionName.empty()) {
+      return false;
+    }
+
+    return ops.MoveToPointName(m_controllerName, m_positionName, m_blocking);
+  }
+
+  std::string GetDescription() const override {
+    return "Move " + m_controllerName + " to position '" + m_positionName + "'";
+  }
+
+private:
+  std::string m_controllerName;
+  std::string m_positionName;
+  bool m_blocking;
+};
+
+class MoveRelativeAxisOperation : public SequenceOperation {
+public:
+  MoveRelativeAxisOperation(const std::string& controllerName, const std::string& axisName,
+    double distanceMm, bool blocking = true)
+    : m_controllerName(controllerName), m_axisName(axisName),
+    m_distanceMm(distanceMm), m_blocking(blocking) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Validate axis name
+    if (m_axisName.empty()) {
+      return false;
+    }
+
+    return ops.MoveRelative(m_controllerName, m_axisName, m_distanceMm, m_blocking);
+  }
+
+  std::string GetDescription() const override {
+    return "Move " + m_controllerName + " relative on " + m_axisName +
+      " axis by " + std::to_string(m_distanceMm) + "mm";
+  }
+
+private:
+  std::string m_controllerName;
+  std::string m_axisName;
+  double m_distanceMm;
+  bool m_blocking;
+};

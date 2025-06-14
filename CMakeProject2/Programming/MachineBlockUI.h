@@ -36,14 +36,27 @@ enum class BlockType {
   SET_TEC_TEMPERATURE,  // NEW: Set TEC temperature (°C)
   TEC_ON,               // NEW: Turn TEC on
   TEC_OFF,               // NEW: Turn TEC off
-  PROMPT             // NEW: User confirmation prompt
+  PROMPT,             // NEW: User confirmation prompt
+  MOVE_TO_POSITION,     // Move to saved position name
+  MOVE_RELATIVE_AXIS    // Move relative on specified axis
+
 };
 
+// In MachineBlockUI.h, make sure BlockParameter struct looks like this:
 struct BlockParameter {
   std::string name;
   std::string value;
   std::string type; // "string", "int", "float", "bool"
   std::string description;
+
+  // Explicit constructor to ensure proper copying
+  BlockParameter(const std::string& n, const std::string& v, const std::string& t, const std::string& d)
+    : name(n), value(v), type(t), description(d) {
+  }
+
+  // Default copy constructor and assignment operator should work correctly
+  BlockParameter(const BlockParameter&) = default;
+  BlockParameter& operator=(const BlockParameter&) = default;
 };
 
 struct BlockConnection {
@@ -135,7 +148,7 @@ public:
       m_promptUI->Render();
     }
   }
-
+  void UpdateBlockLabelIfNeeded(MachineBlock* block);
 private:
   // UI state
   bool m_showWindow = true;
@@ -190,6 +203,9 @@ private:
   const ImU32 TEC_ON_COLOR = IM_COL32(100, 200, 255, 255);             // Light blue
   const ImU32 TEC_OFF_COLOR = IM_COL32(120, 120, 180, 255);            // Dark blue
   const ImU32 PROMPT_COLOR = IM_COL32(255, 200, 50, 255);  // Gold/Yellow
+  // Add new block colors in MachineBlockUI.h:
+  const ImU32 MOVE_TO_POSITION_COLOR = IM_COL32(50, 150, 200, 255);     // Light blue
+  const ImU32 MOVE_RELATIVE_AXIS_COLOR = IM_COL32(150, 100, 200, 255);  // Light purple
 
 
   // Canvas background colors
@@ -300,6 +316,8 @@ private:
   void ExecuteSequenceWithSimpleMonitoring();
   void MonitorSequenceProgress(std::atomic<bool>& executionComplete);
   int GetEstimatedBlockExecutionTime(MachineBlock* block);
+
+
 
 
   std::unique_ptr<UserPromptUI> m_promptUI;
