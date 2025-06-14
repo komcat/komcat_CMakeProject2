@@ -11,7 +11,6 @@
 #include <thread>      // For std::thread
 #include <algorithm>   // For std::transform
 #include <nlohmann/json.hpp>
-  // Add this include at the top
 #include "virtual_machine_operations_adapter.h"
 #include "ProgramManager.h"
 #include "FeedbackUI.h"  // Include the feedback UI
@@ -39,7 +38,6 @@ enum class BlockType {
   PROMPT,             // NEW: User confirmation prompt
   MOVE_TO_POSITION,     // Move to saved position name
   MOVE_RELATIVE_AXIS    // Move relative on specified axis
-
 };
 
 // In MachineBlockUI.h, make sure BlockParameter struct looks like this:
@@ -66,6 +64,7 @@ struct BlockConnection {
   ImVec2 toPos;    // Connection point position
 };
 
+// MOVED: Define MachineBlock before BlockCategory
 struct MachineBlock {
   int id;
   BlockType type;
@@ -82,6 +81,15 @@ struct MachineBlock {
   MachineBlock(int id, BlockType type, const std::string& label, ImU32 color)
     : id(id), type(type), label(label), color(color), position(0, 0) {
   }
+};
+
+// NOW BlockCategory can use MachineBlock since it's already defined
+struct BlockCategory {
+  std::string name;
+  std::string description;
+  ImVec4 headerColor;
+  std::vector<MachineBlock> blocks;
+  bool expanded = true; // Default expanded state
 };
 
 class MachineBlockUI {
@@ -149,13 +157,14 @@ public:
     }
   }
   void UpdateBlockLabelIfNeeded(MachineBlock* block);
+
 private:
   // UI state
   bool m_showWindow = true;
 
   // Block management
   std::vector<std::unique_ptr<MachineBlock>> m_programBlocks;
-  std::vector<MachineBlock> m_paletteBlocks;
+  std::vector<BlockCategory> m_blockCategories;
   std::vector<BlockConnection> m_connections;
   MachineBlock* m_selectedBlock = nullptr;
   int m_nextBlockId = 1;
@@ -207,7 +216,6 @@ private:
   const ImU32 MOVE_TO_POSITION_COLOR = IM_COL32(50, 150, 200, 255);     // Light blue
   const ImU32 MOVE_RELATIVE_AXIS_COLOR = IM_COL32(150, 100, 200, 255);  // Light purple
 
-
   // Canvas background colors
   const ImU32 CANVAS_BG_COLOR = IM_COL32(45, 45, 45, 255);
   const ImU32 GRID_COLOR = IM_COL32(80, 80, 80, 100);
@@ -235,6 +243,7 @@ private:
   // NEW: Add this method declaration
   void RenderBlockHeader(MachineBlock* block);
   void UpdateBlockLabel(MachineBlock& block);
+
   // Canvas utilities
   ImVec2 WorldToCanvas(const ImVec2& canvasPos, const ImVec2& worldPos) const;
   ImVec2 CanvasToWorld(const ImVec2& canvasPos, const ImVec2& canvasPos_) const;
@@ -270,7 +279,7 @@ private:
   bool CanBlockProvideOutput(const MachineBlock& block) const;
 
   // File operations
-// OR add overloaded versions to maintain compatibility:
+  // OR add overloaded versions to maintain compatibility:
   void SaveProgram();  // Calls SaveProgram("default")
   void SaveProgram(const std::string& programName);
   void LoadProgram();  // Calls LoadProgram("default") 
@@ -284,30 +293,24 @@ private:
   std::string GetBlockDescription(const MachineBlock& block) const;
   std::string GetParameterValue(const MachineBlock& block, const std::string& paramName) const;
 
-
   // JSON helper methods
   std::string BlockTypeToJsonString(BlockType type) const;
   BlockType JsonStringToBlockType(const std::string& typeStr) const;
+
   // Helper method to create a single block sequence
   std::vector<MachineBlock*> CreateSingleBlockExecutionOrder(MachineBlock* block);
 
-
-
-
-// Add this private member
+  // Add this private member
   VirtualMachineOperationsAdapter* m_virtualOps = nullptr;
 
   std::unique_ptr<ProgramManager> m_programManager;
-
 
   // Add these new members
   std::unique_ptr<FeedbackUI> m_feedbackUI;
   bool m_showFeedbackWindow = false;
 
-  void MachineBlockUI::UpdateBlockResult(int blockId, const std::string& status, 
+  void UpdateBlockResult(int blockId, const std::string& status,
     const std::string& result, const std::string& details);
-
-
 
   std::vector<MachineBlock*> m_currentExecutionOrder;
   size_t m_currentBlockIndex = 0;
@@ -317,8 +320,8 @@ private:
   void MonitorSequenceProgress(std::atomic<bool>& executionComplete);
   int GetEstimatedBlockExecutionTime(MachineBlock* block);
 
-
-
+  void RenderBlockCategory(BlockCategory& category);
+  size_t GetTotalBlockCount() const;
 
   std::unique_ptr<UserPromptUI> m_promptUI;
 };

@@ -36,38 +36,154 @@ MachineBlockUI::MachineBlockUI() {
 
 }
 
+
 void MachineBlockUI::InitializePalette() {
-	m_paletteBlocks.clear();
+	m_blockCategories.clear();
 
-	// Create palette blocks with START and END prioritized
-	m_paletteBlocks.emplace_back(0, BlockType::START, "START", START_COLOR);
-	m_paletteBlocks.emplace_back(0, BlockType::MOVE_NODE, "Move Node", MOVE_NODE_COLOR);
-	m_paletteBlocks.emplace_back(0, BlockType::WAIT, "Wait", WAIT_COLOR);
-	m_paletteBlocks.emplace_back(0, BlockType::SET_OUTPUT, "Set Output", SET_OUTPUT_COLOR);
-	m_paletteBlocks.emplace_back(0, BlockType::CLEAR_OUTPUT, "Clear Output", CLEAR_OUTPUT_COLOR);
-	m_paletteBlocks.emplace_back(0, BlockType::END, "END", END_COLOR);
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// PROGRAM FLOW CATEGORY
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	BlockCategory programFlow;
+	programFlow.name = "Program Flow";
+	programFlow.description = "Essential blocks for program execution";
+	programFlow.headerColor = ImVec4(0.2f, 0.8f, 0.2f, 1.0f); // Green
+	programFlow.expanded = true; // Always show these first
 
-	// NEW: Add slide control blocks
-	m_paletteBlocks.emplace_back(7, BlockType::EXTEND_SLIDE, "Extend Slide", GetBlockColor(BlockType::EXTEND_SLIDE));
-	m_paletteBlocks.emplace_back(8, BlockType::RETRACT_SLIDE, "Retract Slide", GetBlockColor(BlockType::RETRACT_SLIDE));
+	// START block
+	programFlow.blocks.emplace_back(1, BlockType::START, "START", GetBlockColor(BlockType::START));
+	InitializeBlockParameters(programFlow.blocks.back());
 
-	// NEW: Add laser and TEC control blocks
-	m_paletteBlocks.emplace_back(9, BlockType::SET_LASER_CURRENT, "Set Laser Current", GetBlockColor(BlockType::SET_LASER_CURRENT));
-	m_paletteBlocks.emplace_back(10, BlockType::LASER_ON, "Laser ON", GetBlockColor(BlockType::LASER_ON));
-	m_paletteBlocks.emplace_back(11, BlockType::LASER_OFF, "Laser OFF", GetBlockColor(BlockType::LASER_OFF));
-	m_paletteBlocks.emplace_back(12, BlockType::SET_TEC_TEMPERATURE, "Set TEC Temp", GetBlockColor(BlockType::SET_TEC_TEMPERATURE));
-	m_paletteBlocks.emplace_back(13, BlockType::TEC_ON, "TEC ON", GetBlockColor(BlockType::TEC_ON));
-	m_paletteBlocks.emplace_back(14, BlockType::TEC_OFF, "TEC OFF", GetBlockColor(BlockType::TEC_OFF));
+	// END block
+	programFlow.blocks.emplace_back(2, BlockType::END, "END", GetBlockColor(BlockType::END));
+	InitializeBlockParameters(programFlow.blocks.back());
 
-	m_paletteBlocks.emplace_back(15, BlockType::PROMPT, "User Prompt", GetBlockColor(BlockType::PROMPT));  // NEW
-	// NEW: Add these blocks to the palette
-	m_paletteBlocks.emplace_back(16, BlockType::MOVE_TO_POSITION, "Move to Position", GetBlockColor(BlockType::MOVE_TO_POSITION));
-	m_paletteBlocks.emplace_back(17, BlockType::MOVE_RELATIVE_AXIS, "Move Relative", GetBlockColor(BlockType::MOVE_RELATIVE_AXIS));
+	// WAIT block
+	programFlow.blocks.emplace_back(3, BlockType::WAIT, "Wait", GetBlockColor(BlockType::WAIT));
+	InitializeBlockParameters(programFlow.blocks.back());
 
-	// Initialize parameters for each block type
-	for (auto& block : m_paletteBlocks) {
-		InitializeBlockParameters(block);
+	// USER PROMPT block
+	programFlow.blocks.emplace_back(4, BlockType::PROMPT, "User Prompt", GetBlockColor(BlockType::PROMPT));
+	InitializeBlockParameters(programFlow.blocks.back());
+
+	m_blockCategories.push_back(std::move(programFlow));
+
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// MOTION CONTROL CATEGORY
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	BlockCategory motionControl;
+	motionControl.name = "Motion Control";
+	motionControl.description = "Device movement and positioning";
+	motionControl.headerColor = ImVec4(0.2f, 0.6f, 1.0f, 1.0f); // Blue
+	motionControl.expanded = false; // Collapsed by default
+
+	// MOVE NODE block
+	motionControl.blocks.emplace_back(5, BlockType::MOVE_NODE, "Move to Node", GetBlockColor(BlockType::MOVE_NODE));
+	InitializeBlockParameters(motionControl.blocks.back());
+
+	// MOVE TO POSITION block
+	motionControl.blocks.emplace_back(6, BlockType::MOVE_TO_POSITION, "Move to Position", GetBlockColor(BlockType::MOVE_TO_POSITION));
+	InitializeBlockParameters(motionControl.blocks.back());
+
+	// MOVE RELATIVE AXIS block
+	motionControl.blocks.emplace_back(7, BlockType::MOVE_RELATIVE_AXIS, "Move Relative", GetBlockColor(BlockType::MOVE_RELATIVE_AXIS));
+	InitializeBlockParameters(motionControl.blocks.back());
+
+	m_blockCategories.push_back(std::move(motionControl));
+
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// I/O CONTROL CATEGORY
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	BlockCategory ioControl;
+	ioControl.name = "I/O Control";
+	ioControl.description = "Digital inputs and outputs";
+	ioControl.headerColor = ImVec4(1.0f, 0.6f, 0.2f, 1.0f); // Orange
+	ioControl.expanded = false;
+
+	// SET OUTPUT block
+	ioControl.blocks.emplace_back(8, BlockType::SET_OUTPUT, "Set Output", GetBlockColor(BlockType::SET_OUTPUT));
+	InitializeBlockParameters(ioControl.blocks.back());
+
+	// CLEAR OUTPUT block
+	ioControl.blocks.emplace_back(9, BlockType::CLEAR_OUTPUT, "Clear Output", GetBlockColor(BlockType::CLEAR_OUTPUT));
+	InitializeBlockParameters(ioControl.blocks.back());
+
+	m_blockCategories.push_back(std::move(ioControl));
+
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// PNEUMATICS CATEGORY
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	BlockCategory pneumatics;
+	pneumatics.name = "Pneumatics";
+	pneumatics.description = "Pneumatic slide control";
+	pneumatics.headerColor = ImVec4(0.6f, 1.0f, 0.6f, 1.0f); // Light green
+	pneumatics.expanded = false;
+
+	// EXTEND SLIDE block
+	pneumatics.blocks.emplace_back(10, BlockType::EXTEND_SLIDE, "Extend Slide", GetBlockColor(BlockType::EXTEND_SLIDE));
+	InitializeBlockParameters(pneumatics.blocks.back());
+
+	// RETRACT SLIDE block
+	pneumatics.blocks.emplace_back(11, BlockType::RETRACT_SLIDE, "Retract Slide", GetBlockColor(BlockType::RETRACT_SLIDE));
+	InitializeBlockParameters(pneumatics.blocks.back());
+
+	m_blockCategories.push_back(std::move(pneumatics));
+
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// LASER CONTROL CATEGORY
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	BlockCategory laserControl;
+	laserControl.name = "Laser Control";
+	laserControl.description = "Laser power and operation";
+	laserControl.headerColor = ImVec4(1.0f, 0.4f, 0.4f, 1.0f); // Red
+	laserControl.expanded = false;
+
+	// SET LASER CURRENT block
+	laserControl.blocks.emplace_back(12, BlockType::SET_LASER_CURRENT, "Set Laser Current", GetBlockColor(BlockType::SET_LASER_CURRENT));
+	InitializeBlockParameters(laserControl.blocks.back());
+
+	// LASER ON block
+	laserControl.blocks.emplace_back(13, BlockType::LASER_ON, "Laser ON", GetBlockColor(BlockType::LASER_ON));
+	InitializeBlockParameters(laserControl.blocks.back());
+
+	// LASER OFF block
+	laserControl.blocks.emplace_back(14, BlockType::LASER_OFF, "Laser OFF", GetBlockColor(BlockType::LASER_OFF));
+	InitializeBlockParameters(laserControl.blocks.back());
+
+	m_blockCategories.push_back(std::move(laserControl));
+
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// TEMPERATURE CONTROL CATEGORY
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	BlockCategory temperatureControl;
+	temperatureControl.name = "Temperature Control";
+	temperatureControl.description = "TEC and thermal management";
+	temperatureControl.headerColor = ImVec4(0.4f, 0.8f, 1.0f, 1.0f); // Light blue
+	temperatureControl.expanded = false;
+
+	// SET TEC TEMPERATURE block
+	temperatureControl.blocks.emplace_back(15, BlockType::SET_TEC_TEMPERATURE, "Set TEC Temp", GetBlockColor(BlockType::SET_TEC_TEMPERATURE));
+	InitializeBlockParameters(temperatureControl.blocks.back());
+
+	// TEC ON block
+	temperatureControl.blocks.emplace_back(16, BlockType::TEC_ON, "TEC ON", GetBlockColor(BlockType::TEC_ON));
+	InitializeBlockParameters(temperatureControl.blocks.back());
+
+	// TEC OFF block
+	temperatureControl.blocks.emplace_back(17, BlockType::TEC_OFF, "TEC OFF", GetBlockColor(BlockType::TEC_OFF));
+	InitializeBlockParameters(temperatureControl.blocks.back());
+
+	m_blockCategories.push_back(std::move(temperatureControl));
+
+	printf("[PALETTE] Initialized %zu block categories with %zu total blocks\n",
+		m_blockCategories.size(), GetTotalBlockCount());
+}
+
+size_t MachineBlockUI::GetTotalBlockCount() const {
+	size_t total = 0;
+	for (const auto& category : m_blockCategories) {
+		total += category.blocks.size();
 	}
+	return total;
 }
 
 void MachineBlockUI::RenderUI() {
@@ -189,41 +305,28 @@ void MachineBlockUI::RenderUI() {
 }
 
 
+
 void MachineBlockUI::RenderLeftPanel() {
 	ImGui::Text("Block Palette");
 	ImGui::Separator();
 
-	// Add descriptive text
+	// Show total blocks
 	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f)); // Gray
-	ImGui::TextWrapped("Essential blocks for program flow:");
+	ImGui::Text("Categories: %zu | Blocks: %zu", m_blockCategories.size(), GetTotalBlockCount());
 	ImGui::PopStyleColor();
 
 	ImGui::Spacing();
 
-	// START block description
-	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
-	ImGui::TextWrapped("★ START: Every program needs exactly one START block");
-	ImGui::PopStyleColor();
-
-	// END block description  
-	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.0f, 0.0f, 1.0f)); // Red
-	ImGui::TextWrapped("★ END: Every program should end with an END block");
-	ImGui::PopStyleColor();
-
-	ImGui::Spacing();
-	ImGui::Separator();
-
-	// FIXED: Add scrollable child window for the block palette
 	// Calculate available height for the scrollable area
-	float availableHeight = ImGui::GetContentRegionAvail().y - 100.0f; // Leave space for buttons
+	float availableHeight = ImGui::GetContentRegionAvail().y - 120.0f; // Leave space for buttons
 
 	// Create scrollable child window for block palette
 	if (ImGui::BeginChild("BlockPaletteScroll", ImVec2(0, availableHeight), true, ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
 
-		// FIXED: Render all palette blocks with correct function signature
-		for (size_t i = 0; i < m_paletteBlocks.size(); i++) {
-			RenderPaletteBlock(m_paletteBlocks[i], static_cast<int>(i));  // FIXED: Added index parameter
-			ImGui::Spacing(); // Add some space between blocks
+		// Render each category
+		for (auto& category : m_blockCategories) {
+			RenderBlockCategory(category);
+			ImGui::Spacing();
 		}
 
 	}
@@ -244,23 +347,73 @@ void MachineBlockUI::RenderLeftPanel() {
 		ImGui::SetTooltip("Adds START and END blocks to get you started");
 	}
 
-	ImGui::Spacing();
-
-	// Program management buttons
-	if (ImGui::Button("Save Program", ImVec2(-1, 0))) {
-		SaveProgram();
+	// Category controls
+	if (ImGui::Button("Expand All", ImVec2((-1.0f / 2.0f) - 2, 0))) {
+		for (auto& category : m_blockCategories) {
+			category.expanded = true;
+		}
 	}
-
-	if (ImGui::Button("Load Program", ImVec2(-1, 0))) {
-		LoadProgram();
+	ImGui::SameLine();
+	if (ImGui::Button("Collapse All", ImVec2(-1, 0))) {
+		for (auto& category : m_blockCategories) {
+			if (category.name != "Program Flow") { // Keep Program Flow always visible
+				category.expanded = false;
+			}
+		}
 	}
 }
-// In MachineBlockUI.cpp - Update RenderPaletteBlock function
-void MachineBlockUI::RenderPaletteBlock(const MachineBlock& block, int index) {
-	// IMPROVED: Smaller button size for more compact palette
-	ImVec2 buttonSize(m_leftPanelWidth - 20, 35); // Reduced from 50 to 35
 
-	// IMPROVED: More subtle button colors with better hover/active states
+// ===============================================
+// 5. NEW METHOD - Render individual category
+// ===============================================
+
+void MachineBlockUI::RenderBlockCategory(BlockCategory& category) {
+	// Category header with colored background
+	ImGui::PushStyleColor(ImGuiCol_Header, category.headerColor);
+	ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(category.headerColor.x * 1.1f, category.headerColor.y * 1.1f, category.headerColor.z * 1.1f, category.headerColor.w));
+	ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(category.headerColor.x * 0.9f, category.headerColor.y * 0.9f, category.headerColor.z * 0.9f, category.headerColor.w));
+
+	// Create the collapsible header
+	std::string headerText = category.name + " (" + std::to_string(category.blocks.size()) + ")";
+	bool nodeOpen = ImGui::CollapsingHeader(headerText.c_str(),
+		category.expanded ? ImGuiTreeNodeFlags_DefaultOpen : 0);
+
+	// Update expanded state
+	category.expanded = nodeOpen;
+
+	ImGui::PopStyleColor(3);
+
+	// Show description when hovered
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("%s", category.description.c_str());
+	}
+
+	// Render blocks if category is expanded
+	if (nodeOpen) {
+		ImGui::Indent(10.0f); // Indent the blocks slightly
+
+		for (size_t i = 0; i < category.blocks.size(); i++) {
+			RenderPaletteBlock(category.blocks[i], static_cast<int>(i));
+
+			// Add small spacing between blocks
+			if (i < category.blocks.size() - 1) {
+				ImGui::Spacing();
+			}
+		}
+
+		ImGui::Unindent(10.0f);
+	}
+}
+
+
+
+
+
+void MachineBlockUI::RenderPaletteBlock(const MachineBlock& block, int index) {
+	// Compact button size for tree view
+	ImVec2 buttonSize(m_leftPanelWidth - 40, 30); // Smaller than before
+
+	// Button colors
 	ImVec4 baseColor = ImGui::ColorConvertU32ToFloat4(block.color);
 	ImVec4 hoverColor = ImVec4(baseColor.x * 1.1f, baseColor.y * 1.1f, baseColor.z * 1.1f, baseColor.w);
 	ImVec4 activeColor = ImVec4(baseColor.x * 0.9f, baseColor.y * 0.9f, baseColor.z * 0.9f, baseColor.w);
@@ -287,47 +440,41 @@ void MachineBlockUI::RenderPaletteBlock(const MachineBlock& block, int index) {
 
 	ImGui::PopStyleColor(3);
 
-	// Special highlighting for START/END blocks (smaller icons)
-	if (block.type == BlockType::START || block.type == BlockType::END) {
-		ImGui::SameLine();
-		if (block.type == BlockType::START) {
-			ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "[ >> ]");
-		}
-		else {
-			ImGui::TextColored(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), "[ X ]");
-		}
-	}
-
-	// Enhanced tooltip with more information
+	// Enhanced tooltip with category and description
 	if (ImGui::IsItemHovered()) {
-		std::string tooltipText = "Drag to canvas or click to add " + block.label + " block";
+		std::string tooltipText = "Add " + block.label + " block to canvas";
 
 		// Add specific descriptions for each block type
 		switch (block.type) {
 		case BlockType::START:
-			tooltipText += "\nStarts program execution";
+			tooltipText += "\n• Starts program execution";
 			break;
 		case BlockType::END:
-			tooltipText += "\nEnds program execution";
+			tooltipText += "\n• Ends program execution";
 			break;
 		case BlockType::MOVE_NODE:
-			tooltipText += "\nMoves device to specified node";
+			tooltipText += "\n• Moves device to a specific node";
+			break;
+		case BlockType::MOVE_TO_POSITION:
+			tooltipText += "\n• Moves device to a saved position";
+			break;
+		case BlockType::MOVE_RELATIVE_AXIS:
+			tooltipText += "\n• Moves device relative on specific axis";
 			break;
 		case BlockType::WAIT:
-			tooltipText += "\nPauses execution for specified time";
+			tooltipText += "\n• Pauses execution for specified time";
 			break;
 		case BlockType::SET_OUTPUT:
-			tooltipText += "\nActivates an output pin";
+			tooltipText += "\n• Activates an output pin";
 			break;
 		case BlockType::CLEAR_OUTPUT:
-			tooltipText += "\nDeactivates an output pin";
+			tooltipText += "\n• Deactivates an output pin";
 			break;
 		}
 
 		ImGui::SetTooltip("%s", tooltipText.c_str());
 	}
 }
-
 
 
 void MachineBlockUI::RenderMiddlePanel() {
