@@ -1,9 +1,10 @@
-// global_jog_panel.cpp
+// global_jog_panel.cpp - Updated implementation
 #include "include/motions/global_jog_panel.h"
 #include <fstream>
 #include <algorithm>
 #include <nlohmann/json.hpp>
 #include <iostream>
+#include <iomanip>
 
 using json = nlohmann::json;
 
@@ -294,6 +295,174 @@ ImVec4 GlobalJogPanel::GetButtonColor(const std::string& key) {
   return m_keyBindingEnabled ? alertColor : regularColor;
 }
 
+// NEW: Get current positions for the selected device
+std::map<std::string, double> GlobalJogPanel::GetCurrentPositions() {
+  std::map<std::string, double> positions;
+
+  if (m_selectedDevice.empty()) {
+    return positions;
+  }
+
+  auto deviceOpt = m_configManager.GetDevice(m_selectedDevice);
+  if (!deviceOpt.has_value()) {
+    return positions;
+  }
+
+  const auto& device = deviceOpt.value().get();
+
+  if (device.Port == 50000) {
+    // PI controller
+    PIController* controller = m_piControllerManager.GetController(m_selectedDevice);
+    if (controller && controller->IsConnected()) {
+      controller->GetPositions(positions);
+    }
+  }
+  else {
+    // ACS controller
+    ACSController* controller = m_acsControllerManager.GetController(m_selectedDevice);
+    if (controller && controller->IsConnected()) {
+      controller->GetPositions(positions);
+    }
+  }
+
+  return positions;
+}
+
+// NEW: Check if the selected device is connected
+bool GlobalJogPanel::IsDeviceConnected() const {
+  if (m_selectedDevice.empty()) {
+    return false;
+  }
+
+  auto deviceOpt = m_configManager.GetDevice(m_selectedDevice);
+  if (!deviceOpt.has_value()) {
+    return false;
+  }
+
+  const auto& device = deviceOpt.value().get();
+
+  if (device.Port == 50000) {
+    // PI controller
+    PIController* controller = m_piControllerManager.GetController(m_selectedDevice);
+    return controller && controller->IsConnected();
+  }
+  else {
+    // ACS controller
+    ACSController* controller = m_acsControllerManager.GetController(m_selectedDevice);
+    return controller && controller->IsConnected();
+  }
+}
+
+// NEW: Render position display section
+
+// NEW: Render position display section
+void GlobalJogPanel::RenderPositionDisplay() {
+  if (!m_showPositions || m_selectedDevice.empty()) {
+    return;
+  }
+
+  ImGui::Separator();
+  ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "Current Positions for %s", m_selectedDevice.c_str());
+
+  if (!IsDeviceConnected()) {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Device not connected");
+    return;
+  }
+
+  // Get current positions
+  std::map<std::string, double> positions = GetCurrentPositions();
+
+  if (positions.empty()) {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Unable to read positions");
+    return;
+  }
+
+  // Add a refresh button
+  if (ImGui::Button("Refresh Positions")) {
+    // Force a fresh read of positions
+    positions = GetCurrentPositions();
+  }
+
+  ImGui::SameLine();
+
+  // Add copy to clipboard button
+  if (ImGui::Button("Copy to Clipboard")) {
+    // Format positions as JSON using string concatenation
+    std::string jsonStr = "{\n";
+    jsonStr += "  \"device\": \"" + m_selectedDevice + "\",\n";
+    jsonStr += "  \"positions\": {\n";
+
+    auto it = positions.begin();
+    while (it != positions.end()) {
+      char positionBuffer[64];
+      snprintf(positionBuffer, sizeof(positionBuffer), "%.6f", it->second);
+
+      jsonStr += "    \"" + it->first + "\": " + std::string(positionBuffer);
+      ++it;
+      if (it != positions.end()) {
+        jsonStr += ",";
+      }
+      jsonStr += "\n";
+    }
+
+    jsonStr += "  }\n";
+    jsonStr += "}";
+
+    ImGui::SetClipboardText(jsonStr.c_str());
+    m_logger->LogInfo("GlobalJogPanel: Copied positions to clipboard for " + m_selectedDevice);
+  }
+
+  // Display positions in a table
+  if (ImGui::BeginTable("PositionsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+    ImGui::TableSetupColumn("Axis", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+    ImGui::TableSetupColumn("Position (mm/deg)", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableHeadersRow();
+
+    // Define axis order and labels
+    std::vector<std::pair<std::string, std::string>> axisInfo = {
+      {"X", "X (Linear)"},
+      {"Y", "Y (Linear)"},
+      {"Z", "Z (Linear)"},
+      {"U", "U (Roll)"},
+      {"V", "V (Pitch)"},
+      {"W", "W (Yaw)"}
+    };
+
+    for (const auto& [axis, label] : axisInfo) {
+      auto posIt = positions.find(axis);
+      if (posIt != positions.end()) {
+        ImGui::TableNextRow();
+
+        // Axis label
+        ImGui::TableNextColumn();
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "%s", label.c_str());
+
+        // Position value with appropriate formatting
+        ImGui::TableNextColumn();
+        if (axis == "U" || axis == "V" || axis == "W") {
+          // Rotation axes - show more decimal places for degrees
+          ImGui::Text("%.4f°", posIt->second);
+        }
+        else {
+          // Linear axes - show in mm with good precision
+          ImGui::Text("%.6f mm", posIt->second);
+        }
+      }
+    }
+
+    ImGui::EndTable();
+  }
+
+  // Show a status indicator for motion
+  ImGui::Separator();
+  ImGui::Text("Motion Status:");
+  ImGui::SameLine();
+
+  // Check if any axis is moving (this would require additional API calls)
+  // For now, just show connected status
+  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Connected & Ready");
+}
+
 void GlobalJogPanel::RenderUI() {
   if (!m_showWindow) return;
 
@@ -329,6 +498,13 @@ void GlobalJogPanel::RenderUI() {
       }
     }
     ImGui::EndCombo();
+  }
+
+  // NEW: Show Positions button
+  ImGui::SameLine();
+  if (ImGui::Button(m_showPositions ? "Hide Positions" : "Show Positions")) {
+    m_showPositions = !m_showPositions;
+    m_logger->LogInfo("GlobalJogPanel: " + std::string(m_showPositions ? "Showing" : "Hiding") + " positions");
   }
 
   ImGui::Separator();
@@ -437,20 +613,10 @@ void GlobalJogPanel::RenderUI() {
   }
   ImGui::PopStyleColor();
 
-
-
-
+  // NEW: Render position display if enabled
+  RenderPositionDisplay();
 
   ImGui::Separator();
-
-  //if (!m_selectedDevice.empty() && DeviceSupportsUVW(m_selectedDevice)) {
-  //  m_logger->LogInfo("GlobalJogPanel: Rendering UVW controls for " + m_selectedDevice);
-  //  RenderRotationControls();
-  //}
-  //else {
-  //  m_logger->LogWarning("GlobalJogPanel: UVW controls not shown for " + m_selectedDevice +
-  //    " - DeviceSupportsUVW: " + std::to_string(DeviceSupportsUVW(m_selectedDevice)));
-  //}
 
   // Add rotation controls if device supports UVW
   if (!m_selectedDevice.empty() && DeviceSupportsUVW(m_selectedDevice)) {
@@ -493,9 +659,6 @@ void GlobalJogPanel::RenderUI() {
   ImGui::End();
 }
 
-
-
-// Check if device supports UVW axes (typically PI hexapod controllers)
 // Check if device supports UVW axes (typically PI hexapod controllers)
 bool GlobalJogPanel::DeviceSupportsUVW(const std::string& deviceId) {
   if (deviceId.empty()) {
@@ -525,7 +688,7 @@ bool GlobalJogPanel::DeviceSupportsUVW(const std::string& deviceId) {
   const auto& availableAxes = controller->GetAvailableAxes();
 
   // Log the available axes
-  if (debugverbose)m_logger->LogInfo("GlobalJogPanel: DeviceSupportsUVW - available axes for " + deviceId + ": " +std::to_string(availableAxes.size()) + " axes");
+  if (debugverbose)m_logger->LogInfo("GlobalJogPanel: DeviceSupportsUVW - available axes for " + deviceId + ": " + std::to_string(availableAxes.size()) + " axes");
 
   // If axes are named as numbers 1-6 instead of letters X,Y,Z,U,V,W
   // Check if there are at least 6 axes (hexapod typically has 6 axes)
@@ -539,7 +702,7 @@ bool GlobalJogPanel::DeviceSupportsUVW(const std::string& deviceId) {
       if (std::find(availableAxes.begin(), availableAxes.end(), "4") != availableAxes.end() ||
         std::find(availableAxes.begin(), availableAxes.end(), "5") != availableAxes.end() ||
         std::find(availableAxes.begin(), availableAxes.end(), "6") != availableAxes.end()) {
-        if(debugverbose) m_logger->LogInfo("GlobalJogPanel: DeviceSupportsUVW - device has numeric axes (1-6)");
+        if (debugverbose) m_logger->LogInfo("GlobalJogPanel: DeviceSupportsUVW - device has numeric axes (1-6)");
         return true;
       }
     }
@@ -558,8 +721,6 @@ bool GlobalJogPanel::DeviceSupportsUVW(const std::string& deviceId) {
   return false;
 }
 
-// Handle UVW rotation movement
-// Handle UVW rotation movement with support for numeric axes
 // Handle UVW rotation movement for hexapod devices
 void GlobalJogPanel::MoveRotationAxis(const std::string& axis, double amount) {
   if (m_selectedDevice.empty()) {
@@ -594,10 +755,6 @@ void GlobalJogPanel::MoveRotationAxis(const std::string& axis, double amount) {
   }
 }
 
-
-
-
-// Render rotation controls in the UI
 // Render rotation controls in the UI with improved contrast
 void GlobalJogPanel::RenderRotationControls() {
   // Skip rendering if device doesn't support UVW

@@ -1,4 +1,4 @@
-// global_jog_panel.h
+// global_jog_panel.h - Updated header
 #pragma once
 
 #include "include/motions/MotionConfigManager.h"
@@ -43,6 +43,7 @@ public:
   // Process key input - call this from the main input handling loop
   void ProcessKeyInput(int keyCode, bool keyDown);
   bool debugverbose = false;
+
 private:
   // References to managers
   MotionConfigManager& m_configManager;
@@ -54,6 +55,7 @@ private:
   bool m_showWindow = true;
   std::string m_windowTitle = "Global Jog Control";
   bool m_keyBindingEnabled = false;
+  bool m_showPositions = false; // NEW: Track whether to show positions
 
   // Available jog steps in mm
   std::vector<double> m_jogSteps = {
@@ -97,9 +99,7 @@ private:
   // Render styles
   ImVec4 GetButtonColor(const std::string& key);
 
-  // Add these to the private section of the GlobalJogPanel class
-
-// Check if the selected device supports UVW axes
+  // Check if the selected device supports UVW axes
   bool DeviceSupportsUVW(const std::string& deviceId);
 
   // Helper method for handling UVW axis movement
@@ -108,4 +108,8 @@ private:
   // UI helper for displaying the rotation controls
   void RenderRotationControls();
 
+  // NEW: Helper methods for position display
+  void RenderPositionDisplay();
+  std::map<std::string, double> GetCurrentPositions();
+  bool IsDeviceConnected() const;
 };
