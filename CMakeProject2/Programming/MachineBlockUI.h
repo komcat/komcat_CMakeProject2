@@ -37,7 +37,16 @@ enum class BlockType {
   TEC_OFF,               // NEW: Turn TEC off
   PROMPT,             // NEW: User confirmation prompt
   MOVE_TO_POSITION,     // Move to saved position name
-  MOVE_RELATIVE_AXIS    // Move relative on specified axis
+  MOVE_RELATIVE_AXIS,    // Move relative on specified axis
+  // NEW: Keithley 2400 Block Types
+  KEITHLEY_RESET,
+  KEITHLEY_SET_OUTPUT,
+  KEITHLEY_VOLTAGE_SOURCE,
+  KEITHLEY_CURRENT_SOURCE,
+  KEITHLEY_READ_VOLTAGE,
+  KEITHLEY_READ_CURRENT,
+  KEITHLEY_READ_RESISTANCE,
+  KEITHLEY_SEND_COMMAND
 };
 
 // In MachineBlockUI.h, make sure BlockParameter struct looks like this:
@@ -215,6 +224,14 @@ private:
   // Add new block colors in MachineBlockUI.h:
   const ImU32 MOVE_TO_POSITION_COLOR = IM_COL32(50, 150, 200, 255);     // Light blue
   const ImU32 MOVE_RELATIVE_AXIS_COLOR = IM_COL32(150, 100, 200, 255);  // Light purple
+  const ImU32 KEITHLEY_RESET_COLOR = IM_COL32(255, 140, 0, 255);         // Orange
+  const ImU32 KEITHLEY_SET_OUTPUT_COLOR = IM_COL32(255, 165, 0, 255);    // Orange red
+  const ImU32 KEITHLEY_VOLTAGE_SOURCE_COLOR = IM_COL32(50, 150, 255, 255); // Blue
+  const ImU32 KEITHLEY_CURRENT_SOURCE_COLOR = IM_COL32(0, 191, 255, 255);  // Deep sky blue
+  const ImU32 KEITHLEY_READ_VOLTAGE_COLOR = IM_COL32(144, 238, 144, 255);  // Light green
+  const ImU32 KEITHLEY_READ_CURRENT_COLOR = IM_COL32(152, 251, 152, 255);  // Pale green
+  const ImU32 KEITHLEY_READ_RESISTANCE_COLOR = IM_COL32(173, 255, 47, 255); // Green yellow
+  const ImU32 KEITHLEY_SEND_COMMAND_COLOR = IM_COL32(255, 20, 147, 255);   // Deep pink
 
   // Canvas background colors
   const ImU32 CANVAS_BG_COLOR = IM_COL32(45, 45, 45, 255);

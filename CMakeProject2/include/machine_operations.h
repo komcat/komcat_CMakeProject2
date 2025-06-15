@@ -20,6 +20,7 @@
 
 // Forward declare CLD101xOperations instead of including the header
 class CLD101xOperations;
+class Keithley2400Operations;
 
 class MachineOperations {
 public:
@@ -29,8 +30,10 @@ public:
 		EziIOManager& ioManager,
 		PneumaticManager& pneumaticManager,
 		CLD101xOperations* laserOps = nullptr,
-		PylonCameraTest* cameraTest = nullptr
+		PylonCameraTest* cameraTest = nullptr,
+		Keithley2400Operations* smuOps = nullptr  // Added Keithley parameter
 	);
+
 
 	~MachineOperations();
 
@@ -238,13 +241,37 @@ public:
 	// NEW: Save current position for a specific node (looks up correct position name from graph)
 	bool SaveCurrentPositionForNode(const std::string& deviceName, const std::string& graphName, const std::string& nodeId);
 
+
+	// SMU control methods (Keithley 2400) - NEW
+	bool SMU_ResetInstrument(const std::string& clientName = "");
+	bool SMU_SetOutput(bool enable, const std::string& clientName = "");
+	bool SMU_SetupVoltageSource(double voltage, double compliance = 0.1,
+		const std::string& range = "AUTO", const std::string& clientName = "");
+	bool SMU_SetupCurrentSource(double current, double compliance = 10.0,
+		const std::string& range = "AUTO", const std::string& clientName = "");
+	bool SMU_ReadVoltage(double& voltage, const std::string& clientName = "");
+	bool SMU_ReadCurrent(double& current, const std::string& clientName = "");
+	bool SMU_ReadResistance(double& resistance, const std::string& clientName = "");
+	bool SMU_ReadPower(double& power, const std::string& clientName = "");
+	bool SMU_SendCommand(const std::string& command, const std::string& clientName = "");
+	bool SMU_QueryCommand(const std::string& command, std::string& response, const std::string& clientName = "");
+
+
+
 private:
+	Logger* m_logger;
+	
+	
+	// Core system references
 	MotionControlLayer& m_motionLayer;
 	PIControllerManager& m_piControllerManager;
 	EziIOManager& m_ioManager;
 	PneumaticManager& m_pneumaticManager;
-	Logger* m_logger;
+
+	// Optional components
 	CLD101xOperations* m_laserOps;
+	Keithley2400Operations* m_smuOps;  // Added SMU operations
+	PylonCameraTest* m_cameraTest;
 
 
 
@@ -267,8 +294,7 @@ private:
 	};
 	std::map<std::string, ScanInfo> m_scanInfo;
 
-	// Add camera reference
-	PylonCameraTest* m_cameraTest;
+
 
 	// Camera exposure management
 	std::unique_ptr<CameraExposureManager> m_cameraExposureManager;

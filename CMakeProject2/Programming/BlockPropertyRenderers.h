@@ -248,3 +248,69 @@ private:
   void RenderTestButton(const std::string& controllerName, const std::string& axisName,
     const std::string& distance, bool blocking, MachineOperations* machineOps);
 };
+
+
+
+// Keithley Reset Renderer
+class KeithleyResetRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+};
+
+// Keithley Set Output Renderer
+class KeithleySetOutputRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+};
+
+// Keithley Voltage Source Renderer
+class KeithleyVoltageSourceRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+};
+
+// Keithley Current Source Renderer
+class KeithleyCurrentSourceRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+};
+
+// Keithley Read Voltage Renderer
+class KeithleyReadVoltageRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+};
+
+// Keithley Read Current Renderer
+class KeithleyReadCurrentRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+};
+
+// Keithley Read Resistance Renderer
+class KeithleyReadResistanceRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+};
+
+// Keithley Send Command Renderer
+class KeithleySendCommandRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+};

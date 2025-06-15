@@ -545,11 +545,39 @@ std::unique_ptr<BlockPropertyRenderer> BlockRendererFactory::CreateRenderer(Bloc
     return std::make_unique<MoveToPositionRenderer>();
   case BlockType::MOVE_RELATIVE_AXIS:
     return std::make_unique<MoveRelativeAxisRenderer>();
+
+    // NEW: Keithley renderer cases
+  case BlockType::KEITHLEY_RESET:
+    return std::make_unique<KeithleyResetRenderer>();
+  case BlockType::KEITHLEY_SET_OUTPUT:
+    return std::make_unique<KeithleySetOutputRenderer>();
+  case BlockType::KEITHLEY_VOLTAGE_SOURCE:
+    return std::make_unique<KeithleyVoltageSourceRenderer>();
+  case BlockType::KEITHLEY_CURRENT_SOURCE:
+    return std::make_unique<KeithleyCurrentSourceRenderer>();
+  case BlockType::KEITHLEY_READ_VOLTAGE:
+    return std::make_unique<KeithleyReadVoltageRenderer>();
+  case BlockType::KEITHLEY_READ_CURRENT:
+    return std::make_unique<KeithleyReadCurrentRenderer>();
+  case BlockType::KEITHLEY_READ_RESISTANCE:
+    return std::make_unique<KeithleyReadResistanceRenderer>();
+  case BlockType::KEITHLEY_SEND_COMMAND:
+    return std::make_unique<KeithleySendCommandRenderer>();
+
+
   default:
     return std::make_unique<DefaultRenderer>();
   }
 }
 
+std::string GetParameterValue(const MachineBlock& block, const std::string& paramName) {
+  for (const auto& param : block.parameters) {
+    if (param.name == paramName) {
+      return param.value;
+    }
+  }
+  return "";
+}
 
 
 
@@ -1496,5 +1524,675 @@ void MoveRelativeAxisRenderer::RenderTestButton(const std::string& controllerNam
 
   if (ImGui::IsItemHovered()) {
     ImGui::SetTooltip("Test moving %s on %s axis by %s mm", controllerName.c_str(), axisName.c_str(), distance.c_str());
+  }
+}
+
+
+
+// Keithley Reset Renderer Implementation
+void KeithleyResetRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("Reset Keithley 2400 Instrument");
+  ImGui::Separator();
+
+  // Client name parameter
+  for (auto& param : block->parameters) {
+    if (param.name == "client_name") {
+      char buffer[256];
+      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      buffer[sizeof(buffer) - 1] = '\0';
+
+      if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
+        param.value = std::string(buffer);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Optional Keithley client name (leave empty for default)");
+      }
+      break;
+    }
+  }
+}
+
+void KeithleyResetRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  if (!machineOps) return;
+
+  if (ImGui::Button("Test Reset")) {
+    std::string clientName = GetParameterValue(*block, "client_name");
+    bool success = machineOps->SMU_ResetInstrument(clientName);
+
+    if (success) {
+      ImGui::OpenPopup("Reset Success");
+    }
+    else {
+      ImGui::OpenPopup("Reset Failed");
+    }
+  }
+
+  // Popup modals
+  if (ImGui::BeginPopupModal("Reset Success", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Keithley instrument reset successfully!");
+    if (ImGui::Button("OK")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  if (ImGui::BeginPopupModal("Reset Failed", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Failed to reset Keithley instrument!");
+    ImGui::Text("Check connection and try again.");
+    if (ImGui::Button("OK")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+}
+
+void KeithleyResetRenderer::RenderValidation(MachineBlock* block) {
+  // No specific validation needed for reset command
+  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Reset command is valid");
+}
+
+// Keithley Set Output Renderer Implementation
+void KeithleySetOutputRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("Keithley Output Control");
+  ImGui::Separator();
+
+  // Enable parameter
+  for (auto& param : block->parameters) {
+    if (param.name == "enable") {
+      bool enable = (param.value == "true");
+      if (ImGui::Checkbox("Enable Output", &enable)) {
+        param.value = enable ? "true" : "false";
+      }
+    }
+    else if (param.name == "client_name") {
+      char buffer[256];
+      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      buffer[sizeof(buffer) - 1] = '\0';
+
+      if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
+        param.value = std::string(buffer);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Optional Keithley client name (leave empty for default)");
+      }
+    }
+  }
+}
+
+void KeithleySetOutputRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  if (!machineOps) return;
+
+  bool enable = (GetParameterValue(*block, "enable") == "true");
+  std::string clientName = GetParameterValue(*block, "client_name");
+
+  std::string buttonText = enable ? "Test Enable Output" : "Test Disable Output";
+  if (ImGui::Button(buttonText.c_str())) {
+    bool success = machineOps->SMU_SetOutput(enable, clientName);
+
+    if (success) {
+      ImGui::OpenPopup("Output Success");
+    }
+    else {
+      ImGui::OpenPopup("Output Failed");
+    }
+  }
+
+  // Popup modals
+  if (ImGui::BeginPopupModal("Output Success", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Keithley output %s successfully!", enable ? "enabled" : "disabled");
+    if (ImGui::Button("OK")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  if (ImGui::BeginPopupModal("Output Failed", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Failed to %s Keithley output!", enable ? "enable" : "disable");
+    ImGui::Text("Check connection and try again.");
+    if (ImGui::Button("OK")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+}
+
+void KeithleySetOutputRenderer::RenderValidation(MachineBlock* block) {
+  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Output control is valid");
+}
+
+// Keithley Voltage Source Renderer Implementation
+void KeithleyVoltageSourceRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("Keithley Voltage Source Setup");
+  ImGui::Separator();
+
+  for (auto& param : block->parameters) {
+    if (param.name == "voltage") {
+      float voltage = std::stof(param.value.empty() ? "0.0" : param.value);
+      if (ImGui::InputFloat("Voltage (V)", &voltage, 0.1f, 1.0f, "%.3f")) {
+        param.value = std::to_string(voltage);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Output voltage in volts");
+      }
+    }
+    else if (param.name == "compliance") {
+      float compliance = std::stof(param.value.empty() ? "0.1" : param.value);
+      if (ImGui::InputFloat("Current Compliance (A)", &compliance, 0.001f, 0.01f, "%.6f")) {
+        param.value = std::to_string(compliance);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Current compliance limit in amperes");
+      }
+    }
+    else if (param.name == "range") {
+      char buffer[64];
+      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      buffer[sizeof(buffer) - 1] = '\0';
+
+      if (ImGui::InputText("Range", buffer, sizeof(buffer))) {
+        param.value = std::string(buffer);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Voltage range (AUTO, 20V, 200V)");
+      }
+    }
+    else if (param.name == "client_name") {
+      char buffer[256];
+      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      buffer[sizeof(buffer) - 1] = '\0';
+
+      if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
+        param.value = std::string(buffer);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Optional Keithley client name (leave empty for default)");
+      }
+    }
+  }
+}
+
+void KeithleyVoltageSourceRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  if (!machineOps) return;
+
+  if (ImGui::Button("Test Voltage Setup")) {
+    std::string voltageStr = GetParameterValue(*block, "voltage");
+    std::string complianceStr = GetParameterValue(*block, "compliance");
+    std::string range = GetParameterValue(*block, "range");
+    std::string clientName = GetParameterValue(*block, "client_name");
+
+    try {
+      double voltage = std::stod(voltageStr.empty() ? "0.0" : voltageStr);
+      double compliance = std::stod(complianceStr.empty() ? "0.1" : complianceStr);
+
+      bool success = machineOps->SMU_SetupVoltageSource(voltage, compliance, range, clientName);
+
+      if (success) {
+        ImGui::OpenPopup("Voltage Setup Success");
+      }
+      else {
+        ImGui::OpenPopup("Voltage Setup Failed");
+      }
+    }
+    catch (const std::exception& e) {
+      ImGui::OpenPopup("Invalid Parameters");
+    }
+  }
+
+  // Popup modals
+  if (ImGui::BeginPopupModal("Voltage Setup Success", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Voltage source configured successfully!");
+    if (ImGui::Button("OK")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  if (ImGui::BeginPopupModal("Voltage Setup Failed", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Failed to configure voltage source!");
+    ImGui::Text("Check connection and parameters.");
+    if (ImGui::Button("OK")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  if (ImGui::BeginPopupModal("Invalid Parameters", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Invalid voltage or compliance values!");
+    ImGui::Text("Please enter valid numbers.");
+    if (ImGui::Button("OK")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+}
+
+void KeithleyVoltageSourceRenderer::RenderValidation(MachineBlock* block) {
+  std::string voltageStr = GetParameterValue(*block, "voltage");
+  std::string complianceStr = GetParameterValue(*block, "compliance");
+
+  bool isValid = true;
+  std::string errorMsg;
+
+  if (voltageStr.empty()) {
+    isValid = false;
+    errorMsg = "Voltage value is required";
+  }
+  else {
+    try {
+      double voltage = std::stod(voltageStr);
+      if (std::abs(voltage) > 200.0) {
+        isValid = false;
+        errorMsg = "Voltage exceeds ±200V limit";
+      }
+    }
+    catch (const std::exception&) {
+      isValid = false;
+      errorMsg = "Invalid voltage format";
+    }
+  }
+
+  if (isValid && !complianceStr.empty()) {
+    try {
+      double compliance = std::stod(complianceStr);
+      if (compliance <= 0 || compliance > 1.0) {
+        isValid = false;
+        errorMsg = "Current compliance must be between 0 and 1A";
+      }
+    }
+    catch (const std::exception&) {
+      isValid = false;
+      errorMsg = "Invalid compliance format";
+    }
+  }
+
+  if (isValid) {
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Voltage source parameters are valid");
+  }
+  else {
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ %s", errorMsg.c_str());
+  }
+}
+
+// Keithley Current Source Renderer Implementation
+void KeithleyCurrentSourceRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("Keithley Current Source Setup");
+  ImGui::Separator();
+
+  for (auto& param : block->parameters) {
+    if (param.name == "current") {
+      float current = std::stof(param.value.empty() ? "0.001" : param.value);
+      if (ImGui::InputFloat("Current (A)", &current, 0.0001f, 0.001f, "%.6f")) {
+        param.value = std::to_string(current);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Output current in amperes");
+      }
+    }
+    else if (param.name == "compliance") {
+      float compliance = std::stof(param.value.empty() ? "10.0" : param.value);
+      if (ImGui::InputFloat("Voltage Compliance (V)", &compliance, 0.1f, 1.0f, "%.3f")) {
+        param.value = std::to_string(compliance);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Voltage compliance limit in volts");
+      }
+    }
+    else if (param.name == "range") {
+      char buffer[64];
+      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      buffer[sizeof(buffer) - 1] = '\0';
+
+      if (ImGui::InputText("Range", buffer, sizeof(buffer))) {
+        param.value = std::string(buffer);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Current range (AUTO, 1mA, 10mA, 100mA, 1A)");
+      }
+    }
+    else if (param.name == "client_name") {
+      char buffer[256];
+      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      buffer[sizeof(buffer) - 1] = '\0';
+
+      if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
+        param.value = std::string(buffer);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Optional Keithley client name (leave empty for default)");
+      }
+    }
+  }
+}
+
+void KeithleyCurrentSourceRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  if (!machineOps) return;
+
+  if (ImGui::Button("Test Current Setup")) {
+    std::string currentStr = GetParameterValue(*block, "current");
+    std::string complianceStr = GetParameterValue(*block, "compliance");
+    std::string range = GetParameterValue(*block, "range");
+    std::string clientName = GetParameterValue(*block, "client_name");
+
+    try {
+      double current = std::stod(currentStr.empty() ? "0.001" : currentStr);
+      double compliance = std::stod(complianceStr.empty() ? "10.0" : complianceStr);
+
+      bool success = machineOps->SMU_SetupCurrentSource(current, compliance, range, clientName);
+
+      if (success) {
+        ImGui::OpenPopup("Current Setup Success");
+      }
+      else {
+        ImGui::OpenPopup("Current Setup Failed");
+      }
+    }
+    catch (const std::exception& e) {
+      ImGui::OpenPopup("Invalid Parameters");
+    }
+  }
+
+  // Popup modals (similar to voltage source)
+  if (ImGui::BeginPopupModal("Current Setup Success", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Current source configured successfully!");
+    if (ImGui::Button("OK")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  if (ImGui::BeginPopupModal("Current Setup Failed", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Failed to configure current source!");
+    ImGui::Text("Check connection and parameters.");
+    if (ImGui::Button("OK")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  if (ImGui::BeginPopupModal("Invalid Parameters", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Invalid current or compliance values!");
+    ImGui::Text("Please enter valid numbers.");
+    if (ImGui::Button("OK")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+}
+
+void KeithleyCurrentSourceRenderer::RenderValidation(MachineBlock* block) {
+  std::string currentStr = GetParameterValue(*block, "current");
+  std::string complianceStr = GetParameterValue(*block, "compliance");
+
+  bool isValid = true;
+  std::string errorMsg;
+
+  if (currentStr.empty()) {
+    isValid = false;
+    errorMsg = "Current value is required";
+  }
+  else {
+    try {
+      double current = std::stod(currentStr);
+      if (std::abs(current) > 1.0) {
+        isValid = false;
+        errorMsg = "Current exceeds ±1A limit";
+      }
+    }
+    catch (const std::exception&) {
+      isValid = false;
+      errorMsg = "Invalid current format";
+    }
+  }
+
+  if (isValid && !complianceStr.empty()) {
+    try {
+      double compliance = std::stod(complianceStr);
+      if (compliance <= 0 || compliance > 200.0) {
+        isValid = false;
+        errorMsg = "Voltage compliance must be between 0 and 200V";
+      }
+    }
+    catch (const std::exception&) {
+      isValid = false;
+      errorMsg = "Invalid compliance format";
+    }
+  }
+
+  if (isValid) {
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Current source parameters are valid");
+  }
+  else {
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ %s", errorMsg.c_str());
+  }
+}
+
+// Keithley Read Voltage Renderer Implementation
+void KeithleyReadVoltageRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("Read Keithley Voltage");
+  ImGui::Separator();
+
+  // Client name parameter
+  for (auto& param : block->parameters) {
+    if (param.name == "client_name") {
+      char buffer[256];
+      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      buffer[sizeof(buffer) - 1] = '\0';
+
+      if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
+        param.value = std::string(buffer);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Optional Keithley client name (leave empty for default)");
+      }
+      break;
+    }
+  }
+}
+
+void KeithleyReadVoltageRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  if (!machineOps) return;
+
+  static double lastVoltageReading = 0.0;
+  static bool hasReading = false;
+
+  if (ImGui::Button("Test Read Voltage")) {
+    std::string clientName = GetParameterValue(*block, "client_name");
+    bool success = machineOps->SMU_ReadVoltage(lastVoltageReading, clientName);
+    hasReading = success;
+  }
+
+  if (hasReading) {
+    ImGui::SameLine();
+    ImGui::Text("Last Reading: %.6f V", lastVoltageReading);
+  }
+}
+
+void KeithleyReadVoltageRenderer::RenderValidation(MachineBlock* block) {
+  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Voltage read command is valid");
+}
+
+// Keithley Read Current Renderer Implementation
+void KeithleyReadCurrentRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("Read Keithley Current");
+  ImGui::Separator();
+
+  // Client name parameter
+  for (auto& param : block->parameters) {
+    if (param.name == "client_name") {
+      char buffer[256];
+      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      buffer[sizeof(buffer) - 1] = '\0';
+
+      if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
+        param.value = std::string(buffer);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Optional Keithley client name (leave empty for default)");
+      }
+      break;
+    }
+  }
+}
+
+void KeithleyReadCurrentRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  if (!machineOps) return;
+
+  static double lastCurrentReading = 0.0;
+  static bool hasReading = false;
+
+  if (ImGui::Button("Test Read Current")) {
+    std::string clientName = GetParameterValue(*block, "client_name");
+    bool success = machineOps->SMU_ReadCurrent(lastCurrentReading, clientName);
+    hasReading = success;
+  }
+
+  if (hasReading) {
+    ImGui::SameLine();
+    ImGui::Text("Last Reading: %.9f A", lastCurrentReading);
+  }
+}
+
+void KeithleyReadCurrentRenderer::RenderValidation(MachineBlock* block) {
+  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Current read command is valid");
+}
+
+// Keithley Read Resistance Renderer Implementation
+void KeithleyReadResistanceRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("Read Keithley Resistance");
+  ImGui::Separator();
+
+  // Client name parameter
+  for (auto& param : block->parameters) {
+    if (param.name == "client_name") {
+      char buffer[256];
+      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      buffer[sizeof(buffer) - 1] = '\0';
+
+      if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
+        param.value = std::string(buffer);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Optional Keithley client name (leave empty for default)");
+      }
+      break;
+    }
+  }
+}
+
+void KeithleyReadResistanceRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  if (!machineOps) return;
+
+  static double lastResistanceReading = 0.0;
+  static bool hasReading = false;
+
+  if (ImGui::Button("Test Read Resistance")) {
+    std::string clientName = GetParameterValue(*block, "client_name");
+    bool success = machineOps->SMU_ReadResistance(lastResistanceReading, clientName);
+    hasReading = success;
+  }
+
+  if (hasReading) {
+    ImGui::SameLine();
+    ImGui::Text("Last Reading: %.3f Ω", lastResistanceReading);
+  }
+}
+
+void KeithleyReadResistanceRenderer::RenderValidation(MachineBlock* block) {
+  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Resistance read command is valid");
+}
+
+// Keithley Send Command Renderer Implementation
+void KeithleySendCommandRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Text("Send Keithley SCPI Command");
+  ImGui::Separator();
+
+  for (auto& param : block->parameters) {
+    if (param.name == "command") {
+      char buffer[512];
+      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      buffer[sizeof(buffer) - 1] = '\0';
+
+      if (ImGui::InputText("SCPI Command", buffer, sizeof(buffer))) {
+        param.value = std::string(buffer);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("SCPI command to send (e.g., *IDN?, :SOUR:VOLT 5.0)");
+      }
+    }
+    else if (param.name == "client_name") {
+      char buffer[256];
+      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      buffer[sizeof(buffer) - 1] = '\0';
+
+      if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
+        param.value = std::string(buffer);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Optional Keithley client name (leave empty for default)");
+      }
+    }
+  }
+}
+
+void KeithleySendCommandRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  if (!machineOps) return;
+
+  if (ImGui::Button("Test Send Command")) {
+    std::string command = GetParameterValue(*block, "command");
+    std::string clientName = GetParameterValue(*block, "client_name");
+
+    if (command.empty()) {
+      ImGui::OpenPopup("Empty Command");
+      return;
+    }
+
+    bool success = machineOps->SMU_SendCommand(command, clientName);
+
+    if (success) {
+      ImGui::OpenPopup("Command Success");
+    }
+    else {
+      ImGui::OpenPopup("Command Failed");
+    }
+  }
+
+  // Popup modals
+  if (ImGui::BeginPopupModal("Command Success", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("SCPI command sent successfully!");
+    if (ImGui::Button("OK")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  if (ImGui::BeginPopupModal("Command Failed", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Failed to send SCPI command!");
+    ImGui::Text("Check connection and command syntax.");
+    if (ImGui::Button("OK")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  if (ImGui::BeginPopupModal("Empty Command", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Please enter a SCPI command first!");
+    if (ImGui::Button("OK")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+}
+
+void KeithleySendCommandRenderer::RenderValidation(MachineBlock* block) {
+  std::string command = GetParameterValue(*block, "command");
+
+  if (command.empty()) {
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ SCPI command is required");
+  }
+  else if (command.length() > 256) {
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ Command too long (max 256 characters)");
+  }
+  else {
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ SCPI command is valid");
   }
 }

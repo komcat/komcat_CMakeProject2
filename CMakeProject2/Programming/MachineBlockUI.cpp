@@ -174,6 +174,53 @@ void MachineBlockUI::InitializePalette() {
 
 	m_blockCategories.push_back(std::move(temperatureControl));
 
+	// ═══════════════════════════════════════════════════════════════════════════
+	// KEITHLEY SMU CATEGORY
+	// ═══════════════════════════════════════════════════════════════════════════
+	BlockCategory keithleyControl;
+	keithleyControl.name = "Keithley SMU";
+	keithleyControl.description = "Source Measure Unit control and measurements";
+	keithleyControl.headerColor = ImVec4(1.0f, 0.7f, 0.0f, 1.0f); // Orange
+	keithleyControl.expanded = false;
+
+	// RESET KEITHLEY block
+	keithleyControl.blocks.emplace_back(50, BlockType::KEITHLEY_RESET, "Reset Keithley", GetBlockColor(BlockType::KEITHLEY_RESET));
+	InitializeBlockParameters(keithleyControl.blocks.back());
+
+	// SET OUTPUT block
+	keithleyControl.blocks.emplace_back(51, BlockType::KEITHLEY_SET_OUTPUT, "Keithley Output", GetBlockColor(BlockType::KEITHLEY_SET_OUTPUT));
+	InitializeBlockParameters(keithleyControl.blocks.back());
+
+	// VOLTAGE SOURCE block
+	keithleyControl.blocks.emplace_back(52, BlockType::KEITHLEY_VOLTAGE_SOURCE, "Voltage Source", GetBlockColor(BlockType::KEITHLEY_VOLTAGE_SOURCE));
+	InitializeBlockParameters(keithleyControl.blocks.back());
+
+	// CURRENT SOURCE block
+	keithleyControl.blocks.emplace_back(53, BlockType::KEITHLEY_CURRENT_SOURCE, "Current Source", GetBlockColor(BlockType::KEITHLEY_CURRENT_SOURCE));
+	InitializeBlockParameters(keithleyControl.blocks.back());
+
+	// READ VOLTAGE block
+	keithleyControl.blocks.emplace_back(54, BlockType::KEITHLEY_READ_VOLTAGE, "Read Voltage", GetBlockColor(BlockType::KEITHLEY_READ_VOLTAGE));
+	InitializeBlockParameters(keithleyControl.blocks.back());
+
+	// READ CURRENT block
+	keithleyControl.blocks.emplace_back(55, BlockType::KEITHLEY_READ_CURRENT, "Read Current", GetBlockColor(BlockType::KEITHLEY_READ_CURRENT));
+	InitializeBlockParameters(keithleyControl.blocks.back());
+
+	// READ RESISTANCE block
+	keithleyControl.blocks.emplace_back(56, BlockType::KEITHLEY_READ_RESISTANCE, "Read Resistance", GetBlockColor(BlockType::KEITHLEY_READ_RESISTANCE));
+	InitializeBlockParameters(keithleyControl.blocks.back());
+
+	// SEND COMMAND block
+	keithleyControl.blocks.emplace_back(57, BlockType::KEITHLEY_SEND_COMMAND, "Send Command", GetBlockColor(BlockType::KEITHLEY_SEND_COMMAND));
+	InitializeBlockParameters(keithleyControl.blocks.back());
+
+	m_blockCategories.push_back(std::move(keithleyControl));
+
+
+
+
+
 	printf("[PALETTE] Initialized %zu block categories with %zu total blocks\n",
 		m_blockCategories.size(), GetTotalBlockCount());
 }
@@ -1110,7 +1157,47 @@ void MachineBlockUI::InitializeBlockParameters(MachineBlock& block) {
 		block.parameters.push_back(BlockParameter{ "blocking", "true", "bool", "Wait for movement completion" });
 		break;
 
+		// NEW: Keithley block parameters
+	case BlockType::KEITHLEY_RESET:
+		block.parameters.push_back({ "client_name", "", "string", "Keithley client name (empty for default)" });
+		break;
 
+	case BlockType::KEITHLEY_SET_OUTPUT:
+		block.parameters.push_back({ "enable", "true", "bool", "Enable/disable output" });
+		block.parameters.push_back({ "client_name", "", "string", "Keithley client name (empty for default)" });
+		break;
+
+	case BlockType::KEITHLEY_VOLTAGE_SOURCE:
+		block.parameters.push_back({ "voltage", "1.0", "double", "Output voltage (V)" });
+		block.parameters.push_back({ "compliance", "0.1", "double", "Current compliance (A)" });
+		block.parameters.push_back({ "range", "AUTO", "string", "Voltage range (AUTO, 20V, 200V)" });
+		block.parameters.push_back({ "client_name", "", "string", "Keithley client name (empty for default)" });
+		break;
+
+	case BlockType::KEITHLEY_CURRENT_SOURCE:
+		block.parameters.push_back({ "current", "0.001", "double", "Output current (A)" });
+		block.parameters.push_back({ "compliance", "10.0", "double", "Voltage compliance (V)" });
+		block.parameters.push_back({ "range", "AUTO", "string", "Current range (AUTO, 1mA, 10mA, 100mA, 1A)" });
+		block.parameters.push_back({ "client_name", "", "string", "Keithley client name (empty for default)" });
+		break;
+
+	case BlockType::KEITHLEY_READ_VOLTAGE:
+		block.parameters.push_back({ "client_name", "", "string", "Keithley client name (empty for default)" });
+		break;
+
+	case BlockType::KEITHLEY_READ_CURRENT:
+		block.parameters.push_back({ "client_name", "", "string", "Keithley client name (empty for default)" });
+		break;
+
+	case BlockType::KEITHLEY_READ_RESISTANCE:
+		block.parameters.push_back({ "client_name", "", "string", "Keithley client name (empty for default)" });
+		break;
+
+	case BlockType::KEITHLEY_SEND_COMMAND:
+		block.parameters.push_back({ "command", "*IDN?", "string", "SCPI command to send" });
+		block.parameters.push_back({ "client_name", "", "string", "Keithley client name (empty for default)" });
+		break;
+	
 	}
 }
 
@@ -1466,6 +1553,15 @@ std::string MachineBlockUI::BlockTypeToString(BlockType type) const {
 	case BlockType::PROMPT: return "User Prompt";  // NEW
 	case BlockType::MOVE_TO_POSITION: return "Move to Position";
 	case BlockType::MOVE_RELATIVE_AXIS: return "Move Relative";
+		// NEW: Keithley block strings
+	case BlockType::KEITHLEY_RESET: return "Reset Keithley";
+	case BlockType::KEITHLEY_SET_OUTPUT: return "Keithley Output";
+	case BlockType::KEITHLEY_VOLTAGE_SOURCE: return "Voltage Source";
+	case BlockType::KEITHLEY_CURRENT_SOURCE: return "Current Source";
+	case BlockType::KEITHLEY_READ_VOLTAGE: return "Read Voltage";
+	case BlockType::KEITHLEY_READ_CURRENT: return "Read Current";
+	case BlockType::KEITHLEY_READ_RESISTANCE: return "Read Resistance";
+	case BlockType::KEITHLEY_SEND_COMMAND: return "Send Command";
 
 	default: return "Unknown";
 	}
@@ -1490,6 +1586,15 @@ ImU32 MachineBlockUI::GetBlockColor(BlockType type) const {
 	case BlockType::PROMPT: return PROMPT_COLOR;  // NEW
 	case BlockType::MOVE_TO_POSITION: return MOVE_TO_POSITION_COLOR;
 	case BlockType::MOVE_RELATIVE_AXIS: return MOVE_RELATIVE_AXIS_COLOR;
+		// NEW: Keithley block colors
+	case BlockType::KEITHLEY_RESET: return KEITHLEY_RESET_COLOR;
+	case BlockType::KEITHLEY_SET_OUTPUT: return KEITHLEY_SET_OUTPUT_COLOR;
+	case BlockType::KEITHLEY_VOLTAGE_SOURCE: return KEITHLEY_VOLTAGE_SOURCE_COLOR;
+	case BlockType::KEITHLEY_CURRENT_SOURCE: return KEITHLEY_CURRENT_SOURCE_COLOR;
+	case BlockType::KEITHLEY_READ_VOLTAGE: return KEITHLEY_READ_VOLTAGE_COLOR;
+	case BlockType::KEITHLEY_READ_CURRENT: return KEITHLEY_READ_CURRENT_COLOR;
+	case BlockType::KEITHLEY_READ_RESISTANCE: return KEITHLEY_READ_RESISTANCE_COLOR;
+	case BlockType::KEITHLEY_SEND_COMMAND: return KEITHLEY_SEND_COMMAND_COLOR;
 
 	default: return IM_COL32(128, 128, 128, 255);
 	}
@@ -1543,6 +1648,15 @@ std::string MachineBlockUI::BlockTypeToJsonString(BlockType type) const {
 	case BlockType::PROMPT: return "PROMPT";  // NEW
 	case BlockType::MOVE_TO_POSITION: return "MOVE_TO_POSITION";
 	case BlockType::MOVE_RELATIVE_AXIS: return "MOVE_RELATIVE_AXIS";
+		// NEW: Keithley JSON strings
+	case BlockType::KEITHLEY_RESET: return "KEITHLEY_RESET";
+	case BlockType::KEITHLEY_SET_OUTPUT: return "KEITHLEY_SET_OUTPUT";
+	case BlockType::KEITHLEY_VOLTAGE_SOURCE: return "KEITHLEY_VOLTAGE_SOURCE";
+	case BlockType::KEITHLEY_CURRENT_SOURCE: return "KEITHLEY_CURRENT_SOURCE";
+	case BlockType::KEITHLEY_READ_VOLTAGE: return "KEITHLEY_READ_VOLTAGE";
+	case BlockType::KEITHLEY_READ_CURRENT: return "KEITHLEY_READ_CURRENT";
+	case BlockType::KEITHLEY_READ_RESISTANCE: return "KEITHLEY_READ_RESISTANCE";
+	case BlockType::KEITHLEY_SEND_COMMAND: return "KEITHLEY_SEND_COMMAND";
 
 	default: return "UNKNOWN";
 	}
@@ -1567,6 +1681,15 @@ BlockType MachineBlockUI::JsonStringToBlockType(const std::string& typeStr) cons
 	if (typeStr == "PROMPT") return BlockType::PROMPT;  // NEW
 	if (typeStr == "MOVE_TO_POSITION") return BlockType::MOVE_TO_POSITION;
 	if (typeStr == "MOVE_RELATIVE_AXIS") return BlockType::MOVE_RELATIVE_AXIS;
+	// NEW: Keithley JSON to enum
+	if (typeStr == "KEITHLEY_RESET") return BlockType::KEITHLEY_RESET;
+	if (typeStr == "KEITHLEY_SET_OUTPUT") return BlockType::KEITHLEY_SET_OUTPUT;
+	if (typeStr == "KEITHLEY_VOLTAGE_SOURCE") return BlockType::KEITHLEY_VOLTAGE_SOURCE;
+	if (typeStr == "KEITHLEY_CURRENT_SOURCE") return BlockType::KEITHLEY_CURRENT_SOURCE;
+	if (typeStr == "KEITHLEY_READ_VOLTAGE") return BlockType::KEITHLEY_READ_VOLTAGE;
+	if (typeStr == "KEITHLEY_READ_CURRENT") return BlockType::KEITHLEY_READ_CURRENT;
+	if (typeStr == "KEITHLEY_READ_RESISTANCE") return BlockType::KEITHLEY_READ_RESISTANCE;
+	if (typeStr == "KEITHLEY_SEND_COMMAND") return BlockType::KEITHLEY_SEND_COMMAND;
 
 	return BlockType::START;
 }
@@ -2168,7 +2291,99 @@ std::string MachineBlockUI::GetBlockDescription(const MachineBlock& block) const
 		}
 		return "Clear Output";
 	}
+	case BlockType::EXTEND_SLIDE: {
+		std::string slideName = GetParameterValue(block, "slide_name");
+		return slideName.empty() ? "Extend Slide" : "Extend\n" + slideName;
+	}
+	case BlockType::RETRACT_SLIDE: {
+		std::string slideName = GetParameterValue(block, "slide_name");
+		return slideName.empty() ? "Retract Slide" : "Retract\n" + slideName;
+	}
+	case BlockType::SET_LASER_CURRENT: {
+		std::string current = GetParameterValue(block, "current_ma");
+		return current.empty() ? "Set Laser Current" : "Set Laser\n" + current + " mA";
+	}
+	case BlockType::LASER_ON: {
+		std::string laserName = GetParameterValue(block, "laser_name");
+		return laserName.empty() ? "Laser ON" : "Laser ON\n" + laserName;
+	}
+	case BlockType::LASER_OFF: {
+		std::string laserName = GetParameterValue(block, "laser_name");
+		return laserName.empty() ? "Laser OFF" : "Laser OFF\n" + laserName;
+	}
+	case BlockType::SET_TEC_TEMPERATURE: {
+		std::string temp = GetParameterValue(block, "temperature_c");
+		return temp.empty() ? "Set TEC Temperature" : "Set TEC\n" + temp + "°C";
+	}
+	case BlockType::TEC_ON: {
+		std::string laserName = GetParameterValue(block, "laser_name");
+		return laserName.empty() ? "TEC ON" : "TEC ON\n" + laserName;
+	}
+	case BlockType::TEC_OFF: {
+		std::string laserName = GetParameterValue(block, "laser_name");
+		return laserName.empty() ? "TEC OFF" : "TEC OFF\n" + laserName;
+	}
+	case BlockType::PROMPT: {
+		std::string promptText = GetParameterValue(block, "prompt_text");
+		return promptText.empty() ? "Prompt" : "Prompt: " + promptText;
+	}
+	case BlockType::MOVE_TO_POSITION: {
+		std::string position = GetParameterValue(block, "position");
+		return position.empty() ? "Move To Position" : "Move To\n" + position;
+	}
+	case BlockType::MOVE_RELATIVE_AXIS: {
+		std::string axis = GetParameterValue(block, "axis");
+		std::string distance = GetParameterValue(block, "distance");
+		return axis.empty() || distance.empty() ? "Move Relative Axis" :
+			"Move " + axis + "\nby " + distance;
+	}
 
+	// NEW: Keithley block descriptions
+	// NEW: Keithley block descriptions
+	case BlockType::KEITHLEY_RESET: {
+		std::string clientName = GetParameterValue(block, "client_name");
+		return "Reset Keithley" + (clientName.empty() ? "" : "\n(" + clientName + ")");
+	}
+
+	case BlockType::KEITHLEY_SET_OUTPUT: {
+		std::string enable = GetParameterValue(block, "enable");
+		std::string clientName = GetParameterValue(block, "client_name");
+		std::string state = (enable == "true") ? "ON" : "OFF";
+		return "Output " + state + (clientName.empty() ? "" : "\n(" + clientName + ")");
+	}
+
+	case BlockType::KEITHLEY_VOLTAGE_SOURCE: {
+		std::string voltage = GetParameterValue(block, "voltage");
+		std::string compliance = GetParameterValue(block, "compliance");
+		if (!voltage.empty()) {
+			return "Voltage Source\n" + voltage + "V, " + compliance + "A";
+		}
+		return "Voltage Source";
+	}
+
+	case BlockType::KEITHLEY_CURRENT_SOURCE: {
+		std::string current = GetParameterValue(block, "current");
+		std::string compliance = GetParameterValue(block, "compliance");
+		if (!current.empty()) {
+			return "Current Source\n" + current + "A, " + compliance + "V";
+		}
+		return "Current Source";
+	}
+
+	case BlockType::KEITHLEY_READ_VOLTAGE:
+	case BlockType::KEITHLEY_READ_CURRENT:
+	case BlockType::KEITHLEY_READ_RESISTANCE: {
+		std::string clientName = GetParameterValue(block, "client_name");
+		return BlockTypeToString(block.type) + (clientName.empty() ? "" : "\n(" + clientName + ")");
+	}
+
+	case BlockType::KEITHLEY_SEND_COMMAND: {
+		std::string command = GetParameterValue(block, "command");
+		if (!command.empty() && command.length() <= 10) {
+			return "Send Command\n" + command;
+		}
+		return "Send Command";
+	}
 	default:
 		return block.label;
 	}
@@ -2319,9 +2534,9 @@ void MachineBlockUI::UpdateBlockLabel(MachineBlock& block) {
 		break;
 	}
 
-												 // ═══════════════════════════════════════════════════════════════════════════════════════
-												 // NEW: Enhanced Move To Position Label
-												 // ═══════════════════════════════════════════════════════════════════════════════════════
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// NEW: Enhanced Move To Position Label
+	// ═══════════════════════════════════════════════════════════════════════════════════════
 	case BlockType::MOVE_TO_POSITION: {
 		std::string controllerName = GetParameterValue(block, "controller_name");
 		std::string positionName = GetParameterValue(block, "position_name");
@@ -2347,9 +2562,9 @@ void MachineBlockUI::UpdateBlockLabel(MachineBlock& block) {
 		break;
 	}
 
-																	// ═══════════════════════════════════════════════════════════════════════════════════════
-																	// NEW: Enhanced Move Relative Axis Label - Show "Move X +5mm" format
-																	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// NEW: Enhanced Move Relative Axis Label - Show "Move X +5mm" format
+	// ═══════════════════════════════════════════════════════════════════════════════════════
 	case BlockType::MOVE_RELATIVE_AXIS: {
 		std::string controllerName = GetParameterValue(block, "controller_name");
 		std::string axisName = GetParameterValue(block, "axis_name");

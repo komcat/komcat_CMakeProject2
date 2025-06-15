@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "ProcessStep.h"
 #include <vector>
@@ -248,7 +248,7 @@ public:
   }
 
   std::string GetDescription() const override {
-    return "Wait for laser temperature to stabilize at " + std::to_string(m_targetTemp) + "C (±" +
+    return "Wait for laser temperature to stabilize at " + std::to_string(m_targetTemp) + "C (Â±" +
       std::to_string(m_tolerance) + "C)" +
       (m_laserName.empty() ? "" : " for " + m_laserName);
   }
@@ -307,7 +307,7 @@ public:
 
     std::string stepsStr;
     for (size_t i = 0; i < m_stepSizes.size(); ++i) {
-      stepsStr += std::to_string(m_stepSizes[i] * 1000) + " µm";
+      stepsStr += std::to_string(m_stepSizes[i] * 1000) + " Âµm";
       if (i < m_stepSizes.size() - 1) stepsStr += ", ";
     }
 
@@ -432,7 +432,7 @@ public:
 
     std::string stepsStr;
     for (size_t i = 0; i < m_stepSizes.size(); ++i) {
-      stepsStr += std::to_string(m_stepSizes[i] * 1000) + " µm";
+      stepsStr += std::to_string(m_stepSizes[i] * 1000) + " Âµm";
       if (i < m_stepSizes.size() - 1) stepsStr += ", ";
     }
 
@@ -797,8 +797,8 @@ public:
   bool Execute(MachineOperations& ops) override {
     float temperature = ops.GetLaserTemperature(m_laserName);
     std::string message = m_description.empty() ?
-      "Laser temperature" + (m_laserName.empty() ? "" : " for " + m_laserName) + ": " + std::to_string(temperature) + "°C" :
-      m_description + ": " + std::to_string(temperature) + "°C";
+      "Laser temperature" + (m_laserName.empty() ? "" : " for " + m_laserName) + ": " + std::to_string(temperature) + "Â°C" :
+      m_description + ": " + std::to_string(temperature) + "Â°C";
     ops.LogInfo(message);
     return true;
   }
@@ -988,7 +988,7 @@ public:
                 {"x_axis", "horizontal_left"},
                 {"y_axis", "horizontal_toward"},
                 {"z_axis", "vertical_up"},
-                {"precision", "±0.1mm"},
+                {"precision", "Â±0.1mm"},
                 {"calibration_method", "automatic_needle_calibration"}
             }}
         };
@@ -1424,4 +1424,194 @@ private:
   std::string m_axisName;
   double m_distanceMm;
   bool m_blocking;
+};
+
+// Add these Keithley 2400 operation classes to SequenceStep.h:
+
+// Reset Keithley instrument operation
+class ResetKeithleyOperation : public SequenceOperation {
+public:
+  ResetKeithleyOperation(const std::string& clientName = "")
+    : m_clientName(clientName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.SMU_ResetInstrument(m_clientName);
+  }
+
+  std::string GetDescription() const override {
+    return "Reset Keithley instrument" + (m_clientName.empty() ? "" : " (" + m_clientName + ")");
+  }
+
+private:
+  std::string m_clientName;
+};
+
+// Set Keithley output operation
+class SetKeithleyOutputOperation : public SequenceOperation {
+public:
+  SetKeithleyOutputOperation(bool enable, const std::string& clientName = "")
+    : m_enable(enable), m_clientName(clientName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.SMU_SetOutput(m_enable, m_clientName);
+  }
+
+  std::string GetDescription() const override {
+    return std::string(m_enable ? "Enable" : "Disable") + " Keithley output" +
+      (m_clientName.empty() ? "" : " (" + m_clientName + ")");
+  }
+
+private:
+  bool m_enable;
+  std::string m_clientName;
+};
+
+// Setup Keithley voltage source operation
+class SetupKeithleyVoltageSourceOperation : public SequenceOperation {
+public:
+  SetupKeithleyVoltageSourceOperation(double voltage, double compliance = 0.1,
+    const std::string& range = "AUTO",
+    const std::string& clientName = "")
+    : m_voltage(voltage), m_compliance(compliance), m_range(range), m_clientName(clientName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.SMU_SetupVoltageSource(m_voltage, m_compliance, m_range, m_clientName);
+  }
+
+  std::string GetDescription() const override {
+    return "Setup Keithley voltage source: " + std::to_string(m_voltage) + "V, " +
+      std::to_string(m_compliance) + "A compliance" +
+      (m_clientName.empty() ? "" : " (" + m_clientName + ")");
+  }
+
+private:
+  double m_voltage;
+  double m_compliance;
+  std::string m_range;
+  std::string m_clientName;
+};
+
+// Setup Keithley current source operation
+class SetupKeithleyCurrentSourceOperation : public SequenceOperation {
+public:
+  SetupKeithleyCurrentSourceOperation(double current, double compliance = 10.0,
+    const std::string& range = "AUTO",
+    const std::string& clientName = "")
+    : m_current(current), m_compliance(compliance), m_range(range), m_clientName(clientName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.SMU_SetupCurrentSource(m_current, m_compliance, m_range, m_clientName);
+  }
+
+  std::string GetDescription() const override {
+    return "Setup Keithley current source: " + std::to_string(m_current) + "A, " +
+      std::to_string(m_compliance) + "V compliance" +
+      (m_clientName.empty() ? "" : " (" + m_clientName + ")");
+  }
+
+private:
+  double m_current;
+  double m_compliance;
+  std::string m_range;
+  std::string m_clientName;
+};
+
+// Read Keithley voltage operation
+class ReadKeithleyVoltageOperation : public SequenceOperation {
+public:
+  ReadKeithleyVoltageOperation(const std::string& clientName = "")
+    : m_clientName(clientName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    double voltage;
+    if (ops.SMU_ReadVoltage(voltage, m_clientName)) {
+      ops.LogInfo("Keithley voltage reading: " + std::to_string(voltage) + "V" +
+        (m_clientName.empty() ? "" : " (" + m_clientName + ")"));
+      return true;
+    }
+    return false;
+  }
+
+  std::string GetDescription() const override {
+    return "Read Keithley voltage" + (m_clientName.empty() ? "" : " (" + m_clientName + ")");
+  }
+
+private:
+  std::string m_clientName;
+};
+
+// Read Keithley current operation
+class ReadKeithleyCurrentOperation : public SequenceOperation {
+public:
+  ReadKeithleyCurrentOperation(const std::string& clientName = "")
+    : m_clientName(clientName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    double current;
+    if (ops.SMU_ReadCurrent(current, m_clientName)) {
+      ops.LogInfo("Keithley current reading: " + std::to_string(current) + "A" +
+        (m_clientName.empty() ? "" : " (" + m_clientName + ")"));
+      return true;
+    }
+    return false;
+  }
+
+  std::string GetDescription() const override {
+    return "Read Keithley current" + (m_clientName.empty() ? "" : " (" + m_clientName + ")");
+  }
+
+private:
+  std::string m_clientName;
+};
+
+// Read Keithley resistance operation
+class ReadKeithleyResistanceOperation : public SequenceOperation {
+public:
+  ReadKeithleyResistanceOperation(const std::string& clientName = "")
+    : m_clientName(clientName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    double resistance;
+    if (ops.SMU_ReadResistance(resistance, m_clientName)) {
+      ops.LogInfo("Keithley resistance reading: " + std::to_string(resistance) + " Ohms" +
+        (m_clientName.empty() ? "" : " (" + m_clientName + ")"));
+      return true;
+    }
+    return false;
+  }
+
+  std::string GetDescription() const override {
+    return "Read Keithley resistance" + (m_clientName.empty() ? "" : " (" + m_clientName + ")");
+  }
+
+private:
+  std::string m_clientName;
+};
+
+// Send Keithley SCPI command operation
+class SendKeithleyCommandOperation : public SequenceOperation {
+public:
+  SendKeithleyCommandOperation(const std::string& command, const std::string& clientName = "")
+    : m_command(command), m_clientName(clientName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.SMU_SendCommand(m_command, m_clientName);
+  }
+
+  std::string GetDescription() const override {
+    return "Send Keithley command: " + m_command +
+      (m_clientName.empty() ? "" : " (" + m_clientName + ")");
+  }
+
+private:
+  std::string m_command;
+  std::string m_clientName;
 };

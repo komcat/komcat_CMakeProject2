@@ -1,37 +1,40 @@
-// machine_operations.cpp
+﻿// machine_operations.cpp
 #include "machine_operations.h"
 #include "include/cld101x_operations.h"  // Include it here, not in the header
 #include <sstream>
 #include <filesystem>
 #include <chrono>
 #include <iomanip>
+#include "include/SMU/keithley2400_operations.h" // Include the SMU operations header
 
-
-// 3. MODIFY the MachineOperations constructor (in machine_operations.cpp):
+// Updated constructor
 MachineOperations::MachineOperations(
   MotionControlLayer& motionLayer,
   PIControllerManager& piControllerManager,
   EziIOManager& ioManager,
   PneumaticManager& pneumaticManager,
   CLD101xOperations* laserOps,
-  PylonCameraTest* cameraTest
+  PylonCameraTest* cameraTest,
+  Keithley2400Operations* smuOps  // Added SMU parameter
 ) : m_motionLayer(motionLayer),
 m_piControllerManager(piControllerManager),
 m_ioManager(ioManager),
 m_pneumaticManager(pneumaticManager),
 m_laserOps(laserOps),
+m_smuOps(smuOps),  // Initialize SMU operations
 m_cameraTest(cameraTest),
-m_autoExposureEnabled(true)  // ADD this line
+m_autoExposureEnabled(true)
 {
   m_logger = Logger::GetInstance();
 
-  // ADD: Initialize camera exposure manager
+  // Initialize camera exposure manager
   if (m_cameraTest) {
     m_cameraExposureManager = std::make_unique<CameraExposureManager>("camera_exposure_config.json");
     m_logger->LogInfo("MachineOperations: Camera exposure manager initialized");
   }
 
-  m_logger->LogInfo("MachineOperations: Initialized");
+  m_logger->LogInfo("MachineOperations: Initialized" +
+    std::string(m_smuOps ? " with SMU support" : ""));
 }
 
 
@@ -2144,4 +2147,144 @@ bool MachineOperations::SaveCurrentPositionForNode(const std::string& deviceName
     m_logger->LogError("MachineOperations: Exception while saving position for node: " + std::string(e.what()));
     return false;
   }
+}
+
+
+// SMU Control Methods Implementation
+
+bool MachineOperations::SMU_ResetInstrument(const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: Resetting SMU instrument" +
+    (clientName.empty() ? "" : " (" + clientName + ")"));
+
+  return m_smuOps->ResetInstrument(clientName);
+}
+
+bool MachineOperations::SMU_SetOutput(bool enable, const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: " + std::string(enable ? "Enabling" : "Disabling") +
+    " SMU output" + (clientName.empty() ? "" : " (" + clientName + ")"));
+
+  return m_smuOps->SetOutput(enable, clientName);
+}
+
+bool MachineOperations::SMU_SetupVoltageSource(double voltage, double compliance,
+  const std::string& range, const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: Setting up SMU voltage source - " +
+    std::to_string(voltage) + "V, compliance " + std::to_string(compliance) + "A" +
+    (clientName.empty() ? "" : " (" + clientName + ")"));
+
+  return m_smuOps->SetupVoltageSource(voltage, compliance, range, clientName);
+}
+
+bool MachineOperations::SMU_SetupCurrentSource(double current, double compliance,
+  const std::string& range, const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: Setting up SMU current source - " +
+    std::to_string(current) + "A, compliance " + std::to_string(compliance) + "V" +
+    (clientName.empty() ? "" : " (" + clientName + ")"));
+
+  return m_smuOps->SetupCurrentSource(current, compliance, range, clientName);
+}
+
+bool MachineOperations::SMU_ReadVoltage(double& voltage, const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  bool result = m_smuOps->ReadVoltage(voltage, clientName);
+  if (result) {
+    m_logger->LogInfo("MachineOperations: SMU voltage reading: " + std::to_string(voltage) + "V" +
+      (clientName.empty() ? "" : " (" + clientName + ")"));
+  }
+  return result;
+}
+
+bool MachineOperations::SMU_ReadCurrent(double& current, const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  bool result = m_smuOps->ReadCurrent(current, clientName);
+  if (result) {
+    m_logger->LogInfo("MachineOperations: SMU current reading: " + std::to_string(current) + "A" +
+      (clientName.empty() ? "" : " (" + clientName + ")"));
+  }
+  return result;
+}
+
+bool MachineOperations::SMU_ReadResistance(double& resistance, const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  bool result = m_smuOps->ReadResistance(resistance, clientName);
+  if (result) {
+    m_logger->LogInfo("MachineOperations: SMU resistance reading: " + std::to_string(resistance) + "Ω" +
+      (clientName.empty() ? "" : " (" + clientName + ")"));
+  }
+  return result;
+}
+
+bool MachineOperations::SMU_ReadPower(double& power, const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  bool result = m_smuOps->ReadPower(power, clientName);
+  if (result) {
+    m_logger->LogInfo("MachineOperations: SMU power reading: " + std::to_string(power) + "W" +
+      (clientName.empty() ? "" : " (" + clientName + ")"));
+  }
+  return result;
+}
+
+bool MachineOperations::SMU_SendCommand(const std::string& command, const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: Sending SMU command: " + command +
+    (clientName.empty() ? "" : " (" + clientName + ")"));
+
+  return m_smuOps->SendWriteCommand(command, clientName);
+}
+
+bool MachineOperations::SMU_QueryCommand(const std::string& command, std::string& response,
+  const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: Sending SMU query: " + command +
+    (clientName.empty() ? "" : " (" + clientName + ")"));
+
+  bool result = m_smuOps->SendQueryCommand(command, response, clientName);
+  if (result) {
+    m_logger->LogInfo("MachineOperations: SMU query response: " + response);
+  }
+  return result;
 }

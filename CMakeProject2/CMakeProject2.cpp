@@ -9,6 +9,7 @@
 
 #include "include/SMU/keithley2400_client.h"
 #include "include/SMU/keithley2400_manager.h"
+#include "include/SMU/keithley2400_operations.h"
 
 #include "include/logger.h" // Include our new logger header
 #include "include/motions/MotionTypes.h"  // Add this line - include MotionTypes.h first
@@ -1353,12 +1354,15 @@ int main(int argc, char* argv[])
 
   // Keithley 2400 Manager (conditional)
   std::unique_ptr<Keithley2400Manager> keithleyManager;
+  std::unique_ptr<Keithley2400Operations> smuOps;
   if (moduleConfig.isEnabled("KEITHLEY_2400_MANAGER")) {
     keithleyManager = std::make_unique<Keithley2400Manager>();
 
     // Initialize from config file
     if (keithleyManager->Initialize("smu_config.json")) {
       logger->LogInfo("Keithley2400Manager initialized from config file");
+
+      smuOps = std::make_unique<Keithley2400Operations>(*keithleyManager);
 
       // Try to connect based on config
       if (keithleyManager->ConnectAll()) {
@@ -1401,10 +1405,13 @@ int main(int argc, char* argv[])
 
     // Use real machine operations
     machineOps = std::make_unique<MachineOperations>(
-      *motionControlLayer, *piControllerManager,
+      *motionControlLayer, 
+      *piControllerManager,
       ioManager ? *ioManager : *(EziIOManager*)nullptr,
       pneumaticManager ? *pneumaticManager : *(PneumaticManager*)nullptr,
-      laserOps.get(), pylonCameraTest.get()
+      laserOps.get(), 
+      pylonCameraTest.get(),
+      smuOps.get()  // Pass SMU operations
     );
     logger->LogInfo("Real MachineOperations initialized");
   }

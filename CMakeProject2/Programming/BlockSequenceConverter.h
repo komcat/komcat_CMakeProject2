@@ -52,6 +52,15 @@ private:
   std::shared_ptr<SequenceOperation> ConvertPromptBlock(const MachineBlock& block);
   std::shared_ptr<SequenceOperation> ConvertMoveToPositionBlock(const MachineBlock& block);
   std::shared_ptr<SequenceOperation> ConvertMoveRelativeAxisBlock(const MachineBlock& block);
+  // NEW: Keithley converter method declarations
+  std::shared_ptr<SequenceOperation> ConvertKeithleyResetBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertKeithleySetOutputBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertKeithleyVoltageSourceBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertKeithleyCurrentSourceBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertKeithleyReadVoltageBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertKeithleyReadCurrentBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertKeithleyReadResistanceBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertKeithleySendCommandBlock(const MachineBlock& block);
 
   // Helper methods
   std::string GetParameterValue(const MachineBlock& block, const std::string& paramName);

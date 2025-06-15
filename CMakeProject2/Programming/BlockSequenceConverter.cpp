@@ -146,7 +146,38 @@ std::unique_ptr<SequenceStep> BlockSequenceConverter::ConvertBlocksToSequence(
     case BlockType::MOVE_RELATIVE_AXIS:
       operation = ConvertMoveRelativeAxisBlock(*block);
       break;
+      // NEW: Keithley converter cases
+    case BlockType::KEITHLEY_RESET:
+      operation = ConvertKeithleyResetBlock(*block);
+      break;
 
+    case BlockType::KEITHLEY_SET_OUTPUT:
+      operation = ConvertKeithleySetOutputBlock(*block);
+      break;
+
+    case BlockType::KEITHLEY_VOLTAGE_SOURCE:
+      operation = ConvertKeithleyVoltageSourceBlock(*block);
+      break;
+
+    case BlockType::KEITHLEY_CURRENT_SOURCE:
+      operation = ConvertKeithleyCurrentSourceBlock(*block);
+      break;
+
+    case BlockType::KEITHLEY_READ_VOLTAGE:
+      operation = ConvertKeithleyReadVoltageBlock(*block);
+      break;
+
+    case BlockType::KEITHLEY_READ_CURRENT:
+      operation = ConvertKeithleyReadCurrentBlock(*block);
+      break;
+
+    case BlockType::KEITHLEY_READ_RESISTANCE:
+      operation = ConvertKeithleyReadResistanceBlock(*block);
+      break;
+
+    case BlockType::KEITHLEY_SEND_COMMAND:
+      operation = ConvertKeithleySendCommandBlock(*block);
+      break;
     default:
       m_machineOps.LogWarning("Unknown block type encountered: " +
         std::to_string(static_cast<int>(block->type)));
@@ -444,4 +475,98 @@ std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertMoveRelativeAx
   }
 
   return std::make_shared<MoveRelativeAxisOperation>(controllerName, axisName, distance, blocking);
+}
+
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertKeithleyResetBlock(const MachineBlock& block) {
+  std::string clientName = GetParameterValue(block, "client_name");
+
+  return std::make_shared<ResetKeithleyOperation>(clientName);
+}
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertKeithleySetOutputBlock(const MachineBlock& block) {
+  std::string enableStr = GetParameterValue(block, "enable");
+  std::string clientName = GetParameterValue(block, "client_name");
+
+  bool enable = (enableStr == "true" || enableStr == "1");
+
+  return std::make_shared<SetKeithleyOutputOperation>(enable, clientName);
+}
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertKeithleyVoltageSourceBlock(const MachineBlock& block) {
+  std::string voltageStr = GetParameterValue(block, "voltage");
+  std::string complianceStr = GetParameterValue(block, "compliance");
+  std::string range = GetParameterValue(block, "range");
+  std::string clientName = GetParameterValue(block, "client_name");
+
+  if (voltageStr.empty()) {
+    m_machineOps.LogWarning("KEITHLEY_VOLTAGE_SOURCE block missing voltage parameter");
+    return nullptr;
+  }
+
+  try {
+    double voltage = std::stod(voltageStr);
+    double compliance = complianceStr.empty() ? 0.1 : std::stod(complianceStr);
+    if (range.empty()) range = "AUTO";
+
+    return std::make_shared<SetupKeithleyVoltageSourceOperation>(voltage, compliance, range, clientName);
+  }
+  catch (const std::exception& e) {
+    m_machineOps.LogError("Error parsing KEITHLEY_VOLTAGE_SOURCE parameters: " + std::string(e.what()));
+    return nullptr;
+  }
+}
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertKeithleyCurrentSourceBlock(const MachineBlock& block) {
+  std::string currentStr = GetParameterValue(block, "current");
+  std::string complianceStr = GetParameterValue(block, "compliance");
+  std::string range = GetParameterValue(block, "range");
+  std::string clientName = GetParameterValue(block, "client_name");
+
+  if (currentStr.empty()) {
+    m_machineOps.LogWarning("KEITHLEY_CURRENT_SOURCE block missing current parameter");
+    return nullptr;
+  }
+
+  try {
+    double current = std::stod(currentStr);
+    double compliance = complianceStr.empty() ? 10.0 : std::stod(complianceStr);
+    if (range.empty()) range = "AUTO";
+
+    return std::make_shared<SetupKeithleyCurrentSourceOperation>(current, compliance, range, clientName);
+  }
+  catch (const std::exception& e) {
+    m_machineOps.LogError("Error parsing KEITHLEY_CURRENT_SOURCE parameters: " + std::string(e.what()));
+    return nullptr;
+  }
+}
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertKeithleyReadVoltageBlock(const MachineBlock& block) {
+  std::string clientName = GetParameterValue(block, "client_name");
+
+  return std::make_shared<ReadKeithleyVoltageOperation>(clientName);
+}
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertKeithleyReadCurrentBlock(const MachineBlock& block) {
+  std::string clientName = GetParameterValue(block, "client_name");
+
+  return std::make_shared<ReadKeithleyCurrentOperation>(clientName);
+}
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertKeithleyReadResistanceBlock(const MachineBlock& block) {
+  std::string clientName = GetParameterValue(block, "client_name");
+
+  return std::make_shared<ReadKeithleyResistanceOperation>(clientName);
+}
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertKeithleySendCommandBlock(const MachineBlock& block) {
+  std::string command = GetParameterValue(block, "command");
+  std::string clientName = GetParameterValue(block, "client_name");
+
+  if (command.empty()) {
+    m_machineOps.LogWarning("KEITHLEY_SEND_COMMAND block missing command parameter");
+    return nullptr;
+  }
+
+  return std::make_shared<SendKeithleyCommandOperation>(command, clientName);
 }
