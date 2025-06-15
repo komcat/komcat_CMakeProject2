@@ -1086,7 +1086,7 @@ int main(int argc, char* argv[])
   // Get the logger instance
   Logger* logger = Logger::GetInstance();
   logger->Log("Application started with module configuration");
-
+  logger->ToggleMinimize();
   // Setup SDL (always enabled)
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
   {

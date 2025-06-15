@@ -6,8 +6,10 @@
 DigitalDisplayWithChart::DigitalDisplayWithChart(const std::string& initialDataName)
   : m_selectedDataName(initialDataName) {
 
-  // Generate unique window ID
-  m_windowId = "Display_" + initialDataName + "_" + std::to_string(reinterpret_cast<uintptr_t>(this));
+  // Generate unique window ID with static counter instead of memory address
+  static int instanceCounter = 0;
+  instanceCounter++;
+  m_windowId = "Display_" + initialDataName + "_" + std::to_string(instanceCounter);
 
   initializeUnitsMap();
   initializeDisplayNameMap();
@@ -22,9 +24,9 @@ void DigitalDisplayWithChart::Render() {
   ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
 
-  // Create resizable window
-  ImGui::Begin(m_windowId.c_str(), nullptr,
-    ImGuiWindowFlags_NoTitleBar |
+  // Create resizable window with clean display name
+  std::string displayWindowName = getDisplayName(m_selectedDataName) + " Display";
+  ImGui::Begin(displayWindowName.c_str(), nullptr,
     ImGuiWindowFlags_NoScrollbar |
     ImGuiWindowFlags_NoCollapse);
 
@@ -400,41 +402,46 @@ void DigitalDisplayWithChart::renderChart() {
       ImPlotAxisFlags_AutoFit,
       ImPlotAxisFlags_AutoFit);
 
-    // Find the most recent timestamp from actual data (not ImGui::GetTime())
+    // FIXED: Calculate time window based on oldest available data
     double latestTime = 0.0;
+    double earliestTime = 0.0;
+
     if (!buffer.timestamps.empty()) {
-      latestTime = buffer.timestamps.back();  // Use actual data timestamp
+      latestTime = buffer.timestamps.back();
+
+      // Use either the time window OR the span of available data, whichever is smaller
+      double dataSpan = latestTime - buffer.timestamps.front();
+      double timeWindow = std::min((double)m_timeWindow, dataSpan);
+
+      earliestTime = latestTime - timeWindow;
     }
     else {
-      latestTime = ImGui::GetTime();  // Fallback if no data
+      // Fallback if no data
+      latestTime = ImGui::GetTime();
+      earliestTime = latestTime - m_timeWindow;
     }
-    double earliestTime = latestTime - m_timeWindow;
 
     // Set x-axis to scroll with newest data - ALWAYS update
     ImPlot::SetupAxisLimits(ImAxis_X1,
       earliestTime,
       latestTime,
-      ImGuiCond_Always);  // Always update, not just once
+      ImGuiCond_Always);
 
     if (!m_autoScaleY) {
       ImPlot::SetupAxisLimits(ImAxis_Y1, m_yMin, m_yMax, ImGuiCond_Always);
     }
 
-    // Plot the data - only plot points within time window
+    // Plot ALL available data (don't filter by time window in plotting)
     if (buffer.values.size() > 1) {
       std::vector<float> xValues, yValues;
 
-      // Filter data to only include points within the time window
+      // Plot all data points - let ImPlot handle the clipping
       for (size_t i = 0; i < buffer.timestamps.size(); i++) {
-        double timestamp = buffer.timestamps[i];
-        // Only include points within the visible time window
-        if (timestamp >= earliestTime && timestamp <= latestTime) {
-          xValues.push_back(static_cast<float>(timestamp));
-          yValues.push_back(buffer.values[i]);
-        }
+        xValues.push_back(static_cast<float>(buffer.timestamps[i]));
+        yValues.push_back(buffer.values[i]);
       }
 
-      // Only plot if we have filtered data
+      // Plot all data
       if (!xValues.empty()) {
         ImPlot::PushStyleColor(ImPlotCol_Line, buffer.color);
         ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.0f);
