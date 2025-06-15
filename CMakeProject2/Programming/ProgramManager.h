@@ -52,9 +52,40 @@ public:
   void SetSaveCallback(std::function<void(const std::string&)> callback) {
     m_saveCallback = callback;
   }
+
+  // Setter for current program
+ // Setter for current program
+  void SetCurrentProgram(const std::string& programName) {
+    m_currentProgram = programName;
+    printf("[INFO] Current program set to: '%s'\n", programName.c_str());
+  }
+
+  // Clear current program (convenience method)
+  void ClearCurrentProgram() {
+    m_currentProgram = "";
+    printf("[INFO] Current program cleared\n");
+  }
+
+  // Alternative with validation
+  bool SetCurrentProgramWithValidation(const std::string& programName) {
+    // Check if program file exists
+    std::string filepath = m_programsDirectory + programName + ".json";
+    if (std::filesystem::exists(filepath)) {
+      m_currentProgram = programName;
+      printf("[INFO] Current program set to: %s\n", programName.c_str());
+      return true;
+    }
+    else {
+      printf("[WARNING] Program file not found: %s\n", programName.c_str());
+      return false;
+    }
+  }
+
+
+  std::string GenerateUniqueFilename(const std::string& baseName);
+
 private:
   ProgramInfo ExtractProgramInfo(const std::string& filepath);
-  std::string GenerateUniqueFilename(const std::string& baseName);
 
   std::function<void(const std::string&)> m_loadCallback;
   std::function<void(const std::string&)> m_saveCallback;

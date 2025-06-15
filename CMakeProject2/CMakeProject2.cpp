@@ -91,6 +91,14 @@
 #include "Programming/virtual_machine_operations.h"
 #include "Programming/virtual_machine_operations_adapter.h"
 #include "include/data/DigitalDisplayWithChart.h"
+#include "Programming/MacroManager.h"
+
+
+
+
+
+
+
 #pragma region header functions
 
 
@@ -1491,7 +1499,21 @@ int main(int argc, char* argv[])
       logger->LogInfo("MachineBlockUI initialized in debug mode only");
     }
   }
+  // ADD MACRO MANAGER INITIALIZATION (add this after MachineBlockUI section)
+  std::unique_ptr<MacroManager> macroManager;
+  if (moduleConfig.isEnabled("MACRO_MANAGER") && machineBlockUI) {
+    macroManager = std::make_unique<MacroManager>();
 
+    // Connect the macro manager to the block UI
+    macroManager->SetMachineBlockUI(machineBlockUI.get());
+
+    // Add your saved programs to the macro manager
+    macroManager->AddProgram("Test Sequence", "Test sequence.json");
+    macroManager->AddProgram("User Prompt Test", "test user prompt.json");
+    macroManager->AddProgram("Slide Test", "test_slides.json");
+
+    logger->LogInfo("MacroManager initialized with saved programs");
+  }
 
 
 
@@ -1551,6 +1573,7 @@ int main(int argc, char* argv[])
       toolbarVertical->AddReferenceToCategory("Manual",
         CreateHierarchicalUI(*ioUI, "IO Control"));
     }
+
     if (pneumaticUI) {
       toolbarVertical->AddReferenceToCategory("Manual",
         CreateHierarchicalUI(*pneumaticUI, "Pneumatic"));
@@ -1629,6 +1652,14 @@ int main(int argc, char* argv[])
     logger->LogInfo("VerticalToolbarMenu initialized with " +
       std::to_string(toolbarVertical->GetComponentCount()) + " components");
   }
+
+  // If you want to add it to your toolbar, add this in the toolbar setup section:
+  if (macroManager && toolbarVertical) {
+    toolbarVertical->AddReferenceToCategory("Products",
+      CreateHierarchicalUI(*macroManager, "Macro Programming"));
+  }
+
+
 
   // Create one display for current monitoring
   auto currentDisplay = std::make_unique<DigitalDisplayWithChart>("GPIB-Current");
@@ -1770,7 +1801,7 @@ int main(int argc, char* argv[])
           mainIoUI->setConfigManager(ioconfigManager.get());
         }
         if (mainIoUI->IsVisible()) {
-          mainIoUI->ToggleWindow(); // Hide by default
+          //mainIoUI->ToggleWindow(); // Hide by default
         }
       }
       mainIoUI->RenderUI();
@@ -1859,6 +1890,17 @@ int main(int argc, char* argv[])
     if (cameraExposureTestUI) {
       cameraExposureTestUI->RenderUI();
     }
+
+    // ADD MACRO MANAGER RENDERING (add this with other RenderUI calls)
+    if (macroManager) {
+      macroManager->RenderUI();
+    }
+
+
+
+
+
+
 
     // Rendering
     ImGui::Render();

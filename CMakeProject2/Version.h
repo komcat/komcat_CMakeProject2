@@ -2,11 +2,19 @@
 #include <string>
 #include <sstream>
 
+//version
+/*
+version 2.1.0.46
+- add macro manager executing block programs
+- user write multiple block program and connected into larger macro program.
+
+*/
+
 // Version information - manually set for now
 #define VERSION_MAJOR 2
-#define VERSION_MINOR 0
+#define VERSION_MINOR 1
 #define VERSION_PATCH 0
-#define VERSION_BUILD 43
+#define VERSION_BUILD 46
 
 // Build information
 #define BUILD_DATE __DATE__

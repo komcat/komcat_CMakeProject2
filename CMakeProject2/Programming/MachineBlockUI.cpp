@@ -233,21 +233,43 @@ size_t MachineBlockUI::GetTotalBlockCount() const {
 	return total;
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// MAIN RENDER METHOD - Now much cleaner and easier to understand
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
 void MachineBlockUI::RenderUI() {
 	if (!m_showWindow) return;
 
-	// Main window with specific size and position
+	// Setup main window
 	ImGui::SetNextWindowSize(ImVec2(1200, 800), ImGuiCond_FirstUseEver);
 	ImGui::Begin("Machine Block Programming", &m_showWindow, ImGuiWindowFlags_NoScrollbar);
-	// Add feedback button to your existing toolbar
+
+	// Render each section
+	RenderMainToolbar();
+	RenderProgramValidationStatus();
+	RenderMainPanels();
+	RenderPopupDialogs();
+	RenderFeedbackAndPrompts();
+
+	ImGui::End();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// MAIN TOOLBAR - Program management buttons
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void MachineBlockUI::RenderMainToolbar() {
+	// Feedback button
 	if (ImGui::Button("Show Results")) {
 		ShowFeedbackWindow();
 	}
 	ImGui::SameLine();
-	// Program management toolbar
+
+	// Then use it in the New Program button:
 	if (ImGui::Button("New Program")) {
-		ClearAll();
-		if (m_feedbackUI) m_feedbackUI->ClearBlocks();  // Clear results too
+		ClearAll();  // This now properly clears current program
+		if (m_feedbackUI) m_feedbackUI->ClearBlocks();
 		printf("[INFO] New program created\n");
 	}
 	ImGui::SameLine();
@@ -257,9 +279,14 @@ void MachineBlockUI::RenderUI() {
 	}
 	ImGui::SameLine();
 
-	if (ImGui::Button("Save Program")) {
-		if (!m_programManager->GetCurrentProgram().empty()) {
-			SaveProgram(m_programManager->GetCurrentProgram());
+	// Enhanced Save Program button
+	RenderSaveProgramButton();
+	ImGui::SameLine();
+
+	if (ImGui::Button("Save As")) {
+		MachineBlock* startBlock = GetStartBlock();
+		if (!startBlock) {
+			ImGui::OpenPopup("Cannot Save Program");
 		}
 		else {
 			ImGui::OpenPopup("Save Program As");
@@ -267,44 +294,68 @@ void MachineBlockUI::RenderUI() {
 	}
 	ImGui::SameLine();
 
-	if (ImGui::Button("Save As")) {
-		ImGui::OpenPopup("Save Program As");
-	}
-	ImGui::SameLine();
-
 	// Current program display
+	RenderCurrentProgramDisplay();
+
+	ImGui::Separator();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// SAVE PROGRAM BUTTON - With START block integration
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void MachineBlockUI::RenderSaveProgramButton() {
+	if (ImGui::Button("Save Program")) {
+		// Check if START block exists
+		MachineBlock* startBlock = GetStartBlock();
+		if (!startBlock) {
+			ImGui::OpenPopup("Cannot Save Program");
+		}
+		else if (!m_programManager->GetCurrentProgram().empty()) {
+			// Save existing program - update START block with current name
+			std::string currentName = m_programManager->GetCurrentProgram();
+			UpdateBlockParameterValue(startBlock, "program_name", currentName);
+			SaveProgram(currentName);
+		}
+		else {
+			// New program - use name from START block or show Save As dialog
+			std::string programName = GetBlockParameterValue(startBlock, "program_name");
+			if (!programName.empty() && programName != "MyProgram") {
+				SaveProgram(programName);
+				m_programManager->SetCurrentProgramWithValidation(programName);
+			}
+			else {
+				ImGui::OpenPopup("Save Program As");
+			}
+		}
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// CURRENT PROGRAM DISPLAY
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void MachineBlockUI::RenderCurrentProgramDisplay() {
 	if (!m_programManager->GetCurrentProgram().empty()) {
 		ImGui::Text("Current: %s", m_programManager->GetCurrentProgram().c_str());
 	}
 	else {
 		ImGui::Text("Current: Untitled");
 	}
+}
 
-	ImGui::Separator();
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// PROGRAM VALIDATION STATUS
+// ═══════════════════════════════════════════════════════════════════════════════════════
 
-	// Program Browser Popup
-	if (ImGui::BeginPopupModal("Program Browser", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-		m_programManager->RenderProgramBrowser();
-
-		ImGui::Separator();
-		if (ImGui::Button("Close", ImVec2(120, 0))) {
-			ImGui::CloseCurrentPopup();
-		}
-		ImGui::EndPopup();
-	}
-
-	// Save As Dialog Popup
-	if (ImGui::BeginPopupModal("Save Program As", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-		m_programManager->RenderSaveAsDialog();
-		ImGui::EndPopup();
-	}
-
-	// Program validation status
+void MachineBlockUI::RenderProgramValidationStatus() {
 	bool isValid = ValidateProgram();
+
 	if (!isValid) {
 		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
 		ImGui::Text("[WARNING] Program Invalid: ");
 		ImGui::SameLine();
+
 		if (CountBlocksOfType(BlockType::START) == 0) {
 			ImGui::Text("Missing START block. ");
 		}
@@ -321,35 +372,477 @@ void MachineBlockUI::RenderUI() {
 		ImGui::Text("[OK] Program Valid - Ready to Execute");
 		ImGui::PopStyleColor();
 	}
+}
 
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// MAIN PANELS LAYOUT
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void MachineBlockUI::RenderMainPanels() {
 	// Calculate panel sizes
 	ImVec2 windowSize = ImGui::GetContentRegionAvail();
-	float middlePanelWidth = windowSize.x - m_leftPanelWidth - m_rightPanelWidth - 20.0f;
+	float leftPanelWidth = 250.0f;   // Block palette
+	float rightPanelWidth = 300.0f;  // Properties panel
+	float middlePanelWidth = windowSize.x - leftPanelWidth - rightPanelWidth - 20.0f;
 
-	// Left Panel - Palette
-	ImGui::BeginChild("PalettePanel", ImVec2(m_leftPanelWidth, windowSize.y), true);
-	RenderLeftPanel();
+	// Left Panel - Block Palette
+	ImGui::BeginChild("PalettePanel", ImVec2(leftPanelWidth, windowSize.y), true);
+	RenderPalettePanel();
 	ImGui::EndChild();
 	ImGui::SameLine();
 
 	// Middle Panel - Program Canvas
 	ImGui::BeginChild("ProgramCanvas", ImVec2(middlePanelWidth, windowSize.y), true);
-	RenderMiddlePanel();
+	RenderCanvasPanel();
 	ImGui::EndChild();
 	ImGui::SameLine();
 
 	// Right Panel - Properties
-	ImGui::BeginChild("PropertiesPanel", ImVec2(m_rightPanelWidth, windowSize.y), true);
-	RenderRightPanel();
+	ImGui::BeginChild("PropertiesPanel", ImVec2(rightPanelWidth, windowSize.y), true);
+	RenderPropertiesPanel();
+	ImGui::EndChild();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// PALETTE PANEL - Block selection and palette controls
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void MachineBlockUI::RenderPalettePanel() {
+	ImGui::Text("Block Palette");
+	ImGui::Separator();
+
+	// Show palette info
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
+	ImGui::Text("Drag blocks to canvas or click to add");
+	ImGui::PopStyleColor();
+	ImGui::Spacing();
+
+	// Calculate available height for scrollable area
+	float availableHeight = ImGui::GetContentRegionAvail().y - 120.0f;
+
+	// Scrollable block palette
+	if (ImGui::BeginChild("BlockPaletteScroll", ImVec2(0, availableHeight), true, ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
+		RenderBlockPalette();
+	}
 	ImGui::EndChild();
 
-	RenderFeedback();
-	// At the END of RenderUI(), add:
+	// Palette controls at bottom
+	RenderPaletteControls();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// BLOCK PALETTE - Individual blocks
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+
+void MachineBlockUI::RenderBlockPalette() {
+	// Always use the categorized system
+	for (auto& category : m_blockCategories) {
+		RenderBlockCategory(category);
+		ImGui::Spacing();
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// PALETTE CONTROLS - Buttons at bottom of palette
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void MachineBlockUI::RenderPaletteControls() {
+	ImGui::Separator();
+
+	// Quick action buttons
+	if (ImGui::Button("Clear All", ImVec2(-1, 0))) {
+		ClearAll();
+	}
+
+	if (ImGui::Button("Quick Start", ImVec2(-1, 0))) {
+		QuickStart();
+	}
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("Adds START and END blocks to get you started");
+	}
+
+	// Category controls (if using categories)
+	if (!m_blockCategories.empty()) {
+		if (ImGui::Button("Expand All", ImVec2((-1.0f / 2.0f) - 2, 0))) {
+			for (auto& category : m_blockCategories) {
+				category.expanded = true;
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Collapse All", ImVec2(-1, 0))) {
+			for (auto& category : m_blockCategories) {
+				if (category.name != "Program Flow") {
+					category.expanded = false;
+				}
+			}
+		}
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// CANVAS PANEL - Program building area
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void MachineBlockUI::RenderCanvasPanel() {
+	RenderCanvasHeader();
+	RenderCanvas();
+}
+
+void MachineBlockUI::RenderCanvasHeader() {
+	ImGui::Text("Program Canvas");
+	ImGui::SameLine();
+
+	// Show canvas info
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
+	ImGui::Text("| Blocks: %zu | Connections: %zu", m_programBlocks.size(), m_connections.size());
+	ImGui::PopStyleColor();
+
+	ImGui::Separator();
+}
+// Complete RenderCanvas() method for MachineBlockUI.cpp
+
+void MachineBlockUI::RenderCanvas() {
+	// Calculate canvas size
+	ImVec2 canvasSize = ImGui::GetContentRegionAvail();
+
+	// Ensure minimum canvas size
+	if (canvasSize.x < 50.0f) canvasSize.x = 50.0f;
+	if (canvasSize.y < 50.0f) canvasSize.y = 50.0f;
+
+	// Create a child frame for the canvas - this isolates mouse input
+	ImGui::BeginChildFrame(ImGui::GetID("CanvasFrame"), canvasSize,
+		ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav);
+
+	// Get the canvas position for coordinate calculations
+	ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+
+	// Track if the canvas is hovered (this now refers to the child frame)
+	bool isCanvasHovered = ImGui::IsWindowHovered();
+
+	// Get the draw list for custom rendering
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// 1. DRAW CANVAS BACKGROUND AND GRID
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+
+	// Draw canvas background
+	drawList->AddRectFilled(canvasPos,
+		ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
+		IM_COL32(50, 50, 50, 255)); // Dark gray background
+
+	// Draw grid
+	RenderGrid(canvasPos, canvasSize);
+
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// 2. HANDLE CANVAS NAVIGATION
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+
+	// Pan with middle mouse button (now isolated to canvas)
+	if (isCanvasHovered && ImGui::IsMouseDragging(ImGuiMouseButton_Middle)) {
+		ImVec2 delta = ImGui::GetIO().MouseDelta;
+		m_canvasOffset.x += delta.x / m_canvasZoom;
+		m_canvasOffset.y += delta.y / m_canvasZoom;
+	}
+
+	// Zoom with mouse wheel (now isolated to canvas)
+	if (isCanvasHovered && ImGui::GetIO().MouseWheel != 0) {
+		float zoomDelta = ImGui::GetIO().MouseWheel * 0.1f;
+		m_canvasZoom = (std::max)(0.3f, (std::min)(m_canvasZoom + zoomDelta, 3.0f));
+	}
+
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// 3. HANDLE BLOCK SELECTION AND DRAGGING
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+
+	// Handle block selection and dragging (now isolated to canvas)
+	if (isCanvasHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+		ImVec2 mousePos = ImGui::GetIO().MousePos;
+		MachineBlock* clickedBlock = GetBlockAtPosition(mousePos, canvasPos);
+
+		if (clickedBlock) {
+			// Select the block
+			m_selectedBlock = clickedBlock;
+			m_selectedBlock->selected = true;
+
+			// Deselect other blocks
+			for (auto& block : m_programBlocks) {
+				if (block.get() != m_selectedBlock) {
+					block->selected = false;
+				}
+			}
+
+			// Start dragging
+			m_isDragging = true;
+			m_draggedBlock = clickedBlock;
+			ImVec2 worldPos = CanvasToWorld(canvasPos, mousePos);
+			m_dragOffset = ImVec2(worldPos.x - clickedBlock->position.x, worldPos.y - clickedBlock->position.y);
+		}
+		else {
+			// Deselect all blocks
+			m_selectedBlock = nullptr;
+			for (auto& block : m_programBlocks) {
+				block->selected = false;
+			}
+		}
+	}
+
+	// Handle block dragging (now isolated to canvas)
+	if (m_isDragging && m_draggedBlock && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+		ImVec2 mousePos = ImGui::GetIO().MousePos;
+		ImVec2 worldPos = CanvasToWorld(canvasPos, mousePos);
+		m_draggedBlock->position = ImVec2(worldPos.x - m_dragOffset.x, worldPos.y - m_dragOffset.y);
+	}
+
+	// Stop dragging
+	if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+		m_isDragging = false;
+		m_draggedBlock = nullptr;
+	}
+
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// 4. HANDLE RIGHT-CLICK CONTEXT MENU
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+
+	// Right-click context menu (now isolated to canvas)
+	if (isCanvasHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+		ImVec2 mousePos = ImGui::GetIO().MousePos;
+		MachineBlock* clickedBlock = GetBlockAtPosition(mousePos, canvasPos);
+
+		if (clickedBlock) {
+			ImGui::OpenPopup("BlockContextMenu");
+			m_selectedBlock = clickedBlock;
+		}
+	}
+
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// 5. HANDLE BLOCK CONNECTIONS
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+
+	// Handle connection completion
+	if (m_isConnecting && isCanvasHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+		ImVec2 mousePos = ImGui::GetIO().MousePos;
+		MachineBlock* targetBlock = GetBlockAtPosition(mousePos, canvasPos);
+
+		if (targetBlock && targetBlock != m_connectionStart && CanBlockAcceptInput(*targetBlock)) {
+			CompleteConnection(targetBlock);
+		}
+		else {
+			CancelConnection();
+		}
+	}
+
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// 6. RENDER VISUAL ELEMENTS
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+
+	// Render connections first (so they appear behind blocks)
+	RenderConnections(canvasPos);
+
+	// Render all blocks
+	for (const auto& block : m_programBlocks) {
+		RenderProgramBlock(*block, canvasPos);
+	}
+
+	// Draw connection preview line
+	if (m_isConnecting && m_connectionStart) {
+		ImVec2 mousePos = ImGui::GetIO().MousePos;
+		ImVec2 startPos = GetBlockOutputPoint(*m_connectionStart, canvasPos);
+		drawList->AddLine(startPos, mousePos, IM_COL32(255, 255, 0, 200), 3.0f);
+	}
+
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// 7. RENDER CONTEXT MENU
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+
+	// Context menu (MUST be inside the child frame where it was opened)
+	if (ImGui::BeginPopup("BlockContextMenu")) {
+		// Safety check: ensure the selected block still exists
+		bool blockStillExists = false;
+		if (m_selectedBlock) {
+			for (const auto& block : m_programBlocks) {
+				if (block.get() == m_selectedBlock) {
+					blockStillExists = true;
+					break;
+				}
+			}
+		}
+
+		if (blockStillExists && m_selectedBlock) {
+			ImGui::Text("Block: %s", m_selectedBlock->label.c_str());
+			ImGui::Separator();
+
+			// Execute single block option
+			if (m_selectedBlock->type != BlockType::START && m_selectedBlock->type != BlockType::END) {
+				if (!m_isExecuting) {
+					if (ImGui::MenuItem("Execute Block")) {
+						ExecuteSingleBlock(m_selectedBlock);
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::Separator();
+				}
+			}
+
+			// FIXED CODE:
+// Connection options
+			if (CanBlockProvideOutput(*m_selectedBlock)) {
+				if (ImGui::MenuItem("Start Connection")) {
+					// Calculate the start position for the connection
+					ImVec2 startPos = GetBlockOutputPoint(*m_selectedBlock, canvasPos);
+					StartConnection(m_selectedBlock, startPos);  // ✅ CORRECT - 2 arguments
+					ImGui::CloseCurrentPopup();
+				}
+			}
+
+
+			// Delete block option (with restrictions for START/END)
+			bool canDelete = (m_selectedBlock->type != BlockType::START && m_selectedBlock->type != BlockType::END);
+			if (ImGui::MenuItem("Delete Block", "DEL", false, canDelete)) {
+				DeleteSelectedBlock();
+				ImGui::CloseCurrentPopup();
+			}
+
+			if (!canDelete) {
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+				ImGui::TextWrapped("START and END blocks cannot be deleted");
+				ImGui::PopStyleColor();
+			}
+		}
+		else {
+			ImGui::Text("No block selected");
+		}
+
+		ImGui::EndPopup();
+	}
+
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+	// 8. CANVAS OVERLAY INFO
+	// ═══════════════════════════════════════════════════════════════════════════════════════
+
+	// Draw canvas info overlay (top-left corner)
+	if (isCanvasHovered || m_isDragging || m_isConnecting) {
+		ImVec2 overlayPos = ImVec2(canvasPos.x + 10, canvasPos.y + 10);
+		char overlayText[256];
+		snprintf(overlayText, sizeof(overlayText),
+			"Zoom: %.1fx | Blocks: %zu | Connections: %zu",
+			m_canvasZoom, m_programBlocks.size(), m_connections.size());
+
+		drawList->AddRectFilled(overlayPos,
+			ImVec2(overlayPos.x + 250, overlayPos.y + 20),
+			IM_COL32(0, 0, 0, 180));
+		drawList->AddText(ImVec2(overlayPos.x + 5, overlayPos.y + 3),
+			IM_COL32(255, 255, 255, 255), overlayText);
+	}
+
+	ImGui::EndChildFrame();
+}
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// PROPERTIES PANEL - Block properties and actions
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void MachineBlockUI::RenderPropertiesPanel() {
+	ImGui::Text("Properties");
+	ImGui::Separator();
+
+	// Execution status
+	RenderExecutionStatus();
+	ImGui::Spacing();
+	ImGui::Separator();
+
+	// Block properties
+	if (m_selectedBlock) {
+		RenderSelectedBlockProperties();
+	}
+	else {
+		RenderNoSelectionMessage();
+	}
+}
+
+void MachineBlockUI::RenderSelectedBlockProperties() {
+	// Block header info
+	RenderBlockHeader(m_selectedBlock);
+
+	// Use specialized renderer for block-specific content
+	auto renderer = BlockRendererFactory::CreateRenderer(m_selectedBlock->type);
+	renderer->RenderProperties(m_selectedBlock, m_machineOps);
+	renderer->RenderActions(m_selectedBlock, m_machineOps);
+	renderer->RenderValidation(m_selectedBlock);
+}
+
+void MachineBlockUI::RenderNoSelectionMessage() {
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
+	ImGui::TextWrapped("Select a block to view and edit its properties.");
+	ImGui::Spacing();
+	ImGui::TextWrapped("You can:");
+	ImGui::BulletText("Click a block on the canvas");
+	ImGui::BulletText("Drag blocks to move them");
+	ImGui::BulletText("Connect blocks by dragging");
+	ImGui::BulletText("Delete with DEL key");
+	ImGui::PopStyleColor();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// POPUP DIALOGS - Save dialogs and error messages
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void MachineBlockUI::RenderPopupDialogs() {
+	// Program Browser Popup
+	if (ImGui::BeginPopupModal("Program Browser", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		m_programManager->RenderProgramBrowser();
+		ImGui::Separator();
+		if (ImGui::Button("Close", ImVec2(120, 0))) {
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+
+	// Enhanced Save As Dialog
+	if (ImGui::BeginPopupModal("Save Program As", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		RenderEnhancedSaveAsDialog();
+		ImGui::EndPopup();
+	}
+
+	// Error popup for missing START block
+	RenderCannotSaveDialog();
+}
+
+void MachineBlockUI::RenderCannotSaveDialog() {
+	if (ImGui::BeginPopupModal("Cannot Save Program", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
+		ImGui::Text("Cannot save program!");
+		ImGui::PopStyleColor();
+		ImGui::Separator();
+		ImGui::Text("Every program must have a START block.");
+		ImGui::Text("Please add a START block before saving.");
+		ImGui::Separator();
+
+		if (ImGui::Button("OK", ImVec2(120, 0))) {
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// FEEDBACK AND PROMPTS - Results window and user prompts
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+void MachineBlockUI::RenderFeedbackAndPrompts() {
+	// Render feedback UI
+	if (m_feedbackUI) {
+		m_feedbackUI->Render();  // ADD THIS LINE
+	}
+
+	// Render prompt UI
 	if (m_promptUI) {
 		m_promptUI->Render();
 	}
-	ImGui::End();
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// EXECUTION STATUS - Shows current execution state
+// ═══════════════════════════════════════════════════════════════════════════════════════
 
 
 
@@ -1616,17 +2109,25 @@ void MachineBlockUI::QuickStart() {
 }
 
 void MachineBlockUI::ClearAll() {
+	// Clear all blocks and connections
 	m_programBlocks.clear();
 	m_connections.clear();
+
+	// Reset UI state
 	m_selectedBlock = nullptr;
 	m_isConnecting = false;
 	m_connectionStart = nullptr;
 	m_isDragging = false;
 	m_draggedBlock = nullptr;
 
-	printf("Cleared all blocks and connections\n");
-}
+	// ✅ CORRECT - Use public method
+	if (m_programManager) {
+		m_programManager->SetCurrentProgram("");  // Clear current program
+	}
 
+	m_nextBlockId = 1;
+	printf("[SUCCESS] Program cleared - ready for new program\n");
+}
 
 
 std::string MachineBlockUI::BlockTypeToJsonString(BlockType type) const {
@@ -1704,9 +2205,16 @@ void MachineBlockUI::LoadProgram() {
 	LoadProgram("default");
 }
 // Save Program implementation
+// Update your MachineBlockUI::SaveProgram method to include this:
+
 void MachineBlockUI::SaveProgram(const std::string& programName) {
 	try {
 		nlohmann::json programJson;
+
+		// ADD PROGRAM IDENTIFIER
+		programJson["file_type"] = "program";
+		programJson["program_id"] = m_nextBlockId;  // or use a separate program ID counter
+		programJson["version"] = "1.0";
 
 		// Save blocks
 		programJson["blocks"] = nlohmann::json::array();
@@ -1744,7 +2252,7 @@ void MachineBlockUI::SaveProgram(const std::string& programName) {
 
 		// Use program manager to save
 		if (m_programManager->SaveProgram(programName, programJson)) {
-			printf("[SAVE] Program saved: %s\n", programName.c_str());
+			printf("[SAVE] Program saved: %s (ID: %d)\n", programName.c_str(), m_nextBlockId);
 			printf("   Blocks: %zu, Connections: %zu\n", m_programBlocks.size(), m_connections.size());
 		}
 
@@ -1753,8 +2261,8 @@ void MachineBlockUI::SaveProgram(const std::string& programName) {
 		printf("[ERROR] Error saving program: %s\n", e.what());
 	}
 }
-
 // Load Program implementation
+// ✅ FIXED CODE:
 void MachineBlockUI::LoadProgram(const std::string& programName) {
 	try {
 		nlohmann::json programJson;
@@ -1824,15 +2332,23 @@ void MachineBlockUI::LoadProgram(const std::string& programName) {
 		}
 		m_nextBlockId = maxId + 1;
 
+		// ✅ CRITICAL FIX: Set current program name after successful load
+		if (m_programManager) {
+			m_programManager->SetCurrentProgram(programName);
+		}
+
 		printf("[LOAD] Program loaded: %s\n", programName.c_str());
 		printf("   Blocks: %zu, Connections: %zu\n", m_programBlocks.size(), m_connections.size());
 
 	}
 	catch (const std::exception& e) {
 		printf("[ERROR] Error loading program: %s\n", e.what());
+		// ✅ ALSO: Clear current program if load failed
+		if (m_programManager) {
+			m_programManager->SetCurrentProgram("");
+		}
 	}
 }
-
 
 void MachineBlockUI::ExecuteProgramAsSequence() {
 	ExecuteProgramAsSequence([this](bool success) {
@@ -2985,3 +3501,142 @@ void MachineBlockUI::ExecuteSequenceWithSimpleMonitoring() {
 	// The completion callback will be triggered automatically by SequenceStep
 }
 
+
+// Helper method to find the START block
+MachineBlock* MachineBlockUI::GetStartBlock() {
+	for (const auto& block : m_programBlocks) {
+		if (block->type == BlockType::START) {
+			return block.get();
+		}
+	}
+	return nullptr;
+}
+
+// Helper method to get parameter value from a block
+std::string MachineBlockUI::GetBlockParameterValue(MachineBlock* block, const std::string& paramName) {
+	if (!block) return "";
+
+	for (const auto& param : block->parameters) {
+		if (param.name == paramName) {
+			return param.value;
+		}
+	}
+	return "";
+}
+
+// Helper method to update parameter value in a block
+void MachineBlockUI::UpdateBlockParameterValue(MachineBlock* block, const std::string& paramName, const std::string& newValue) {
+	if (!block) return;
+
+	for (auto& param : block->parameters) {
+		if (param.name == paramName) {
+			param.value = newValue;
+			printf("[INFO] Updated %s parameter '%s' to '%s'\n",
+				BlockTypeToString(block->type).c_str(), paramName.c_str(), newValue.c_str());
+			return;
+		}
+	}
+}
+
+// Add this implementation to MachineBlockUI.cpp
+
+void MachineBlockUI::RenderEnhancedSaveAsDialog() {
+	static char nameBuffer[256] = "";
+	static char descBuffer[512] = "";
+	static char authorBuffer[256] = "";
+	static bool dialogInitialized = false;
+
+	// Initialize dialog with START block values when first opened
+	if (!dialogInitialized) {
+		MachineBlock* startBlock = GetStartBlock();
+		if (startBlock) {
+			// Pre-fill with START block values
+			std::string programName = GetBlockParameterValue(startBlock, "program_name");
+			std::string description = GetBlockParameterValue(startBlock, "description");
+			std::string author = GetBlockParameterValue(startBlock, "author");
+
+			strncpy_s(nameBuffer, sizeof(nameBuffer), programName.c_str(), _TRUNCATE);
+			strncpy_s(descBuffer, sizeof(descBuffer), description.c_str(), _TRUNCATE);
+			strncpy_s(authorBuffer, sizeof(authorBuffer), author.c_str(), _TRUNCATE);
+		}
+		dialogInitialized = true;
+	}
+
+	ImGui::Text("Save Program As");
+	ImGui::Separator();
+
+	ImGui::Text("Program Name:");
+	ImGui::SetNextItemWidth(300);
+	if (ImGui::InputText("##name", nameBuffer, sizeof(nameBuffer))) {
+		// Update START block parameter in real-time
+		MachineBlock* startBlock = GetStartBlock();
+		if (startBlock) {
+			UpdateBlockParameterValue(startBlock, "program_name", std::string(nameBuffer));
+		}
+	}
+
+	ImGui::Text("Description:");
+	ImGui::SetNextItemWidth(300);
+	if (ImGui::InputTextMultiline("##desc", descBuffer, sizeof(descBuffer), ImVec2(300, 60))) {
+		// Update START block parameter in real-time
+		MachineBlock* startBlock = GetStartBlock();
+		if (startBlock) {
+			UpdateBlockParameterValue(startBlock, "description", std::string(descBuffer));
+		}
+	}
+
+	ImGui::Text("Author:");
+	ImGui::SetNextItemWidth(300);
+	if (ImGui::InputText("##author", authorBuffer, sizeof(authorBuffer))) {
+		// Update START block parameter in real-time
+		MachineBlock* startBlock = GetStartBlock();
+		if (startBlock) {
+			UpdateBlockParameterValue(startBlock, "author", std::string(authorBuffer));
+		}
+	}
+
+	ImGui::Separator();
+
+	// Validation
+	bool canSave = strlen(nameBuffer) > 0;
+	if (!canSave) {
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
+		ImGui::Text("Program name cannot be empty!");
+		ImGui::PopStyleColor();
+	}
+
+	if (ImGui::Button("Save", ImVec2(120, 0)) && canSave) {
+		// Generate unique filename
+		std::string filename = m_programManager->GenerateUniqueFilename(std::string(nameBuffer));
+
+		// Final update to START block parameters
+		MachineBlock* startBlock = GetStartBlock();
+		if (startBlock) {
+			UpdateBlockParameterValue(startBlock, "program_name", std::string(nameBuffer));
+			UpdateBlockParameterValue(startBlock, "description", std::string(descBuffer));
+			UpdateBlockParameterValue(startBlock, "author", std::string(authorBuffer));
+		}
+
+		// Save the program
+		SaveProgram(filename);
+		m_programManager->SetCurrentProgram(filename);
+
+		// Reset dialog state
+		dialogInitialized = false;
+		memset(nameBuffer, 0, sizeof(nameBuffer));
+		memset(descBuffer, 0, sizeof(descBuffer));
+		memset(authorBuffer, 0, sizeof(authorBuffer));
+
+		ImGui::CloseCurrentPopup();
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+		// Reset dialog state without saving
+		dialogInitialized = false;
+		memset(nameBuffer, 0, sizeof(nameBuffer));
+		memset(descBuffer, 0, sizeof(descBuffer));
+		memset(authorBuffer, 0, sizeof(authorBuffer));
+
+		ImGui::CloseCurrentPopup();
+	}
+}

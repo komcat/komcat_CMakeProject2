@@ -166,6 +166,33 @@ public:
     }
   }
   void UpdateBlockLabelIfNeeded(MachineBlock* block);
+  // File operations
+// OR add overloaded versions to maintain compatibility:
+  void SaveProgram();  // Calls SaveProgram("default")
+  void SaveProgram(const std::string& programName);
+  void LoadProgram();  // Calls LoadProgram("default") 
+  void LoadProgram(const std::string& programName);
+
+
+  // ═══════════════════════════════════════════════════════════════════════════════════════
+  // NEW: START BLOCK HELPER METHODS
+  // ═══════════════════════════════════════════════════════════════════════════════════════
+
+  // Find the START block in the current program
+  MachineBlock* GetStartBlock();
+
+  // Get parameter value from any block
+  std::string GetBlockParameterValue(MachineBlock* block, const std::string& paramName);
+
+  // Update parameter value in any block
+  void UpdateBlockParameterValue(MachineBlock* block, const std::string& paramName, const std::string& newValue);
+
+  // Enhanced save functionality with START block integration
+  void RenderEnhancedSaveAsDialog();
+
+  // Generate unique filename (delegates to ProgramManager)
+  std::string GenerateUniqueFilename(const std::string& baseName);
+
 
 private:
   // UI state
@@ -295,12 +322,7 @@ private:
   bool CanBlockAcceptInput(const MachineBlock& block) const;
   bool CanBlockProvideOutput(const MachineBlock& block) const;
 
-  // File operations
-  // OR add overloaded versions to maintain compatibility:
-  void SaveProgram();  // Calls SaveProgram("default")
-  void SaveProgram(const std::string& programName);
-  void LoadProgram();  // Calls LoadProgram("default") 
-  void LoadProgram(const std::string& programName);
+
 
   // Quick actions
   void QuickStart();
@@ -341,4 +363,46 @@ private:
   size_t GetTotalBlockCount() const;
 
   std::unique_ptr<UserPromptUI> m_promptUI;
+
+
+  // ═══════════════════════════════════════════════════════════════════════════════════════
+    // REFACTORED UI RENDERING METHODS
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    // Main UI sections
+  void RenderMainToolbar();
+  void RenderProgramValidationStatus();
+  void RenderMainPanels();
+  void RenderPopupDialogs();
+  void RenderFeedbackAndPrompts();
+
+  // Toolbar components
+  void RenderSaveProgramButton();
+  void RenderCurrentProgramDisplay();
+
+  // Panel rendering
+  void RenderPalettePanel();
+  void RenderCanvasPanel();
+  void RenderPropertiesPanel();
+
+  // Palette components
+  void RenderBlockPalette();
+  void RenderPaletteControls();
+
+  // ═══════════════════════════════════════════════════════════════════════════════════════
+   // CANVAS RENDERING METHODS
+   // ═══════════════════════════════════════════════════════════════════════════════════════
+
+   // Main canvas rendering
+  void RenderCanvasHeader();
+  void RenderCanvas();
+
+
+
+  // Properties components
+  void RenderSelectedBlockProperties();
+  void RenderNoSelectionMessage();
+
+  // Dialog rendering
+  void RenderCannotSaveDialog();
 };

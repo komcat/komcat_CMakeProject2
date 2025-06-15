@@ -1,0 +1,1475 @@
+﻿#ifdef _WIN32
+#include <windows.h>
+#else
+#include <filesystem>
+#endif
+
+#include "MacroManager.h"
+#include "MachineBlockUI.h"
+#include <fstream>
+#include <iostream>
+#include <thread>
+#include <chrono>
+#include "imgui.h"
+#include <chrono>
+#include <iomanip>
+#include <sstream>
+
+
+
+
+
+MacroManager::MacroManager() {
+  m_isExecuting = false;
+  m_nextMacroId = 1;
+  m_currentProgramIndex = -1;
+  m_currentExecutingProgram = "";
+  m_debugMode = true;
+  m_forceRescanMacros = false;
+
+
+  // ADD THIS LINE:
+  InitializeFeedbackUI();
+  // Auto-scan for programs on startup
+  ScanForPrograms();
+}
+
+MacroManager::~MacroManager() {
+  // Clean up any running execution
+}
+
+void MacroManager::AddProgram(const std::string& programName, const std::string& filePath) {
+  SavedProgram program;
+  program.name = programName;
+  program.filePath = filePath;
+  program.description = "";
+
+  m_savedPrograms[programName] = program;
+
+  if (m_debugMode) {
+    printf("[MACRO DEBUG] [ADD] Added program: %s -> %s\n", programName.c_str(), filePath.c_str());
+  }
+}
+
+void MacroManager::ScanForPrograms() {
+  if (m_debugMode) {
+    printf("[MACRO DEBUG] [SCAN] Scanning for program files...\n");
+  }
+
+  std::map<std::string, SavedProgram> manualPrograms = m_savedPrograms;
+  m_savedPrograms.clear();
+
+  std::vector<std::string> searchPaths = {
+      "programs/",
+      "Programs/",
+      "./",
+      "saved_programs/"
+  };
+
+  int foundCount = 0;
+
+  for (const auto& path : searchPaths) {
+    if (m_debugMode) {
+      printf("[MACRO DEBUG] [SCAN] Scanning directory: %s\n", path.c_str());
+    }
+
+    // Method 1: Try to scan directory for all .json files (Windows/Linux compatible)
+    std::vector<std::string> foundFiles;
+
+#ifdef _WIN32
+    // Windows directory scanning
+    std::string searchPattern = path + "*.json";
+    WIN32_FIND_DATAA findFileData;
+    HANDLE hFind = FindFirstFileA(searchPattern.c_str(), &findFileData);
+
+    if (hFind != INVALID_HANDLE_VALUE) {
+      do {
+        if (!(findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+          foundFiles.push_back(findFileData.cFileName);
+          if (m_debugMode) {
+            printf("[MACRO DEBUG] [SCAN] Found JSON file: %s\n", findFileData.cFileName);
+          }
+        }
+      } while (FindNextFileA(hFind, &findFileData) != 0);
+      FindClose(hFind);
+    }
+#else
+    // Linux/Mac directory scanning using C++17 filesystem
+    try {
+      if (std::filesystem::exists(path) && std::filesystem::is_directory(path)) {
+        for (const auto& entry : std::filesystem::directory_iterator(path)) {
+          if (entry.is_regular_file() && entry.path().extension() == ".json") {
+            foundFiles.push_back(entry.path().filename().string());
+            if (m_debugMode) {
+              printf("[MACRO DEBUG] [SCAN] Found JSON file: %s\n", entry.path().filename().string().c_str());
+            }
+          }
+        }
+      }
+    }
+    catch (const std::exception& e) {
+      if (m_debugMode) {
+        printf("[MACRO DEBUG] [SCAN] Error scanning directory %s: %s\n", path.c_str(), e.what());
+      }
+    }
+#endif
+
+    // Fallback: If directory scanning fails, use hardcoded list
+    if (foundFiles.empty()) {
+      if (m_debugMode) {
+        printf("[MACRO DEBUG] [SCAN] Directory scanning failed, using fallback list for: %s\n", path.c_str());
+      }
+
+      std::vector<std::string> fallbackFiles = {
+      };
+
+      // Check which fallback files actually exist
+      for (const auto& fileName : fallbackFiles) {
+        std::string fullPath = path + fileName;
+        std::ifstream file(fullPath);
+        if (file.good()) {
+          foundFiles.push_back(fileName);
+          if (m_debugMode) {
+            printf("[MACRO DEBUG] [SCAN] Fallback found: %s\n", fileName.c_str());
+          }
+        }
+        file.close();
+      }
+    }
+
+    // Process all found files
+    for (const auto& fileName : foundFiles) {
+      std::string fullPath = path + fileName;
+      std::ifstream file(fullPath);
+
+      if (file.good()) {
+        // Extract program name from filename (remove .json extension)
+        std::string programName = fileName;
+        size_t lastDot = programName.find_last_of(".");
+        if (lastDot != std::string::npos) {
+          programName = programName.substr(0, lastDot);
+        }
+
+        // Clean up name (capitalize first letter, replace underscores)
+        if (!programName.empty()) {
+          // Replace underscores with spaces
+          std::replace(programName.begin(), programName.end(), '_', ' ');
+
+          // Capitalize first letter
+          programName[0] = std::toupper(programName[0]);
+
+          // Capitalize after spaces
+          for (size_t i = 1; i < programName.length(); i++) {
+            if (programName[i - 1] == ' ' && i < programName.length()) {
+              programName[i] = std::toupper(programName[i]);
+            }
+          }
+        }
+
+        SavedProgram program;
+        program.name = programName;
+        program.filePath = fullPath;
+        program.description = "Auto-detected from " + path;
+
+        m_savedPrograms[programName] = program;
+        foundCount++;
+
+        if (m_debugMode) {
+          printf("[MACRO DEBUG] [FOUND] Found program: %s -> %s\n",
+            programName.c_str(), fullPath.c_str());
+        }
+      }
+      file.close();
+    }
+  }
+
+  // Add back any manually added programs
+  for (const auto& [name, program] : manualPrograms) {
+    if (m_savedPrograms.find(name) == m_savedPrograms.end()) {
+      m_savedPrograms[name] = program;
+      if (m_debugMode) {
+        printf("[MACRO DEBUG] [RESTORE] Restored manual program: %s\n", name.c_str());
+      }
+    }
+  }
+
+  if (m_debugMode) {
+    printf("[MACRO DEBUG] [SCAN] Scan complete. Found %d programs, total available: %zu\n",
+      foundCount, m_savedPrograms.size());
+  }
+}
+bool MacroManager::CreateMacro(const std::string& macroName, const std::string& description) {
+  if (m_macros.find(macroName) != m_macros.end()) {
+    printf("[MACRO] Macro '%s' already exists\n", macroName.c_str());
+    return false;
+  }
+
+  MacroProgram macro;
+  macro.id = m_nextMacroId++;
+  macro.name = macroName;
+  macro.description = description;
+  macro.programs.clear();
+
+  m_macros[macroName] = macro;
+  printf("[MACRO] Created macro: %s\n", macroName.c_str());
+  return true;
+}
+
+bool MacroManager::AddProgramToMacro(const std::string& macroName, const std::string& programName) {
+  auto macroIt = m_macros.find(macroName);
+  if (macroIt == m_macros.end()) {
+    printf("[MACRO] Macro '%s' not found\n", macroName.c_str());
+    return false;
+  }
+
+  auto programIt = m_savedPrograms.find(programName);
+  if (programIt == m_savedPrograms.end()) {
+    printf("[MACRO] Program '%s' not found\n", programName.c_str());
+    return false;
+  }
+
+  macroIt->second.programs.push_back(programIt->second);
+  printf("[MACRO] Added program '%s' to macro '%s'\n", programName.c_str(), macroName.c_str());
+  return true;
+}
+
+bool MacroManager::RemoveProgramFromMacro(const std::string& macroName, int index) {
+  auto macroIt = m_macros.find(macroName);
+  if (macroIt == m_macros.end()) {
+    printf("[MACRO] Macro '%s' not found\n", macroName.c_str());
+    return false;
+  }
+
+  if (index < 0 || index >= macroIt->second.programs.size()) {
+    printf("[MACRO] Invalid program index %d\n", index);
+    return false;
+  }
+
+  macroIt->second.programs.erase(macroIt->second.programs.begin() + index);
+  printf("[MACRO] Removed program at index %d from macro '%s'\n", index, macroName.c_str());
+  return true;
+}
+
+// Modified ExecuteMacro method with simple text feedback
+void MacroManager::ExecuteMacro(const std::string& macroName, std::function<void(bool)> callback) {
+  auto it = m_macros.find(macroName);
+  if (it == m_macros.end()) {
+    printf("[MACRO ERROR] Macro '%s' not found\n", macroName.c_str());
+    AddExecutionLog("ERROR: Macro '" + macroName + "' not found");
+    if (callback) callback(false);
+    return;
+  }
+
+  if (m_isExecuting) {
+    printf("[MACRO ERROR] Another macro is already executing\n");
+    AddExecutionLog("ERROR: Another macro is already executing");
+    if (callback) callback(false);
+    return;
+  }
+
+  const MacroProgram& macro = it->second;
+  m_isExecuting = true;
+  m_currentMacro = macroName;
+  m_currentProgramIndex = -1;
+  m_currentExecutingProgram = "";
+
+  AddExecutionLog("=== STARTING MACRO: " + macroName + " ===");
+  AddExecutionLog("Programs to execute: " + std::to_string(macro.programs.size()));
+
+  printf("[MACRO] Starting execution of macro '%s' with %zu programs:\n",
+    macroName.c_str(), macro.programs.size());
+
+  for (size_t i = 0; i < macro.programs.size(); i++) {
+    printf("[MACRO] %zu. %s (%s)\n", i + 1,
+      macro.programs[i].name.c_str(), macro.programs[i].filePath.c_str());
+  }
+
+  std::thread executionThread([this, macro, callback]() {
+    bool success = true;
+
+    for (size_t i = 0; i < macro.programs.size(); i++) {
+      if (!m_isExecuting) {
+        AddExecutionLog("STOPPED: Execution stopped by user at program " + std::to_string(i + 1));
+        printf("[MACRO DEBUG] [STOP] Execution stopped by user at program %zu\n", i + 1);
+        success = false;
+        break;
+      }
+
+      const SavedProgram& program = macro.programs[i];
+      m_currentProgramIndex = static_cast<int>(i);
+      m_currentExecutingProgram = program.name;
+
+      AddExecutionLog("Loading program " + std::to_string(i + 1) + "/" +
+        std::to_string(macro.programs.size()) + ": " + program.name);
+
+      printf("[MACRO DEBUG] [EXEC] [%zu/%zu] Loading program: %s\n",
+        i + 1, macro.programs.size(), program.name.c_str());
+
+      m_blockUI->LoadProgram(program.name);
+
+      AddExecutionLog("Program loaded, starting execution...");
+
+      printf("[MACRO DEBUG] [WAIT] Program loaded, waiting 500ms for UI update...\n");
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+      bool programSuccess = false;
+      bool executionComplete = false;
+
+      printf("[MACRO DEBUG] [RUN] Starting execution of program: %s\n", program.name.c_str());
+
+      // Execute with simple feedback capture
+      m_blockUI->ExecuteProgramAsSequence([&programSuccess, &executionComplete, &program, this, i](bool result) {
+        programSuccess = result;
+        executionComplete = true;
+
+        std::string resultMsg = result ? "SUCCESS" : "FAILED";
+        AddExecutionLog("Program '" + program.name + "' completed: " + resultMsg);
+
+        printf("[MACRO DEBUG] [RESULT] Program '%s' execution callback: %s\n",
+          program.name.c_str(), result ? "SUCCESS" : "FAILED");
+      });
+
+      printf("[MACRO DEBUG] [WAIT] Waiting for program completion...\n");
+      int timeout = 0;
+      const int maxTimeout = 300;
+
+      while (!executionComplete && timeout < maxTimeout && m_isExecuting) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        timeout++;
+
+        // Add periodic status updates
+        if (timeout % 50 == 0) {
+          AddExecutionLog("Still executing '" + program.name + "' (" +
+            std::to_string(timeout / 10) + "s elapsed)");
+          printf("[MACRO DEBUG] [WAIT] Still waiting... (%d/%d seconds)\n", timeout / 10, maxTimeout / 10);
+        }
+      }
+
+      if (!m_isExecuting) {
+        AddExecutionLog("CANCELLED: Execution cancelled during '" + program.name + "'");
+        printf("[MACRO DEBUG] [CANCEL] Execution cancelled by user during program '%s'\n", program.name.c_str());
+        success = false;
+        break;
+      }
+
+      if (!executionComplete) {
+        AddExecutionLog("TIMEOUT: Program '" + program.name + "' timed out after " +
+          std::to_string(maxTimeout / 10) + " seconds");
+        printf("[MACRO DEBUG] [TIMEOUT] Program '%s' timed out after %d seconds\n", program.name.c_str(), maxTimeout / 10);
+        success = false;
+        break;
+      }
+
+      if (!programSuccess) {
+        AddExecutionLog("FAILED: Program '" + program.name + "' execution failed");
+        printf("[MACRO DEBUG] [FAILED] Program '%s' failed\n", program.name.c_str());
+        success = false;
+        break;
+      }
+
+      AddExecutionLog("SUCCESS: Program '" + program.name + "' completed successfully");
+      printf("[MACRO DEBUG] [SUCCESS] Program '%s' completed successfully\n", program.name.c_str());
+
+      if (i < macro.programs.size() - 1) {
+        AddExecutionLog("Waiting 1 second before next program...");
+        printf("[MACRO DEBUG] [WAIT] Waiting 1 second before next program...\n");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+      }
+    }
+
+    m_isExecuting = false;
+    m_currentMacro = "";
+    m_currentProgramIndex = -1;
+    m_currentExecutingProgram = "";
+
+    if (success) {
+      AddExecutionLog("=== MACRO COMPLETED SUCCESSFULLY ===");
+      printf("[MACRO DEBUG] [COMPLETE] All programs in macro executed successfully\n");
+    }
+    else {
+      AddExecutionLog("=== MACRO EXECUTION FAILED ===");
+      printf("[MACRO DEBUG] [FAILED] Macro execution failed\n");
+    }
+
+    if (callback) {
+      callback(success);
+    }
+  });
+
+  executionThread.detach();
+}
+
+void MacroManager::SaveMacro(const std::string& macroName, const std::string& filePath) {
+  auto macroIt = m_macros.find(macroName);
+  if (macroIt == m_macros.end()) {
+    printf("[MACRO] Macro '%s' not found\n", macroName.c_str());
+    return;
+  }
+
+  nlohmann::json macroJson;
+  const MacroProgram& macro = macroIt->second;
+
+  // ADD MACRO IDENTIFIER
+  macroJson["file_type"] = "macro";
+  macroJson["macro_id"] = macro.id;
+  macroJson["version"] = "1.0";
+
+  macroJson["name"] = macro.name;
+  macroJson["description"] = macro.description;
+  macroJson["id"] = macro.id;  // Keep for backward compatibility
+
+  nlohmann::json programsArray = nlohmann::json::array();
+  for (const auto& program : macro.programs) {
+    nlohmann::json programJson;
+    programJson["name"] = program.name;
+    programJson["file_path"] = program.filePath;
+    programJson["description"] = program.description;
+    programsArray.push_back(programJson);
+  }
+  macroJson["programs"] = programsArray;
+
+  try {
+    size_t lastSlash = filePath.find_last_of("/\\");
+    if (lastSlash != std::string::npos) {
+      std::string directory = filePath.substr(0, lastSlash);
+
+      // Try to create the directory by creating nested paths
+      std::string currentPath = "";
+      std::string delimiter = "/";
+      size_t pos = 0;
+      std::string token;
+      std::string directoryCopy = directory + "/";
+
+      while ((pos = directoryCopy.find(delimiter)) != std::string::npos) {
+        token = directoryCopy.substr(0, pos);
+        if (!token.empty()) {
+          currentPath += token;
+
+          // Try to create directory by attempting to create a test file
+          std::string testFile = currentPath + "/.dirtest";
+          std::ofstream test(testFile);
+          if (test.good()) {
+            test.close();
+            std::remove(testFile.c_str());
+            if (m_debugMode) {
+              printf("[MACRO DEBUG] [SAVE] Directory '%s' verified/created\n", currentPath.c_str());
+            }
+          }
+          else {
+            // Try to create the directory using system call
+#ifdef _WIN32
+            std::string createCmd = "mkdir \"" + currentPath + "\" 2>nul";
+            system(createCmd.c_str());
+#else
+            std::string createCmd = "mkdir -p \"" + currentPath + "\" 2>/dev/null";
+            system(createCmd.c_str());
+#endif
+
+            if (m_debugMode) {
+              printf("[MACRO DEBUG] [SAVE] Attempted to create directory: %s\n", currentPath.c_str());
+            }
+          }
+          currentPath += "/";
+        }
+        directoryCopy.erase(0, pos + delimiter.length());
+      }
+    }
+
+    std::ofstream file(filePath);
+    if (!file.good()) {
+      printf("[MACRO] [ERROR] Could not create file: %s\n", filePath.c_str());
+      printf("[MACRO] [INFO] Directory creation may have failed. Try manually creating the 'macros/' folder\n");
+      return;
+    }
+
+    file << macroJson.dump(2);
+    file.close();
+    printf("[MACRO] Saved macro '%s' (ID: %d) to %s\n", macroName.c_str(), macro.id, filePath.c_str());
+
+    m_forceRescanMacros = true;
+
+  }
+  catch (const std::exception& e) {
+    printf("[MACRO] Error saving macro: %s\n", e.what());
+  }
+}
+
+void MacroManager::LoadMacro(const std::string& filePath) {
+  try {
+    std::ifstream file(filePath);
+    nlohmann::json macroJson;
+    file >> macroJson;
+    file.close();
+
+    // VALIDATE FILE TYPE
+    if (macroJson.contains("file_type")) {
+      std::string fileType = macroJson["file_type"];
+      if (fileType != "macro") {
+        printf("[MACRO] [WARNING] File '%s' is not a macro file (type: %s)\n",
+          filePath.c_str(), fileType.c_str());
+        return;
+      }
+    }
+    else {
+      // Check if it looks like a program file
+      if (macroJson.contains("blocks") || macroJson.contains("program_id")) {
+        printf("[MACRO] [WARNING] File '%s' appears to be a program file, not a macro\n",
+          filePath.c_str());
+        return;
+      }
+
+      // Legacy macro file without file_type - allow it but warn
+      if (m_debugMode) {
+        printf("[MACRO DEBUG] [LOAD] Loading legacy macro file without file_type identifier\n");
+      }
+    }
+
+    MacroProgram macro;
+    macro.name = macroJson["name"];
+    macro.description = macroJson["description"];
+
+    // Use macro_id if available, otherwise fall back to id
+    if (macroJson.contains("macro_id")) {
+      macro.id = macroJson["macro_id"];
+    }
+    else {
+      macro.id = macroJson.contains("id") ? macroJson["id"] : m_nextMacroId++;
+    }
+
+    if (macroJson.contains("programs")) {
+      for (const auto& programJson : macroJson["programs"]) {
+        SavedProgram program;
+        program.name = programJson["name"];
+        program.filePath = programJson["file_path"];
+        program.description = programJson.contains("description") ?
+          programJson["description"] : "";
+        macro.programs.push_back(program);
+      }
+    }
+
+    m_macros[macro.name] = macro;
+    printf("[MACRO] Loaded macro '%s' (ID: %d) with %zu programs\n",
+      macro.name.c_str(), macro.id, macro.programs.size());
+
+  }
+  catch (const std::exception& e) {
+    printf("[MACRO] Error loading macro: %s\n", e.what());
+  }
+}
+
+
+void MacroManager::ExecuteSingleProgram(const std::string& programName) {
+  auto programIt = m_savedPrograms.find(programName);
+  if (programIt == m_savedPrograms.end()) {
+    printf("[MACRO DEBUG] [ERROR] Single program '%s' not found\n", programName.c_str());
+    return;
+  }
+
+  if (!m_blockUI) {
+    printf("[MACRO DEBUG] [ERROR] MachineBlockUI not set for single program execution\n");
+    return;
+  }
+
+  if (m_isExecuting) {
+    printf("[MACRO DEBUG] [ERROR] Cannot execute single program '%s' - macro is currently running: '%s'\n",
+      programName.c_str(), m_currentMacro.c_str());
+    return;
+  }
+
+  printf("[MACRO DEBUG] [START] Executing single program: %s\n", programName.c_str());
+  printf("[MACRO DEBUG] [INFO] File path: %s\n", programIt->second.filePath.c_str());
+
+  printf("[MACRO DEBUG] [LOAD] Loading program into BlockUI...\n");
+  m_blockUI->LoadProgram(programIt->second.name);
+
+  printf("[MACRO DEBUG] [WAIT] Waiting 100ms for UI update...\n");
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  printf("[MACRO DEBUG] [RUN] Starting program execution...\n");
+  m_blockUI->ExecuteProgramAsSequence([programName](bool success) {
+    if (success) {
+      printf("[MACRO DEBUG] [COMPLETE] [SUCCESS] Single program '%s' completed successfully\n", programName.c_str());
+    }
+    else {
+      printf("[MACRO DEBUG] [COMPLETE] [FAILED] Single program '%s' failed\n", programName.c_str());
+    }
+  });
+}
+
+// UPDATED: Graceful StopExecution method
+void MacroManager::StopExecution() {
+  if (m_isExecuting) {
+    printf("[MACRO DEBUG] [GRACEFUL_STOP] User requested graceful stop of macro: %s\n", m_currentMacro.c_str());
+    printf("[MACRO DEBUG] [INFO] Currently executing program %d: %s\n",
+      m_currentProgramIndex + 1, m_currentExecutingProgram.c_str());
+    printf("[MACRO DEBUG] [INFO] Will stop after current program completes\n");
+
+    m_stopRequested = true;  // Set the graceful stop flag
+    // Note: m_isExecuting stays true until the current program finishes
+  }
+  else {
+    printf("[MACRO DEBUG] [WARNING] Stop requested but no macro is currently executing\n");
+  }
+}
+
+std::vector<std::string> MacroManager::GetMacroNames() const {
+  std::vector<std::string> names;
+  for (const auto& pair : m_macros) {
+    names.push_back(pair.first);
+  }
+  return names;
+}
+
+std::vector<std::string> MacroManager::GetProgramNames() const {
+  std::vector<std::string> names;
+  for (const auto& pair : m_savedPrograms) {
+    names.push_back(pair.first);
+  }
+  return names;
+}
+
+MacroProgram* MacroManager::GetMacro(const std::string& macroName) {
+  auto it = m_macros.find(macroName);
+  return (it != m_macros.end()) ? &it->second : nullptr;
+}
+
+bool MacroManager::DeleteMacro(const std::string& macroName) {
+  auto it = m_macros.find(macroName);
+  if (it != m_macros.end()) {
+    m_macros.erase(it);
+    printf("[MACRO] Deleted macro '%s'\n", macroName.c_str());
+    return true;
+  }
+  return false;
+}
+
+void MacroManager::SetMachineBlockUI(MachineBlockUI* blockUI) {
+  m_blockUI = blockUI;
+}
+
+bool MacroManager::IsExecuting() const {
+  return m_isExecuting;
+}
+
+std::string MacroManager::GetCurrentMacro() const {
+  return m_currentMacro;
+}
+
+
+// Add this new method to MacroManager class
+
+void MacroManager::ScanForMacroFiles(std::vector<std::string>& availableMacroFiles) {
+  availableMacroFiles.clear();
+
+  std::vector<std::string> searchPaths = {
+      "macros/",
+      "programs/macros/",
+      "Programs/Macros/",
+      "Programs/",
+      "./"
+  };
+
+  for (const auto& path : searchPaths) {
+    if (m_debugMode) {
+      printf("[MACRO DEBUG] [SCAN] Scanning for macro files in: %s\n", path.c_str());
+    }
+
+    // Method 1: Try to scan directory for all .json files
+    std::vector<std::string> foundFiles;
+
+#ifdef _WIN32
+    // Windows directory scanning
+    std::string searchPattern = path + "*.json";
+    WIN32_FIND_DATAA findFileData;
+    HANDLE hFind = FindFirstFileA(searchPattern.c_str(), &findFileData);
+
+    if (hFind != INVALID_HANDLE_VALUE) {
+      do {
+        if (!(findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+          std::string fileName = findFileData.cFileName;
+          foundFiles.push_back(fileName);
+          if (m_debugMode) {
+            printf("[MACRO DEBUG] [SCAN] Found JSON file: %s\n", fileName.c_str());
+          }
+        }
+      } while (FindNextFileA(hFind, &findFileData) != 0);
+      FindClose(hFind);
+    }
+#else
+    // Linux/Mac directory scanning using C++17 filesystem
+    try {
+      if (std::filesystem::exists(path) && std::filesystem::is_directory(path)) {
+        for (const auto& entry : std::filesystem::directory_iterator(path)) {
+          if (entry.is_regular_file() && entry.path().extension() == ".json") {
+            std::string fileName = entry.path().filename().string();
+            foundFiles.push_back(fileName);
+            if (m_debugMode) {
+              printf("[MACRO DEBUG] [SCAN] Found JSON file: %s\n", fileName.c_str());
+            }
+          }
+        }
+      }
+    }
+    catch (const std::exception& e) {
+      if (m_debugMode) {
+        printf("[MACRO DEBUG] [SCAN] Error scanning directory %s: %s\n", path.c_str(), e.what());
+      }
+    }
+#endif
+
+    // Fallback: If directory scanning fails, use hardcoded patterns
+    if (foundFiles.empty()) {
+      if (m_debugMode) {
+        printf("[MACRO DEBUG] [SCAN] Directory scanning failed, using fallback for: %s\n", path.c_str());
+      }
+
+      std::vector<std::string> possibleMacroNames = {
+          "macro1", "macro2", "macro3", "test_macro", "example_macro",
+          "workflow_macro", "production_macro", "calibration_macro",
+          "initialization_macro", "setup_macro", "demo_macro",
+          "macro slide and stop"  // Add the one we just created
+      };
+
+      for (const auto& macroName : possibleMacroNames) {
+        std::string testFile = macroName + "_macro.json";
+        std::string fullPath = path + testFile;
+        std::ifstream file(fullPath);
+        if (file.good()) {
+          foundFiles.push_back(testFile);
+          if (m_debugMode) {
+            printf("[MACRO DEBUG] [SCAN] Fallback found: %s\n", testFile.c_str());
+          }
+        }
+        file.close();
+      }
+
+      std::vector<std::string> standaloneMacros = {
+          "main_workflow.json",
+          "test_sequence.json",
+          "production_line.json"
+      };
+
+      for (const auto& fileName : standaloneMacros) {
+        std::string fullPath = path + fileName;
+        std::ifstream file(fullPath);
+        if (file.good()) {
+          foundFiles.push_back(fileName);
+          if (m_debugMode) {
+            printf("[MACRO DEBUG] [SCAN] Fallback standalone found: %s\n", fileName.c_str());
+          }
+        }
+        file.close();
+      }
+    }
+
+    // Process all found files and filter by type
+    for (const auto& fileName : foundFiles) {
+      std::string fullPath = path + fileName;
+
+      // Check if this is actually a macro file
+      try {
+        std::ifstream file(fullPath);
+        if (file.good()) {
+          nlohmann::json testJson;
+          file >> testJson;
+          file.close();
+
+          // Check file type
+          bool isMacroFile = false;
+
+          if (testJson.contains("file_type")) {
+            // New format with file_type identifier
+            std::string fileType = testJson["file_type"];
+            isMacroFile = (fileType == "macro");
+
+            if (m_debugMode && !isMacroFile) {
+              printf("[MACRO DEBUG] [SKIP] Skipping %s (type: %s)\n",
+                fileName.c_str(), fileType.c_str());
+            }
+          }
+          else {
+            // Legacy format - check structure
+            bool hasBlocks = testJson.contains("blocks");
+            bool hasProgramId = testJson.contains("program_id");
+            bool hasPrograms = testJson.contains("programs");
+            bool hasName = testJson.contains("name");
+
+            // Likely a macro if it has programs array and name, but no blocks
+            isMacroFile = (hasPrograms && hasName && !hasBlocks && !hasProgramId);
+
+            if (m_debugMode && !isMacroFile) {
+              printf("[MACRO DEBUG] [SKIP] Skipping %s (appears to be program file)\n",
+                fileName.c_str());
+            }
+          }
+
+          if (isMacroFile) {
+            availableMacroFiles.push_back(fullPath);
+            if (m_debugMode) {
+              printf("[MACRO DEBUG] [FOUND] Found macro file: %s\n", fullPath.c_str());
+            }
+          }
+        }
+      }
+      catch (const std::exception& e) {
+        if (m_debugMode) {
+          printf("[MACRO DEBUG] [ERROR] Could not parse %s: %s\n",
+            fileName.c_str(), e.what());
+        }
+      }
+    }
+  }
+
+  if (m_debugMode) {
+    printf("[MACRO DEBUG] [SCAN] Total macro files found: %zu\n", availableMacroFiles.size());
+  }
+}
+
+// Implementation in MacroManager.cpp:
+
+void MacroManager::RenderDebugSection() {
+  ImGui::Checkbox("[DEBUG] Debug Mode", &m_debugMode);
+  ImGui::SameLine();
+  ImGui::TextDisabled("(shows detailed execution info)");
+
+  if (m_debugMode && ImGui::CollapsingHeader("[DEBUG] Debug Information", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::BeginChild("DebugInfo", ImVec2(-1, 100), true);
+
+    ImGui::Columns(2, "DebugColumns", true);
+
+    ImGui::Text("Execution State:");
+    ImGui::Text("  Is Executing: %s", m_isExecuting ? "YES" : "NO");
+    ImGui::Text("  Current Macro: %s", m_currentMacro.empty() ? "None" : m_currentMacro.c_str());
+    ImGui::Text("  Program Index: %d", m_currentProgramIndex);
+    ImGui::Text("  Current Program: %s", m_currentExecutingProgram.empty() ? "None" : m_currentExecutingProgram.c_str());
+
+    ImGui::NextColumn();
+
+    ImGui::Text("System State:");
+    ImGui::Text("  BlockUI Connected: %s", m_blockUI ? "YES" : "NO");
+    ImGui::Text("  Total Macros: %zu", m_macros.size());
+    ImGui::Text("  Available Programs: %zu", m_savedPrograms.size());
+
+    static std::string lastExecutionLog = "No executions yet";
+    ImGui::Text("Last Action: %s", lastExecutionLog.c_str());
+
+    ImGui::Columns(1);
+    ImGui::EndChild();
+    ImGui::Separator();
+  }
+}
+
+
+// UPDATED: Enhanced execution status rendering to show graceful stop state
+void MacroManager::RenderExecutionStatus() {
+  if (m_isExecuting) {
+    // Change background color if stop is requested
+    ImVec4 bgColor = m_stopRequested ?
+      ImVec4(0.6f, 0.3f, 0.1f, 0.8f) :  // Darker orange for "stopping"
+      ImVec4(0.2f, 0.2f, 0.2f, 0.8f);   // Dark gray for normal execution
+
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, bgColor);
+    ImGui::BeginChild("ExecutionStatus", ImVec2(-1, 80), true);
+
+    if (m_stopRequested) {
+      ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "[STOPPING] MACRO: %s", m_currentMacro.c_str());
+      ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.5f, 1.0f), "Finishing current program, then will stop...");
+    }
+    else {
+      ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "[EXECUTING] MACRO: %s", m_currentMacro.c_str());
+    }
+
+    if (m_currentProgramIndex >= 0) {
+      auto macroIt = m_macros.find(m_currentMacro);
+      if (macroIt != m_macros.end() && m_currentProgramIndex < macroIt->second.programs.size()) {
+        ImGui::TextColored(ImVec4(0.5f, 1.0f, 1.0f, 1.0f),
+          "Program %d/%zu: %s",
+          m_currentProgramIndex + 1,
+          macroIt->second.programs.size(),
+          m_currentExecutingProgram.c_str());
+      }
+    }
+
+    // Show appropriate button based on state
+    if (m_stopRequested) {
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
+      ImGui::Button("[STOPPING] Please wait...");
+      ImGui::PopStyleColor();
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Stop requested - waiting for current program to complete");
+      }
+    }
+    else {
+      if (ImGui::Button("[STOP] Stop After Current Program")) {
+        StopExecution();
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Stop gracefully after current program completes");
+      }
+    }
+
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+    ImGui::Spacing();
+  }
+}
+
+void MacroManager::RenderCreateMacroSection() {
+  if (ImGui::CollapsingHeader("[+] Create New Macro", ImGuiTreeNodeFlags_DefaultOpen)) {
+    static char macroName[256] = "";
+    static char macroDesc[512] = "";
+
+    ImGui::Columns(2, "CreateMacroColumns", false);
+    ImGui::SetColumnWidth(0, 100);
+
+    ImGui::Text("Name:");
+    ImGui::NextColumn();
+    ImGui::PushItemWidth(-1);
+    ImGui::InputText("##MacroName", macroName, sizeof(macroName));
+    ImGui::PopItemWidth();
+    ImGui::NextColumn();
+
+    ImGui::Text("Description:");
+    ImGui::NextColumn();
+    ImGui::PushItemWidth(-1);
+    ImGui::InputTextMultiline("##MacroDesc", macroDesc, sizeof(macroDesc), ImVec2(-1, 60));
+    ImGui::PopItemWidth();
+    ImGui::Columns(1);
+
+    ImGui::Spacing();
+    if (ImGui::Button("Create Macro", ImVec2(120, 30)) && strlen(macroName) > 0) {
+      if (CreateMacro(macroName, macroDesc)) {
+        memset(macroName, 0, sizeof(macroName));
+        memset(macroDesc, 0, sizeof(macroDesc));
+      }
+    }
+    ImGui::Separator();
+  }
+}
+
+void MacroManager::RenderEditMacrosSection() {
+  if (ImGui::CollapsingHeader("[EDIT] Edit Macros", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (m_macros.empty()) {
+      ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No macros created yet. Create one above!");
+      return;
+    }
+
+    // ADD THESE VARIABLES FOR DEFERRED DELETION
+    static std::string macroToDelete = "";
+    static int programToRemove = -1;
+    static std::string macroForRemoval = "";
+
+    for (auto& [name, macro] : m_macros) {
+      ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.2f, 0.4f, 0.8f, 0.4f));
+      ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.3f, 0.5f, 0.9f, 0.4f));
+
+      bool isOpen = ImGui::TreeNodeEx(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+      ImGui::PopStyleColor(2);
+
+      if (isOpen) {
+        ImGui::Indent();
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Description: %s", macro.description.c_str());
+        ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Programs: %zu", macro.programs.size());
+        ImGui::Spacing();
+
+        // Visual program flow
+        if (!macro.programs.empty()) {
+          ImGui::Text("Program Flow:");
+          ImGui::BeginChild(("Flow_" + name).c_str(), ImVec2(-1, 100), true, ImGuiWindowFlags_HorizontalScrollbar);
+
+          for (size_t i = 0; i < macro.programs.size(); i++) {
+            const auto& program = macro.programs[i];
+
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 0.8f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 0.9f));
+
+            if (ImGui::Button((program.name + "##" + std::to_string(i)).c_str(), ImVec2(120, 40))) {
+              ExecuteSingleProgram(program.name);
+            }
+            ImGui::PopStyleColor(2);
+
+            if (ImGui::IsItemHovered()) {
+              ImGui::SetTooltip("Click to execute '%s'\\nFile: %s",
+                program.name.c_str(), program.filePath.c_str());
+            }
+
+            // Remove button (X) with deferred deletion
+            ImGui::SameLine();
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 25);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 40);
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
+            if (ImGui::SmallButton(("X##" + std::to_string(i)).c_str())) {
+              programToRemove = static_cast<int>(i);
+              macroForRemoval = name;
+              ImGui::PopStyleColor();
+              break;
+            }
+            ImGui::PopStyleColor();
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 40);
+
+            // Arrow between programs
+            if (i < macro.programs.size() - 1) {
+              ImGui::SameLine();
+              ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 20);
+              ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "-->");
+              ImGui::SameLine();
+            }
+          }
+
+          ImGui::EndChild();
+        }
+
+        // Add program section
+        ImGui::Spacing();
+        ImGui::Text("[+] Add Program:");
+
+        static int selectedProgram = 0;
+        std::vector<std::string> programNames = GetProgramNames();
+        if (!programNames.empty()) {
+          std::vector<const char*> items;
+          for (const auto& pName : programNames) {
+            items.push_back(pName.c_str());
+          }
+
+          ImGui::PushItemWidth(200);
+          ImGui::Combo(("##AddProgram_" + name).c_str(), &selectedProgram, items.data(), items.size());
+          ImGui::PopItemWidth();
+          ImGui::SameLine();
+
+          ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 0.8f));
+          if (ImGui::Button(("Add##" + name).c_str())) {
+            AddProgramToMacro(name, programNames[selectedProgram]);
+          }
+          ImGui::PopStyleColor();
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+
+        // Action buttons
+        ImGui::Columns(4, ("MacroActions_" + name).c_str(), false);
+
+        // Execute button
+        if (!m_isExecuting && !macro.programs.empty()) {
+          ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.7f, 0.1f, 0.8f));
+          ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.8f, 0.2f, 0.9f));
+          if (ImGui::Button(("[RUN] Execute##" + name).c_str(), ImVec2(-1, 35))) {
+            ExecuteMacro(name);
+          }
+          ImGui::PopStyleColor(2);
+        }
+        else if (m_isExecuting) {
+          ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.6f, 0.6f, 0.5f));
+          ImGui::Button("[WAIT] Running...", ImVec2(-1, 35));
+          ImGui::PopStyleColor();
+        }
+        else {
+          ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.6f, 0.6f, 0.5f));
+          ImGui::Button("[!] No Programs", ImVec2(-1, 35));
+          ImGui::PopStyleColor();
+        }
+
+        ImGui::NextColumn();
+
+        // Save button
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.5f, 0.8f, 0.8f));
+        if (ImGui::Button(("[SAVE] Save##" + name).c_str(), ImVec2(-1, 35))) {
+          SaveMacro(name, "macros/" + name + "_macro.json");
+        }
+        ImGui::PopStyleColor();
+
+        ImGui::NextColumn();
+
+        // Copy button
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.4f, 0.8f, 0.8f));
+        if (ImGui::Button(("[COPY] Copy##" + name).c_str(), ImVec2(-1, 35))) {
+          std::string copyName = name + "_copy";
+          if (CreateMacro(copyName, macro.description + " (Copy)")) {
+            for (const auto& program : macro.programs) {
+              AddProgramToMacro(copyName, program.name);
+            }
+          }
+        }
+        ImGui::PopStyleColor();
+
+        ImGui::NextColumn();
+
+        // Delete button with deferred deletion
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 0.9f));
+        if (ImGui::Button(("[DEL] Delete##" + name).c_str(), ImVec2(-1, 35))) {
+          macroToDelete = name;
+          ImGui::PopStyleColor(2);
+          ImGui::Columns(1);
+          ImGui::Unindent();
+          ImGui::TreePop();
+          break;
+        }
+        ImGui::PopStyleColor(2);
+
+        ImGui::Columns(1);
+        ImGui::Unindent();
+        ImGui::TreePop();
+        ImGui::Spacing();
+      }
+    }
+
+    // HANDLE DEFERRED DELETIONS
+    if (!macroToDelete.empty()) {
+      DeleteMacro(macroToDelete);
+      macroToDelete = "";
+    }
+
+    if (programToRemove >= 0 && !macroForRemoval.empty()) {
+      RemoveProgramFromMacro(macroForRemoval, programToRemove);
+      programToRemove = -1;
+      macroForRemoval = "";
+    }
+  }
+}
+
+void MacroManager::RenderLoadMacroSection() {
+  if (ImGui::CollapsingHeader("[LOAD] Load Macro")) {
+    static char filename[256] = "";
+    static std::vector<std::string> availableMacroFiles;
+    static bool filesScanned = false;
+
+    // Simplified scanning call
+    if (!filesScanned || m_forceRescanMacros) {
+      filesScanned = false;
+      m_forceRescanMacros = false;
+
+      // Call the separated scanning method
+      ScanForMacroFiles(availableMacroFiles);
+
+      filesScanned = true;
+    }
+
+    // Manual filename input
+    ImGui::Columns(3, "LoadMacroColumns", false);
+    ImGui::SetColumnWidth(0, 80);
+    ImGui::SetColumnWidth(1, 300);
+
+    ImGui::Text("File:");
+    ImGui::NextColumn();
+    ImGui::PushItemWidth(-1);
+    ImGui::InputText("##LoadFilename", filename, sizeof(filename));
+    ImGui::PopItemWidth();
+    ImGui::NextColumn();
+
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.8f, 0.8f));
+    if (ImGui::Button("[LOAD] Load", ImVec2(80, 25)) && strlen(filename) > 0) {
+      LoadMacro(filename);
+    }
+    ImGui::PopStyleColor();
+    ImGui::Columns(1);
+
+    // Available macro files dropdown
+    if (!availableMacroFiles.empty()) {
+      ImGui::Spacing();
+      ImGui::Text("Available Macro Files:");
+
+      static int selectedMacroFile = 0;
+      std::vector<const char*> macroFileItems;
+      std::vector<std::string> displayNames;
+
+      for (const auto& filePath : availableMacroFiles) {
+        size_t lastSlash = filePath.find_last_of("/\\");
+        std::string displayName = (lastSlash != std::string::npos) ?
+          filePath.substr(lastSlash + 1) : filePath;
+        displayNames.push_back(displayName);
+        macroFileItems.push_back(displayNames.back().c_str());
+      }
+
+      ImGui::Columns(2, "MacroFileColumns", false);
+      ImGui::SetColumnWidth(0, 300);
+
+      ImGui::PushItemWidth(-1);
+      ImGui::Combo("##MacroFileSelect", &selectedMacroFile, macroFileItems.data(), macroFileItems.size());
+      ImGui::PopItemWidth();
+      ImGui::NextColumn();
+
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 0.8f));
+      if (ImGui::Button("[LOAD] Load Selected", ImVec2(-1, 25))) {
+        if (selectedMacroFile >= 0 && selectedMacroFile < availableMacroFiles.size()) {
+          LoadMacro(availableMacroFiles[selectedMacroFile]);
+        }
+      }
+      ImGui::PopStyleColor();
+      ImGui::Columns(1);
+
+      if (selectedMacroFile >= 0 && selectedMacroFile < availableMacroFiles.size()) {
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
+          "Path: %s", availableMacroFiles[selectedMacroFile].c_str());
+      }
+    }
+    else {
+      ImGui::Spacing();
+      ImGui::TextColored(ImVec4(0.8f, 0.6f, 0.2f, 1.0f), "[!] No macro files found in common directories");
+      ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Searched: macros/, programs/macros/, Programs/");
+    }
+
+    ImGui::Spacing();
+    if (ImGui::Button("[REFRESH] Refresh File List")) {
+      filesScanned = false;  // This will trigger ScanForMacroFiles() on next frame
+    }
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(rescans directories for new files)");
+  }
+}
+
+void MacroManager::RenderAvailableProgramsSection() {
+  if (ImGui::CollapsingHeader("[PROGRAMS] Available Programs")) {
+    if (ImGui::Button("[SCAN] Scan for Programs")) {
+      ScanForPrograms();
+    }
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(scans programs/ folder)");
+
+    ImGui::Spacing();
+
+    if (m_savedPrograms.empty()) {
+      ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "[!] No programs available. Save some programs first!");
+      ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Or click 'Scan for Programs' to find existing files.");
+    }
+    else {
+      ImGui::BeginChild("ProgramsList", ImVec2(-1, 120), true);
+
+      ImGui::Columns(4, "ProgramsColumns", true);
+      ImGui::SetColumnWidth(0, 150);
+      ImGui::SetColumnWidth(1, 250);
+      ImGui::SetColumnWidth(2, 60);
+      ImGui::SetColumnWidth(3, 40);
+
+      ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Program Name");
+      ImGui::NextColumn();
+      ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "File Path");
+      ImGui::NextColumn();
+      ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Execute");
+      ImGui::NextColumn();
+      ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Test");
+      ImGui::NextColumn();
+      ImGui::Separator();
+
+      for (const auto& [name, program] : m_savedPrograms) {
+        ImGui::Text("[PROG] %s", name.c_str());
+        ImGui::NextColumn();
+
+        std::ifstream testFile(program.filePath);
+        bool fileExists = testFile.good();
+        testFile.close();
+
+        if (fileExists) {
+          ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s", program.filePath.c_str());
+        }
+        else {
+          ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "[X] %s", program.filePath.c_str());
+        }
+        ImGui::NextColumn();
+
+        if (fileExists) {
+          ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 0.7f));
+          if (ImGui::SmallButton(("[RUN]##exec_" + name).c_str())) {
+            ExecuteSingleProgram(name);
+          }
+          ImGui::PopStyleColor();
+        }
+        else {
+          ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.4f, 0.4f, 0.5f));
+          ImGui::SmallButton("[X]");
+          ImGui::PopStyleColor();
+        }
+
+        if (ImGui::IsItemHovered()) {
+          if (fileExists) {
+            ImGui::SetTooltip("Execute '%s'", name.c_str());
+          }
+          else {
+            ImGui::SetTooltip("File not found: %s", program.filePath.c_str());
+          }
+        }
+        ImGui::NextColumn();
+
+        if (fileExists) {
+          ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.4f, 0.8f, 0.7f));
+          if (ImGui::SmallButton(("[LOAD]##load_" + name).c_str())) {
+            if (m_blockUI) {
+              m_blockUI->LoadProgram(name);
+              if (m_debugMode) {
+                printf("[MACRO DEBUG] [LOAD] Loaded program '%s' into BlockUI for testing\n", name.c_str());
+              }
+            }
+          }
+          ImGui::PopStyleColor();
+          if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Load '%s' into Block Programming for editing", name.c_str());
+          }
+        }
+        else {
+          ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.4f, 0.4f, 0.5f));
+          ImGui::SmallButton("[X]");
+          ImGui::PopStyleColor();
+        }
+        ImGui::NextColumn();
+
+        ImGui::Separator();
+      }
+      ImGui::Columns(1);
+      ImGui::EndChild();
+    }
+  }
+}
+
+// SIMPLIFIED MAIN RenderUI METHOD
+void MacroManager::RenderUI() {
+  if (!m_showWindow) return;
+
+  ImGui::Begin("Macro Manager", &m_showWindow, ImGuiWindowFlags_None);
+
+  // Render all sections in order
+  RenderDebugSection();
+  
+  RenderCreateMacroSection();
+  RenderAvailableProgramsSection();
+  RenderLoadMacroSection();
+  
+  RenderEditMacrosSection();
+  // NEW: Render embedded feedback section
+  RenderEmbeddedFeedbackSection();
+  RenderExecutionStatus();
+  ImGui::End();
+}
+
+
+
+// Simple text-based feedback rendering
+void MacroManager::RenderEmbeddedFeedbackSection() {
+  if (ImGui::CollapsingHeader("[FEEDBACK] Execution Progress", ImGuiTreeNodeFlags_DefaultOpen)) {
+
+    ImGui::Checkbox("Show Execution Log", &m_showEmbeddedFeedback);
+    ImGui::SameLine();
+    ImGui::TextDisabled("(Shows real-time execution progress)");
+
+    if (m_showEmbeddedFeedback) {
+      ImGui::SameLine();
+      if (ImGui::Button("Clear Log")) {
+        ClearExecutionLog();
+      }
+
+      ImGui::SameLine();
+      if (ImGui::Button("Test Log")) {
+        AddExecutionLog("=== TEST MACRO EXECUTION ===");
+        AddExecutionLog("Loading program 1/3: Test Program 1");
+        AddExecutionLog("Program loaded, starting execution...");
+        AddExecutionLog("Program 'Test Program 1' completed: SUCCESS");
+        AddExecutionLog("Loading program 2/3: Test Program 2");
+        AddExecutionLog("Still executing 'Test Program 2' (5s elapsed)");
+        AddExecutionLog("Program 'Test Program 2' completed: SUCCESS");
+        AddExecutionLog("=== MACRO COMPLETED SUCCESSFULLY ===");
+      }
+
+      // Show compact status if executing
+      if (m_isExecuting && !m_currentExecutingProgram.empty()) {
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), // Darker Green for currently executing
+          "EXECUTING: %s (%d/%d)",
+          m_currentExecutingProgram.c_str(),
+          m_currentProgramIndex + 1,
+          static_cast<int>(m_macros[m_currentMacro].programs.size())
+        );
+      }
+
+      // Render execution log
+      ImGui::Separator();
+      ImGui::Text("Execution Log:");
+
+      // Push a dark grey background color for the child window
+      ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f)); // Darker grey
+
+      ImGui::BeginChild("ExecutionLog", ImVec2(-1, 150), true, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+
+      if (m_executionLog.empty()) {
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No execution activity yet...");
+      }
+      else {
+        for (const auto& logEntry : m_executionLog) {
+          // Color-code log entries
+          ImVec4 color = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);  // Light Gray for default messages
+
+          if (logEntry.find("SUCCESS") != std::string::npos ||
+            logEntry.find("completed successfully") != std::string::npos ||
+            logEntry.find("COMPLETED SUCCESSFULLY") != std::string::npos) {
+            color = ImVec4(0.1f, 0.9f, 0.1f, 1.0f);  // Bright Green for success
+          }
+          else if (logEntry.find("FAILED") != std::string::npos ||
+            logEntry.find("ERROR") != std::string::npos ||
+            logEntry.find("TIMEOUT") != std::string::npos ||
+            logEntry.find("FAILED") != std::string::npos) {
+            color = ImVec4(0.9f, 0.1f, 0.1f, 1.0f);  // Bright Red for errors/failures
+          }
+          else if (logEntry.find("STARTING") != std::string::npos ||
+            logEntry.find("STOPPED") != std::string::npos ||
+            logEntry.find("CANCELLED") != std::string::npos) {
+            color = ImVec4(0.2f, 0.6f, 1.0f, 1.0f);  // Sky Blue for start/stop/cancel
+          }
+          else if (logEntry.find("Loading") != std::string::npos ||
+            logEntry.find("executing") != std::string::npos ||
+            logEntry.find("Waiting") != std::string::npos) {
+            color = ImVec4(1.0f, 0.9f, 0.1f, 1.0f);  // Gold for loading/in-progress/waiting
+          }
+
+          ImGui::TextColored(color, "%s", logEntry.c_str());
+        }
+
+        // Auto-scroll to bottom
+        if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+          ImGui::SetScrollHereY(1.0f);
+        }
+      }
+
+      ImGui::EndChild();
+      ImGui::PopStyleColor(); // Pop the pushed style color for ChildBg
+    }
+
+    ImGui::Separator();
+  }
+}
+
+
+// Simplified initialization - no complex feedback UI needed
+void MacroManager::InitializeFeedbackUI() {
+  // Just clear the log - no complex UI initialization needed
+  ClearExecutionLog();
+  AddExecutionLog("Macro Manager feedback system initialized");
+}
+
+
+void MacroManager::AddExecutionLog(const std::string& message) {
+  std::string timestampedMessage = "[" + GetCurrentTimeString() + "] " + message;
+  m_executionLog.push_back(timestampedMessage);
+
+  // Keep only the last N entries
+  if (m_executionLog.size() > m_maxLogLines) {
+    m_executionLog.erase(m_executionLog.begin());
+  }
+
+  // Also print to console for debugging
+  printf("%s\n", timestampedMessage.c_str());
+}
+
+std::string MacroManager::GetCurrentTimeString() {
+  auto now = std::chrono::system_clock::now();
+  auto time_t = std::chrono::system_clock::to_time_t(now);
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+    now.time_since_epoch()) % 1000;
+
+  std::stringstream ss;
+  ss << std::put_time(std::localtime(&time_t), "%H:%M:%S");
+  ss << "." << std::setfill('0') << std::setw(3) << ms.count();
+  return ss.str();
+}
+
+void MacroManager::ClearExecutionLog() {
+  m_executionLog.clear();
+}
+
