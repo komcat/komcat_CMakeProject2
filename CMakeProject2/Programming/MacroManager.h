@@ -7,6 +7,7 @@
 #include <thread>
 #include <nlohmann/json.hpp>
 #include "FeedbackUI.h"
+#include "MacroEditState.h"
 // Forward declaration
 class MachineBlockUI;
 
@@ -110,4 +111,16 @@ private:
 
 
   void ProcessPendingLogs();
+  void ExecuteMacroWithIndices(const std::string& macroName, const std::vector<int>& indices);
+
+  // NEW: Edit mode state for each macro
+  std::map<std::string, bool> m_editModeStates;
+  std::map<std::string, MacroEditState> m_macroEditStates;
+  std::map<std::string, int> m_selectedProgramIndices; // For add dropdown
+
+  // NEW: Edit mode management
+  bool IsEditMode(const std::string& macroName) const;
+  void SetEditMode(const std::string& macroName, bool editMode);
+  MacroEditState& GetEditState(const std::string& macroName);
+
 };

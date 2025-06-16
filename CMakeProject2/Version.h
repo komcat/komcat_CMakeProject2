@@ -14,7 +14,7 @@ version 2.1.0.46
 #define VERSION_MAJOR 2
 #define VERSION_MINOR 1
 #define VERSION_PATCH 0
-#define VERSION_BUILD 46
+#define VERSION_BUILD 47
 
 // Build information
 #define BUILD_DATE __DATE__

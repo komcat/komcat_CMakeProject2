@@ -14,7 +14,7 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
-
+#include "MacroEditState.h"
 
 
 
@@ -195,6 +195,8 @@ bool MacroManager::CreateMacro(const std::string& macroName, const std::string& 
   return true;
 }
 
+
+// 3. UPDATED: Override existing methods to update edit state
 bool MacroManager::AddProgramToMacro(const std::string& macroName, const std::string& programName) {
   auto macroIt = m_macros.find(macroName);
   if (macroIt == m_macros.end()) {
@@ -209,6 +211,12 @@ bool MacroManager::AddProgramToMacro(const std::string& macroName, const std::st
   }
 
   macroIt->second.programs.push_back(programIt->second);
+
+  // Update edit state
+  if (m_macroEditStates.find(macroName) != m_macroEditStates.end()) {
+    m_macroEditStates[macroName].SetProgramCount(macroIt->second.programs.size());
+  }
+
   printf("[MACRO] Added program '%s' to macro '%s'\n", programName.c_str(), macroName.c_str());
   return true;
 }
@@ -226,10 +234,15 @@ bool MacroManager::RemoveProgramFromMacro(const std::string& macroName, int inde
   }
 
   macroIt->second.programs.erase(macroIt->second.programs.begin() + index);
+
+  // Update edit state
+  if (m_macroEditStates.find(macroName) != m_macroEditStates.end()) {
+    m_macroEditStates[macroName].SetProgramCount(macroIt->second.programs.size());
+  }
+
   printf("[MACRO] Removed program at index %d from macro '%s'\n", index, macroName.c_str());
   return true;
 }
-
 
 // 6. ADD BETTER LOGGING TO ExecuteMacro method:
 void MacroManager::ExecuteMacro(const std::string& macroName, std::function<void(bool)> callback) {
@@ -855,6 +868,10 @@ void MacroManager::RenderCreateMacroSection() {
   }
 }
 
+
+
+
+// 1. FIX: Replace this section in RenderEditMacrosSection()
 void MacroManager::RenderEditMacrosSection() {
   if (ImGui::CollapsingHeader("[EDIT] Edit Macros", ImGuiTreeNodeFlags_DefaultOpen)) {
     if (m_macros.empty()) {
@@ -862,178 +879,483 @@ void MacroManager::RenderEditMacrosSection() {
       return;
     }
 
-    // ADD THESE VARIABLES FOR DEFERRED DELETION
-    static std::string macroToDelete = "";
-    static int programToRemove = -1;
-    static std::string macroForRemoval = "";
-
+    // FIXED: Use class members instead of static variables
     for (auto& [name, macro] : m_macros) {
-      ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.2f, 0.4f, 0.8f, 0.4f));
-      ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.3f, 0.5f, 0.9f, 0.4f));
+      // Initialize states for this macro if not exists
+      if (m_macroEditStates.find(name) == m_macroEditStates.end()) {
+        m_macroEditStates[name].SetProgramCount(macro.programs.size());
+        m_editModeStates[name] = false; // Default to execution mode
+        m_selectedProgramIndices[name] = 0;
+      }
 
+      MacroEditState& editState = m_macroEditStates[name];
+      bool& isEditMode = m_editModeStates[name]; // FIXED: Use class member
+      editState.SetProgramCount(macro.programs.size());
+
+      ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.2f, 0.4f, 0.8f, 0.4f));
       bool isOpen = ImGui::TreeNodeEx(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
-      ImGui::PopStyleColor(2);
+      ImGui::PopStyleColor();
 
       if (isOpen) {
         ImGui::Indent();
+
+        // Macro info
         ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Description: %s", macro.description.c_str());
         ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Programs: %zu", macro.programs.size());
         ImGui::Spacing();
 
-        // Visual program flow
         if (!macro.programs.empty()) {
+          // === EDIT MODE TOGGLE ===
+          ImGui::Spacing();
+
+          if (ImGui::Checkbox(("Edit Mode##" + name).c_str(), &isEditMode)) {
+            // Toggle edit mode - clear selections when switching
+            editState.SetMode(ExecutionMode::SINGLE_PROGRAM);
+          }
+
+          ImGui::SameLine();
+          ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+            isEditMode ? "(Click X to remove, dropdown to add)" : "(Click programs to select for execution)");
+
+          ImGui::Spacing();
+
+          // === EXECUTION MODE SELECTION ===
+          if (!isEditMode) {
+            ImGui::Text("Execution Mode:");
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "[%s]", editState.GetModeDescription().c_str());
+            ImGui::Spacing();
+          }
+
+          // === VISUAL PROGRAM FLOW ===
           ImGui::Text("Program Flow:");
-          ImGui::BeginChild(("Flow_" + name).c_str(), ImVec2(-1, 100), true, ImGuiWindowFlags_HorizontalScrollbar);
+          ImGui::BeginChild(("Flow_" + name).c_str(), ImVec2(-1, 120), true, ImGuiWindowFlags_HorizontalScrollbar);
 
           for (size_t i = 0; i < macro.programs.size(); i++) {
             const auto& program = macro.programs[i];
+            bool isSelected = editState.IsProgramSelected(i);
 
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 0.8f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 0.9f));
+            if (isEditMode) {
+              // === EDIT MODE: Show remove buttons ===
+              ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.3f, 0.3f, 0.8f));
+              ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.7f, 0.4f, 0.4f, 1.0f));
 
-            if (ImGui::Button((program.name + "##" + std::to_string(i)).c_str(), ImVec2(120, 40))) {
-              ExecuteSingleProgram(program.name);
+              std::string buttonId = "X" + program.name + "##" + std::to_string(i);
+              if (ImGui::Button(buttonId.c_str(), ImVec2(140, 40))) {
+                // Remove this program
+                RemoveProgramFromMacro(name, i);
+                editState.SetProgramCount(macro.programs.size() - 1);
+                ImGui::PopStyleColor(2);
+                break; // Exit loop since we modified the container
+              }
+
+              // RIGHT-CLICK MENU for edit mode
+              if (ImGui::BeginPopupContextItem()) {
+                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Program: %s", program.name.c_str());
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("[Del] Delete Program")) {
+                  RemoveProgramFromMacro(name, i);
+                  editState.SetProgramCount(macro.programs.size() - 1);
+                  ImGui::EndPopup();
+                  ImGui::PopStyleColor(2);
+                  break; // Exit loop since we modified the container
+                }
+
+                if (ImGui::MenuItem("Program Info")) {
+                  // Show program details
+                  printf("[MACRO INFO] Program: %s | File: %s | Description: %s\n",
+                    program.name.c_str(), program.filePath.c_str(), program.description.c_str());
+                }
+
+                ImGui::Separator();
+                if (ImGui::MenuItem("Test Run")) {
+                  ExecuteSingleProgram(program.name);
+                }
+
+                ImGui::EndPopup();
+              }
+
             }
+            else {
+              // === EXECUTION MODE: Show selection ===
+              if (isSelected) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.7f, 0.3f, 0.9f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.8f, 0.4f, 1.0f));
+              }
+              else {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.4f, 0.4f, 0.6f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
+              }
+
+              std::string buttonId = program.name + "##" + std::to_string(i);
+              if (ImGui::Button(buttonId.c_str(), ImVec2(120, 40))) {
+                editState.SelectSingleProgram(i);
+              }
+
+              // Right click menu
+              if (ImGui::BeginPopupContextItem()) {
+                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Program: %s", program.name.c_str());
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Run This Only")) {
+                  editState.SelectSingleProgram(i);
+                  ExecuteSingleProgram(program.name);
+                }
+
+                if (ImGui::MenuItem("Run From Here to End")) {
+                  editState.SetRunFromIndex(i);
+                  // Give visual feedback
+                  AddExecutionLog("Set to run from '" + program.name + "' to end");
+                }
+
+                if (ImGui::MenuItem("☑️ Toggle Selection")) {
+                  editState.ToggleProgramSelection(i);
+                }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Program Info")) {
+                  printf("[MACRO INFO] Program: %s | File: %s\n",
+                    program.name.c_str(), program.filePath.c_str());
+                }
+
+                ImGui::EndPopup();
+              }
+            }
+
             ImGui::PopStyleColor(2);
-
-            if (ImGui::IsItemHovered()) {
-              ImGui::SetTooltip("Click to execute '%s'\\nFile: %s",
-                program.name.c_str(), program.filePath.c_str());
-            }
-
-            // Remove button (X) with deferred deletion
-            ImGui::SameLine();
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 25);
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 40);
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-            if (ImGui::SmallButton(("X##" + std::to_string(i)).c_str())) {
-              programToRemove = static_cast<int>(i);
-              macroForRemoval = name;
-              ImGui::PopStyleColor();
-              break;
-            }
-            ImGui::PopStyleColor();
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 40);
 
             // Arrow between programs
             if (i < macro.programs.size() - 1) {
               ImGui::SameLine();
-              ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 20);
-              ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "-->");
+              ImGui::Text("→");
               ImGui::SameLine();
             }
           }
-
           ImGui::EndChild();
-        }
 
-        // Add program section
-        ImGui::Spacing();
-        ImGui::Text("[+] Add Program:");
+          // === ADD PROGRAM SECTION ===
+          ImGui::Spacing();
+          ImGui::Text("Add Program:");
 
-        static int selectedProgram = 0;
-        std::vector<std::string> programNames = GetProgramNames();
-        if (!programNames.empty()) {
-          std::vector<const char*> items;
-          for (const auto& pName : programNames) {
-            items.push_back(pName.c_str());
+          int& selectedProgram = m_selectedProgramIndices[name];
+
+          std::vector<std::string> availablePrograms;
+          for (const auto& [progName, savedProg] : m_savedPrograms) {
+            bool alreadyInMacro = false;
+            for (const auto& existingProg : macro.programs) {
+              if (existingProg.name == progName) {
+                alreadyInMacro = true;
+                break;
+              }
+            }
+            if (!alreadyInMacro) {
+              availablePrograms.push_back(progName);
+            }
           }
 
-          ImGui::PushItemWidth(200);
-          ImGui::Combo(("##AddProgram_" + name).c_str(), &selectedProgram, items.data(), items.size());
-          ImGui::PopItemWidth();
-          ImGui::SameLine();
+          if (!availablePrograms.empty()) {
+            if (selectedProgram >= availablePrograms.size()) {
+              selectedProgram = 0;
+            }
 
-          ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 0.8f));
-          if (ImGui::Button(("Add##" + name).c_str())) {
-            AddProgramToMacro(name, programNames[selectedProgram]);
+            ImGui::PushItemWidth(200);
+            std::vector<const char*> items;
+            for (const auto& progName : availablePrograms) {
+              items.push_back(progName.c_str());
+            }
+
+            ImGui::Combo(("##AddProgram_" + name).c_str(), &selectedProgram, items.data(), items.size());
+            ImGui::PopItemWidth();
+
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 0.8f));
+            if (ImGui::Button(("Add##" + name).c_str(), ImVec2(60, 25))) {
+              if (selectedProgram >= 0 && selectedProgram < availablePrograms.size()) {
+                AddProgramToMacro(name, availablePrograms[selectedProgram]);
+                editState.SetProgramCount(macro.programs.size() + 1);
+              }
+            }
+            ImGui::PopStyleColor();
           }
-          ImGui::PopStyleColor();
-        }
-
-        ImGui::Spacing();
-        ImGui::Separator();
-
-        // Action buttons
-        ImGui::Columns(4, ("MacroActions_" + name).c_str(), false);
-
-        // Execute button
-        if (!m_isExecuting && !macro.programs.empty()) {
-          ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.7f, 0.1f, 0.8f));
-          ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.8f, 0.2f, 0.9f));
-          if (ImGui::Button(("[RUN] Execute##" + name).c_str(), ImVec2(-1, 35))) {
-            ExecuteMacro(name);
+          else {
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "All available programs already added");
           }
-          ImGui::PopStyleColor(2);
-        }
-        else if (m_isExecuting) {
-          ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.6f, 0.6f, 0.5f));
-          ImGui::Button("[WAIT] Running...", ImVec2(-1, 35));
-          ImGui::PopStyleColor();
-        }
-        else {
-          ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.6f, 0.6f, 0.5f));
-          ImGui::Button("[!] No Programs", ImVec2(-1, 35));
-          ImGui::PopStyleColor();
-        }
 
-        ImGui::NextColumn();
+          // === EXECUTION CONTROLS (only in execution mode) ===
+          if (!isEditMode) {
+            ImGui::Spacing();
+            ImGui::Text("Execution Mode:");
 
-        // Save button
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.5f, 0.8f, 0.8f));
-        if (ImGui::Button(("[SAVE] Save##" + name).c_str(), ImVec2(-1, 35))) {
-          SaveMacro(name, "macros/" + name + "_macro.json");
-        }
-        ImGui::PopStyleColor();
+            if (ImGui::Button("Single", ImVec2(60, 25))) {
+              // Keep current selection - shows only selected program
+            }
+            ImGui::SameLine();
 
-        ImGui::NextColumn();
+            if (ImGui::Button("All", ImVec2(60, 25))) {
+              editState.SelectAllPrograms();
+            }
+            ImGui::SameLine();
 
-        // Copy button
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.4f, 0.8f, 0.8f));
-        if (ImGui::Button(("[COPY] Copy##" + name).c_str(), ImVec2(-1, 35))) {
-          std::string copyName = name + "_copy";
-          if (CreateMacro(copyName, macro.description + " (Copy)")) {
-            for (const auto& program : macro.programs) {
-              AddProgramToMacro(copyName, program.name);
+            // IMPROVED: Better "Run From" button with clearer text
+            if (ImGui::Button("From►", ImVec2(60, 25))) {
+              // Set to run from the first selected program
+              auto executionIndices = editState.GetExecutionIndices(macro.programs.size());
+              if (!executionIndices.empty()) {
+                editState.SetRunFromIndex(executionIndices[0]);
+              }
+              else {
+                editState.SetRunFromIndex(0); // Default to first program
+              }
+            }
+            if (ImGui::IsItemHovered()) {
+              ImGui::SetTooltip("Run from clicked program to the end\n1. Click a program block\n2. Click 'From►' to run from that point");
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("Custom", ImVec2(60, 25))) {
+              editState.SetMode(ExecutionMode::CUSTOM_SELECTION);
+            }
+            if (ImGui::IsItemHovered()) {
+              ImGui::SetTooltip("Toggle individual programs on/off");
+            }
+
+            ImGui::Spacing();
+
+            // === HELPFUL INSTRUCTIONS ===
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "How to use:");
+            ImGui::BulletText("Single: Click a program → only that one runs");
+            ImGui::BulletText("All: Run all programs in sequence");
+            ImGui::BulletText("From►: Click a program → run from there to end");
+            ImGui::BulletText("Custom: Right-click programs for advanced options");
+
+            ImGui::Separator();
+
+            // === EXECUTION PREVIEW ===
+            auto executionIndices = editState.GetExecutionIndices(macro.programs.size());
+            if (!executionIndices.empty()) {
+              ImGui::Text("Will Execute:");
+              ImGui::SameLine();
+
+              std::string previewText;
+              for (size_t i = 0; i < executionIndices.size(); i++) {
+                if (i > 0) previewText += " → ";
+                if (executionIndices[i] < macro.programs.size()) {
+                  previewText += macro.programs[executionIndices[i]].name;
+                }
+                if (previewText.length() > 80) {
+                  previewText += "...";
+                  break;
+                }
+              }
+
+              ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.9f, 1.0f), "%s", previewText.c_str());
+              ImGui::Text("(%zu programs)", executionIndices.size());
+
+              ImGui::Spacing();
+              if (ImGui::Button(("Execute Selected##" + name).c_str(), ImVec2(140, 30))) {
+                ExecuteMacroWithIndices(name, executionIndices);
+              }
+
+              if (m_isExecuting && m_currentMacro == name) {
+                ImGui::SameLine();
+                if (ImGui::Button("Stop", ImVec2(60, 30))) {
+                  StopExecution();
+                }
+              }
+            }
+            else {
+              ImGui::TextColored(ImVec4(0.8f, 0.3f, 0.3f, 1.0f), "No programs selected for execution");
+            }
+          }
+          else {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "Edit Mode: Add programs above, click ✖ to remove");
+
+            // === SAVE MACRO BUTTON (prominent in edit mode) ===
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.5f, 0.8f, 0.9f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.6f, 0.9f, 1.0f));
+            if (ImGui::Button(("Save Macro##" + name).c_str(), ImVec2(120, 35))) {
+              std::string saveFileName = "macros/" + name + "_macro.json";
+              SaveMacro(name, saveFileName);
+
+              // Show feedback
+              AddExecutionLog("Saved macro '" + name + "' to " + saveFileName);
+            }
+            ImGui::PopStyleColor(2);
+
+            if (ImGui::IsItemHovered()) {
+              ImGui::SetTooltip("Save current macro configuration\nFile: macros/%s_macro.json", name.c_str());
+            }
+
+            // === ADDITIONAL EDIT MODE ACTIONS ===
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.4f, 0.8f, 0.8f));
+            if (ImGui::Button(("Copy Macro##" + name).c_str(), ImVec2(120, 35))) {
+              std::string copyName = name + "_copy";
+              int copyNumber = 1;
+
+              // Find unique name
+              while (m_macros.find(copyName) != m_macros.end()) {
+                copyName = name + "_copy" + std::to_string(copyNumber);
+                copyNumber++;
+              }
+
+              if (CreateMacro(copyName, macro.description + " (Copy)")) {
+                // Copy all programs
+                for (const auto& program : macro.programs) {
+                  AddProgramToMacro(copyName, program.name);
+                }
+                AddExecutionLog("Created copy: '" + copyName + "'");
+              }
+            }
+            ImGui::PopStyleColor();
+
+            if (ImGui::IsItemHovered()) {
+              ImGui::SetTooltip("Create a copy of this macro");
+            }
+
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 0.9f));
+            if (ImGui::Button(("[Del] Delete Macro##" + name).c_str(), ImVec2(120, 35))) {
+              // Add confirmation popup logic here if needed
+              DeleteMacro(name);
+              AddExecutionLog("Deleted macro: '" + name + "'");
+              ImGui::PopStyleColor(2);
+              ImGui::Unindent();
+              ImGui::TreePop();
+              break; // Exit loop since we deleted the macro
+            }
+            ImGui::PopStyleColor(2);
+
+            if (ImGui::IsItemHovered()) {
+              ImGui::SetTooltip("⚠️ Delete this macro permanently");
             }
           }
         }
-        ImGui::PopStyleColor();
 
-        ImGui::NextColumn();
-
-        // Delete button with deferred deletion
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 0.9f));
-        if (ImGui::Button(("[DEL] Delete##" + name).c_str(), ImVec2(-1, 35))) {
-          macroToDelete = name;
-          ImGui::PopStyleColor(2);
-          ImGui::Columns(1);
-          ImGui::Unindent();
-          ImGui::TreePop();
-          break;
-        }
-        ImGui::PopStyleColor(2);
-
-        ImGui::Columns(1);
         ImGui::Unindent();
         ImGui::TreePop();
-        ImGui::Spacing();
+      }
+
+      ImGui::Spacing();
+    }
+  }
+}
+
+// NEW: Edit mode management methods
+bool MacroManager::IsEditMode(const std::string& macroName) const {
+  auto it = m_editModeStates.find(macroName);
+  return (it != m_editModeStates.end()) ? it->second : false;
+}
+
+void MacroManager::SetEditMode(const std::string& macroName, bool editMode) {
+  m_editModeStates[macroName] = editMode;
+
+  // Clear selections when switching modes
+  if (m_macroEditStates.find(macroName) != m_macroEditStates.end()) {
+    m_macroEditStates[macroName].SetMode(ExecutionMode::SINGLE_PROGRAM);
+  }
+}
+
+MacroEditState& MacroManager::GetEditState(const std::string& macroName) {
+  // Initialize if doesn't exist
+  if (m_macroEditStates.find(macroName) == m_macroEditStates.end()) {
+    auto macroIt = m_macros.find(macroName);
+    size_t programCount = (macroIt != m_macros.end()) ? macroIt->second.programs.size() : 0;
+    m_macroEditStates[macroName].SetProgramCount(programCount);
+  }
+
+  return m_macroEditStates[macroName];
+}
+
+// New method to execute macro with specific program indices
+void MacroManager::ExecuteMacroWithIndices(const std::string& macroName, const std::vector<int>& indices) {
+  auto it = m_macros.find(macroName);
+  if (it == m_macros.end()) {
+    printf("[MACRO ERROR] Macro '%s' not found\n", macroName.c_str());
+    return;
+  }
+
+  if (m_isExecuting) {
+    printf("[MACRO ERROR] Another macro is already executing\n");
+    return;
+  }
+
+  const MacroProgram& macro = it->second;
+
+  // Create subset of programs to execute
+  std::vector<SavedProgram> programsToExecute;
+  for (int index : indices) {
+    if (index >= 0 && index < macro.programs.size()) {
+      programsToExecute.push_back(macro.programs[index]);
+    }
+  }
+
+  if (programsToExecute.empty()) {
+    printf("[MACRO ERROR] No valid programs selected\n");
+    return;
+  }
+
+  // Execute the selected programs (similar to ExecuteMacro but with custom list)
+  m_isExecuting = true;
+  m_currentMacro = macroName;
+
+  AddExecutionLog("=== EXECUTING SELECTED PROGRAMS ===");
+  AddExecutionLog("Macro: " + macroName);
+  AddExecutionLog("Programs: " + std::to_string(programsToExecute.size()) + "/" + std::to_string(macro.programs.size()));
+
+  std::thread executionThread([this, programsToExecute, macroName]() {
+    bool success = true;
+
+    for (size_t i = 0; i < programsToExecute.size(); i++) {
+      if (!m_isExecuting) {
+        AddExecutionLog("STOPPED: Execution stopped by user");
+        success = false;
+        break;
+      }
+
+      const SavedProgram& program = programsToExecute[i];
+      AddExecutionLog("Executing " + std::to_string(i + 1) + "/" +
+        std::to_string(programsToExecute.size()) + ": " + program.name);
+
+      m_blockUI->LoadProgram(program.name);
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+      bool programSuccess = false;
+      bool executionComplete = false;
+
+      m_blockUI->ExecuteProgramAsSequence([&programSuccess, &executionComplete](bool result) {
+        programSuccess = result;
+        executionComplete = true;
+      });
+
+      // Wait for completion (simplified timeout logic)
+      int timeout = 0;
+      while (!executionComplete && timeout < 300 && m_isExecuting) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        timeout++;
+      }
+
+      if (!m_isExecuting || !executionComplete || !programSuccess) {
+        success = false;
+        break;
       }
     }
 
-    // HANDLE DEFERRED DELETIONS
-    if (!macroToDelete.empty()) {
-      DeleteMacro(macroToDelete);
-      macroToDelete = "";
-    }
+    m_isExecuting = false;
+    m_currentMacro = "";
 
-    if (programToRemove >= 0 && !macroForRemoval.empty()) {
-      RemoveProgramFromMacro(macroForRemoval, programToRemove);
-      programToRemove = -1;
-      macroForRemoval = "";
-    }
-  }
+    std::string result = success ? "SUCCESS" : "FAILED";
+    AddExecutionLog("=== EXECUTION " + result + " ===");
+  });
+
+  executionThread.detach();
 }
 
 void MacroManager::RenderLoadMacroSection() {
