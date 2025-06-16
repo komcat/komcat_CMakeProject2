@@ -563,7 +563,8 @@ std::unique_ptr<BlockPropertyRenderer> BlockRendererFactory::CreateRenderer(Bloc
     return std::make_unique<KeithleyReadResistanceRenderer>();
   case BlockType::KEITHLEY_SEND_COMMAND:
     return std::make_unique<KeithleySendCommandRenderer>();
-
+  case BlockType::SCAN_OPERATION:
+    return std::make_unique<ScanOperationRenderer>();
 
   default:
     return std::make_unique<DefaultRenderer>();
@@ -2195,4 +2196,345 @@ void KeithleySendCommandRenderer::RenderValidation(MachineBlock* block) {
   else {
     ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ SCPI command is valid");
   }
+}
+
+
+void ScanOperationRenderer::RenderProperties(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::TextColored(ImVec4(0.8f, 0.6f, 1.0f, 1.0f), "Scan Operation Configuration");
+  ImGui::Separator();
+
+  // Custom UI for scan-specific parameters
+  for (auto& param : block->parameters) {
+    if (param.name == "device_name") {
+      ImGui::Text("Device Name:");
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(150);
+      char buffer[256];
+      strcpy(buffer, param.value.c_str());
+      if (ImGui::InputText("##device_name", buffer, sizeof(buffer))) {
+        param.value = buffer;
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Motion controller device (e.g., hex-left, hex-right)");
+      }
+    }
+    else if (param.name == "data_channel") {
+      ImGui::Text("Data Channel:");
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(150);
+      char buffer[256];
+      strcpy(buffer, param.value.c_str());
+      if (ImGui::InputText("##data_channel", buffer, sizeof(buffer))) {
+        param.value = buffer;
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Data source to monitor (e.g., GPIB-Current)");
+      }
+    }
+    else if (param.name == "step_sizes_um") {
+      ImGui::Text("Step Sizes (µm):");
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(120);
+      char buffer[256];
+      strcpy(buffer, param.value.c_str());
+      if (ImGui::InputText("##step_sizes", buffer, sizeof(buffer))) {
+        param.value = buffer;
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Comma-separated step sizes in micrometers\nExample: 2,1,0.5 for multi-stage scanning");
+      }
+    }
+    else if (param.name == "settling_time_ms") {
+      ImGui::Text("Settling Time (ms):");
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(80);
+      int value = std::stoi(param.value.empty() ? "300" : param.value);
+      if (ImGui::InputInt("##settling_time", &value)) {
+        param.value = std::to_string(value);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Time to wait after each motion step");
+      }
+    }
+    else if (param.name == "axes_to_scan") {
+      ImGui::Text("Scan Axes:");
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(100);
+      char buffer[256];
+      strcpy(buffer, param.value.c_str());
+      if (ImGui::InputText("##axes", buffer, sizeof(buffer))) {
+        param.value = buffer;
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Comma-separated axes in scan order\nExample: Z,X,Y");
+      }
+    }
+    else if (param.name == "timeout_minutes") {
+      ImGui::Text("Timeout (min):");
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(60);
+      int value = std::stoi(param.value.empty() ? "30" : param.value);
+      if (ImGui::InputInt("##timeout", &value)) {
+        param.value = std::to_string(value);
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Maximum time to wait for scan completion");
+      }
+    }
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+
+  // Show scan preview
+  ScanParameters params = ExtractScanParameters(block);
+  auto stepSizes = ParseStepSizes(params.stepSizesStr);
+  auto axes = ParseAxes(params.axesStr);
+
+  ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Scan Preview:");
+  ImGui::Text("Device: %s", params.deviceName.c_str());
+  ImGui::Text("Channel: %s", params.dataChannel.c_str());
+
+  if (!stepSizes.empty()) {
+    ImGui::Text("Steps: ");
+    ImGui::SameLine();
+    for (size_t i = 0; i < stepSizes.size(); ++i) {
+      ImGui::SameLine();
+      ImGui::Text("%.1fµm", stepSizes[i] * 1000);
+      if (i < stepSizes.size() - 1) {
+        ImGui::SameLine();
+        ImGui::Text(" → ");
+      }
+    }
+  }
+
+  if (!axes.empty()) {
+    ImGui::Text("Axes: ");
+    for (size_t i = 0; i < axes.size(); ++i) {
+      ImGui::SameLine();
+      ImGui::Text("%s", axes[i].c_str());
+      if (i < axes.size() - 1) {
+        ImGui::SameLine();
+        ImGui::Text(" → ");
+      }
+    }
+  }
+}
+
+void ScanOperationRenderer::RenderActions(MachineBlock* block, MachineOperations* machineOps) {
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "Scan Actions:");
+
+  ScanParameters params = ExtractScanParameters(block);
+
+  // Show current scan status
+  RenderScanStatus(params, machineOps);
+
+  ImGui::Spacing();
+
+  // Test scan button
+  if (ImGui::Button("Test Scan", ImVec2(100, 0))) {
+    RenderTestButton(params, machineOps);
+  }
+
+  ImGui::SameLine();
+
+  // Stop scan button
+  if (ImGui::Button("Stop Scan", ImVec2(100, 0))) {
+    if (machineOps && !params.deviceName.empty()) {
+      bool success = machineOps->StopScan(params.deviceName);
+      if (success) {
+        printf("✅ Scan stopped successfully on %s\n", params.deviceName.c_str());
+      }
+      else {
+        printf("❌ Failed to stop scan on %s\n", params.deviceName.c_str());
+      }
+    }
+  }
+
+  ImGui::SameLine();
+
+  // Check device connection
+  if (ImGui::Button("Check Device", ImVec2(100, 0))) {
+    if (machineOps && !params.deviceName.empty()) {
+      bool connected = machineOps->IsDeviceConnected(params.deviceName);
+      printf("🔌 Device %s: %s\n", params.deviceName.c_str(),
+        connected ? "Connected" : "Disconnected");
+    }
+  }
+}
+
+void ScanOperationRenderer::RenderValidation(MachineBlock* block) {
+  ScanParameters params = ExtractScanParameters(block);
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "Validation:");
+
+  bool hasErrors = false;
+
+  // Validate device name
+  if (params.deviceName.empty()) {
+    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "❌ Device name is required");
+    hasErrors = true;
+  }
+
+  // Validate data channel
+  if (params.dataChannel.empty()) {
+    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "❌ Data channel is required");
+    hasErrors = true;
+  }
+
+  // Validate step sizes
+  auto stepSizes = ParseStepSizes(params.stepSizesStr);
+  if (stepSizes.empty()) {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "⚠️ Invalid step sizes, will use defaults");
+  }
+
+  // Validate axes
+  auto axes = ParseAxes(params.axesStr);
+  if (axes.empty()) {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "⚠️ Invalid axes, will use defaults (Z,X,Y)");
+  }
+
+  // Validate settling time
+  if (params.settlingTimeMs < 50) {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "⚠️ Settling time very low (< 50ms)");
+  }
+
+  // Validate timeout
+  if (params.timeoutMinutes < 1) {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "⚠️ Timeout very short (< 1 minute)");
+  }
+
+  if (!hasErrors) {
+    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "✅ Configuration valid");
+  }
+}
+
+// Helper method implementations
+ScanOperationRenderer::ScanParameters ScanOperationRenderer::ExtractScanParameters(MachineBlock* block) {
+  ScanParameters params;
+
+  for (const auto& param : block->parameters) {
+    if (param.name == "device_name") {
+      params.deviceName = param.value;
+    }
+    else if (param.name == "data_channel") {
+      params.dataChannel = param.value;
+    }
+    else if (param.name == "step_sizes_um") {
+      params.stepSizesStr = param.value;
+    }
+    else if (param.name == "settling_time_ms") {
+      params.settlingTimeMs = std::stoi(param.value.empty() ? "300" : param.value);
+    }
+    else if (param.name == "axes_to_scan") {
+      params.axesStr = param.value;
+    }
+    else if (param.name == "timeout_minutes") {
+      params.timeoutMinutes = std::stoi(param.value.empty() ? "30" : param.value);
+    }
+  }
+
+  return params;
+}
+
+void ScanOperationRenderer::RenderTestButton(const ScanParameters& params, MachineOperations* machineOps) {
+  if (!machineOps) {
+    printf("❌ No machine operations available for testing\n");
+    return;
+  }
+
+  if (params.deviceName.empty() || params.dataChannel.empty()) {
+    printf("❌ Cannot test: Device name and data channel are required\n");
+    return;
+  }
+
+  auto stepSizes = ParseStepSizes(params.stepSizesStr);
+  auto axes = ParseAxes(params.axesStr);
+
+  printf("🔍 Starting test scan on %s using %s...\n",
+    params.deviceName.c_str(), params.dataChannel.c_str());
+
+  bool success = machineOps->StartScan(
+    params.deviceName,
+    params.dataChannel,
+    stepSizes,
+    params.settlingTimeMs,
+    axes
+  );
+
+  if (success) {
+    printf("✅ Test scan started successfully\n");
+  }
+  else {
+    printf("❌ Failed to start test scan\n");
+  }
+}
+
+void ScanOperationRenderer::RenderScanStatus(const ScanParameters& params, MachineOperations* machineOps) {
+  if (!machineOps || params.deviceName.empty()) {
+    ImGui::Text("Status: No device specified");
+    return;
+  }
+
+  bool isActive = machineOps->IsScanActive(params.deviceName);
+  double progress = machineOps->GetScanProgress(params.deviceName);
+  std::string status = machineOps->GetScanStatus(params.deviceName);
+
+  if (isActive) {
+    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "🔍 SCANNING ACTIVE");
+    ImGui::ProgressBar(progress / 100.0f, ImVec2(200, 0));
+    ImGui::Text("Status: %s", status.c_str());
+    ImGui::Text("Progress: %.1f%%", progress);
+  }
+  else {
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "⏸️ No active scan");
+    ImGui::Text("Status: %s", status.c_str());
+  }
+}
+
+std::vector<double> ScanOperationRenderer::ParseStepSizes(const std::string& stepSizesStr) {
+  std::vector<double> stepSizes;
+  std::stringstream ss(stepSizesStr);
+  std::string item;
+
+  while (std::getline(ss, item, ',')) {
+    // Trim whitespace
+    item.erase(0, item.find_first_not_of(' '));
+    item.erase(item.find_last_not_of(' ') + 1);
+
+    if (!item.empty()) {
+      try {
+        double stepUm = std::stod(item);
+        double stepMm = stepUm / 1000.0; // Convert to millimeters
+        stepSizes.push_back(stepMm);
+      }
+      catch (const std::exception&) {
+        // Skip invalid values
+      }
+    }
+  }
+
+  return stepSizes;
+}
+
+std::vector<std::string> ScanOperationRenderer::ParseAxes(const std::string& axesStr) {
+  std::vector<std::string> axes;
+  std::stringstream ss(axesStr);
+  std::string item;
+
+  while (std::getline(ss, item, ',')) {
+    // Trim whitespace
+    item.erase(0, item.find_first_not_of(' '));
+    item.erase(item.find_last_not_of(' ') + 1);
+
+    if (!item.empty()) {
+      axes.push_back(item);
+    }
+  }
+
+  return axes;  // ✅ Now properly returns the parsed axes vector
 }

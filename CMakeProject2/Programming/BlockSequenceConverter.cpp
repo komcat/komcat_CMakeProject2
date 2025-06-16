@@ -92,6 +92,18 @@ std::unique_ptr<SequenceStep> BlockSequenceConverter::ConvertBlocksToSequence(
       operation = ConvertMoveNodeBlock(*block);
       break;
 
+      // NEW: Add these cases
+    case BlockType::MOVE_TO_POSITION:
+      operation = ConvertMoveToPositionBlock(*block);
+      break;
+
+    case BlockType::MOVE_RELATIVE_AXIS:
+      operation = ConvertMoveRelativeAxisBlock(*block);
+      break;
+    case BlockType::SCAN_OPERATION:
+      operation = ConvertScanOperationBlock(*block);
+      break;
+
     case BlockType::WAIT:
       operation = ConvertWaitBlock(*block);
       break;
@@ -138,14 +150,8 @@ std::unique_ptr<SequenceStep> BlockSequenceConverter::ConvertBlocksToSequence(
     case BlockType::PROMPT:  // NEW
       operation = ConvertPromptBlock(*block);
       break;
-      // NEW: Add these cases
-    case BlockType::MOVE_TO_POSITION:
-      operation = ConvertMoveToPositionBlock(*block);
-      break;
+      
 
-    case BlockType::MOVE_RELATIVE_AXIS:
-      operation = ConvertMoveRelativeAxisBlock(*block);
-      break;
       // NEW: Keithley converter cases
     case BlockType::KEITHLEY_RESET:
       operation = ConvertKeithleyResetBlock(*block);
@@ -569,4 +575,91 @@ std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertKeithleySendCo
   }
 
   return std::make_shared<SendKeithleyCommandOperation>(command, clientName);
+}
+
+
+std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertScanOperationBlock(const MachineBlock& block) {
+  std::string deviceName = GetParameterValue(block, "device_name");
+  std::string dataChannel = GetParameterValue(block, "data_channel");
+  std::string stepSizesStr = GetParameterValue(block, "step_sizes_um");
+  int settlingTimeMs = GetParameterValueAsInt(block, "settling_time_ms", 300);
+  std::string axesStr = GetParameterValue(block, "axes_to_scan");
+  int timeoutMinutes = GetParameterValueAsInt(block, "timeout_minutes", 30);
+
+  // Validate required parameters
+  if (deviceName.empty()) {
+    m_machineOps.LogError("SCAN_OPERATION block missing device_name parameter");
+    return nullptr;
+  }
+
+  if (dataChannel.empty()) {
+    m_machineOps.LogError("SCAN_OPERATION block missing data_channel parameter");
+    return nullptr;
+  }
+
+  // Parse step sizes from micrometers to millimeters
+  std::vector<double> stepSizes;
+  std::stringstream stepStream(stepSizesStr);
+  std::string stepStr;
+
+  while (std::getline(stepStream, stepStr, ',')) {
+    // Trim whitespace
+    stepStr.erase(0, stepStr.find_first_not_of(' '));
+    stepStr.erase(stepStr.find_last_not_of(' ') + 1);
+
+    if (!stepStr.empty()) {
+      try {
+        double stepUm = std::stod(stepStr);
+        double stepMm = stepUm / 1000.0;  // Convert micrometers to millimeters
+        stepSizes.push_back(stepMm);
+      }
+      catch (const std::exception& e) {
+        m_machineOps.LogWarning("Invalid step size '" + stepStr + "', using default 0.001mm");
+        stepSizes.push_back(0.001);  // Default 1µm in mm
+      }
+    }
+  }
+
+  // Default step sizes if parsing failed
+  if (stepSizes.empty()) {
+    stepSizes = { 0.002, 0.001, 0.0005 };  // 2µm, 1µm, 0.5µm in mm
+    m_machineOps.LogInfo("Using default step sizes: 2,1,0.5 µm");
+  }
+
+  // Parse axes to scan
+  std::vector<std::string> axesToScan;
+  std::stringstream axesStream(axesStr);
+  std::string axisStr;
+
+  while (std::getline(axesStream, axisStr, ',')) {
+    // Trim whitespace
+    axisStr.erase(0, axisStr.find_first_not_of(' '));
+    axisStr.erase(axisStr.find_last_not_of(' ') + 1);
+
+    if (!axisStr.empty()) {
+      axesToScan.push_back(axisStr);
+    }
+  }
+
+  // Default axes if parsing failed
+  if (axesToScan.empty()) {
+    axesToScan = { "Z", "X", "Y" };
+    m_machineOps.LogInfo("Using default scan axes: Z,X,Y");
+  }
+
+  // Convert timeout from minutes to milliseconds
+  int timeoutMs = timeoutMinutes * 60 * 1000;
+
+  m_machineOps.LogInfo("Converting SCAN_OPERATION block for device: " + deviceName +
+    " using channel: " + dataChannel);
+
+  // Create the RunScanOperation (complete scan with auto-move to peak)
+  return std::make_shared<RunScanOperation>(
+    deviceName,
+    dataChannel,
+    stepSizes,
+    settlingTimeMs,
+    axesToScan,
+    timeoutMs
+  );
 }

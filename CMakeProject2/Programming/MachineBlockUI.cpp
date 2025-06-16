@@ -88,6 +88,10 @@ void MachineBlockUI::InitializePalette() {
 	motionControl.blocks.emplace_back(7, BlockType::MOVE_RELATIVE_AXIS, "Move Relative", GetBlockColor(BlockType::MOVE_RELATIVE_AXIS));
 	InitializeBlockParameters(motionControl.blocks.back());
 
+	// NEW: SCAN OPERATION block
+	motionControl.blocks.emplace_back(8, BlockType::SCAN_OPERATION, "Scan Operation", GetBlockColor(BlockType::SCAN_OPERATION));
+	InitializeBlockParameters(motionControl.blocks.back());
+
 	m_blockCategories.push_back(std::move(motionControl));
 
 	// ═══════════════════════════════════════════════════════════════════════════════════════
@@ -1650,6 +1654,31 @@ void MachineBlockUI::InitializeBlockParameters(MachineBlock& block) {
 		block.parameters.push_back(BlockParameter{ "blocking", "true", "bool", "Wait for movement completion" });
 		break;
 
+	case BlockType::SCAN_OPERATION:
+		// Required parameters
+		block.parameters.push_back({ "device_name", "hex-left", "string",
+															 "Motion controller device (e.g., hex-left, hex-right)" });
+		block.parameters.push_back({ "data_channel", "GPIB-Current", "string",
+															 "Data source to monitor (e.g., GPIB-Current)" });
+
+		// Step sizes (comma-separated values in micrometers)
+		block.parameters.push_back({ "step_sizes_um", "2,1,0.5", "string",
+															 "Step sizes in micrometers (comma-separated, e.g., 2,1,0.5)" });
+
+		// Settling time
+		block.parameters.push_back({ "settling_time_ms", "300", "int",
+															 "Time to wait after each step (milliseconds)" });
+
+		// Axes to scan
+		block.parameters.push_back({ "axes_to_scan", "Z,X,Y", "string",
+															 "Axes to scan (comma-separated, e.g., Z,X,Y)" });
+
+		// Timeout
+		block.parameters.push_back({ "timeout_minutes", "30", "int",
+															 "Maximum time to wait for completion (minutes)" });
+		break;
+
+
 		// NEW: Keithley block parameters
 	case BlockType::KEITHLEY_RESET:
 		block.parameters.push_back({ "client_name", "", "string", "Keithley client name (empty for default)" });
@@ -2055,7 +2084,7 @@ std::string MachineBlockUI::BlockTypeToString(BlockType type) const {
 	case BlockType::KEITHLEY_READ_CURRENT: return "Read Current";
 	case BlockType::KEITHLEY_READ_RESISTANCE: return "Read Resistance";
 	case BlockType::KEITHLEY_SEND_COMMAND: return "Send Command";
-
+	case BlockType::SCAN_OPERATION: return "Scan Operation";  // NEW
 	default: return "Unknown";
 	}
 }
@@ -2088,6 +2117,7 @@ ImU32 MachineBlockUI::GetBlockColor(BlockType type) const {
 	case BlockType::KEITHLEY_READ_CURRENT: return KEITHLEY_READ_CURRENT_COLOR;
 	case BlockType::KEITHLEY_READ_RESISTANCE: return KEITHLEY_READ_RESISTANCE_COLOR;
 	case BlockType::KEITHLEY_SEND_COMMAND: return KEITHLEY_SEND_COMMAND_COLOR;
+	case BlockType::SCAN_OPERATION: return SCAN_OPERATION_COLOR;  // NEW
 
 	default: return IM_COL32(128, 128, 128, 255);
 	}
@@ -2158,6 +2188,7 @@ std::string MachineBlockUI::BlockTypeToJsonString(BlockType type) const {
 	case BlockType::KEITHLEY_READ_CURRENT: return "KEITHLEY_READ_CURRENT";
 	case BlockType::KEITHLEY_READ_RESISTANCE: return "KEITHLEY_READ_RESISTANCE";
 	case BlockType::KEITHLEY_SEND_COMMAND: return "KEITHLEY_SEND_COMMAND";
+	case BlockType::SCAN_OPERATION: return "SCAN_OPERATION";  // NEW
 
 	default: return "UNKNOWN";
 	}
@@ -2191,6 +2222,7 @@ BlockType MachineBlockUI::JsonStringToBlockType(const std::string& typeStr) cons
 	if (typeStr == "KEITHLEY_READ_CURRENT") return BlockType::KEITHLEY_READ_CURRENT;
 	if (typeStr == "KEITHLEY_READ_RESISTANCE") return BlockType::KEITHLEY_READ_RESISTANCE;
 	if (typeStr == "KEITHLEY_SEND_COMMAND") return BlockType::KEITHLEY_SEND_COMMAND;
+	if (typeStr == "SCAN_OPERATION") return BlockType::SCAN_OPERATION;  // NEW
 
 	return BlockType::START;
 }
@@ -3132,6 +3164,22 @@ void MachineBlockUI::UpdateBlockLabel(MachineBlock& block) {
 				block.label = "Move " + axisName + "\n" + distance + "mm";
 			}
 		}
+		break;
+	}
+
+	case BlockType::SCAN_OPERATION: {
+		std::string deviceName = GetParameterValue(block, "device_name");
+		std::string dataChannel = GetParameterValue(block, "data_channel");
+		std::string stepSizesStr = GetParameterValue(block, "step_sizes_um");
+		std::string axesStr = GetParameterValue(block, "axes_to_scan");
+
+		// Create a compact label
+		std::string shortDevice = deviceName.empty() ? "Device" : deviceName;
+		std::string shortChannel = dataChannel.empty() ? "Channel" :
+			(dataChannel.length() > 8 ? dataChannel.substr(0, 8) + "..." : dataChannel);
+
+		block.label = "Scan " + shortDevice + "\n" + shortChannel + "\n" +
+			(stepSizesStr.empty() ? "2,1,0.5µm" : stepSizesStr + "µm");
 		break;
 	}
 

@@ -314,3 +314,26 @@ public:
   void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
   void RenderValidation(MachineBlock* block) override;
 };
+
+class ScanOperationRenderer : public BlockPropertyRenderer {
+public:
+  void RenderProperties(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderActions(MachineBlock* block, MachineOperations* machineOps) override;
+  void RenderValidation(MachineBlock* block) override;
+
+private:
+  struct ScanParameters {
+    std::string deviceName;
+    std::string dataChannel;
+    std::string stepSizesStr;
+    int settlingTimeMs;
+    std::string axesStr;
+    int timeoutMinutes;
+  };
+
+  ScanParameters ExtractScanParameters(MachineBlock* block);
+  void RenderTestButton(const ScanParameters& params, MachineOperations* machineOps);
+  void RenderScanStatus(const ScanParameters& params, MachineOperations* machineOps);
+  std::vector<double> ParseStepSizes(const std::string& stepSizesStr);
+  std::vector<std::string> ParseAxes(const std::string& axesStr);
+};

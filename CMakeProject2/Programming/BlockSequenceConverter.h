@@ -61,6 +61,7 @@ private:
   std::shared_ptr<SequenceOperation> ConvertKeithleyReadCurrentBlock(const MachineBlock& block);
   std::shared_ptr<SequenceOperation> ConvertKeithleyReadResistanceBlock(const MachineBlock& block);
   std::shared_ptr<SequenceOperation> ConvertKeithleySendCommandBlock(const MachineBlock& block);
+  std::shared_ptr<SequenceOperation> ConvertScanOperationBlock(const MachineBlock& block);
 
   // Helper methods
   std::string GetParameterValue(const MachineBlock& block, const std::string& paramName);

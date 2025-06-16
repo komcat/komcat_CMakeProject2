@@ -46,7 +46,8 @@ enum class BlockType {
   KEITHLEY_READ_VOLTAGE,
   KEITHLEY_READ_CURRENT,
   KEITHLEY_READ_RESISTANCE,
-  KEITHLEY_SEND_COMMAND
+  KEITHLEY_SEND_COMMAND,
+  SCAN_OPERATION  // NEW: Scanning operation block
 };
 
 // In MachineBlockUI.h, make sure BlockParameter struct looks like this:
@@ -203,6 +204,7 @@ private:
   std::vector<BlockCategory> m_blockCategories;
   std::vector<BlockConnection> m_connections;
   MachineBlock* m_selectedBlock = nullptr;
+
   int m_nextBlockId = 1;
 
   // Connection state
@@ -259,6 +261,7 @@ private:
   const ImU32 KEITHLEY_READ_CURRENT_COLOR = IM_COL32(152, 251, 152, 255);  // Pale green
   const ImU32 KEITHLEY_READ_RESISTANCE_COLOR = IM_COL32(173, 255, 47, 255); // Green yellow
   const ImU32 KEITHLEY_SEND_COMMAND_COLOR = IM_COL32(255, 20, 147, 255);   // Deep pink
+  const ImU32 SCAN_OPERATION_COLOR = IM_COL32(150, 100, 200, 255);  // Purple
 
   // Canvas background colors
   const ImU32 CANVAS_BG_COLOR = IM_COL32(45, 45, 45, 255);

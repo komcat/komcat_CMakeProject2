@@ -38,32 +38,46 @@ MacroManager::~MacroManager() {
   // Clean up any running execution
 }
 
+// Fix 4: Updated AddProgram() - Store actual filename
 void MacroManager::AddProgram(const std::string& programName, const std::string& filePath) {
   SavedProgram program;
   program.name = programName;
-  program.filePath = filePath;
+
+  // ✅ FIX: Extract just filename without path and extension for filePath storage
+  std::string filename = filePath;
+  size_t lastSlash = filename.find_last_of("/\\");
+  if (lastSlash != std::string::npos) {
+    filename = filename.substr(lastSlash + 1);
+  }
+  size_t lastDot = filename.find_last_of(".");
+  if (lastDot != std::string::npos) {
+    filename = filename.substr(0, lastDot);
+  }
+
+  program.filePath = filename;  // ✅ Store just filename for ProgramManager compatibility
   program.description = "";
 
   m_savedPrograms[programName] = program;
 
   if (m_debugMode) {
-    printf("[MACRO DEBUG] [ADD] Added program: %s -> %s\n", programName.c_str(), filePath.c_str());
+    printf("[MACRO DEBUG] [ADD] Added program: %s -> %s\n", programName.c_str(), filename.c_str());
   }
 }
 
+
+// Fix 1: Updated ScanForPrograms() - Only scan programs/ folder, use actual filenames
 void MacroManager::ScanForPrograms() {
   if (m_debugMode) {
-    printf("[MACRO DEBUG] [SCAN] Scanning for program files...\n");
+    printf("[MACRO DEBUG] [SCAN] Scanning for program files in programs/ folder...\n");
   }
 
+  // Save manually added programs before clearing
   std::map<std::string, SavedProgram> manualPrograms = m_savedPrograms;
   m_savedPrograms.clear();
 
+  // ✅ FIX: Only scan programs/ folder (remove other paths)
   std::vector<std::string> searchPaths = {
-      "programs/",
-      "Programs/",
-      "./",
-      "saved_programs/"
+      "programs/"
   };
 
   int foundCount = 0;
@@ -72,9 +86,6 @@ void MacroManager::ScanForPrograms() {
     if (m_debugMode) {
       printf("[MACRO DEBUG] [SCAN] Scanning directory: %s\n", path.c_str());
     }
-
-    // Method 1: Try to scan directory for all .json files (Windows/Linux compatible)
-    std::vector<std::string> foundFiles;
 
 #ifdef _WIN32
     // Windows directory scanning
@@ -85,23 +96,58 @@ void MacroManager::ScanForPrograms() {
     if (hFind != INVALID_HANDLE_VALUE) {
       do {
         if (!(findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-          foundFiles.push_back(findFileData.cFileName);
+          std::string fileName = findFileData.cFileName;
+          std::string fullPath = path + fileName;
+
+          // ✅ FIX: Use actual filename without extension as key and display name
+          std::string fileNameOnly = fileName;
+          size_t lastDot = fileNameOnly.find_last_of(".");
+          if (lastDot != std::string::npos) {
+            fileNameOnly = fileNameOnly.substr(0, lastDot);
+          }
+
+          SavedProgram program;
+          program.name = fileNameOnly;           // ✅ Use actual filename (no fancy display name)
+          program.filePath = fileNameOnly;       // ✅ Store just filename for ProgramManager compatibility
+          program.description = "Program from " + path;
+
+          m_savedPrograms[fileNameOnly] = program;
+          foundCount++;
+
           if (m_debugMode) {
-            printf("[MACRO DEBUG] [SCAN] Found JSON file: %s\n", findFileData.cFileName);
+            printf("[MACRO DEBUG] [FOUND] Found program: %s -> %s\n",
+              fileNameOnly.c_str(), fullPath.c_str());
           }
         }
       } while (FindNextFileA(hFind, &findFileData) != 0);
       FindClose(hFind);
     }
 #else
-    // Linux/Mac directory scanning using C++17 filesystem
+    // Linux/Unix directory scanning
     try {
       if (std::filesystem::exists(path) && std::filesystem::is_directory(path)) {
         for (const auto& entry : std::filesystem::directory_iterator(path)) {
           if (entry.is_regular_file() && entry.path().extension() == ".json") {
-            foundFiles.push_back(entry.path().filename().string());
+            std::string fileName = entry.path().filename().string();
+
+            // ✅ FIX: Use actual filename without extension
+            std::string fileNameOnly = fileName;
+            size_t lastDot = fileNameOnly.find_last_of(".");
+            if (lastDot != std::string::npos) {
+              fileNameOnly = fileNameOnly.substr(0, lastDot);
+            }
+
+            SavedProgram program;
+            program.name = fileNameOnly;           // ✅ Use actual filename
+            program.filePath = fileNameOnly;       // ✅ Store just filename
+            program.description = "Program from " + path;
+
+            m_savedPrograms[fileNameOnly] = program;
+            foundCount++;
+
             if (m_debugMode) {
-              printf("[MACRO DEBUG] [SCAN] Found JSON file: %s\n", entry.path().filename().string().c_str());
+              printf("[MACRO DEBUG] [FOUND] Found program: %s -> %s\n",
+                fileNameOnly.c_str(), entry.path().string().c_str());
             }
           }
         }
@@ -109,78 +155,10 @@ void MacroManager::ScanForPrograms() {
     }
     catch (const std::exception& e) {
       if (m_debugMode) {
-        printf("[MACRO DEBUG] [SCAN] Error scanning directory %s: %s\n", path.c_str(), e.what());
+        printf("[MACRO DEBUG] [ERROR] Error scanning %s: %s\n", path.c_str(), e.what());
       }
     }
 #endif
-
-    // Fallback: If directory scanning fails, use hardcoded list
-    if (foundFiles.empty()) {
-      if (m_debugMode) {
-        printf("[MACRO DEBUG] [SCAN] Directory scanning failed, using fallback list for: %s\n", path.c_str());
-      }
-
-      std::vector<std::string> fallbackFiles = {
-      };
-
-      // Check which fallback files actually exist
-      for (const auto& fileName : fallbackFiles) {
-        std::string fullPath = path + fileName;
-        std::ifstream file(fullPath);
-        if (file.good()) {
-          foundFiles.push_back(fileName);
-          if (m_debugMode) {
-            printf("[MACRO DEBUG] [SCAN] Fallback found: %s\n", fileName.c_str());
-          }
-        }
-        file.close();
-      }
-    }
-
-    // Process all found files
-    for (const auto& fileName : foundFiles) {
-      std::string fullPath = path + fileName;
-      std::ifstream file(fullPath);
-
-      if (file.good()) {
-        // Extract program name from filename (remove .json extension)
-        std::string programName = fileName;
-        size_t lastDot = programName.find_last_of(".");
-        if (lastDot != std::string::npos) {
-          programName = programName.substr(0, lastDot);
-        }
-
-        // Clean up name (capitalize first letter, replace underscores)
-        if (!programName.empty()) {
-          // Replace underscores with spaces
-          std::replace(programName.begin(), programName.end(), '_', ' ');
-
-          // Capitalize first letter
-          programName[0] = std::toupper(programName[0]);
-
-          // Capitalize after spaces
-          for (size_t i = 1; i < programName.length(); i++) {
-            if (programName[i - 1] == ' ' && i < programName.length()) {
-              programName[i] = std::toupper(programName[i]);
-            }
-          }
-        }
-
-        SavedProgram program;
-        program.name = programName;
-        program.filePath = fullPath;
-        program.description = "Auto-detected from " + path;
-
-        m_savedPrograms[programName] = program;
-        foundCount++;
-
-        if (m_debugMode) {
-          printf("[MACRO DEBUG] [FOUND] Found program: %s -> %s\n",
-            programName.c_str(), fullPath.c_str());
-        }
-      }
-      file.close();
-    }
   }
 
   // Add back any manually added programs
@@ -198,6 +176,8 @@ void MacroManager::ScanForPrograms() {
       foundCount, m_savedPrograms.size());
   }
 }
+
+
 bool MacroManager::CreateMacro(const std::string& macroName, const std::string& description) {
   if (m_macros.find(macroName) != m_macros.end()) {
     printf("[MACRO] Macro '%s' already exists\n", macroName.c_str());
@@ -251,6 +231,7 @@ bool MacroManager::RemoveProgramFromMacro(const std::string& macroName, int inde
 }
 
 // Modified ExecuteMacro method with simple text feedback
+// Fix 3: Updated ExecuteMacro() - Use actual filename in macro execution
 void MacroManager::ExecuteMacro(const std::string& macroName, std::function<void(bool)> callback) {
   auto it = m_macros.find(macroName);
   if (it == m_macros.end()) {
@@ -305,7 +286,8 @@ void MacroManager::ExecuteMacro(const std::string& macroName, std::function<void
       printf("[MACRO DEBUG] [EXEC] [%zu/%zu] Loading program: %s\n",
         i + 1, macro.programs.size(), program.name.c_str());
 
-      m_blockUI->LoadProgram(program.name);
+      // ✅ FIX: Use actual filename from filePath (not display name)
+      m_blockUI->LoadProgram(program.filePath);
 
       AddExecutionLog("Program loaded, starting execution...");
 
@@ -330,34 +312,21 @@ void MacroManager::ExecuteMacro(const std::string& macroName, std::function<void
       });
 
       printf("[MACRO DEBUG] [WAIT] Waiting for program completion...\n");
-      int timeout = 0;
-      const int maxTimeout = 300;
 
-      while (!executionComplete && timeout < maxTimeout && m_isExecuting) {
+      // Wait for execution completion with timeout
+      auto startTime = std::chrono::steady_clock::now();
+      const auto timeoutDuration = std::chrono::minutes(5); // 5-minute timeout
+
+      while (!executionComplete && m_isExecuting) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        timeout++;
 
-        // Add periodic status updates
-        if (timeout % 50 == 0) {
-          AddExecutionLog("Still executing '" + program.name + "' (" +
-            std::to_string(timeout / 10) + "s elapsed)");
-          printf("[MACRO DEBUG] [WAIT] Still waiting... (%d/%d seconds)\n", timeout / 10, maxTimeout / 10);
+        auto currentTime = std::chrono::steady_clock::now();
+        if (currentTime - startTime > timeoutDuration) {
+          printf("[MACRO DEBUG] [TIMEOUT] Program '%s' timed out after 5 minutes\n", program.name.c_str());
+          AddExecutionLog("TIMEOUT: Program '" + program.name + "' timed out");
+          programSuccess = false;
+          break;
         }
-      }
-
-      if (!m_isExecuting) {
-        AddExecutionLog("CANCELLED: Execution cancelled during '" + program.name + "'");
-        printf("[MACRO DEBUG] [CANCEL] Execution cancelled by user during program '%s'\n", program.name.c_str());
-        success = false;
-        break;
-      }
-
-      if (!executionComplete) {
-        AddExecutionLog("TIMEOUT: Program '" + program.name + "' timed out after " +
-          std::to_string(maxTimeout / 10) + " seconds");
-        printf("[MACRO DEBUG] [TIMEOUT] Program '%s' timed out after %d seconds\n", program.name.c_str(), maxTimeout / 10);
-        success = false;
-        break;
       }
 
       if (!programSuccess) {
@@ -369,22 +338,17 @@ void MacroManager::ExecuteMacro(const std::string& macroName, std::function<void
 
       AddExecutionLog("SUCCESS: Program '" + program.name + "' completed successfully");
       printf("[MACRO DEBUG] [SUCCESS] Program '%s' completed successfully\n", program.name.c_str());
-
-      if (i < macro.programs.size() - 1) {
-        AddExecutionLog("Waiting 1 second before next program...");
-        printf("[MACRO DEBUG] [WAIT] Waiting 1 second before next program...\n");
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-      }
     }
 
+    // Cleanup and callback
     m_isExecuting = false;
     m_currentMacro = "";
     m_currentProgramIndex = -1;
     m_currentExecutingProgram = "";
 
     if (success) {
-      AddExecutionLog("=== MACRO COMPLETED SUCCESSFULLY ===");
-      printf("[MACRO DEBUG] [COMPLETE] All programs in macro executed successfully\n");
+      AddExecutionLog("=== MACRO EXECUTION COMPLETED SUCCESSFULLY ===");
+      printf("[MACRO DEBUG] [SUCCESS] Macro execution completed successfully\n");
     }
     else {
       AddExecutionLog("=== MACRO EXECUTION FAILED ===");
@@ -399,86 +363,38 @@ void MacroManager::ExecuteMacro(const std::string& macroName, std::function<void
   executionThread.detach();
 }
 
+// Fix 5: Updated SaveMacro() - Save with actual filenames
 void MacroManager::SaveMacro(const std::string& macroName, const std::string& filePath) {
-  auto macroIt = m_macros.find(macroName);
-  if (macroIt == m_macros.end()) {
-    printf("[MACRO] Macro '%s' not found\n", macroName.c_str());
+  auto it = m_macros.find(macroName);
+  if (it == m_macros.end()) {
+    printf("[MACRO] Error: Macro '%s' not found for saving\n", macroName.c_str());
     return;
   }
 
-  nlohmann::json macroJson;
-  const MacroProgram& macro = macroIt->second;
-
-  // ADD MACRO IDENTIFIER
-  macroJson["file_type"] = "macro";
-  macroJson["macro_id"] = macro.id;
-  macroJson["version"] = "1.0";
-
-  macroJson["name"] = macro.name;
-  macroJson["description"] = macro.description;
-  macroJson["id"] = macro.id;  // Keep for backward compatibility
-
-  nlohmann::json programsArray = nlohmann::json::array();
-  for (const auto& program : macro.programs) {
-    nlohmann::json programJson;
-    programJson["name"] = program.name;
-    programJson["file_path"] = program.filePath;
-    programJson["description"] = program.description;
-    programsArray.push_back(programJson);
-  }
-  macroJson["programs"] = programsArray;
-
   try {
-    size_t lastSlash = filePath.find_last_of("/\\");
-    if (lastSlash != std::string::npos) {
-      std::string directory = filePath.substr(0, lastSlash);
+    const MacroProgram& macro = it->second;
 
-      // Try to create the directory by creating nested paths
-      std::string currentPath = "";
-      std::string delimiter = "/";
-      size_t pos = 0;
-      std::string token;
-      std::string directoryCopy = directory + "/";
+    nlohmann::json macroJson = {
+      {"file_type", "macro"},
+      {"macro_id", macro.id},
+      {"name", macro.name},
+      {"description", macro.description},
+      {"programs", nlohmann::json::array()}
+    };
 
-      while ((pos = directoryCopy.find(delimiter)) != std::string::npos) {
-        token = directoryCopy.substr(0, pos);
-        if (!token.empty()) {
-          currentPath += token;
-
-          // Try to create directory by attempting to create a test file
-          std::string testFile = currentPath + "/.dirtest";
-          std::ofstream test(testFile);
-          if (test.good()) {
-            test.close();
-            std::remove(testFile.c_str());
-            if (m_debugMode) {
-              printf("[MACRO DEBUG] [SAVE] Directory '%s' verified/created\n", currentPath.c_str());
-            }
-          }
-          else {
-            // Try to create the directory using system call
-#ifdef _WIN32
-            std::string createCmd = "mkdir \"" + currentPath + "\" 2>nul";
-            system(createCmd.c_str());
-#else
-            std::string createCmd = "mkdir -p \"" + currentPath + "\" 2>/dev/null";
-            system(createCmd.c_str());
-#endif
-
-            if (m_debugMode) {
-              printf("[MACRO DEBUG] [SAVE] Attempted to create directory: %s\n", currentPath.c_str());
-            }
-          }
-          currentPath += "/";
-        }
-        directoryCopy.erase(0, pos + delimiter.length());
-      }
+    // ✅ FIX: Save programs with actual filenames
+    for (const auto& program : macro.programs) {
+      macroJson["programs"].push_back({
+        {"name", program.name},
+        {"file_path", program.filePath},  // ✅ Use actual filename (not full path)
+        {"description", program.description}
+        });
     }
 
     std::ofstream file(filePath);
-    if (!file.good()) {
-      printf("[MACRO] [ERROR] Could not create file: %s\n", filePath.c_str());
-      printf("[MACRO] [INFO] Directory creation may have failed. Try manually creating the 'macros/' folder\n");
+    if (!file.is_open()) {
+      printf("[MACRO] Error: Could not create macro file at %s\n", filePath.c_str());
+      printf("       Try manually creating the 'macros/' folder\n");
       return;
     }
 
@@ -487,12 +403,13 @@ void MacroManager::SaveMacro(const std::string& macroName, const std::string& fi
     printf("[MACRO] Saved macro '%s' (ID: %d) to %s\n", macroName.c_str(), macro.id, filePath.c_str());
 
     m_forceRescanMacros = true;
-
   }
   catch (const std::exception& e) {
     printf("[MACRO] Error saving macro: %s\n", e.what());
   }
 }
+
+
 
 void MacroManager::LoadMacro(const std::string& filePath) {
   try {
@@ -558,6 +475,7 @@ void MacroManager::LoadMacro(const std::string& filePath) {
 }
 
 
+// Fix 2: Updated ExecuteSingleProgram() - Use actual filename directly
 void MacroManager::ExecuteSingleProgram(const std::string& programName) {
   auto programIt = m_savedPrograms.find(programName);
   if (programIt == m_savedPrograms.end()) {
@@ -580,7 +498,9 @@ void MacroManager::ExecuteSingleProgram(const std::string& programName) {
   printf("[MACRO DEBUG] [INFO] File path: %s\n", programIt->second.filePath.c_str());
 
   printf("[MACRO DEBUG] [LOAD] Loading program into BlockUI...\n");
-  m_blockUI->LoadProgram(programIt->second.name);
+
+  // ✅ FIX: Use actual filename directly (not display name)
+  m_blockUI->LoadProgram(programIt->second.filePath);
 
   printf("[MACRO DEBUG] [WAIT] Waiting 100ms for UI update...\n");
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
