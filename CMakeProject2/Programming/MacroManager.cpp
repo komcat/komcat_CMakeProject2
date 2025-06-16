@@ -230,8 +230,8 @@ bool MacroManager::RemoveProgramFromMacro(const std::string& macroName, int inde
   return true;
 }
 
-// Modified ExecuteMacro method with simple text feedback
-// Fix 3: Updated ExecuteMacro() - Use actual filename in macro execution
+
+// 6. ADD BETTER LOGGING TO ExecuteMacro method:
 void MacroManager::ExecuteMacro(const std::string& macroName, std::function<void(bool)> callback) {
   auto it = m_macros.find(macroName);
   if (it == m_macros.end()) {
@@ -254,16 +254,12 @@ void MacroManager::ExecuteMacro(const std::string& macroName, std::function<void
   m_currentProgramIndex = -1;
   m_currentExecutingProgram = "";
 
+  // These should now show up in UI
   AddExecutionLog("=== STARTING MACRO: " + macroName + " ===");
   AddExecutionLog("Programs to execute: " + std::to_string(macro.programs.size()));
 
   printf("[MACRO] Starting execution of macro '%s' with %zu programs:\n",
     macroName.c_str(), macro.programs.size());
-
-  for (size_t i = 0; i < macro.programs.size(); i++) {
-    printf("[MACRO] %zu. %s (%s)\n", i + 1,
-      macro.programs[i].name.c_str(), macro.programs[i].filePath.c_str());
-  }
 
   std::thread executionThread([this, macro, callback]() {
     bool success = true;
@@ -271,7 +267,6 @@ void MacroManager::ExecuteMacro(const std::string& macroName, std::function<void
     for (size_t i = 0; i < macro.programs.size(); i++) {
       if (!m_isExecuting) {
         AddExecutionLog("STOPPED: Execution stopped by user at program " + std::to_string(i + 1));
-        printf("[MACRO DEBUG] [STOP] Execution stopped by user at program %zu\n", i + 1);
         success = false;
         break;
       }
@@ -280,79 +275,71 @@ void MacroManager::ExecuteMacro(const std::string& macroName, std::function<void
       m_currentProgramIndex = static_cast<int>(i);
       m_currentExecutingProgram = program.name;
 
+      // These messages should now appear in UI
       AddExecutionLog("Loading program " + std::to_string(i + 1) + "/" +
         std::to_string(macro.programs.size()) + ": " + program.name);
 
-      printf("[MACRO DEBUG] [EXEC] [%zu/%zu] Loading program: %s\n",
-        i + 1, macro.programs.size(), program.name.c_str());
-
-      // ✅ FIX: Use actual filename from filePath (not display name)
-      m_blockUI->LoadProgram(program.filePath);
+      m_blockUI->LoadProgram(program.name);
 
       AddExecutionLog("Program loaded, starting execution...");
-
-      printf("[MACRO DEBUG] [WAIT] Program loaded, waiting 500ms for UI update...\n");
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
       bool programSuccess = false;
       bool executionComplete = false;
 
-      printf("[MACRO DEBUG] [RUN] Starting execution of program: %s\n", program.name.c_str());
-
-      // Execute with simple feedback capture
-      m_blockUI->ExecuteProgramAsSequence([&programSuccess, &executionComplete, &program, this, i](bool result) {
+      // Execute with callback
+      m_blockUI->ExecuteProgramAsSequence([&programSuccess, &executionComplete, &program, this](bool result) {
         programSuccess = result;
         executionComplete = true;
 
         std::string resultMsg = result ? "SUCCESS" : "FAILED";
         AddExecutionLog("Program '" + program.name + "' completed: " + resultMsg);
-
-        printf("[MACRO DEBUG] [RESULT] Program '%s' execution callback: %s\n",
-          program.name.c_str(), result ? "SUCCESS" : "FAILED");
       });
 
-      printf("[MACRO DEBUG] [WAIT] Waiting for program completion...\n");
+      // Wait for completion with periodic updates
+      int timeout = 0;
+      const int maxTimeout = 300;
 
-      // Wait for execution completion with timeout
-      auto startTime = std::chrono::steady_clock::now();
-      const auto timeoutDuration = std::chrono::minutes(5); // 5-minute timeout
-
-      while (!executionComplete && m_isExecuting) {
+      while (!executionComplete && timeout < maxTimeout && m_isExecuting) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        timeout++;
 
-        auto currentTime = std::chrono::steady_clock::now();
-        if (currentTime - startTime > timeoutDuration) {
-          printf("[MACRO DEBUG] [TIMEOUT] Program '%s' timed out after 5 minutes\n", program.name.c_str());
-          AddExecutionLog("TIMEOUT: Program '" + program.name + "' timed out");
-          programSuccess = false;
-          break;
+        if (timeout % 50 == 0) {
+          AddExecutionLog("Still executing '" + program.name + "' (" +
+            std::to_string(timeout / 10) + "s elapsed)");
         }
+      }
+
+      if (!executionComplete) {
+        AddExecutionLog("TIMEOUT: Program '" + program.name + "' timed out");
+        success = false;
+        break;
       }
 
       if (!programSuccess) {
         AddExecutionLog("FAILED: Program '" + program.name + "' execution failed");
-        printf("[MACRO DEBUG] [FAILED] Program '%s' failed\n", program.name.c_str());
         success = false;
         break;
       }
 
       AddExecutionLog("SUCCESS: Program '" + program.name + "' completed successfully");
-      printf("[MACRO DEBUG] [SUCCESS] Program '%s' completed successfully\n", program.name.c_str());
+
+      if (i < macro.programs.size() - 1) {
+        AddExecutionLog("Waiting before next program...");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+      }
     }
 
-    // Cleanup and callback
+    // Final cleanup
     m_isExecuting = false;
-    m_currentMacro = "";
     m_currentProgramIndex = -1;
     m_currentExecutingProgram = "";
 
     if (success) {
-      AddExecutionLog("=== MACRO EXECUTION COMPLETED SUCCESSFULLY ===");
-      printf("[MACRO DEBUG] [SUCCESS] Macro execution completed successfully\n");
+      AddExecutionLog("=== MACRO COMPLETED SUCCESSFULLY ===");
     }
     else {
       AddExecutionLog("=== MACRO EXECUTION FAILED ===");
-      printf("[MACRO DEBUG] [FAILED] Macro execution failed\n");
     }
 
     if (callback) {
@@ -362,6 +349,7 @@ void MacroManager::ExecuteMacro(const std::string& macroName, std::function<void
 
   executionThread.detach();
 }
+
 
 // Fix 5: Updated SaveMacro() - Save with actual filenames
 void MacroManager::SaveMacro(const std::string& macroName, const std::string& filePath) {
@@ -1263,7 +1251,13 @@ void MacroManager::RenderUI() {
 
 
 // Simple text-based feedback rendering
+
+
+// 4. UPDATE RenderEmbeddedFeedbackSection to use display logs:
 void MacroManager::RenderEmbeddedFeedbackSection() {
+  // CRITICAL: Process pending logs on main thread before rendering
+  ProcessPendingLogs();
+
   if (ImGui::CollapsingHeader("[FEEDBACK] Execution Progress", ImGuiTreeNodeFlags_DefaultOpen)) {
 
     ImGui::Checkbox("Show Execution Log", &m_showEmbeddedFeedback);
@@ -1282,16 +1276,13 @@ void MacroManager::RenderEmbeddedFeedbackSection() {
         AddExecutionLog("Loading program 1/3: Test Program 1");
         AddExecutionLog("Program loaded, starting execution...");
         AddExecutionLog("Program 'Test Program 1' completed: SUCCESS");
-        AddExecutionLog("Loading program 2/3: Test Program 2");
-        AddExecutionLog("Still executing 'Test Program 2' (5s elapsed)");
-        AddExecutionLog("Program 'Test Program 2' completed: SUCCESS");
-        AddExecutionLog("=== MACRO COMPLETED SUCCESSFULLY ===");
+        AddExecutionLog("=== TEST COMPLETED ===");
       }
 
       // Show compact status if executing
       if (m_isExecuting && !m_currentExecutingProgram.empty()) {
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), // Darker Green for currently executing
+        ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f),
           "EXECUTING: %s (%d/%d)",
           m_currentExecutingProgram.c_str(),
           m_currentProgramIndex + 1,
@@ -1303,52 +1294,51 @@ void MacroManager::RenderEmbeddedFeedbackSection() {
       ImGui::Separator();
       ImGui::Text("Execution Log:");
 
-      // Push a dark grey background color for the child window
-      ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f)); // Darker grey
+      ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
 
-      ImGui::BeginChild("ExecutionLog", ImVec2(-1, 150), true, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+      if (ImGui::BeginChild("ExecutionLog", ImVec2(-1, 150), true, ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
 
-      if (m_executionLog.empty()) {
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No execution activity yet...");
-      }
-      else {
-        for (const auto& logEntry : m_executionLog) {
-          // Color-code log entries
-          ImVec4 color = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);  // Light Gray for default messages
-
-          if (logEntry.find("SUCCESS") != std::string::npos ||
-            logEntry.find("completed successfully") != std::string::npos ||
-            logEntry.find("COMPLETED SUCCESSFULLY") != std::string::npos) {
-            color = ImVec4(0.1f, 0.9f, 0.1f, 1.0f);  // Bright Green for success
-          }
-          else if (logEntry.find("FAILED") != std::string::npos ||
-            logEntry.find("ERROR") != std::string::npos ||
-            logEntry.find("TIMEOUT") != std::string::npos ||
-            logEntry.find("FAILED") != std::string::npos) {
-            color = ImVec4(0.9f, 0.1f, 0.1f, 1.0f);  // Bright Red for errors/failures
-          }
-          else if (logEntry.find("STARTING") != std::string::npos ||
-            logEntry.find("STOPPED") != std::string::npos ||
-            logEntry.find("CANCELLED") != std::string::npos) {
-            color = ImVec4(0.2f, 0.6f, 1.0f, 1.0f);  // Sky Blue for start/stop/cancel
-          }
-          else if (logEntry.find("Loading") != std::string::npos ||
-            logEntry.find("executing") != std::string::npos ||
-            logEntry.find("Waiting") != std::string::npos) {
-            color = ImVec4(1.0f, 0.9f, 0.1f, 1.0f);  // Gold for loading/in-progress/waiting
-          }
-
-          ImGui::TextColored(color, "%s", logEntry.c_str());
+        // USE DISPLAY LOGS INSTEAD OF EXECUTION LOGS
+        if (m_displayLogs.empty()) {
+          ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No execution activity yet...");
         }
+        else {
+          for (const auto& logEntry : m_displayLogs) {
+            // Color-code log entries
+            ImVec4 color = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);  // Light Gray
 
-        // Auto-scroll to bottom
-        if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
-          ImGui::SetScrollHereY(1.0f);
+            if (logEntry.find("SUCCESS") != std::string::npos ||
+              logEntry.find("completed successfully") != std::string::npos ||
+              logEntry.find("COMPLETED SUCCESSFULLY") != std::string::npos) {
+              color = ImVec4(0.1f, 0.9f, 0.1f, 1.0f);  // Bright Green
+            }
+            else if (logEntry.find("FAILED") != std::string::npos ||
+              logEntry.find("ERROR") != std::string::npos ||
+              logEntry.find("TIMEOUT") != std::string::npos) {
+              color = ImVec4(0.9f, 0.1f, 0.1f, 1.0f);  // Bright Red
+            }
+            else if (logEntry.find("STARTING") != std::string::npos ||
+              logEntry.find("STOPPED") != std::string::npos ||
+              logEntry.find("CANCELLED") != std::string::npos) {
+              color = ImVec4(0.2f, 0.6f, 1.0f, 1.0f);  // Sky Blue
+            }
+            else if (logEntry.find("Loading") != std::string::npos ||
+              logEntry.find("executing") != std::string::npos ||
+              logEntry.find("Waiting") != std::string::npos) {
+              color = ImVec4(1.0f, 0.9f, 0.1f, 1.0f);  // Gold
+            }
+
+            ImGui::TextColored(color, "%s", logEntry.c_str());
+          }
+
+          // Auto-scroll to bottom
+          if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+            ImGui::SetScrollHereY(1.0f);
+          }
         }
       }
-
       ImGui::EndChild();
-      ImGui::PopStyleColor(); // Pop the pushed style color for ChildBg
+      ImGui::PopStyleColor();
     }
 
     ImGui::Separator();
@@ -1356,26 +1346,49 @@ void MacroManager::RenderEmbeddedFeedbackSection() {
 }
 
 
+
 // Simplified initialization - no complex feedback UI needed
 void MacroManager::InitializeFeedbackUI() {
   // Just clear the log - no complex UI initialization needed
   ClearExecutionLog();
+  // Set the show flag to true by default so logs are visible
+  m_showEmbeddedFeedback = true;
+  printf("[MACRO DEBUG] InitializeFeedbackUI called - logs should be visible\n");
+
   AddExecutionLog("Macro Manager feedback system initialized");
 }
 
 
 void MacroManager::AddExecutionLog(const std::string& message) {
   std::string timestampedMessage = "[" + GetCurrentTimeString() + "] " + message;
-  m_executionLog.push_back(timestampedMessage);
 
-  // Keep only the last N entries
-  if (m_executionLog.size() > m_maxLogLines) {
-    m_executionLog.erase(m_executionLog.begin());
+  // Thread-safe: Add to pending logs from any thread
+  {
+    std::lock_guard<std::mutex> lock(m_logMutex);
+    m_pendingLogs.push_back(timestampedMessage);
   }
 
-  // Also print to console for debugging
+  // Always print to console for debugging
   printf("%s\n", timestampedMessage.c_str());
 }
+
+// 3. ADD this new method to process pending logs on main thread:
+void MacroManager::ProcessPendingLogs() {
+  std::lock_guard<std::mutex> lock(m_logMutex);
+
+  // Move pending logs to display logs
+  for (const auto& log : m_pendingLogs) {
+    m_displayLogs.push_back(log);
+  }
+  m_pendingLogs.clear();
+
+  // Keep only the last N entries
+  if (m_displayLogs.size() > m_maxLogLines) {
+    m_displayLogs.erase(m_displayLogs.begin(),
+      m_displayLogs.begin() + (m_displayLogs.size() - m_maxLogLines));
+  }
+}
+
 
 std::string MacroManager::GetCurrentTimeString() {
   auto now = std::chrono::system_clock::now();
@@ -1389,7 +1402,11 @@ std::string MacroManager::GetCurrentTimeString() {
   return ss.str();
 }
 
+// 5. UPDATE ClearExecutionLog to clear both logs:
 void MacroManager::ClearExecutionLog() {
-  m_executionLog.clear();
+  std::lock_guard<std::mutex> lock(m_logMutex);
+  m_pendingLogs.clear();
+  m_displayLogs.clear();
+  m_executionLog.clear();  // Keep for backward compatibility
 }
 

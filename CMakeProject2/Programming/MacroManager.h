@@ -3,6 +3,8 @@
 #include <vector>
 #include <map>
 #include <functional>
+#include <mutex>
+#include <thread>
 #include <nlohmann/json.hpp>
 #include "FeedbackUI.h"
 // Forward declaration
@@ -100,4 +102,12 @@ private:
   int m_maxLogLines = 20;  // Keep last 20 log entries
 
   std::vector<std::string> m_executionLog;
+
+  // Thread-safe logging
+  std::mutex m_logMutex;
+  std::vector<std::string> m_pendingLogs;  // Messages from execution thread
+  std::vector<std::string> m_displayLogs;  // Messages for UI display
+
+
+  void ProcessPendingLogs();
 };
