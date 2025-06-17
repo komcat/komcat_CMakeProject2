@@ -969,8 +969,8 @@ void MachineBlockUI::RenderPaletteBlock(const MachineBlock& block, int index) {
 	std::string buttonLabel = block.label + "##palette" + std::to_string(index);
 
 	if (ImGui::Button(buttonLabel.c_str(), buttonSize)) {
-		// Add block to program at center of canvas
-		ImVec2 centerPos(200, 100 + static_cast<float>(m_programBlocks.size()) * 80);
+		// Add block to program at fixed position x=-20, y=0
+		ImVec2 centerPos(-20, 0);
 		AddBlockToProgram(block.type, centerPos);
 	}
 
