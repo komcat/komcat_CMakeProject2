@@ -1303,7 +1303,7 @@ public:
     });
 
     // Wait for user response with timeout
-    int timeoutSeconds = 30; // 30 second timeout
+    int timeoutSeconds = 3600; // 30 second timeout
     int waitedMs = 0;
     while (!m_completed && waitedMs < (timeoutSeconds * 1000)) {
       std::this_thread::sleep_for(std::chrono::milliseconds(100));

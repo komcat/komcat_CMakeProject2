@@ -29,6 +29,10 @@ public:
 
   bool WaitForTemperatureStabilization(float targetTemp, float tolerance = 0.5f,
     int timeoutMs = 30000, const std::string& clientName = "");
+  // Enhanced methods with retry capability
+  bool SetLaserCurrentWithRetry(float current, const std::string& clientName = "", int maxRetries = 3);
+  bool LaserOnWithRetry(const std::string& clientName = "", int maxRetries = 3);
+  bool TryReconnectClient(CLD101xClient* client);
 
 private:
   CLD101xManager& m_manager;

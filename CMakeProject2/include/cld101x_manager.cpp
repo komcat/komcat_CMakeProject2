@@ -75,6 +75,8 @@ bool CLD101xManager::Initialize(const std::string& configFile) {
   }
 }
 
+
+// MODIFY your existing AddClient method to store connection info:
 bool CLD101xManager::AddClient(const std::string& name, const std::string& ip, int port) {
   // Check if a client with this name already exists
   if (m_clients.find(name) != m_clients.end()) {
@@ -85,7 +87,11 @@ bool CLD101xManager::AddClient(const std::string& name, const std::string& ip, i
   // Create a new client
   std::unique_ptr<CLD101xClient> client = std::make_unique<CLD101xClient>();
   m_clients[name] = std::move(client);
-  m_logger->LogInfo("CLD101xManager: Added client '" + name + "'");
+
+  // Store connection info for later reconnection
+  m_connectionInfo[name] = { ip, port, false };
+
+  m_logger->LogInfo("CLD101xManager: Added client '" + name + "' (IP: " + ip + ", Port: " + std::to_string(port) + ")");
   return true;
 }
 
@@ -314,4 +320,130 @@ bool CLD101xManager::IsVisible() const {
 
 const std::string& CLD101xManager::GetName() const {
   return m_name;
+}
+
+bool CLD101xManager::IsConnected(const std::string& clientName) const {
+  auto it = m_clients.find(clientName);
+  if (it != m_clients.end()) {
+    return it->second->IsConnected();
+  }
+  return false;
+}
+
+bool CLD101xManager::IsAnyConnected() const {
+  for (const auto& [name, client] : m_clients) {
+    if (client->IsConnected()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool CLD101xManager::AreAllConnected() const {
+  if (m_clients.empty()) {
+    return false;
+  }
+
+  for (const auto& [name, client] : m_clients) {
+    if (!client->IsConnected()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+int CLD101xManager::GetConnectedCount() const {
+  int count = 0;
+  for (const auto& [name, client] : m_clients) {
+    if (client->IsConnected()) {
+      count++;
+    }
+  }
+  return count;
+}
+
+bool CLD101xManager::ReconnectClient(const std::string& clientName) {
+  auto it = m_clients.find(clientName);
+  if (it == m_clients.end()) {
+    m_logger->LogError("CLD101xManager: Client '" + clientName + "' not found for reconnection");
+    return false;
+  }
+
+  CLD101xClient* client = it->second.get();
+
+  // Check if we have connection info stored
+  auto connIt = m_connectionInfo.find(clientName);
+  if (connIt == m_connectionInfo.end()) {
+    m_logger->LogWarning("CLD101xManager: No connection info stored for client '" + clientName + "', using defaults");
+    // Try default connection
+    return client->Connect("127.0.0.88", 65432);
+  }
+
+  const auto& connInfo = connIt->second;
+
+  m_logger->LogInfo("CLD101xManager: Attempting to reconnect client '" + clientName +
+    "' to " + connInfo.ip + ":" + std::to_string(connInfo.port));
+
+  // Disconnect first if connected
+  if (client->IsConnected()) {
+    client->Disconnect();
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }
+
+  // Try to reconnect
+  bool success = client->Connect(connInfo.ip, connInfo.port);
+
+  if (success) {
+    m_logger->LogInfo("CLD101xManager: Successfully reconnected client '" + clientName + "'");
+  }
+  else {
+    m_logger->LogError("CLD101xManager: Failed to reconnect client '" + clientName + "'");
+  }
+
+  return success;
+}
+
+bool CLD101xManager::ReconnectAll() {
+  bool allSuccess = true;
+
+  for (const auto& [clientName, client] : m_clients) {
+    if (!client->IsConnected()) {
+      m_logger->LogInfo("CLD101xManager: Attempting to reconnect client '" + clientName + "'");
+      if (!ReconnectClient(clientName)) {
+        allSuccess = false;
+      }
+    }
+  }
+
+  return allSuccess;
+}
+
+bool CLD101xManager::ConnectClient(const std::string& clientName) {
+  auto it = m_clients.find(clientName);
+  if (it == m_clients.end()) {
+    m_logger->LogError("CLD101xManager: Client '" + clientName + "' not found");
+    return false;
+  }
+
+  auto connIt = m_connectionInfo.find(clientName);
+  if (connIt == m_connectionInfo.end()) {
+    m_logger->LogWarning("CLD101xManager: No connection info for client '" + clientName + "', using defaults");
+    return it->second->Connect("127.0.0.88", 65432);
+  }
+
+  const auto& connInfo = connIt->second;
+
+  m_logger->LogInfo("CLD101xManager: Connecting client '" + clientName +
+    "' to " + connInfo.ip + ":" + std::to_string(connInfo.port));
+
+  bool success = it->second->Connect(connInfo.ip, connInfo.port);
+
+  if (success) {
+    m_logger->LogInfo("CLD101xManager: Successfully connected client '" + clientName + "'");
+  }
+  else {
+    m_logger->LogError("CLD101xManager: Failed to connect client '" + clientName + "'");
+  }
+
+  return success;
 }

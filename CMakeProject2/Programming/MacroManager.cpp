@@ -311,7 +311,7 @@ void MacroManager::ExecuteMacro(const std::string& macroName, std::function<void
 
       // Wait for completion with periodic updates
       int timeout = 0;
-      const int maxTimeout = 300;
+      const int maxTimeout = 6000;
 
       while (!executionComplete && timeout < maxTimeout && m_isExecuting) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -1009,7 +1009,7 @@ void MacroManager::RenderEditMacrosSection() {
                   AddExecutionLog("Set to run from '" + program.name + "' to end");
                 }
 
-                if (ImGui::MenuItem("☑️ Toggle Selection")) {
+                if (ImGui::MenuItem("Toggle Selection")) {
                   editState.ToggleProgramSelection(i);
                 }
 
@@ -1029,7 +1029,7 @@ void MacroManager::RenderEditMacrosSection() {
             // Arrow between programs
             if (i < macro.programs.size() - 1) {
               ImGui::SameLine();
-              ImGui::Text("→");
+              ImGui::Text("->");
               ImGui::SameLine();
             }
           }
@@ -1274,21 +1274,17 @@ MacroEditState& MacroManager::GetEditState(const std::string& macroName) {
   return m_macroEditStates[macroName];
 }
 
-// New method to execute macro with specific program indices
 void MacroManager::ExecuteMacroWithIndices(const std::string& macroName, const std::vector<int>& indices) {
   auto it = m_macros.find(macroName);
   if (it == m_macros.end()) {
     printf("[MACRO ERROR] Macro '%s' not found\n", macroName.c_str());
     return;
   }
-
   if (m_isExecuting) {
     printf("[MACRO ERROR] Another macro is already executing\n");
     return;
   }
-
   const MacroProgram& macro = it->second;
-
   // Create subset of programs to execute
   std::vector<SavedProgram> programsToExecute;
   for (int index : indices) {
@@ -1296,67 +1292,73 @@ void MacroManager::ExecuteMacroWithIndices(const std::string& macroName, const s
       programsToExecute.push_back(macro.programs[index]);
     }
   }
-
   if (programsToExecute.empty()) {
     printf("[MACRO ERROR] No valid programs selected\n");
     return;
   }
-
   // Execute the selected programs (similar to ExecuteMacro but with custom list)
   m_isExecuting = true;
   m_currentMacro = macroName;
-
   AddExecutionLog("=== EXECUTING SELECTED PROGRAMS ===");
   AddExecutionLog("Macro: " + macroName);
   AddExecutionLog("Programs: " + std::to_string(programsToExecute.size()) + "/" + std::to_string(macro.programs.size()));
-
   std::thread executionThread([this, programsToExecute, macroName]() {
     bool success = true;
-
     for (size_t i = 0; i < programsToExecute.size(); i++) {
       if (!m_isExecuting) {
         AddExecutionLog("STOPPED: Execution stopped by user");
         success = false;
         break;
       }
-
       const SavedProgram& program = programsToExecute[i];
       AddExecutionLog("Executing " + std::to_string(i + 1) + "/" +
         std::to_string(programsToExecute.size()) + ": " + program.name);
 
-      m_blockUI->LoadProgram(program.name);
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      try {
+        m_blockUI->LoadProgram(program.name);
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-      bool programSuccess = false;
-      bool executionComplete = false;
+        bool programSuccess = false;
+        bool executionComplete = false;
 
-      m_blockUI->ExecuteProgramAsSequence([&programSuccess, &executionComplete](bool result) {
-        programSuccess = result;
-        executionComplete = true;
-      });
+        m_blockUI->ExecuteProgramAsSequence([&programSuccess, &executionComplete](bool result) {
+          try {
+            programSuccess = result;
+            executionComplete = true;
+          }
+          catch (...) {
+            // Continue execution even if assignment fails
+            programSuccess = false;
+            executionComplete = true;
+          }
+        });
 
-      // Wait for completion (simplified timeout logic)
-      int timeout = 0;
-      while (!executionComplete && timeout < 300 && m_isExecuting) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        timeout++;
+        // Wait for completion (simplified timeout logic)
+        int timeout = 0;
+        while (!executionComplete && timeout < 60000 && m_isExecuting) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          timeout++;
+        }
+
+        if (!m_isExecuting || !executionComplete || !programSuccess) {
+          success = false;
+          break;
+        }
       }
-
-      if (!m_isExecuting || !executionComplete || !programSuccess) {
+      catch (...) {
+        AddExecutionLog("ERROR: Memory access violation in program execution");
         success = false;
         break;
       }
     }
-
     m_isExecuting = false;
     m_currentMacro = "";
-
     std::string result = success ? "SUCCESS" : "FAILED";
     AddExecutionLog("=== EXECUTION " + result + " ===");
   });
-
   executionThread.detach();
 }
+
 
 void MacroManager::RenderLoadMacroSection() {
   if (ImGui::CollapsingHeader("[LOAD] Load Macro")) {

@@ -8,7 +8,12 @@
 
 // Forward declaration
 class Logger;
-
+// Store connection info for reconnection - Add this
+struct ClientConnectionInfo {
+  std::string ip;
+  int port;
+  bool autoConnect;
+};
 // Manager class for CLD101x clients
 class CLD101xManager {
 public:
@@ -33,6 +38,18 @@ public:
   // Disconnect all clients
   void DisconnectAll();
 
+  // CONNECTION STATUS METHODS - Add these
+  bool IsConnected(const std::string& clientName) const;
+  bool IsAnyConnected() const;
+  bool AreAllConnected() const;
+  int GetConnectedCount() const;
+
+  // RECONNECTION METHODS - Add these
+  bool ReconnectClient(const std::string& clientName);
+  bool ReconnectAll();
+  bool ConnectClient(const std::string& clientName);
+
+
   // Get list of all client names
   std::vector<std::string> GetClientNames() const;
 
@@ -47,4 +64,7 @@ private:
   std::map<std::string, std::unique_ptr<CLD101xClient>> m_clients;
   bool m_showWindow;
   std::string m_name;
+
+
+  std::map<std::string, ClientConnectionInfo> m_connectionInfo;
 };

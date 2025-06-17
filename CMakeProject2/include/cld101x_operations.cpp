@@ -34,17 +34,24 @@ CLD101xClient* CLD101xOperations::GetClient(const std::string& clientName) {
   }
 }
 
+
 bool CLD101xOperations::LaserOn(const std::string& clientName) {
-  m_logger->LogInfo("CLD101xOperations: Turning laser on" +
-    (clientName.empty() ? "" : " for " + clientName));
-
-  CLD101xClient* client = GetClient(clientName);
-  if (!client) {
-    return false;
-  }
-
-  return client->LaserOn();
+  // Use retry version with 3 attempts by default
+  return LaserOnWithRetry(clientName, 3);
 }
+
+//
+//bool CLD101xOperations::LaserOn(const std::string& clientName) {
+//  m_logger->LogInfo("CLD101xOperations: Turning laser on" +
+//    (clientName.empty() ? "" : " for " + clientName));
+//
+//  CLD101xClient* client = GetClient(clientName);
+//  if (!client) {
+//    return false;
+//  }
+//
+//  return client->LaserOn();
+//}
 
 bool CLD101xOperations::LaserOff(const std::string& clientName) {
   m_logger->LogInfo("CLD101xOperations: Turning laser off" +
@@ -82,18 +89,24 @@ bool CLD101xOperations::TECOff(const std::string& clientName) {
   return client->TECOff();
 }
 
+// Wrapper methods that use retry by default
 bool CLD101xOperations::SetLaserCurrent(float current, const std::string& clientName) {
-  m_logger->LogInfo("CLD101xOperations: Setting laser current to " +
-    std::to_string(current) + "A" +
-    (clientName.empty() ? "" : " for " + clientName));
-
-  CLD101xClient* client = GetClient(clientName);
-  if (!client) {
-    return false;
-  }
-
-  return client->SetLaserCurrent(current);
+  // Use retry version with 3 attempts by default
+  return SetLaserCurrentWithRetry(current, clientName, 3);
 }
+
+//bool CLD101xOperations::SetLaserCurrent(float current, const std::string& clientName) {
+//  m_logger->LogInfo("CLD101xOperations: Setting laser current to " +
+//    std::to_string(current) + "A" +
+//    (clientName.empty() ? "" : " for " + clientName));
+//
+//  CLD101xClient* client = GetClient(clientName);
+//  if (!client) {
+//    return false;
+//  }
+//
+//  return client->SetLaserCurrent(current);
+//}
 
 bool CLD101xOperations::SetTECTemperature(float temperature, const std::string& clientName) {
   m_logger->LogInfo("CLD101xOperations: Setting TEC temperature to " +
@@ -210,5 +223,130 @@ bool CLD101xOperations::WaitForTemperatureStabilization(
   }
 
   m_logger->LogWarning("CLD101xOperations: Timed out waiting for temperature stabilization");
+  return false;
+}
+
+bool CLD101xOperations::SetLaserCurrentWithRetry(float current, const std::string& clientName, int maxRetries) {
+  m_logger->LogInfo("CLD101xOperations: Setting laser current to " +
+    std::to_string(current) + "A with retry" +
+    (clientName.empty() ? "" : " for " + clientName));
+
+  for (int attempt = 1; attempt <= maxRetries; attempt++) {
+    CLD101xClient* client = GetClient(clientName);
+    if (!client) {
+      m_logger->LogError("CLD101xOperations: No client available for laser current setting");
+      return false;
+    }
+
+    // Check if client is connected
+    if (!client->IsConnected()) {
+      m_logger->LogWarning("CLD101xOperations: Client not connected, attempting reconnection (attempt " +
+        std::to_string(attempt) + "/" + std::to_string(maxRetries) + ")");
+
+      // Try to reconnect - you'll need to add this method to CLD101xClient
+      if (!TryReconnectClient(client)) {
+        if (attempt < maxRetries) {
+          m_logger->LogInfo("CLD101xOperations: Reconnection failed, waiting 2 seconds before retry...");
+          std::this_thread::sleep_for(std::chrono::seconds(2));
+          continue;
+        }
+        else {
+          m_logger->LogError("CLD101xOperations: All reconnection attempts failed");
+          return false;
+        }
+      }
+    }
+
+    // Try to set the laser current
+    if (client->SetLaserCurrent(current)) {
+      if (attempt > 1) {
+        m_logger->LogInfo("CLD101xOperations: Laser current set successfully on attempt " + std::to_string(attempt));
+      }
+      return true;
+    }
+
+    // If we get here, the command failed
+    if (attempt < maxRetries) {
+      m_logger->LogWarning("CLD101xOperations: Failed to set laser current (attempt " +
+        std::to_string(attempt) + "/" + std::to_string(maxRetries) + "), retrying in 1 second...");
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    else {
+      m_logger->LogError("CLD101xOperations: Failed to set laser current after " + std::to_string(maxRetries) + " attempts");
+    }
+  }
+
+  return false;
+}
+
+bool CLD101xOperations::LaserOnWithRetry(const std::string& clientName, int maxRetries) {
+  m_logger->LogInfo("CLD101xOperations: Turning laser on with retry" +
+    (clientName.empty() ? "" : " for " + clientName));
+
+  for (int attempt = 1; attempt <= maxRetries; attempt++) {
+    CLD101xClient* client = GetClient(clientName);
+    if (!client) {
+      m_logger->LogError("CLD101xOperations: No client available for laser on");
+      return false;
+    }
+
+    // Check connection and try to reconnect if needed
+    if (!client->IsConnected()) {
+      m_logger->LogWarning("CLD101xOperations: Client not connected, attempting reconnection (attempt " +
+        std::to_string(attempt) + "/" + std::to_string(maxRetries) + ")");
+
+      if (!TryReconnectClient(client)) {
+        if (attempt < maxRetries) {
+          m_logger->LogInfo("CLD101xOperations: Reconnection failed, waiting 2 seconds before retry...");
+          std::this_thread::sleep_for(std::chrono::seconds(2));
+          continue;
+        }
+        else {
+          m_logger->LogError("CLD101xOperations: All reconnection attempts failed");
+          return false;
+        }
+      }
+    }
+
+    // Try to turn laser on
+    if (client->LaserOn()) {
+      if (attempt > 1) {
+        m_logger->LogInfo("CLD101xOperations: Laser turned on successfully on attempt " + std::to_string(attempt));
+      }
+      return true;
+    }
+
+    // If we get here, the command failed
+    if (attempt < maxRetries) {
+      m_logger->LogWarning("CLD101xOperations: Failed to turn laser on (attempt " +
+        std::to_string(attempt) + "/" + std::to_string(maxRetries) + "), retrying in 1 second...");
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    else {
+      m_logger->LogError("CLD101xOperations: Failed to turn laser on after " + std::to_string(maxRetries) + " attempts");
+    }
+  }
+
+  return false;
+}
+
+// Helper method to try reconnecting a client
+bool CLD101xOperations::TryReconnectClient(CLD101xClient* client) {
+  if (!client) return false;
+
+  // Get the manager to try reconnecting this client
+  // You might need to store connection info in the client or manager
+  // For now, let's assume the manager can handle reconnection
+
+  // If your CLD101xManager has a reconnect method:
+  auto clientNames = m_manager.GetClientNames();
+  for (const auto& name : clientNames) {
+    if (m_manager.GetClient(name) == client) {
+      // Try to reconnect this specific client
+      // You'll need to implement this in your manager
+      return m_manager.ReconnectClient(name);
+    }
+  }
+
   return false;
 }

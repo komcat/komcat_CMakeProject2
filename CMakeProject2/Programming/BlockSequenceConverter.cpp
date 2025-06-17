@@ -584,7 +584,7 @@ std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertScanOperationB
   std::string stepSizesStr = GetParameterValue(block, "step_sizes_um");
   int settlingTimeMs = GetParameterValueAsInt(block, "settling_time_ms", 300);
   std::string axesStr = GetParameterValue(block, "axes_to_scan");
-  int timeoutMinutes = GetParameterValueAsInt(block, "timeout_minutes", 30);
+  int timeoutMinutes = GetParameterValueAsInt(block, "timeout_minutes", 600);
 
   // Validate required parameters
   if (deviceName.empty()) {
