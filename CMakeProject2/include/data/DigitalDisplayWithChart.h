@@ -126,4 +126,6 @@ private:
   std::string getBaseUnit(const std::string& dataName);
   std::pair<float, std::string> getScaledValueAndUnit(float absValue);
   ImVec4 generateColor(const std::string& channelName);
+
+  bool m_showDebug = false; // Add this line
 };

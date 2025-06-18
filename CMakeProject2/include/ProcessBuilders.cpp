@@ -536,15 +536,33 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"gantry-main", "Process_Flow", "caldot"));
 
-		// 6. Prompt user before dispensing
-		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
-			"Ready to dispense calibration dot? Press confirm when ready.", uiManager));
+		// 5.1 offset back -2mm
+		sequence->AddOperation(std::make_shared<MoveRelativeAxisOperation>(
+			"gantry-main", "Z", -2));
+
 
 		// 7. Extend dispenser
 		sequence->AddOperation(std::make_shared<ExtendSlideOperation>("Dispenser_Head"));
 
 		// 8. Wait for dispenser to extend
 		sequence->AddOperation(std::make_shared<WaitOperation>(500));
+
+		// 6. Prompt user before dispensing
+		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
+			"Adjust tip of nozzle to touch the surface, continue when ready?", uiManager));
+
+
+
+
+		// save current position of gantry to caldot.
+		sequence->AddOperation(std::make_shared<CapturePositionOperation>(
+			"gantry-main", "caldot"));
+		// 4. Log the reference position
+		sequence->AddOperation(std::make_shared<LogPositionDistanceOperation>(
+			"gantry-main", "caldot", "Reference Z height captured"));
+
+
+
 
 		// 9. Set output IOBottom dispenser (activate)
 		sequence->AddOperation(std::make_shared<SetOutputOperation>(
@@ -606,9 +624,24 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<SaveNeedleOffsetOperation>(
 			"gantry-main", "pos1", "pos2"));
 
+
+		// 21. Move back to safe position
+		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
+			"gantry-main",  "g_safe")); // Safe position
+
+
 		// 21. Move back to safe position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"gantry-main", "Process_Flow", "node_4027")); // Safe position
+
+
+		// 2. Move hex-left to home position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"hex-left", "Process_Flow", "node_5480"));
+
+		// 3. Move hex-right to home position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"hex-right", "Process_Flow", "node_5136"));
 
 		// Clear stored positions at end
 		sequence->AddOperation(std::make_shared<ClearStoredPositionsOperation>());
@@ -631,3 +664,5 @@ namespace ProcessBuilders {
 		logger->LogProcess("=== END DEBUG SEQUENCE ===");
 	}
 } // namespace ProcessBuilders
+
+

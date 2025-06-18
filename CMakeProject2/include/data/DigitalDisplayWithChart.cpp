@@ -3,8 +3,9 @@
 #include <iostream>
 #include <cmath>
 
+
 DigitalDisplayWithChart::DigitalDisplayWithChart(const std::string& initialDataName)
-  : m_selectedDataName(initialDataName) {
+  : m_selectedDataName(initialDataName), m_showDebug(false) { // Add debug flag here
 
   // Generate unique window ID with static counter instead of memory address
   static int instanceCounter = 0;
@@ -13,6 +14,12 @@ DigitalDisplayWithChart::DigitalDisplayWithChart(const std::string& initialDataN
 
   initializeUnitsMap();
   initializeDisplayNameMap();
+
+  // DEBUG: Add logging to see what's happening during initialization
+  if (m_showDebug) {
+    std::cout << "[DEBUG] DigitalDisplayWithChart initialized with channel: " << initialDataName << std::endl;
+  }
+
   loadChannelsFromConfig();
 }
 
@@ -109,10 +116,15 @@ void DigitalDisplayWithChart::initializeDisplayNameMap() {
   };
 }
 
+
 void DigitalDisplayWithChart::loadChannelsFromConfig() {
   std::lock_guard<std::mutex> lock(m_dataMutex);
   m_availableChannels.clear();
-  std::set<std::string> channelIds;
+  std::set<std::string> configChannelIds; // Only track config channels, not all channels
+
+  if (m_showDebug) {
+    std::cout << "[DEBUG] Loading channels from config..." << std::endl;
+  }
 
   // First, load from config file
   try {
@@ -122,56 +134,114 @@ void DigitalDisplayWithChart::loadChannelsFromConfig() {
       configFile >> config;
 
       if (config.contains("channels") && config["channels"].is_array()) {
+        if (m_showDebug) {
+          std::cout << "[DEBUG] Found " << config["channels"].size() << " channels in config file" << std::endl;
+        }
+
         for (const auto& channel : config["channels"]) {
           std::string id = channel.value("id", "");
           std::string displayName = channel.value("displayName", id);
           bool enabled = channel.value("enable", true);
 
+          if (m_showDebug) {
+            std::cout << "[DEBUG] Config channel: " << id << " (enabled: " << enabled << ")" << std::endl;
+          }
+
           if (!id.empty() && enabled) {
             m_availableChannels.emplace_back(id, displayName);
-            channelIds.insert(id);
+            configChannelIds.insert(id); // Track this as a config channel
+            if (m_showDebug) {
+              std::cout << "[DEBUG] Added config channel: " << id << " -> " << displayName << std::endl;
+            }
           }
         }
       }
       configFile.close();
     }
+    else {
+      if (m_showDebug) {
+        std::cout << "[DEBUG] Could not open data_display_config.json" << std::endl;
+      }
+    }
   }
   catch (const std::exception& e) {
-    // Config loading failed, continue with global store channels
+    if (m_showDebug) {
+      std::cout << "[DEBUG] Exception loading config: " << e.what() << std::endl;
+    }
   }
 
   // Second, add channels from global data store
-  if (GlobalDataStore::GetInstance()) {
-    std::vector<std::string> globalChannels = GlobalDataStore::GetInstance()->GetAvailableChannels();
+  // CHANGED: Now we add ALL channels from GlobalDataStore, even if they're in config
+  if (m_showDebug) {
+    std::cout << "[DEBUG] Checking GlobalDataStore..." << std::endl;
+  }
+
+  GlobalDataStore* globalStore = GlobalDataStore::GetInstance();
+  if (globalStore) {
+    if (m_showDebug) {
+      std::cout << "[DEBUG] GlobalDataStore instance found" << std::endl;
+    }
+
+    std::vector<std::string> globalChannels = globalStore->GetAvailableChannels();
+    if (m_showDebug) {
+      std::cout << "[DEBUG] GlobalDataStore has " << globalChannels.size() << " channels:" << std::endl;
+    }
 
     for (const std::string& channelId : globalChannels) {
-      if (channelIds.find(channelId) == channelIds.end()) {
-        std::string displayName = channelId;
-
-        // Make display names more readable
-        std::replace(displayName.begin(), displayName.end(), '_', ' ');
-        std::replace(displayName.begin(), displayName.end(), '-', ' ');
-
-        // Capitalize first letter of each word
-        bool capitalizeNext = true;
-        for (char& c : displayName) {
-          if (capitalizeNext && std::isalpha(c)) {
-            c = std::toupper(c);
-            capitalizeNext = false;
-          }
-          else if (c == ' ') {
-            capitalizeNext = true;
-          }
-        }
-
-        m_availableChannels.emplace_back(channelId, displayName + " (Auto)");
-        channelIds.insert(channelId);
+      if (m_showDebug) {
+        std::cout << "[DEBUG] GlobalStore channel: " << channelId << std::endl;
       }
+
+      // Check if this channel has a value
+      float value = globalStore->GetValue(channelId, -999.0f);
+      if (m_showDebug) {
+        std::cout << "[DEBUG]   Current value: " << value << std::endl;
+      }
+
+      // CHANGED: Always add auto-detected channels, regardless of config
+      std::string displayName = channelId;
+
+      // Make display names more readable
+      std::replace(displayName.begin(), displayName.end(), '_', ' ');
+      std::replace(displayName.begin(), displayName.end(), '-', ' ');
+
+      // Capitalize first letter of each word
+      bool capitalizeNext = true;
+      for (char& c : displayName) {
+        if (capitalizeNext && std::isalpha(c)) {
+          c = std::toupper(c);
+          capitalizeNext = false;
+        }
+        else if (c == ' ') {
+          capitalizeNext = true;
+        }
+      }
+
+      // Add suffix to indicate if it's also in config
+      if (configChannelIds.find(channelId) != configChannelIds.end()) {
+        displayName += " (Auto + Config)";
+      }
+      else {
+        displayName += " (Auto)";
+      }
+
+      m_availableChannels.emplace_back(channelId, displayName);
+      if (m_showDebug) {
+        std::cout << "[DEBUG] Added auto-detected channel: " << channelId << " -> " << displayName << std::endl;
+      }
+    }
+  }
+  else {
+    if (m_showDebug) {
+      std::cout << "[DEBUG] GlobalDataStore instance is NULL!" << std::endl;
     }
   }
 
   // Fallback channels if empty
   if (m_availableChannels.empty()) {
+    if (m_showDebug) {
+      std::cout << "[DEBUG] No channels found, using fallback channels" << std::endl;
+    }
     m_availableChannels = {
         {"GPIB-Current", "Current Reading"},
         {"SMU1-Current", "SMU1 Current"},
@@ -179,14 +249,53 @@ void DigitalDisplayWithChart::loadChannelsFromConfig() {
     };
   }
 
+  if (m_showDebug) {
+    std::cout << "[DEBUG] Final channel list (" << m_availableChannels.size() << " channels):" << std::endl;
+    for (const auto& [id, displayName] : m_availableChannels) {
+      std::cout << "[DEBUG]   " << id << " -> " << displayName << std::endl;
+    }
+  }
+
   m_channelsLoaded = true;
 }
+
+
 
 void DigitalDisplayWithChart::updateData() {
   std::lock_guard<std::mutex> lock(m_dataMutex);
 
+  // DEBUG: Check if GlobalDataStore is accessible
+  GlobalDataStore* globalStore = GlobalDataStore::GetInstance();
+  if (!globalStore) {
+    if (m_showDebug) {
+      std::cout << "[DEBUG] GlobalDataStore is NULL in updateData!" << std::endl;
+    }
+    return;
+  }
+
   // Get current value from global data store
-  float currentValue = GlobalDataStore::GetInstance()->GetValue(m_selectedDataName);
+  float currentValue = globalStore->GetValue(m_selectedDataName);
+
+  // DEBUG: Log the value retrieval (only occasionally to avoid spam)
+  if (m_showDebug) {
+    static int debugCounter = 0;
+    debugCounter++;
+    if (debugCounter % 60 == 0) { // Log every 60 frames (about once per second at 60fps)
+      std::cout << "[DEBUG] Channel '" << m_selectedDataName << "' value: " << currentValue << std::endl;
+
+      // Also check if the channel exists in the global store
+      bool hasValue = globalStore->HasValue(m_selectedDataName);
+      std::cout << "[DEBUG] Channel '" << m_selectedDataName << "' exists in store: " << hasValue << std::endl;
+
+      // List all available channels
+      auto allChannels = globalStore->GetAvailableChannels();
+      std::cout << "[DEBUG] All channels in GlobalStore: ";
+      for (const auto& ch : allChannels) {
+        std::cout << ch << " ";
+      }
+      std::cout << std::endl;
+    }
+  }
 
   // Use high-resolution timestamp for better timing accuracy
   auto now = std::chrono::high_resolution_clock::now();
@@ -201,6 +310,10 @@ void DigitalDisplayWithChart::updateData() {
     newBuffer.unit = getBaseUnit(m_selectedDataName);
     newBuffer.color = generateColor(m_selectedDataName);
     m_dataBuffers[m_selectedDataName] = newBuffer;
+
+    if (m_showDebug) {
+      std::cout << "[DEBUG] Created new data buffer for: " << m_selectedDataName << std::endl;
+    }
   }
 
   auto& buffer = m_dataBuffers[m_selectedDataName];
@@ -216,9 +329,13 @@ void DigitalDisplayWithChart::updateData() {
   }
 }
 
+
 void DigitalDisplayWithChart::handleRightClickMenu() {
   if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
     m_showChannelPopup = true;
+    if (m_showDebug) {
+      std::cout << "[DEBUG] Right-click detected, reloading channels..." << std::endl;
+    }
     loadChannelsFromConfig(); // Refresh channels
     ImGui::OpenPopup("SelectDataSource");
   }
@@ -227,28 +344,62 @@ void DigitalDisplayWithChart::handleRightClickMenu() {
     ImGui::Text("Select Data Source:");
     ImGui::Separator();
 
-    // Group channels by source
+    // DEBUG: Show debug info in the popup - but only if debug is enabled
+    if (m_showDebug && ImGui::TreeNode("Debug Info")) {
+      ImGui::Text("Currently selected: %s", m_selectedDataName.c_str());
+      ImGui::Text("Available channels: %zu", m_availableChannels.size());
+
+      // Show GlobalDataStore status
+      GlobalDataStore* globalStore = GlobalDataStore::GetInstance();
+      if (globalStore) {
+        auto allChannels = globalStore->GetAvailableChannels();
+        ImGui::Text("GlobalStore channels: %zu", allChannels.size());
+
+        if (ImGui::TreeNode("All GlobalStore Channels")) {
+          for (const auto& ch : allChannels) {
+            float val = globalStore->GetValue(ch);
+            ImGui::Text("%s: %.6f", ch.c_str(), val);
+          }
+          ImGui::TreePop();
+        }
+      }
+      else {
+        ImGui::Text("GlobalStore: NULL");
+      }
+      ImGui::TreePop();
+    }
+
+    ImGui::Separator();
+
+    // Group channels by type
     bool hasConfigChannels = false;
-    bool hasAutoChannels = false;
+    bool hasAutoOnlyChannels = false;
+    bool hasAutoConfigChannels = false;
 
     for (const auto& [id, displayName] : m_availableChannels) {
-      if (displayName.find("(Auto)") != std::string::npos) {
-        hasAutoChannels = true;
+      if (displayName.find("(Auto + Config)") != std::string::npos) {
+        hasAutoConfigChannels = true;
+      }
+      else if (displayName.find("(Auto)") != std::string::npos) {
+        hasAutoOnlyChannels = true;
       }
       else {
         hasConfigChannels = true;
       }
     }
 
-    // Show config channels first
+    // Show config-only channels first
     if (hasConfigChannels) {
       ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "Configured Channels:");
       for (const auto& [id, displayName] : m_availableChannels) {
-        if (displayName.find("(Auto)") == std::string::npos) {
+        if (displayName.find("(Auto") == std::string::npos) {
           bool isSelected = (id == m_selectedDataName);
-          if (ImGui::Selectable((displayName + "##" + id).c_str(), isSelected)) {
+          if (ImGui::Selectable((displayName + "##config_" + id).c_str(), isSelected)) {
             SetSelectedChannel(id);
             m_showChannelPopup = false;
+            if (m_showDebug) {
+              std::cout << "[DEBUG] Selected config channel: " << id << std::endl;
+            }
           }
           if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("ID: %s", id.c_str());
@@ -257,19 +408,43 @@ void DigitalDisplayWithChart::handleRightClickMenu() {
       }
     }
 
-    // Show auto-detected channels
-    if (hasAutoChannels) {
+    // Show channels that are both auto-detected AND in config
+    if (hasAutoConfigChannels) {
       if (hasConfigChannels) ImGui::Separator();
+      ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.8f, 1.0f), "Live Channels (Config + Auto):");
+      for (const auto& [id, displayName] : m_availableChannels) {
+        if (displayName.find("(Auto + Config)") != std::string::npos) {
+          bool isSelected = (id == m_selectedDataName);
+          if (ImGui::Selectable((displayName + "##live_" + id).c_str(), isSelected)) {
+            SetSelectedChannel(id);
+            m_showChannelPopup = false;
+            if (m_showDebug) {
+              std::cout << "[DEBUG] Selected live channel: " << id << std::endl;
+            }
+          }
+          if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("ID: %s\nThis channel is both configured and has live data", id.c_str());
+          }
+        }
+      }
+    }
+
+    // Show auto-detected only channels
+    if (hasAutoOnlyChannels) {
+      if (hasConfigChannels || hasAutoConfigChannels) ImGui::Separator();
       ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.0f, 1.0f), "Auto-detected Channels:");
       for (const auto& [id, displayName] : m_availableChannels) {
         if (displayName.find("(Auto)") != std::string::npos) {
           bool isSelected = (id == m_selectedDataName);
-          if (ImGui::Selectable((displayName + "##" + id).c_str(), isSelected)) {
+          if (ImGui::Selectable((displayName + "##auto_" + id).c_str(), isSelected)) {
             SetSelectedChannel(id);
             m_showChannelPopup = false;
+            if (m_showDebug) {
+              std::cout << "[DEBUG] Selected auto channel: " << id << std::endl;
+            }
           }
           if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("ID: %s", id.c_str());
+            ImGui::SetTooltip("ID: %s\nAuto-detected from live data", id.c_str());
           }
         }
       }
@@ -278,11 +453,41 @@ void DigitalDisplayWithChart::handleRightClickMenu() {
     ImGui::Separator();
     if (ImGui::Selectable("Refresh All Channels")) {
       m_channelsLoaded = false;
+      if (m_showDebug) {
+        std::cout << "[DEBUG] Manual refresh requested" << std::endl;
+      }
       loadChannelsFromConfig();
+    }
+
+    // Add debug button - but only show if debug is enabled
+    if (m_showDebug && ImGui::Selectable("Force Debug Log")) {
+      std::cout << "[DEBUG] === FORCE DEBUG LOG ===" << std::endl;
+
+      // Check DataClientManager state if possible
+      GlobalDataStore* store = GlobalDataStore::GetInstance();
+      if (store) {
+        auto channels = store->GetAvailableChannels();
+        std::cout << "[DEBUG] Current GlobalStore channels (" << channels.size() << "):" << std::endl;
+        for (const auto& ch : channels) {
+          float val = store->GetValue(ch);
+          bool hasVal = store->HasValue(ch);
+          std::cout << "[DEBUG]   " << ch << ": value=" << val << ", exists=" << hasVal << std::endl;
+        }
+      }
     }
 
     ImGui::EndPopup();
   }
+}
+
+void DigitalDisplayWithChart::SetSelectedChannel(const std::string& channelName) {
+  std::lock_guard<std::mutex> lock(m_dataMutex);
+  if (m_showDebug) {
+    std::cout << "[DEBUG] Changing channel from '" << m_selectedDataName << "' to '" << channelName << "'" << std::endl;
+  }
+  m_selectedDataName = channelName;
+  // Update window ID to reflect new channel
+  m_windowId = "Display_" + channelName + "_" + std::to_string(reinterpret_cast<uintptr_t>(this));
 }
 
 void DigitalDisplayWithChart::renderDigitalDisplay() {
@@ -462,12 +667,7 @@ void DigitalDisplayWithChart::renderChart() {
   }
 }
 
-void DigitalDisplayWithChart::SetSelectedChannel(const std::string& channelName) {
-  std::lock_guard<std::mutex> lock(m_dataMutex);
-  m_selectedDataName = channelName;
-  // Update window ID to reflect new channel
-  m_windowId = "Display_" + channelName + "_" + std::to_string(reinterpret_cast<uintptr_t>(this));
-}
+
 
 std::string DigitalDisplayWithChart::getDisplayName(const std::string& dataName) {
   auto it = m_displayNameMap.find(dataName);

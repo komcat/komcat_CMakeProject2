@@ -15,7 +15,7 @@ private:
   mutable std::mutex m_mutex;  // Add 'mutable' keyword here
   // Private constructor
   GlobalDataStore() {}
-
+  bool m_showDebug = false; // Add this line
 public:
   // Get singleton instance
   static GlobalDataStore* GetInstance();

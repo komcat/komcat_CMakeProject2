@@ -237,6 +237,9 @@ private:
   bool m_autoSaveData;
   int m_dataSaveInterval;
   bool m_isVisible = true;
+
+  bool m_showDebug = false; // Add this line
+
 public:
   // Constructor takes the path to the config file
   DataClientManager(const std::string& configFilePath);
@@ -280,4 +283,6 @@ public:
   // Add these methods to the public section:
   bool IsVisible() const { return m_isVisible; }
   void ToggleWindow() { m_isVisible = !m_isVisible; }
+
+
 };

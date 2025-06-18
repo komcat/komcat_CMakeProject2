@@ -9,13 +9,16 @@
 #include <cstring>
 #include <chrono>
 #include <cmath>
+#include <iostream>
+
 
 // Constructor
 DataClientManager::DataClientManager(const std::string& configFilePath)
   : m_configFilePath(configFilePath),
   m_maxLogEntries(1000),
   m_autoSaveData(false),
-  m_dataSaveInterval(60)
+  m_dataSaveInterval(60),
+  m_showDebug(false) // Add this line
 {
   // Load configuration
   if (!LoadConfig()) {
@@ -239,7 +242,18 @@ void DataClientManager::ConnectAutoClients() {
 }
 
 // Update all clients
+
+// Replace your UpdateClients method with this version:
 void DataClientManager::UpdateClients() {
+  // Debug counter to limit logging frequency
+  static int debugUpdateCounter = 0;
+  debugUpdateCounter++;
+  bool shouldDebugLog = (debugUpdateCounter % 120 == 0); // Log every 2 seconds at 60fps
+
+  if (m_showDebug && shouldDebugLog) {
+    std::cout << "[DEBUG DataClientManager] UpdateClients called" << std::endl;
+  }
+
   // Update all clients
   for (auto& info : m_clients) {
     // Check connection status
@@ -259,6 +273,11 @@ void DataClientManager::UpdateClients() {
 
       // Update the circular buffer with new values
       if (!newValues.empty()) {
+        if (m_showDebug && shouldDebugLog) {
+          std::cout << "[DEBUG DataClientManager] Received " << newValues.size()
+            << " new values for " << info.config.id << std::endl;
+        }
+
         std::lock_guard<std::mutex> lock(*info.dataMutex);
 
         for (float val : newValues) {
@@ -276,8 +295,31 @@ void DataClientManager::UpdateClients() {
           // Update latest value
           info.latestValue = val;
 
-          // Update the global data store with the latest value
-          GlobalDataStore::GetInstance()->SetValue(info.config.id, val);
+          // CRITICAL: Update the global data store with the latest value
+          GlobalDataStore* globalStore = GlobalDataStore::GetInstance();
+          if (globalStore) {
+            globalStore->SetValue(info.config.id, val);
+
+            if (m_showDebug && shouldDebugLog && info.config.id == "GPIB-Current") {
+              std::cout << "[DEBUG DataClientManager] Updated GlobalDataStore: "
+                << info.config.id << " = " << val << std::endl;
+
+              // Verify the value was stored
+              float storedValue = globalStore->GetValue(info.config.id, -999.0f);
+              std::cout << "[DEBUG DataClientManager] Verification read: " << storedValue << std::endl;
+
+              // Check if the channel is in the available channels list
+              auto channels = globalStore->GetAvailableChannels();
+              bool found = std::find(channels.begin(), channels.end(), info.config.id) != channels.end();
+              std::cout << "[DEBUG DataClientManager] Channel '" << info.config.id
+                << "' found in available channels: " << found << std::endl;
+            }
+          }
+          else {
+            if (m_showDebug && shouldDebugLog) {
+              std::cout << "[DEBUG DataClientManager] ERROR: GlobalDataStore is NULL!" << std::endl;
+            }
+          }
         }
 
         // Log data if configured
@@ -295,14 +337,39 @@ void DataClientManager::UpdateClients() {
             ss << siValue.ToString();
           }
 
-
           //TODO debug verbose
           //Logger::GetInstance()->LogInfo(ss.str());
         }
       }
+      else {
+        if (m_showDebug && shouldDebugLog && info.config.id == "GPIB-Current") {
+          std::cout << "[DEBUG DataClientManager] No new values for " << info.config.id << std::endl;
+        }
+      }
+    }
+    else {
+      if (m_showDebug && shouldDebugLog && info.config.id == "GPIB-Current") {
+        std::cout << "[DEBUG DataClientManager] Client " << info.config.id << " not connected" << std::endl;
+      }
+    }
+  }
+
+  // Additional debug: Periodic GlobalDataStore verification
+  if (m_showDebug && shouldDebugLog) {
+    GlobalDataStore* globalStore = GlobalDataStore::GetInstance();
+    if (globalStore) {
+      auto allChannels = globalStore->GetAvailableChannels();
+      std::cout << "[DEBUG DataClientManager] GlobalDataStore currently has "
+        << allChannels.size() << " channels:" << std::endl;
+      for (const auto& ch : allChannels) {
+        float val = globalStore->GetValue(ch);
+        std::cout << "[DEBUG DataClientManager]   " << ch << ": " << val << std::endl;
+      }
     }
   }
 }
+
+
 
 // Format timestamp for display
 std::string FormatTimestamp(const std::chrono::system_clock::time_point& tp) {
