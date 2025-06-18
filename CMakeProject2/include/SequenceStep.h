@@ -1615,3 +1615,196 @@ private:
   std::string m_command;
   std::string m_clientName;
 };
+
+
+
+// Save Current Position to Config operation
+class SaveCurrentPositionToConfigOperation : public SequenceOperation {
+public:
+  SaveCurrentPositionToConfigOperation(const std::string& deviceName, const std::string& positionName)
+    : m_deviceName(deviceName), m_positionName(positionName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    return ops.SaveCurrentPositionToConfig(m_deviceName, m_positionName);
+  }
+
+  std::string GetDescription() const override {
+    return "Save current position of " + m_deviceName + " to config as '" + m_positionName + "'";
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_positionName;
+};
+
+// Apply Needle Offset and Move operation
+class ApplyNeedleOffsetAndMoveOperation : public SequenceOperation {
+public:
+  ApplyNeedleOffsetAndMoveOperation(const std::string& deviceName, const std::string& storedPositionLabel)
+    : m_deviceName(deviceName), m_storedPositionLabel(storedPositionLabel) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    try {
+      // Get the stored camera position
+      PositionStruct cameraPosition;
+      if (!ops.GetStoredPosition(m_storedPositionLabel, cameraPosition)) {
+        ops.LogError("Failed to get stored camera position: " + m_storedPositionLabel);
+        return false;
+      }
+
+      // Load needle offset from camera_to_object_offset.json
+      std::string configPath = "camera_to_object_offset.json";
+      std::ifstream configFile(configPath);
+
+      if (!configFile.is_open()) {
+        ops.LogError("Cannot open camera offset config file: " + configPath);
+        return false;
+      }
+
+      nlohmann::json config;
+      configFile >> config;
+      configFile.close();
+
+      // Check if needle offset exists
+      if (!config.contains("hardware_offsets") ||
+        !config["hardware_offsets"].contains("needle")) {
+        ops.LogError("Needle offset not found in configuration");
+        return false;
+      }
+
+      auto needleCoords = config["hardware_offsets"]["needle"]["coordinates"];
+      double offsetX = needleCoords["x"];
+      double offsetY = needleCoords["y"];
+      double offsetZ = needleCoords["z"];
+
+      ops.LogInfo("Applying needle offset: X=" + std::to_string(offsetX) +
+        ", Y=" + std::to_string(offsetY) +
+        ", Z=" + std::to_string(offsetZ));
+
+      // Calculate needle position = camera position + needle offset
+      PositionStruct needlePosition = cameraPosition;
+      needlePosition.x += offsetX;
+      needlePosition.y += offsetY;
+      needlePosition.z += offsetZ;
+
+      ops.LogInfo("Moving from camera position to needle position:");
+      ops.LogInfo("Camera: X=" + std::to_string(cameraPosition.x) +
+        ", Y=" + std::to_string(cameraPosition.y) +
+        ", Z=" + std::to_string(cameraPosition.z));
+      ops.LogInfo("Needle: X=" + std::to_string(needlePosition.x) +
+        ", Y=" + std::to_string(needlePosition.y) +
+        ", Z=" + std::to_string(needlePosition.z));
+
+      // Move to needle position (using the motion layer's MoveToPosition method)
+      // We'll use relative moves to avoid having to access the motion layer directly
+      double deltaX = needlePosition.x - cameraPosition.x;
+      double deltaY = needlePosition.y - cameraPosition.y;
+      double deltaZ = needlePosition.z - cameraPosition.z;
+
+      // Apply the moves sequentially
+      bool success = true;
+      if (std::abs(deltaX) > 0.001) { // Only move if significant difference
+        success &= ops.MoveRelative(m_deviceName, "X", deltaX, true);
+      }
+      if (std::abs(deltaY) > 0.001) {
+        success &= ops.MoveRelative(m_deviceName, "Y", deltaY, true);
+      }
+      if (std::abs(deltaZ) > 0.001) {
+        success &= ops.MoveRelative(m_deviceName, "Z", deltaZ, true);
+      }
+
+      if (success) {
+        ops.LogInfo("Successfully moved to needle position");
+      }
+      else {
+        ops.LogError("Failed to move to needle position");
+      }
+
+      return success;
+
+    }
+    catch (const std::exception& e) {
+      ops.LogError("Exception while applying needle offset: " + std::string(e.what()));
+      return false;
+    }
+  }
+
+  std::string GetDescription() const override {
+    return "Apply needle offset and move " + m_deviceName + " from camera to needle position";
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_storedPositionLabel;
+};
+
+// Create Safe Dispense Position operation
+class CreateSafeDispensePositionOperation : public SequenceOperation {
+public:
+  CreateSafeDispensePositionOperation(const std::string& deviceName,
+    const std::string& sourcePositionName,
+    const std::string& safePositionName,
+    double zOffset)
+    : m_deviceName(deviceName), m_sourcePositionName(sourcePositionName),
+    m_safePositionName(safePositionName), m_zOffset(zOffset) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    try {
+      // Get current position (which should be the dispense position just saved)
+      PositionStruct currentPosition;
+      if (!ops.GetDeviceCurrentPosition(m_deviceName, currentPosition)) {
+        ops.LogError("Failed to get current position for " + m_deviceName);
+        return false;
+      }
+
+      // Create safe position by modifying Z coordinate
+      PositionStruct safePosition = currentPosition;
+      safePosition.z += m_zOffset; // m_zOffset should be negative (-0.5) to move up
+
+      ops.LogInfo("Creating safe dispense position '" + m_safePositionName + "':");
+      ops.LogInfo("Source position: X=" + std::to_string(currentPosition.x) +
+        ", Y=" + std::to_string(currentPosition.y) +
+        ", Z=" + std::to_string(currentPosition.z));
+      ops.LogInfo("Safe position: X=" + std::to_string(safePosition.x) +
+        ", Y=" + std::to_string(safePosition.y) +
+        ", Z=" + std::to_string(safePosition.z) +
+        " (Z offset: " + std::to_string(m_zOffset) + ")");
+
+      // Move to safe position first
+      bool moveSuccess = ops.MoveRelative(m_deviceName, "Z", m_zOffset, true);
+      if (!moveSuccess) {
+        ops.LogError("Failed to move to safe position");
+        return false;
+      }
+
+      // Save the safe position to config
+      bool saveSuccess = ops.SaveCurrentPositionToConfig(m_deviceName, m_safePositionName);
+      if (!saveSuccess) {
+        ops.LogError("Failed to save safe position to config");
+        return false;
+      }
+
+      ops.LogInfo("Successfully created and saved safe dispense position '" + m_safePositionName + "'");
+      return true;
+
+    }
+    catch (const std::exception& e) {
+      ops.LogError("Exception while creating safe dispense position: " + std::string(e.what()));
+      return false;
+    }
+  }
+
+  std::string GetDescription() const override {
+    return "Create safe dispense position '" + m_safePositionName +
+      "' from '" + m_sourcePositionName + "' with Z offset " + std::to_string(m_zOffset);
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_sourcePositionName;
+  std::string m_safePositionName;
+  double m_zOffset;
+};

@@ -627,7 +627,7 @@ namespace ProcessBuilders {
 
 		// 21. Move back to safe position
 		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
-			"gantry-main",  "g_safe")); // Safe position
+			"gantry-main", "g_safe")); // Safe position
 
 
 		// 21. Move back to safe position
@@ -663,6 +663,273 @@ namespace ProcessBuilders {
 
 		logger->LogProcess("=== END DEBUG SEQUENCE ===");
 	}
+
+
+
+	// Add this new function to ProcessBuilders.cpp
+
+	std::unique_ptr<SequenceStep> BuildDispenseCalibrationSequence(
+		MachineOperations& machineOps, UserInteractionManager& uiManager) {
+
+		auto sequence = std::make_unique<SequenceStep>("Dispense Calibration - Location 1", machineOps);
+
+		// Always move to safe positions first
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"hex-left", "Process_Flow", "node_5531")); // Reject position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"hex-right", "Process_Flow", "node_5190")); // Reject position
+
+		// Clear any old stored positions
+		sequence->AddOperation(std::make_shared<ClearStoredPositionsOperation>());
+
+		// 0. Display current needle offset (needed for calculations)
+		sequence->AddOperation(std::make_shared<DisplayNeedleOffsetOperation>());
+
+		// 1. Move gantry-main to _cam_dispense_1 location
+		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
+			"gantry-main", "_cam_dispense_1"));
+
+		// 2. Prompt user to confirm location (they might manually adjust while prompting)
+		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
+			"Position the camera crosshair exactly where you want to dispense. "
+			"Use manual controls to adjust if needed, then confirm when ready.", uiManager));
+
+		// 3. Save current location to _cam_dispense_1
+		sequence->AddOperation(std::make_shared<SaveCurrentPositionToConfigOperation>(
+			"gantry-main", "_cam_dispense_1"));
+
+		// Store current position for offset calculation
+		sequence->AddOperation(std::make_shared<CapturePositionOperation>(
+			"gantry-main", "camera_position"));
+
+		// 4. Apply camera to needle offset and move to dispense position
+		sequence->AddOperation(std::make_shared<ApplyNeedleOffsetAndMoveOperation>(
+			"gantry-main", "camera_position"));
+
+		// 5. Extend dispenser_head
+		sequence->AddOperation(std::make_shared<ExtendSlideOperation>("Dispenser_Head"));
+
+		// Wait for dispenser to extend
+		sequence->AddOperation(std::make_shared<WaitOperation>(500));
+
+		// 6. Prompt user to adjust dispense height
+		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
+			"Adjust the dispenser tip to the correct height for dispensing. "
+			"Use Z-axis controls to set the proper tip-to-surface distance, then confirm.", uiManager));
+
+		// 7. Save current location to dispense1
+		sequence->AddOperation(std::make_shared<SaveCurrentPositionToConfigOperation>(
+			"gantry-main", "dispense1"));
+
+		// 8. Create and save dispense1safe (dispense1's Z - 0.5mm)
+		sequence->AddOperation(std::make_shared<CreateSafeDispensePositionOperation>(
+			"gantry-main", "dispense1", "dispense1safe", -0.5));
+
+		// Retract dispenser
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
+
+		// Move to safe position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe position
+
+		// Clear stored positions at end
+		sequence->AddOperation(std::make_shared<ClearStoredPositionsOperation>());
+
+		return sequence;
+	}
+
+	// Add similar function for dispense location 2
+	std::unique_ptr<SequenceStep> BuildDispenseCalibration2Sequence(
+		MachineOperations& machineOps, UserInteractionManager& uiManager) {
+
+		auto sequence = std::make_unique<SequenceStep>("Dispense Calibration - Location 2", machineOps);
+
+		// Always move to safe positions first
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"hex-left", "Process_Flow", "node_5531")); // Reject position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"hex-right", "Process_Flow", "node_5190")); // Reject position
+
+		// Clear any old stored positions
+		sequence->AddOperation(std::make_shared<ClearStoredPositionsOperation>());
+
+		// 0. Display current needle offset (needed for calculations)
+		sequence->AddOperation(std::make_shared<DisplayNeedleOffsetOperation>());
+
+		// 1. Move gantry-main to _cam_dispense_2 location
+		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
+			"gantry-main", "_cam_dispense_2"));
+
+		// 2. Prompt user to confirm location
+		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
+			"Position the camera crosshair exactly where you want to dispense. "
+			"Use manual controls to adjust if needed, then confirm when ready.", uiManager));
+
+		// 3. Save current location to _cam_dispense_2
+		sequence->AddOperation(std::make_shared<SaveCurrentPositionToConfigOperation>(
+			"gantry-main", "_cam_dispense_2"));
+
+		// Store current position for offset calculation
+		sequence->AddOperation(std::make_shared<CapturePositionOperation>(
+			"gantry-main", "camera_position"));
+
+		// 4. Apply camera to needle offset and move to dispense position
+		sequence->AddOperation(std::make_shared<ApplyNeedleOffsetAndMoveOperation>(
+			"gantry-main", "camera_position"));
+
+		// 5. Extend dispenser_head
+		sequence->AddOperation(std::make_shared<ExtendSlideOperation>("Dispenser_Head"));
+
+		// Wait for dispenser to extend
+		sequence->AddOperation(std::make_shared<WaitOperation>(500));
+
+		// 6. Prompt user to adjust dispense height
+		sequence->AddOperation(std::make_shared<UserConfirmOperation>(
+			"Adjust the dispenser tip to the correct height for dispensing. "
+			"Use Z-axis controls to set the proper tip-to-surface distance, then confirm.", uiManager));
+
+		// 7. Save current location to dispense2
+		sequence->AddOperation(std::make_shared<SaveCurrentPositionToConfigOperation>(
+			"gantry-main", "dispense2"));
+
+		// 8. Create and save dispense2safe (dispense2's Z - 0.5mm)
+		sequence->AddOperation(std::make_shared<CreateSafeDispensePositionOperation>(
+			"gantry-main", "dispense2", "dispense2safe", -0.5));
+
+		// Retract dispenser
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
+
+		// Move to safe position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe position
+
+		// Clear stored positions at end
+		sequence->AddOperation(std::make_shared<ClearStoredPositionsOperation>());
+
+		return sequence;
+	}
+
+
+
+
+	std::unique_ptr<SequenceStep> BuildDispenseEpoxy1Sequence(
+		MachineOperations& machineOps, UserInteractionManager& uiManager) {
+
+		auto sequence = std::make_unique<SequenceStep>("Dispense Epoxy at Location 1", machineOps);
+
+		// 1. Retract dispenser head first for safety
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
+
+		// 2. Move gantry-main to safe node 4027
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe position
+
+		// 3. Move gantry-main to dispense1safe
+		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
+			"gantry-main", "dispense1safe"));
+
+		// 4. Extend dispenser head
+		sequence->AddOperation(std::make_shared<ExtendSlideOperation>("Dispenser_Head"));
+
+		// 5. Move to position name gantry-main to dispense1
+		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
+			"gantry-main", "dispense1"));
+
+		// 6. Wait 1 sec
+		sequence->AddOperation(std::make_shared<WaitOperation>(1000));
+
+		// 7. Set output dispenser shot (pin 15 according to IOConfig.json)
+		sequence->AddOperation(std::make_shared<SetOutputOperation>(
+			"IOBottom", 15, true)); // Dispenser_Shot pin 15
+
+		// 8. Wait 50ms
+		sequence->AddOperation(std::make_shared<WaitOperation>(50));
+
+		// 9. Clear output
+		sequence->AddOperation(std::make_shared<SetOutputOperation>(
+			"IOBottom", 15, false)); // Clear Dispenser_Shot
+
+		// 10. Wait 50ms
+		sequence->AddOperation(std::make_shared<WaitOperation>(50));
+
+		// 11. Move to position name gantry-main to dispense1safe
+		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
+			"gantry-main", "dispense1safe"));
+
+		// 12. Retract dispenser head (non-blocking)
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
+
+		// 13. Move gantry-main to safe node 4027
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe position
+
+		return sequence;
+	}
+
+	std::unique_ptr<SequenceStep> BuildDispenseEpoxy2Sequence(
+		MachineOperations& machineOps, UserInteractionManager& uiManager) {
+
+		auto sequence = std::make_unique<SequenceStep>("Dispense Epoxy at Location 2", machineOps);
+
+		// 1. Retract dispenser head first for safety
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
+
+		// 2. Move gantry-main to safe node 4027
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe position
+
+		// 3. Move gantry-main to dispense2safe
+		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
+			"gantry-main", "dispense2safe"));
+
+		// 4. Extend dispenser head
+		sequence->AddOperation(std::make_shared<ExtendSlideOperation>("Dispenser_Head"));
+
+		// 5. Move to position name gantry-main to dispense2
+		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
+			"gantry-main", "dispense2"));
+
+		// 6. Wait 1 sec
+		sequence->AddOperation(std::make_shared<WaitOperation>(1000));
+
+		// 7. Set output dispenser shot (pin 15 according to IOConfig.json)
+		sequence->AddOperation(std::make_shared<SetOutputOperation>(
+			"IOBottom", 15, true)); // Dispenser_Shot pin 15
+
+		// 8. Wait 50ms
+		sequence->AddOperation(std::make_shared<WaitOperation>(50));
+
+		// 9. Clear output
+		sequence->AddOperation(std::make_shared<SetOutputOperation>(
+			"IOBottom", 15, false)); // Clear Dispenser_Shot
+
+		// 10. Wait 50ms
+		sequence->AddOperation(std::make_shared<WaitOperation>(50));
+
+		// 11. Move to position name gantry-main to dispense2safe
+		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
+			"gantry-main", "dispense2safe"));
+
+		// 12. Retract dispenser head (non-blocking)
+		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
+
+		// 13. Move gantry-main to safe node 4027
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe position
+
+		return sequence;
+	}
+
+
+
+
+
+
+
+
+	//place new process above this line
 } // namespace ProcessBuilders
-
-

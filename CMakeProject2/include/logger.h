@@ -51,7 +51,7 @@ private:
   bool m_isMaximized = false;
 
   // Font size scale factor
-  float m_fontSize = 1.0f;
+  float m_fontSize = 1.6f;
 
   // Number of unread messages (when minimized)
   int m_unreadMessages = 0;
@@ -117,4 +117,8 @@ public:
   // Enable/disable stdout logging
   void SetLogToStdout(bool enable);
   bool IsLoggingToStdout() const;
+
+  // Add these new methods:
+  bool IsMinimized() const { return m_isMinimized; }
+  bool IsMaximized() const { return m_isMaximized; }
 };

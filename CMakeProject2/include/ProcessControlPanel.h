@@ -56,7 +56,11 @@ private:
 		"UVCuring",
 		"RejectLeftLens",
 		"RejectRightLens",  // Added the two new processes
-		"NeedleCalibration"  // ADD this new process
+		"NeedleCalibration",  // ADD this new process
+		"DispenseCalibration1",    // ADD this new process
+		"DispenseCalibration2",     // ADD this new process
+		"DispenseEpoxy1",           // ADD this new process
+		"DispenseEpoxy2"            // ADD this new process
 	};
 
 	// Methods

@@ -93,7 +93,7 @@
 #include "include/data/DigitalDisplayWithChart.h"
 #include "Programming/MacroManager.h"
 
-
+#include "include/ui/MenuManager.h"
 
 
 
@@ -1499,6 +1499,8 @@ int main(int argc, char* argv[])
       logger->LogInfo("MachineBlockUI initialized in debug mode only");
     }
   }
+
+
   // ADD MACRO MANAGER INITIALIZATION (add this after MachineBlockUI section)
   std::unique_ptr<MacroManager> macroManager;
   if (moduleConfig.isEnabled("MACRO_MANAGER") && machineBlockUI) {
@@ -1649,11 +1651,7 @@ int main(int argc, char* argv[])
         CreateHierarchicalUI(*machineOps->GetCameraExposureManager(), "Camera Exposure"));
     }
 
-    logger->LogInfo("VerticalToolbarMenu initialized with " +
-      std::to_string(toolbarVertical->GetComponentCount()) + " components");
-  }
-
-  // If you want to add it to your toolbar, add this in the toolbar setup section:
+      // If you want to add it to your toolbar, add this in the toolbar setup section:
   if (macroManager && toolbarVertical) {
     toolbarVertical->AddReferenceToCategory("Products",
       CreateHierarchicalUI(*macroManager, "Macro Programming"));
@@ -1661,8 +1659,47 @@ int main(int argc, char* argv[])
 
 
 
+    logger->LogInfo("VerticalToolbarMenu initialized with " +
+      std::to_string(toolbarVertical->GetComponentCount()) + " components");
+  }
+
+
+
+
+
+
+
+
+
+  // ENHANCED: After adding all real components, cross-check and add missing items
+ // This will automatically create placeholder components for any items in toolbar_state.json
+ // that don't exist in the actual toolbar (excluding categories)
+  toolbarVertical->CrossCheckAndAddMissingItems();
+
+  logger->LogInfo("Enhanced VerticalToolbarMenu initialized with " +
+    std::to_string(toolbarVertical->GetComponentCount()) + " total components (" +
+    std::to_string(toolbarVertical->GetVisibleWindowCount()) + " visible)");
+
+
+
+
+
+
+
   // Create one display for current monitoring
   auto currentDisplay = std::make_unique<DigitalDisplayWithChart>("GPIB-Current");
+
+
+  std::unique_ptr<MenuManager> menuManager;
+  if (logger) {
+    menuManager = std::make_unique<MenuManager>(logger, machineOps.get());
+
+    // Set other component references
+    if (toolbarVertical) {
+      menuManager->SetVerticalToolbar(toolbarVertical.get());
+    }
+  }
+
 
 
 
@@ -1898,10 +1935,13 @@ int main(int argc, char* argv[])
 
 
 
+    // In main loop:
+    if (menuManager) {
+      menuManager->RenderMainMenuBar();
+    }
 
 
-
-
+    
     // Rendering
     ImGui::Render();
     glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);

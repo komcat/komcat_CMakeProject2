@@ -5,6 +5,7 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
+#include <set>
 #include "include/logger.h"
 #include "ToolbarStateManager.h"
 
@@ -132,6 +133,34 @@ private:
   std::vector<std::shared_ptr<IHierarchicalTogglableUI>> m_children;
 };
 
+// Placeholder component for missing items from toolbar_state.json
+class PlaceholderUIComponent : public IHierarchicalTogglableUI {
+public:
+  PlaceholderUIComponent(const std::string& name, bool initialState = false)
+    : m_name(name), m_isVisible(initialState), m_children() {
+  }
+
+  bool IsVisible() const override { return m_isVisible; }
+
+  void ToggleWindow() override {
+    m_isVisible = !m_isVisible;
+    // Log the toggle action for placeholders
+    Logger::GetInstance()->LogInfo("Placeholder '" + m_name + "' toggled to " +
+      (m_isVisible ? "visible" : "hidden"));
+  }
+
+  const std::string& GetName() const override { return m_name; }
+  bool HasChildren() const override { return false; }
+  const std::vector<std::shared_ptr<IHierarchicalTogglableUI>>& GetChildren() const override {
+    return m_children;
+  }
+
+private:
+  std::string m_name;
+  bool m_isVisible;
+  std::vector<std::shared_ptr<IHierarchicalTogglableUI>> m_children;
+};
+
 // Helper function to create hierarchical components
 template<typename T>
 std::shared_ptr<IHierarchicalTogglableUI> CreateHierarchicalUI(T& component, const std::string& name) {
@@ -185,11 +214,24 @@ public:
   // Configuration
   void SetWidth(float width) { m_width = width; }
   float GetWidth() const { return m_width; }
+
   // Initialize the toolbar with state persistence
   void InitializeStateTracking(const std::string& stateFilePath = "toolbar_state.json") {
     // Initialize the state manager
     ToolbarStateManager::GetInstance().Initialize(stateFilePath);
+
+    // Cross-check and add missing items
+    CrossCheckAndAddMissingItems();
   }
+
+  // Cross-check with toolbar_state.json and add missing items as placeholders
+  void CrossCheckAndAddMissingItems();
+
+  // Check if a component exists (by name)
+  bool HasComponent(const std::string& name) const;
+
+  // Get all component names currently in the toolbar
+  std::set<std::string> GetAllComponentNames() const;
 
   // Count total windows (components)
   size_t GetTotalWindowCount() const {
@@ -254,13 +296,20 @@ public:
     return visibleWindows;
   }
 
-  void VerticalToolbarMenu::SaveAllWindowStates();
+  // Save all window states
+  void SaveAllWindowStates();
+
 private:
   // Collection of root UI components and categories
   std::vector<std::shared_ptr<IHierarchicalTogglableUI>> m_rootComponents;
 
   // Map for quick access to categories by name
   std::unordered_map<std::string, std::shared_ptr<HierarchicalTogglableUI>> m_categories;
+
+  // Known category names to exclude from missing item check
+  std::set<std::string> m_categoryNames = {
+    "Motors", "Manual", "Data", "Products", "General"
+  };
 
   // Logger instance
   Logger* m_logger;
@@ -275,6 +324,9 @@ private:
   // Helper methods
   void RenderComponent(const std::shared_ptr<IHierarchicalTogglableUI>& component);
   void RenderSecondaryPanel();
-};
 
-// Note: The specialized adapter functions for controller managers have been moved to HierarchicalControllerAdapters.h
+  // Helper to check if a name is a category
+  bool IsKnownCategory(const std::string& name) const {
+    return m_categoryNames.find(name) != m_categoryNames.end();
+  }
+};

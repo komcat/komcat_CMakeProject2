@@ -9,7 +9,7 @@
 // Initialize static instance
 std::unique_ptr<Logger> Logger::s_instance = nullptr;
 
-Logger::Logger() : m_isMinimized(false), m_isMaximized(false), m_fontSize(1.0f),
+Logger::Logger() : m_isMinimized(false), m_isMaximized(false), m_fontSize(1.5f),
 m_unreadMessages(0), m_unreadWarnings(0), m_unreadErrors(0), m_logToStdout(true) {
   // Get current date and open initial log file
   auto now = std::chrono::system_clock::now();

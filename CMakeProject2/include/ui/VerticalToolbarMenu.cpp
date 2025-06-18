@@ -3,6 +3,8 @@
 #include "ToolbarStateManager.h"
 #include "imgui.h"
 #include <algorithm>
+#include <fstream>
+#include "nlohmann/json.hpp"
 
 VerticalToolbarMenu::VerticalToolbarMenu() {
   m_logger = Logger::GetInstance();
@@ -55,6 +57,7 @@ void VerticalToolbarMenu::AddReference(std::shared_ptr<IHierarchicalTogglableUI>
   m_rootComponents.push_back(component);
   m_logger->LogInfo("Added component '" + name + "' to VerticalToolbarMenu");
 }
+
 std::shared_ptr<HierarchicalTogglableUI> VerticalToolbarMenu::CreateCategory(const std::string& name) {
   // Check if category already exists
   auto it = m_categories.find(name);
@@ -65,6 +68,9 @@ std::shared_ptr<HierarchicalTogglableUI> VerticalToolbarMenu::CreateCategory(con
   // Create new category
   auto category = std::make_shared<HierarchicalTogglableUI>(name);
   m_categories[name] = category;
+
+  // Add to known category names
+  m_categoryNames.insert(name);
 
   // Add to root components as well
   m_rootComponents.push_back(category);
@@ -104,6 +110,15 @@ bool VerticalToolbarMenu::AddReferenceToCategory(const std::string& categoryName
     m_logger->LogWarning("Component with name '" + name + "' already exists in category '" +
       categoryName + "'");
     return false;
+  }
+
+  // Load saved state if available and apply it
+  auto& stateManager = ToolbarStateManager::GetInstance();
+  bool savedState = stateManager.GetWindowState(name, component->IsVisible());
+
+  // Only toggle if the current state is different from the saved state
+  if (savedState != component->IsVisible()) {
+    component->ToggleWindow();
   }
 
   category->AddChild(component);
@@ -168,6 +183,112 @@ size_t VerticalToolbarMenu::GetComponentCount() const {
   return count;
 }
 
+// NEW METHOD: Cross-check with toolbar_state.json and add missing items
+void VerticalToolbarMenu::CrossCheckAndAddMissingItems() {
+  try {
+    // Load the toolbar state file
+    std::ifstream stateFile("toolbar_state.json");
+    if (!stateFile.is_open()) {
+      m_logger->LogWarning("CrossCheckAndAddMissingItems: Could not open toolbar_state.json");
+      return;
+    }
+
+    nlohmann::json stateJson;
+    stateFile >> stateJson;
+    stateFile.close();
+
+    if (!stateJson.contains("windows") || !stateJson["windows"].is_object()) {
+      m_logger->LogWarning("CrossCheckAndAddMissingItems: Invalid toolbar_state.json format");
+      return;
+    }
+
+    // Get current component names
+    std::set<std::string> currentNames = GetAllComponentNames();
+
+    // Check each item in the state file
+    auto& windowsObject = stateJson["windows"];
+    int addedCount = 0;
+
+    for (auto& [windowName, visible] : windowsObject.items()) {
+      // Skip if this is a known category
+      if (IsKnownCategory(windowName)) {
+        m_logger->LogInfo("CrossCheckAndAddMissingItems: Skipping category '" + windowName + "'");
+        continue;
+      }
+
+      // Skip if component already exists
+      if (currentNames.find(windowName) != currentNames.end()) {
+        continue;
+      }
+
+      // Create placeholder component for missing item
+      bool initialVisibility = visible.get<bool>();
+      auto placeholder = std::make_shared<PlaceholderUIComponent>(windowName, initialVisibility);
+
+      // Add as root component
+      m_rootComponents.push_back(placeholder);
+      addedCount++;
+
+      m_logger->LogInfo("CrossCheckAndAddMissingItems: Added placeholder for '" + windowName +
+        "' (initial state: " + (initialVisibility ? "visible" : "hidden") + ")");
+    }
+
+    if (addedCount > 0) {
+      m_logger->LogInfo("CrossCheckAndAddMissingItems: Added " + std::to_string(addedCount) +
+        " placeholder components from toolbar_state.json");
+    }
+    else {
+      m_logger->LogInfo("CrossCheckAndAddMissingItems: No missing components found");
+    }
+
+  }
+  catch (const std::exception& e) {
+    m_logger->LogError("CrossCheckAndAddMissingItems: Exception - " + std::string(e.what()));
+  }
+}
+
+// NEW METHOD: Check if a component exists
+bool VerticalToolbarMenu::HasComponent(const std::string& name) const {
+  // Check root components
+  for (const auto& component : m_rootComponents) {
+    if (component->GetName() == name) {
+      return true;
+    }
+
+    // Check children in categories
+    if (component->HasChildren()) {
+      const auto& children = component->GetChildren();
+      for (const auto& child : children) {
+        if (child->GetName() == name) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+// NEW METHOD: Get all component names
+std::set<std::string> VerticalToolbarMenu::GetAllComponentNames() const {
+  std::set<std::string> names;
+
+  // Add root component names
+  for (const auto& component : m_rootComponents) {
+    names.insert(component->GetName());
+
+    // Add children names
+    if (component->HasChildren()) {
+      const auto& children = component->GetChildren();
+      for (const auto& child : children) {
+        names.insert(child->GetName());
+      }
+    }
+  }
+
+  return names;
+}
+
 void VerticalToolbarMenu::RenderUI() {
   // Set vertical toolbar style
   ImGuiStyle& style = ImGui::GetStyle();
@@ -184,6 +305,17 @@ void VerticalToolbarMenu::RenderUI() {
   // Keep background visible
   ImGui::Begin("Toolbar", nullptr, toolbarFlags); // Added proper title instead of hidden one
 
+  // Add a debug section at the top (collapsible)
+  if (ImGui::CollapsingHeader("Toolbar Info##Debug", ImGuiTreeNodeFlags_None)) {
+    ImGui::Text("Total Components: %zu", GetTotalWindowCount());
+    ImGui::Text("Visible Windows: %zu", GetVisibleWindowCount());
+
+    if (ImGui::Button("Refresh Missing Items")) {
+      CrossCheckAndAddMissingItems();
+    }
+    ImGui::Separator();
+  }
+
   // Render all root components
   for (auto& component : m_rootComponents) {
     RenderComponent(component);
@@ -198,15 +330,21 @@ void VerticalToolbarMenu::RenderUI() {
   // Restore original style
   style.WindowPadding.x = oldWindowPadding;
 }
-// Modify RenderComponent to save state when toggled
+
+// Modify RenderComponent to save state when toggled and handle placeholders
 void VerticalToolbarMenu::RenderComponent(const std::shared_ptr<IHierarchicalTogglableUI>& component) {
   bool isVisible = component->IsVisible();
   bool hasChildren = component->HasChildren();
 
-  // Button colors - updated with softer, more natural colors
+  // Check if this is a placeholder component
+  bool isPlaceholder = std::dynamic_pointer_cast<PlaceholderUIComponent>(component) != nullptr;
+
+  // Button colors - updated with different color for placeholders
   ImVec4 activeButtonColor = ImVec4(0.2f, 0.7f, 0.2f, 1.0f); // Green for active
   ImVec4 inactiveButtonColor = ImVec4(0.5f, 0.5f, 0.5f, 1.0f); // Gray for inactive
-  ImVec4 categoryButtonColor = ImVec4(0.4f, 0.5f, 0.7f, 0.9f); // Softer blue for categories
+  ImVec4 categoryButtonColor = ImVec4(0.4f, 0.5f, 0.7f, 0.9f); // Blue for categories
+  ImVec4 placeholderActiveColor = ImVec4(0.7f, 0.5f, 0.2f, 1.0f); // Orange for active placeholders
+  ImVec4 placeholderInactiveColor = ImVec4(0.6f, 0.4f, 0.3f, 1.0f); // Dark orange for inactive placeholders
 
   // Set button width to fill the toolbar
   float buttonWidth = ImGui::GetContentRegionAvail().x;
@@ -214,8 +352,21 @@ void VerticalToolbarMenu::RenderComponent(const std::shared_ptr<IHierarchicalTog
   // Set button color based on state and type
   if (hasChildren) {
     ImGui::PushStyleColor(ImGuiCol_Button, categoryButtonColor);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.6f, 0.8f, 0.9f)); // Lighter blue when hovered
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.3f, 0.4f, 0.6f, 0.9f)); // Darker blue when clicked
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.6f, 0.8f, 0.9f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.3f, 0.4f, 0.6f, 0.9f));
+  }
+  else if (isPlaceholder) {
+    // Special styling for placeholder components
+    if (isVisible) {
+      ImGui::PushStyleColor(ImGuiCol_Button, placeholderActiveColor);
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.6f, 0.3f, 1.0f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.6f, 0.4f, 0.1f, 1.0f));
+    }
+    else {
+      ImGui::PushStyleColor(ImGuiCol_Button, placeholderInactiveColor);
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.7f, 0.5f, 0.4f, 1.0f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.5f, 0.3f, 0.2f, 1.0f));
+    }
   }
   else if (isVisible) {
     ImGui::PushStyleColor(ImGuiCol_Button, activeButtonColor);
@@ -228,8 +379,13 @@ void VerticalToolbarMenu::RenderComponent(const std::shared_ptr<IHierarchicalTog
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
   }
 
-  // Create the button
-  if (ImGui::Button(component->GetName().c_str(), ImVec2(buttonWidth, 30))) {
+  // Create the button with placeholder indicator
+  std::string buttonText = component->GetName();
+  if (isPlaceholder) {
+    buttonText += " [P]"; // Add placeholder indicator
+  }
+
+  if (ImGui::Button(buttonText.c_str(), ImVec2(buttonWidth, 30))) {
     if (hasChildren) {
       // It's a category, show secondary panel
       m_showSecondaryPanel = true;
@@ -243,6 +399,11 @@ void VerticalToolbarMenu::RenderComponent(const std::shared_ptr<IHierarchicalTog
       auto& stateManager = ToolbarStateManager::GetInstance();
       stateManager.SaveWindowState(component->GetName(), component->IsVisible());
     }
+  }
+
+  // Show tooltip for placeholders
+  if (isPlaceholder && ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Placeholder component from toolbar_state.json\nNo actual UI component is connected");
   }
 
   ImGui::PopStyleColor(3); // Reset all button colors (button, hovered, active)
@@ -280,7 +441,7 @@ void VerticalToolbarMenu::RenderSecondaryPanel() {
   }
 
   // Get the selected category name for the window title
-  std::string panelName = m_selectedCategory->GetName() + " Menu"; // Remove ## to show the title
+  std::string panelName = m_selectedCategory->GetName() + " Menu";
 
   // Only set initial position if first time creating this window
   ImGui::SetNextWindowPos(ImVec2(m_width, 0), ImGuiCond_FirstUseEver);
@@ -306,8 +467,6 @@ void VerticalToolbarMenu::RenderSecondaryPanel() {
     return;
   }
 
-
-
   ImGui::Separator();
 
   // Safely get the children
@@ -319,25 +478,52 @@ void VerticalToolbarMenu::RenderSecondaryPanel() {
     if (!child) continue;
 
     bool isVisible = child->IsVisible();
+    bool isPlaceholder = std::dynamic_pointer_cast<PlaceholderUIComponent>(child) != nullptr;
 
     // Button colors
     ImVec4 activeButtonColor = ImVec4(0.2f, 0.7f, 0.2f, 1.0f); // Green for active
     ImVec4 inactiveButtonColor = ImVec4(0.5f, 0.5f, 0.5f, 1.0f); // Gray for inactive
+    ImVec4 placeholderActiveColor = ImVec4(0.7f, 0.5f, 0.2f, 1.0f); // Orange for active placeholders
+    ImVec4 placeholderInactiveColor = ImVec4(0.6f, 0.4f, 0.3f, 1.0f); // Dark orange for inactive placeholders
 
     // Set button width to fill the panel
     float buttonWidth = ImGui::GetContentRegionAvail().x;
 
-    // Set button color based on state
-    if (isVisible) {
-      ImGui::PushStyleColor(ImGuiCol_Button, activeButtonColor);
+    // Set button color based on state and type
+    if (isPlaceholder) {
+      if (isVisible) {
+        ImGui::PushStyleColor(ImGuiCol_Button, placeholderActiveColor);
+      }
+      else {
+        ImGui::PushStyleColor(ImGuiCol_Button, placeholderInactiveColor);
+      }
     }
     else {
-      ImGui::PushStyleColor(ImGuiCol_Button, inactiveButtonColor);
+      if (isVisible) {
+        ImGui::PushStyleColor(ImGuiCol_Button, activeButtonColor);
+      }
+      else {
+        ImGui::PushStyleColor(ImGuiCol_Button, inactiveButtonColor);
+      }
     }
 
-    // Create the button
-    if (ImGui::Button(child->GetName().c_str(), ImVec2(buttonWidth, 30))) {
+    // Create the button with placeholder indicator
+    std::string buttonText = child->GetName();
+    if (isPlaceholder) {
+      buttonText += " [P]"; // Add placeholder indicator
+    }
+
+    if (ImGui::Button(buttonText.c_str(), ImVec2(buttonWidth, 30))) {
       child->ToggleWindow();
+
+      // Save the new state
+      auto& stateManager = ToolbarStateManager::GetInstance();
+      stateManager.SaveWindowState(child->GetName(), child->IsVisible());
+    }
+
+    // Show tooltip for placeholders
+    if (isPlaceholder && ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Placeholder component from toolbar_state.json\nNo actual UI component is connected");
     }
 
     ImGui::PopStyleColor(); // Reset button color

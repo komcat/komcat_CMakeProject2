@@ -1,4 +1,4 @@
-#include "ProcessControlPanel.h"
+ï»¿#include "ProcessControlPanel.h"
 #include "imgui.h"
 #include <chrono>
 #include <iostream>
@@ -25,8 +25,8 @@ void ProcessControlPanel::RenderUI() {
 	ImGuiIO& io = ImGui::GetIO();
 	ImVec2 displaySize = io.DisplaySize;
 
-	// Set initial window size to 75% width and 65% height, but only on first use
-	ImGui::SetNextWindowSize(ImVec2(displaySize.x * 0.75f, displaySize.y * 0.65f), ImGuiCond_FirstUseEver);
+	// Set initial window size to 60% width and 70% height (adjusted since we removed right panel)
+	ImGui::SetNextWindowSize(ImVec2(displaySize.x * 0.6f, displaySize.y * 0.7f), ImGuiCond_FirstUseEver);
 
 	// Begin window with resizable flag only - no auto resize
 	ImGui::Begin("Process Control Panel", &m_showWindow);
@@ -38,15 +38,14 @@ void ProcessControlPanel::RenderUI() {
 
 	ImGui::Separator();
 
-	// Create a two-column layout
+	// Single column layout for process buttons (now using full width)
 	const float windowWidth = ImGui::GetContentRegionAvail().x;
-	const float columnWidth = windowWidth * 0.48f; // Each column gets almost half the window
-	const float buttonWidth = columnWidth - 10.0f;
-	const float buttonHeight = 40.0f;
+	const float buttonWidth = windowWidth * 0.95f; // Use most of the available width
+	const float buttonHeight = 45.0f; // Slightly taller buttons
 
-	// Left column - Process buttons
-	ImGui::BeginChild("ProcessButtons", ImVec2(columnWidth, 350), true, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysVerticalScrollbar);
-	ImGui::Text("Available Processes:");
+	// Process buttons section
+	ImGui::BeginChild("ProcessButtons", ImVec2(0, 400), true, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysVerticalScrollbar);
+	ImGui::Text("Available Processes (Right-click for details):");
 	ImGui::Separator();
 
 	// Style for process selection buttons
@@ -72,6 +71,58 @@ void ProcessControlPanel::RenderUI() {
 			}
 		}
 
+		// Right-click context menu for process details
+		if (ImGui::BeginPopupContextItem(("ProcessMenu_" + process).c_str())) {
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Process Details: %s", process.c_str());
+			ImGui::Separator();
+
+			// Get the process sequence and display its debug print
+			try {
+				// Temporarily store the current selected process
+				std::string originalSelected = m_selectedProcess;
+				m_selectedProcess = process;
+
+				// Build the sequence to get the operations
+				auto sequence = BuildSelectedProcess();
+				if (sequence) {
+					ImGui::Text("Operations in this process:");
+					ImGui::Separator();
+
+					const auto& operations = sequence->GetOperations();
+					ImGui::Text("Total operations: %zu", operations.size());
+					ImGui::Spacing();
+
+					// Display each operation with step number
+					for (size_t i = 0; i < operations.size(); ++i) {
+						ImGui::Text("%zu. %s", i + 1, operations[i]->GetDescription().c_str());
+					}
+
+					ImGui::Spacing();
+					ImGui::Separator();
+					if (ImGui::Button("Close")) {
+						ImGui::CloseCurrentPopup();
+					}
+				}
+				else {
+					ImGui::Text("Error: Could not build process sequence");
+					if (ImGui::Button("Close")) {
+						ImGui::CloseCurrentPopup();
+					}
+				}
+
+				// Restore original selection
+				m_selectedProcess = originalSelected;
+			}
+			catch (const std::exception& e) {
+				ImGui::Text("Error building sequence: %s", e.what());
+				if (ImGui::Button("Close")) {
+					ImGui::CloseCurrentPopup();
+				}
+			}
+
+			ImGui::EndPopup();
+		}
+
 		ImGui::PopStyleColor(2);
 
 		// Spacing between buttons
@@ -79,352 +130,6 @@ void ProcessControlPanel::RenderUI() {
 	}
 
 	ImGui::PopStyleVar();
-	ImGui::EndChild();
-
-	ImGui::SameLine();
-
-	// Right column - Process description
-	ImGui::BeginChild("ProcessDescription", ImVec2(columnWidth, 350), true, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysVerticalScrollbar);
-	ImGui::Text("Process Description:");
-	ImGui::Separator();
-
-	if (m_selectedProcess == "Initialization") {
-		ImGui::TextWrapped("Initializes all hardware by moving devices to home positions, releasing grippers, and setting up pneumatics.");
-		ImGui::Spacing();
-
-		float bulletSpacing = 24.0f; // Increased spacing for better readability
-		float indent = 10.0f;
-
-		// Styled bullets
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Moves gantry, hex-left, and hex-right to safe positions");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Releases left and right grippers");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Retracts pneumatic slides");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Activates base vacuum");
-	}
-	else if (m_selectedProcess == "InitializationParallel") {
-		ImGui::TextWrapped("Initializes all hardware with optimized parallel movements. This version moves multiple devices simultaneously for faster startup.");
-		ImGui::Spacing();
-
-		float bulletSpacing = 24.0f; // Increased spacing for better readability
-		float indent = 10.0f;
-
-		// Styled bullets
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Moves all devices (gantry, hex-left, hex-right) simultaneously");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Releases left and right grippers");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Retracts pneumatic slides");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Activates base vacuum");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Improves initialization speed through parallel execution");
-	}
-	else if (m_selectedProcess == "Probing") {
-		ImGui::TextWrapped("Positions the gantry to inspect key components and waits for user confirmation at each step.");
-		ImGui::Spacing();
-
-		float bulletSpacing = 24.0f;
-		float indent = 10.0f;
-
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Moves gantry to sled position");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Waits for user to confirm sled position");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Moves gantry to PIC position");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Waits for user to confirm PIC position");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Returns to safe position");
-	}
-	else if (m_selectedProcess == "PickPlaceLeftLens") {
-		ImGui::TextWrapped("Controls hex-left to pick up a lens and place it in position.");
-		ImGui::Spacing();
-
-		float bulletSpacing = 24.0f;
-		float indent = 10.0f;
-
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Moves to approach position");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Picks up lens with gripper");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Moves to placement position");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Places lens");
-	}
-	else if (m_selectedProcess == "PickPlaceRightLens") {
-		ImGui::TextWrapped("Controls hex-right to pick up a lens and place it in position.");
-		ImGui::Spacing();
-
-		float bulletSpacing = 24.0f;
-		float indent = 10.0f;
-
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Moves to approach position");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Picks up lens with gripper");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Moves to placement position");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Places lens");
-	}
-	else if (m_selectedProcess == "UVCuring") {
-		ImGui::TextWrapped("Positions the UV device and performs the curing process.");
-		ImGui::Spacing();
-
-		float bulletSpacing = 24.0f;
-		float indent = 10.0f;
-
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Moves gantry to UV position");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Extends UV head");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Activates UV light for the curing period");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Retracts UV head");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Releases grippers and returns to safe position");
-	}
-	// In ProcessControlPanel.cpp, add these new case descriptions in the RenderUI method
-// where all the other process descriptions are defined:
-
-	else if (m_selectedProcess == "RejectLeftLens") {
-		ImGui::TextWrapped("Moves the left lens to the reject position and releases it safely.");
-		ImGui::Spacing();
-
-		float bulletSpacing = 24.0f;
-		float indent = 10.0f;
-
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Retracts all pneumatics for safety");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Moves gantry to safe position");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Moves hex-left to reject lens position");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Releases left gripper");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Waits for lens to drop completely");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Returns hex-left to home position");
-	}
-	else if (m_selectedProcess == "RejectRightLens") {
-		ImGui::TextWrapped("Moves the right lens to the reject position and releases it safely.");
-		ImGui::Spacing();
-
-		float bulletSpacing = 24.0f;
-		float indent = 10.0f;
-
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Retracts all pneumatics for safety");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Moves gantry to safe position");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Moves hex-right to reject lens position");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Releases right gripper");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Waits for lens to drop completely");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Returns hex-right to home position");
-	}
-	else if (m_selectedProcess == "NeedleCalibration") {
-		ImGui::TextWrapped("Performs automatic needle XY calibration by dispensing a dot and calculating offset.");
-		ImGui::Spacing();
-
-		float bulletSpacing = 24.0f;
-		float indent = 10.0f;
-
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Displays current needle offset (if any)");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Moves gantry to camera viewing position");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Records reference position");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Moves to needle position and dispenses dot");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Returns to camera view for user alignment");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("User centers crosshair on dispensed dot");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Calculates and displays needle offset");
-
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-		ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-		ImGui::Text("Saves offset to camera_to_object_offset.json");
-
-		// Add a note about user interaction
-		ImGui::Spacing();
-		ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Note:");
-		ImGui::SameLine();
-		ImGui::TextWrapped("This process requires user interaction to center the crosshair.");
-	}
-	//else if (m_selectedProcess == "CompleteProcess") {
-	//  ImGui::TextWrapped("Performs the complete end-to-end assembly process, including all the steps above in sequence.");
-	//  ImGui::Spacing();
-
-	//  float bulletSpacing = 24.0f;
-	//  float indent = 10.0f;
-
-	//  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-	//  ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-	//  ImGui::Text("System initialization");
-
-	//  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-	//  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-	//  ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-	//  ImGui::Text("Component probing and inspection");
-
-	//  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-	//  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-	//  ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-	//  ImGui::Text("Left lens pick and placement");
-
-	//  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-	//  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-	//  ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-	//  ImGui::Text("Right lens pick and placement");
-
-	//  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-	//  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-	//  ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-	//  ImGui::Text("UV curing");
-
-	//  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bulletSpacing - ImGui::GetTextLineHeight());
-	//  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
-	//  ImGui::TextColored(ImVec4(0.0f, 0.7f, 0.0f, 1.0f), "•"); ImGui::SameLine();
-	//  ImGui::Text("Return to safe positions");
-	//}
-
 	ImGui::EndChild();
 
 	ImGui::Separator();
@@ -457,23 +162,57 @@ void ProcessControlPanel::RenderUI() {
 
 		ImGui::PopStyleColor(3);
 
-		// If process is running and user interactions are needed, show controls
 		if (m_uiManager->IsWaitingForConfirmation() && !m_autoConfirm) {
 			ImGui::Text("User confirmation needed: %s", m_uiManager->GetLastMessage().c_str());
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.7f, 0.2f, 1.0f)); // Green button
-			if (ImGui::Button("Confirm", ImVec2(120, 0))) {
+			// CUSTOMIZABLE PARAMETERS:
+			const float BUTTON_WIDTH = 150.0f;
+			const float BUTTON_HEIGHT = 80.0f;
+			const ImVec4 CONFIRM_COLOR = ImVec4(0.0f, 0.8f, 0.3f, 1.0f);
+			const ImVec4 CONFIRM_HOVER = ImVec4(0.0f, 0.9f, 0.4f, 1.0f);
+			const ImVec4 CANCEL_COLOR = ImVec4(0.8f, 0.2f, 0.2f, 1.0f);
+			const ImVec4 CANCEL_HOVER = ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
+			const float BUTTON_SPACING = 20.0f;
+
+			ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]);
+
+			// Confirm Button
+			ImGui::PushStyleColor(ImGuiCol_Button, CONFIRM_COLOR);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, CONFIRM_HOVER);
+			ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+
+			if (ImGui::Button("[Y] Confirm", ImVec2(BUTTON_WIDTH, BUTTON_HEIGHT))) {
 				m_uiManager->ConfirmationReceived(true);
 			}
-			ImGui::PopStyleColor();
 
-			ImGui::SameLine();
+			ImGui::PopStyleVar();
+			ImGui::PopStyleColor(2);
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f)); // Red button
-			if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+			ImGui::SameLine(0, BUTTON_SPACING);
+
+			// Cancel Button  
+			ImGui::PushStyleColor(ImGuiCol_Button, CANCEL_COLOR);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, CANCEL_HOVER);
+			ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+
+			if (ImGui::Button("[N] Cancel", ImVec2(BUTTON_WIDTH, BUTTON_HEIGHT))) {
 				m_uiManager->ConfirmationReceived(false);
 			}
-			ImGui::PopStyleColor();
+
+			ImGui::PopStyleVar();
+			ImGui::PopStyleColor(2);
+			ImGui::PopFont();
+
+			// Progress indicator
+			static auto startTime = std::chrono::steady_clock::now();
+			auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+				std::chrono::steady_clock::now() - startTime).count();
+
+			ImGui::Text("Waiting for confirmation... (%lds)", elapsed);
+
+			if (elapsed > 300) { // 5 minute timeout
+				ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Warning: This prompt will timeout soon!");
+			}
 		}
 	}
 	else {
@@ -487,9 +226,9 @@ void ProcessControlPanel::RenderUI() {
 
 		ImGui::PopStyleColor(3);
 	}
+
 	// Add a debug section to show device connection status
 	if (ImGui::CollapsingHeader("Device Connection Status")) {
-		// For each device, show the connection status
 		std::vector<std::string> devices = { "gantry-main", "hex-left", "hex-right" };
 
 		for (const auto& deviceName : devices) {
@@ -498,9 +237,13 @@ void ProcessControlPanel::RenderUI() {
 				isConnected ? "Connected" : "Not Connected");
 		}
 	}
+
+	// Add help text at the bottom
+	ImGui::Separator();
+	ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Tip: Right-click any process button to see detailed steps");
+
 	ImGui::End();
 }
-
 void ProcessControlPanel::StartProcess(const std::string& processName) {
 	if (m_processRunning) {
 		m_logger->LogWarning("ProcessControlPanel: Process already running");
@@ -589,6 +332,19 @@ std::unique_ptr<SequenceStep> ProcessControlPanel::BuildSelectedProcess() {
 	else if (m_selectedProcess == "NeedleCalibration") {
 		return ProcessBuilders::BuildNeedleXYCalibrationSequenceEnhanced(m_machineOps, *m_uiManager);
 	}
+	else if (m_selectedProcess == "DispenseCalibration1") {
+		return ProcessBuilders::BuildDispenseCalibrationSequence(m_machineOps, *m_uiManager);
+	}
+	else if (m_selectedProcess == "DispenseCalibration2") {
+		return ProcessBuilders::BuildDispenseCalibration2Sequence(m_machineOps, *m_uiManager);
+	}
+	else if (m_selectedProcess == "DispenseEpoxy1") {
+		return ProcessBuilders::BuildDispenseEpoxy1Sequence(m_machineOps, *m_uiManager);
+	}
+	else if (m_selectedProcess == "DispenseEpoxy2") {
+		return ProcessBuilders::BuildDispenseEpoxy2Sequence(m_machineOps, *m_uiManager);
+	}
+
 
 	// Default fallback
 	return ProcessBuilders::BuildInitializationSequence(m_machineOps);
