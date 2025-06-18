@@ -1,4 +1,4 @@
-// MenuManager.h - Unified approach using MachineOperations
+// MenuManager.h - Complete header with all functionality including Laser TEC
 #pragma once
 #include "include/logger.h"
 
@@ -15,10 +15,10 @@ public:
   // Individual menu renderers
   void RenderViewMenu();
   void RenderManualMenu();
-  //void RenderToolsMenu();
-  //void RenderProcessMenu();
-  //void RenderHardwareMenu();
-  //void RenderHelpMenu();
+  void RenderToolsMenu();
+  void RenderProcessMenu();
+  void RenderHardwareMenu();
+  void RenderHelpMenu();
 
   // Set component references
   void SetLogger(Logger* logger) { m_logger = logger; }
@@ -30,7 +30,16 @@ private:
   MachineOperations* m_machineOps;
   VerticalToolbarMenu* m_toolbar;
 
-  // Helper methods for Manual menu
-  void RenderControllersSubmenu();
-  void RenderMotionSubmenu();
+  // Helper methods for manual operations
+  void RenderMotionControlsMenu();
+  void RenderIOSubmenu();
+  void RenderPneumaticControlsMenu();
+  void RenderLaserTECControlsMenu();
+
+  // Helper methods for hardware controls
+  void RenderPIControllerMenu();
+  void RenderACSControllerMenu();
+  void RenderCameraControlsMenu();
+  void RenderDataAcquisitionMenu();
+  void RenderLaserHardwareMenu();
 };

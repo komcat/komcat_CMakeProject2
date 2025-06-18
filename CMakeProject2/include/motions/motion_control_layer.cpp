@@ -1001,12 +1001,12 @@ bool MotionControlLayer::GetDeviceCurrentNode(const std::string& graphName, cons
       if (posOpt.has_value()) {
         const auto& nodePos = posOpt.value().get();
         // Settings from configuration
-        double tolerance = 0.1;  // Default tolerance 100um
+        double tolerance = 0.2;  // Default tolerance 200um
         const auto& settings = m_configManager.GetSettings();
         if (settings.PositionTolerance > 0) {
           tolerance = settings.PositionTolerance;
         }
-
+        //m_logger->LogInfo("MotionControlLayer: current tolerance = " + std::to_string(tolerance));
         // Compare positions
         if (IsPositionsEqual(currentPos, nodePos, tolerance)) {
           nodeId = node.Id;

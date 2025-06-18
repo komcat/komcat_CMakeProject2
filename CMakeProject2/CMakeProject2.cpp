@@ -1567,15 +1567,8 @@ int main(int argc, char* argv[])
         CreateHierarchicalMotionControlAdapter(*motionControlLayer, "Motion Control"));
     }
 
-    // Add components to Manual category
-    if (ioManager) {
-      auto ioUI = std::make_unique<EziIO_UI>(*ioManager);
-      if (ioconfigManager) {
-        ioUI->setConfigManager(ioconfigManager.get());
-      }
-      toolbarVertical->AddReferenceToCategory("Manual",
-        CreateHierarchicalUI(*ioUI, "IO Control"));
-    }
+
+
 
     if (pneumaticUI) {
       toolbarVertical->AddReferenceToCategory("Manual",
@@ -1664,6 +1657,16 @@ int main(int argc, char* argv[])
 
 
 
+  // Create persistent EziIO UI for toolbar
+  std::unique_ptr<EziIO_UI> toolbarIoUI;
+  if (ioManager) {
+    toolbarIoUI = std::make_unique<EziIO_UI>(*ioManager);
+    if (ioconfigManager) {
+      toolbarIoUI->setConfigManager(ioconfigManager.get());
+    }
+    toolbarVertical->AddReferenceToCategory("Manual",
+      CreateHierarchicalUI(*toolbarIoUI, "IO Control"));
+  }
 
 
 
@@ -1822,20 +1825,26 @@ int main(int argc, char* argv[])
       pylonCameraTest->RenderUIWithMachineOps(machineOps.get());
     }
 
-    // Render IO systems
-    if (ioManager) {
-      // Create and render EziIO_UI if not already in toolbar
-      static std::unique_ptr<EziIO_UI> mainIoUI;
-      if (!mainIoUI) {
-        mainIoUI = std::make_unique<EziIO_UI>(*ioManager);
-        if (ioconfigManager) {
-          mainIoUI->setConfigManager(ioconfigManager.get());
-        }
-        if (mainIoUI->IsVisible()) {
-          //mainIoUI->ToggleWindow(); // Hide by default
-        }
-      }
-      mainIoUI->RenderUI();
+    //// Render IO systems
+    //if (ioManager) {
+    //  // Create and render EziIO_UI if not already in toolbar
+    //  static std::unique_ptr<EziIO_UI> mainIoUI;
+    //  if (!mainIoUI) {
+    //    mainIoUI = std::make_unique<EziIO_UI>(*ioManager);
+    //    if (ioconfigManager) {
+    //      mainIoUI->setConfigManager(ioconfigManager.get());
+    //    }
+    //    // REMOVE THIS SECTION - let the toolbar control visibility
+    //    // if (mainIoUI->IsVisible()) {
+    //    //   mainIoUI->ToggleWindow(); // Hide by default
+    //    // }
+    //  }
+    //  mainIoUI->RenderUI();
+    //}
+
+    // Add this instead:
+    if (toolbarIoUI) {
+      toolbarIoUI->RenderUI();
     }
 
     if (pneumaticUI) {

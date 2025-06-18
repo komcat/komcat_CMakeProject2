@@ -1657,7 +1657,6 @@ public:
       // Load needle offset from camera_to_object_offset.json
       std::string configPath = "camera_to_object_offset.json";
       std::ifstream configFile(configPath);
-
       if (!configFile.is_open()) {
         ops.LogError("Cannot open camera offset config file: " + configPath);
         return false;
@@ -1683,11 +1682,13 @@ public:
         ", Y=" + std::to_string(offsetY) +
         ", Z=" + std::to_string(offsetZ));
 
-      // Calculate needle position = camera position + needle offset
+      // Calculate needle position = camera position - needle offset
+      // The offset in config represents camera-to-needle offset, so we need to invert it
+      // to move from camera position to where needle should be positioned
       PositionStruct needlePosition = cameraPosition;
-      needlePosition.x += offsetX;
-      needlePosition.y += offsetY;
-      needlePosition.z += offsetZ;
+      needlePosition.x -= offsetX;  // CHANGED: subtract instead of add
+      needlePosition.y -= offsetY;  // CHANGED: subtract instead of add
+      needlePosition.z -= offsetZ;  // CHANGED: subtract instead of add
 
       ops.LogInfo("Moving from camera position to needle position:");
       ops.LogInfo("Camera: X=" + std::to_string(cameraPosition.x) +
@@ -1697,11 +1698,14 @@ public:
         ", Y=" + std::to_string(needlePosition.y) +
         ", Z=" + std::to_string(needlePosition.z));
 
-      // Move to needle position (using the motion layer's MoveToPosition method)
-      // We'll use relative moves to avoid having to access the motion layer directly
+      // Calculate the relative movement needed
       double deltaX = needlePosition.x - cameraPosition.x;
       double deltaY = needlePosition.y - cameraPosition.y;
       double deltaZ = needlePosition.z - cameraPosition.z;
+
+      ops.LogInfo("Relative movement: deltaX=" + std::to_string(deltaX) +
+        ", deltaY=" + std::to_string(deltaY) +
+        ", deltaZ=" + std::to_string(deltaZ));
 
       // Apply the moves sequentially
       bool success = true;
@@ -1723,7 +1727,6 @@ public:
       }
 
       return success;
-
     }
     catch (const std::exception& e) {
       ops.LogError("Exception while applying needle offset: " + std::string(e.what()));
@@ -1739,6 +1742,7 @@ private:
   std::string m_deviceName;
   std::string m_storedPositionLabel;
 };
+
 
 // Create Safe Dispense Position operation
 class CreateSafeDispensePositionOperation : public SequenceOperation {

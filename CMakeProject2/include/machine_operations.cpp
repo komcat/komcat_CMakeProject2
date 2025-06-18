@@ -42,8 +42,6 @@ MachineOperations::~MachineOperations() {
   m_logger->LogInfo("MachineOperations: Shutting down");
 }
 
-// 4. MODIFY the MoveDeviceToNode method (in machine_operations.cpp):
-// In machine_operations.cpp - Updated MoveDeviceToNode method
 bool MachineOperations::MoveDeviceToNode(const std::string& deviceName, const std::string& graphName,
   const std::string& targetNodeId, bool blocking) {
   m_logger->LogInfo("MachineOperations: Moving device " + deviceName +
@@ -64,6 +62,81 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName, const st
   std::string currentNodeId;
   if (!m_motionLayer.GetDeviceCurrentNode(graphName, deviceName, currentNodeId)) {
     m_logger->LogError("MachineOperations: Failed to get current node for device " + deviceName);
+
+    // If we can't determine the current node, try to get positions and compare
+    PositionStruct currentPos;
+    if (m_motionLayer.GetCurrentPosition(deviceName, currentPos)) {
+      m_logger->LogInfo("MachineOperations: Current position: X=" + std::to_string(currentPos.x) +
+        " Y=" + std::to_string(currentPos.y) +
+        " Z=" + std::to_string(currentPos.z));
+
+      // Try to get the target node's position
+      try {
+        // Get the graph from config manager
+        auto graphOpt = m_motionLayer.GetConfigManager().GetGraph(graphName);
+        if (graphOpt.has_value()) {
+          const auto& graph = graphOpt.value().get();
+
+          // Find the target node in the graph
+          const Node* targetNode = nullptr;
+          for (const auto& node : graph.Nodes) {
+            if (node.Id == targetNodeId && node.Device == deviceName) {
+              targetNode = &node;
+              break;
+            }
+          }
+
+          if (targetNode && !targetNode->Position.empty()) {
+            // Get the named position for this node
+            auto posOpt = m_motionLayer.GetConfigManager().GetNamedPosition(deviceName, targetNode->Position);
+            if (posOpt.has_value()) {
+              const auto& targetPos = posOpt.value().get();
+
+              m_logger->LogInfo("MachineOperations: Target node position: X=" + std::to_string(targetPos.x) +
+                " Y=" + std::to_string(targetPos.y) +
+                " Z=" + std::to_string(targetPos.z));
+
+              double distance = GetDistanceBetweenPositions(currentPos, targetPos, false);
+              m_logger->LogInfo("MachineOperations: Distance to target: " + std::to_string(distance) + " mm");
+
+              if (distance < 0.1) { // Within 0.1mm, consider we're already there
+                m_logger->LogInfo("MachineOperations: Device appears to be at target node based on position proximity (distance: " +
+                  std::to_string(distance) + " mm)");
+
+                // STILL APPLY CAMERA EXPOSURE EVEN IF ALREADY AT NODE
+                if (deviceName == "gantry-main" && m_autoExposureEnabled) {
+                  m_logger->LogInfo("MachineOperations: Device appears at " + targetNodeId +
+                    ", applying camera exposure with fresh config");
+                  ApplyCameraExposureForNode(targetNodeId);
+                }
+
+                return true;
+              }
+              else {
+                m_logger->LogInfo("MachineOperations: Device is not close enough to target node (distance: " +
+                  std::to_string(distance) + " mm > 0.1 mm tolerance)");
+              }
+            }
+            else {
+              m_logger->LogError("MachineOperations: Target node position '" + targetNode->Position + "' not found in configuration");
+            }
+          }
+          else {
+            m_logger->LogError("MachineOperations: Target node '" + targetNodeId + "' not found for device '" + deviceName + "' in graph '" + graphName + "'");
+          }
+        }
+        else {
+          m_logger->LogError("MachineOperations: Graph '" + graphName + "' not found in configuration");
+        }
+      }
+      catch (const std::exception& e) {
+        m_logger->LogError("MachineOperations: Exception while checking node position: " + std::string(e.what()));
+      }
+    }
+    else {
+      m_logger->LogError("MachineOperations: Failed to get current position for device " + deviceName);
+    }
+
     return false;
   }
 

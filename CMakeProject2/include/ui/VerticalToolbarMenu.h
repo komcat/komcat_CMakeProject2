@@ -187,6 +187,18 @@ inline std::shared_ptr<HierarchicalTogglableUI> CreateUICategory(const std::stri
 }
 
 // Vertical toolbar menu with hierarchical components
+
+#pragma once
+#include <vector>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <set>
+#include "include/logger.h"
+
+// Forward declarations and interfaces remain the same...
+// class IHierarchicalTogglableUI, HierarchicalTogglableUI, etc.
+
 class VerticalToolbarMenu {
 public:
   VerticalToolbarMenu();
@@ -217,14 +229,8 @@ public:
 
   // Initialize the toolbar with state persistence
   void InitializeStateTracking(const std::string& stateFilePath = "toolbar_state.json") {
-    // Initialize the state manager
     ToolbarStateManager::GetInstance().Initialize(stateFilePath);
-
-    // Note: No longer automatically adding missing items from toolbar_state.json
   }
-
-  // Cross-check with toolbar_state.json and add missing items as placeholders (DEPRECATED - not used)
-  void CrossCheckAndAddMissingItems();
 
   // Check if a component exists (by name)
   bool HasComponent(const std::string& name) const;
@@ -232,71 +238,18 @@ public:
   // Get all component names currently in the toolbar
   std::set<std::string> GetAllComponentNames() const;
 
-  // Count total windows (components)
-  size_t GetTotalWindowCount() const {
-    size_t count = 0;
-
-    // Count root components
-    count += m_rootComponents.size();
-
-    // Count children in categories
-    for (const auto& [name, category] : m_categories) {
-      count += category->GetChildren().size();
-    }
-
-    return count;
-  }
-
-  // Count visible windows
-  size_t GetVisibleWindowCount() const {
-    size_t count = 0;
-
-    // Count visible root components
-    for (const auto& component : m_rootComponents) {
-      if (component->IsVisible()) {
-        count++;
-      }
-
-      // If this is a category, also count visible children
-      if (component->HasChildren()) {
-        const auto& children = component->GetChildren();
-        for (const auto& child : children) {
-          if (child->IsVisible()) {
-            count++;
-          }
-        }
-      }
-    }
-
-    return count;
-  }
-
-  // Get a list of all visible window names
-  std::vector<std::string> GetVisibleWindowNames() const {
-    std::vector<std::string> visibleWindows;
-
-    // Check root components
-    for (const auto& component : m_rootComponents) {
-      if (component->IsVisible()) {
-        visibleWindows.push_back(component->GetName());
-      }
-
-      // If this is a category, also check its children
-      if (component->HasChildren()) {
-        const auto& children = component->GetChildren();
-        for (const auto& child : children) {
-          if (child->IsVisible()) {
-            visibleWindows.push_back(child->GetName());
-          }
-        }
-      }
-    }
-
-    return visibleWindows;
-  }
+  // Count total and visible windows
+  size_t GetTotalWindowCount() const;
+  size_t GetVisibleWindowCount() const;
+  std::vector<std::string> GetVisibleWindowNames() const;
 
   // Save all window states
   void SaveAllWindowStates();
+  // Toggle a specific component by name
+  bool ToggleComponentByName(const std::string& componentName);
+
+  // Get a component by name (for direct access)
+  std::shared_ptr<IHierarchicalTogglableUI> GetComponentByName(const std::string& componentName) const;
 
 private:
   // Collection of root UI components and categories
@@ -305,7 +258,7 @@ private:
   // Map for quick access to categories by name
   std::unordered_map<std::string, std::shared_ptr<HierarchicalTogglableUI>> m_categories;
 
-  // Known category names to exclude from missing item check
+  // Known category names
   std::set<std::string> m_categoryNames = {
     "Motors", "Manual", "Data", "Products", "General"
   };
@@ -316,13 +269,16 @@ private:
   // Toolbar width
   float m_width = 250.0f;
 
-  // Secondary panel state
-  bool m_showSecondaryPanel = false;
-  std::shared_ptr<IHierarchicalTogglableUI> m_selectedCategory = nullptr;
+  // REMOVED: Secondary panel state variables
+  // bool m_showSecondaryPanel = false;
+  // std::shared_ptr<IHierarchicalTogglableUI> m_selectedCategory = nullptr;
 
   // Helper methods
   void RenderComponent(const std::shared_ptr<IHierarchicalTogglableUI>& component);
-  void RenderSecondaryPanel();
+  void RenderCategoryWithDropdown(const std::shared_ptr<IHierarchicalTogglableUI>& category, bool isPlaceholder);
+  void RenderRegularComponent(const std::shared_ptr<IHierarchicalTogglableUI>& component, bool isVisible, bool isPlaceholder);
+
+  // REMOVED: RenderSecondaryPanel() method - no longer needed
 
   // Helper to check if a name is a category
   bool IsKnownCategory(const std::string& name) const {
