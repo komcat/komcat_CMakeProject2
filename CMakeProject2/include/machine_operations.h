@@ -10,6 +10,8 @@
 #include "include/logger.h"
 #include "include/camera/pylon_camera_test.h"
 #include "include/camera/CameraExposureManager.h"
+#include "include/motions/MotionConfigEditor.h"
+#include "include/ui/GraphVisualizer.h"
 #include <string>
 #include <vector>
 #include <chrono>
@@ -19,8 +21,10 @@
 #include <mutex>
 
 // Forward declare CLD101xOperations instead of including the header
+
 class CLD101xOperations;
 class Keithley2400Operations;
+
 
 class MachineOperations {
 public:
@@ -256,7 +260,34 @@ public:
 	bool SMU_SendCommand(const std::string& command, const std::string& clientName = "");
 	bool SMU_QueryCommand(const std::string& command, std::string& response, const std::string& clientName = "");
 
+	// UI Component Access Methods (for MenuManager)
+	// ==============================================
 
+	// Get references to controller managers for UI control
+	PIControllerManager* GetPIControllerManager() { return &m_piControllerManager; }
+	const PIControllerManager* GetPIControllerManager() const { return &m_piControllerManager; }
+
+	MotionControlLayer* GetMotionControlLayer() { return &m_motionLayer; }
+	const MotionControlLayer* GetMotionControlLayer() const { return &m_motionLayer; }
+
+	// Access ACS controller manager through motion layer
+	ACSControllerManager* GetACSControllerManager() {
+		return &m_motionLayer.GetACSControllerManager();
+	}
+	const ACSControllerManager* GetACSControllerManager() const {
+		return &m_motionLayer.GetACSControllerManager();
+	}
+
+	// Set additional UI component references (call after construction)
+	void SetMotionConfigEditor(MotionConfigEditor* configEditor) { m_motionConfigEditor = configEditor; }
+	void SetGraphVisualizer(GraphVisualizer* graphVisualizer) { m_graphVisualizer = graphVisualizer; }
+
+	// Get UI component references
+	MotionConfigEditor* GetMotionConfigEditor() { return m_motionConfigEditor; }
+	const MotionConfigEditor* GetMotionConfigEditor() const { return m_motionConfigEditor; }
+
+	GraphVisualizer* GetGraphVisualizer() { return m_graphVisualizer; }
+	const GraphVisualizer* GetGraphVisualizer() const { return m_graphVisualizer; }
 
 private:
 	Logger* m_logger;
@@ -323,4 +354,8 @@ private:
 	mutable std::mutex m_currentPositionsMutex;
 	std::chrono::steady_clock::time_point m_lastPositionUpdate;
 	static constexpr std::chrono::milliseconds POSITION_CACHE_TIMEOUT{ 100 }; // 100ms cache timeout
+
+	// UI Component references for MenuManager access
+	MotionConfigEditor* m_motionConfigEditor = nullptr;
+	GraphVisualizer* m_graphVisualizer = nullptr;
 };

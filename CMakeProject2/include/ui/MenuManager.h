@@ -1,11 +1,10 @@
-// MenuManager.h - Create a dedicated menu management class
+// MenuManager.h - Unified approach using MachineOperations
 #pragma once
 #include "include/logger.h"
 
-
-// Include other necessary headers
-class VerticalToolbarMenu; // Forward declaration
-class MachineOperations; // Forward declaration
+// Forward declarations
+class VerticalToolbarMenu;
+class MachineOperations;
 
 class MenuManager {
 public:
@@ -15,6 +14,7 @@ public:
 
   // Individual menu renderers
   void RenderViewMenu();
+  void RenderManualMenu();
   //void RenderToolsMenu();
   //void RenderProcessMenu();
   //void RenderHardwareMenu();
@@ -29,6 +29,8 @@ private:
   Logger* m_logger;
   MachineOperations* m_machineOps;
   VerticalToolbarMenu* m_toolbar;
-  // Add other component references as needed
-};
 
+  // Helper methods for Manual menu
+  void RenderControllersSubmenu();
+  void RenderMotionSubmenu();
+};

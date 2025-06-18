@@ -133,7 +133,7 @@ private:
   std::vector<std::shared_ptr<IHierarchicalTogglableUI>> m_children;
 };
 
-// Placeholder component for missing items from toolbar_state.json
+// Placeholder component for missing items from toolbar_state.json (DEPRECATED - not used)
 class PlaceholderUIComponent : public IHierarchicalTogglableUI {
 public:
   PlaceholderUIComponent(const std::string& name, bool initialState = false)
@@ -220,11 +220,10 @@ public:
     // Initialize the state manager
     ToolbarStateManager::GetInstance().Initialize(stateFilePath);
 
-    // Cross-check and add missing items
-    CrossCheckAndAddMissingItems();
+    // Note: No longer automatically adding missing items from toolbar_state.json
   }
 
-  // Cross-check with toolbar_state.json and add missing items as placeholders
+  // Cross-check with toolbar_state.json and add missing items as placeholders (DEPRECATED - not used)
   void CrossCheckAndAddMissingItems();
 
   // Check if a component exists (by name)

@@ -1525,6 +1525,8 @@ int main(int argc, char* argv[])
   if (moduleConfig.isEnabled("VERTICAL_TOOLBAR")) {
     toolbarVertical = std::make_unique<VerticalToolbarMenu>();
     toolbarVertical->SetWidth(200);
+
+    // Initialize with state tracking (no longer auto-adds missing items)
     toolbarVertical->InitializeStateTracking("toolbar_state.json");
 
     // Create categories
@@ -1567,7 +1569,6 @@ int main(int argc, char* argv[])
 
     // Add components to Manual category
     if (ioManager) {
-      // Create EziIO_UI for the toolbar
       auto ioUI = std::make_unique<EziIO_UI>(*ioManager);
       if (ioconfigManager) {
         ioUI->setConfigManager(ioconfigManager.get());
@@ -1594,7 +1595,6 @@ int main(int argc, char* argv[])
       toolbarVertical->AddReferenceToCategory("Data",
         CreateHierarchicalUI(*dataClientManager, "Data TCP/IP"));
     }
-    // Add Keithley to Data category in toolbar
     if (keithleyManager) {
       toolbarVertical->AddReferenceToCategory("Data",
         CreateHierarchicalUI(*keithleyManager, "Keithley 2400"));
@@ -1629,12 +1629,10 @@ int main(int argc, char* argv[])
       toolbarVertical->AddReferenceToCategory("Products",
         CreateHierarchicalUI(*motionGraphic, "Motion Graphic"));
     }
-    // ADD MACHINE BLOCK UI TO TOOLBAR (in Products category)
     if (machineBlockUI) {
       toolbarVertical->AddReferenceToCategory("Products",
         CreateHierarchicalUI(*machineBlockUI, "Block Programming"));
     }
-
     if (cameraExposureTestUI) {
       toolbarVertical->AddReferenceToCategory("Products",
         CreateCameraExposureTestUIAdapter(*cameraExposureTestUI, "Camera Testing"));
@@ -1645,40 +1643,25 @@ int main(int argc, char* argv[])
       toolbarVertical->AddReferenceToCategory("General",
         CreateHierarchicalUI(*cld101xManager, "Laser TEC Cntrl"));
     }
-
     if (machineOps && machineOps->GetCameraExposureManager()) {
       toolbarVertical->AddReferenceToCategory("Products",
         CreateHierarchicalUI(*machineOps->GetCameraExposureManager(), "Camera Exposure"));
     }
+    if (macroManager) {
+      toolbarVertical->AddReferenceToCategory("Products",
+        CreateHierarchicalUI(*macroManager, "Macro Programming"));
+    }
 
-      // If you want to add it to your toolbar, add this in the toolbar setup section:
-  if (macroManager && toolbarVertical) {
-    toolbarVertical->AddReferenceToCategory("Products",
-      CreateHierarchicalUI(*macroManager, "Macro Programming"));
-  }
-
-
+    // NOTE: No longer automatically adding missing items from toolbar_state.json
+    // Only components that are actually initialized and enabled will appear in the toolbar
 
     logger->LogInfo("VerticalToolbarMenu initialized with " +
-      std::to_string(toolbarVertical->GetComponentCount()) + " components");
+      std::to_string(toolbarVertical->GetComponentCount()) + " total components (" +
+      std::to_string(toolbarVertical->GetVisibleWindowCount()) + " visible)");
   }
 
 
 
-
-
-
-
-
-
-  // ENHANCED: After adding all real components, cross-check and add missing items
- // This will automatically create placeholder components for any items in toolbar_state.json
- // that don't exist in the actual toolbar (excluding categories)
-  toolbarVertical->CrossCheckAndAddMissingItems();
-
-  logger->LogInfo("Enhanced VerticalToolbarMenu initialized with " +
-    std::to_string(toolbarVertical->GetComponentCount()) + " total components (" +
-    std::to_string(toolbarVertical->GetVisibleWindowCount()) + " visible)");
 
 
 
@@ -1691,13 +1674,24 @@ int main(int argc, char* argv[])
 
 
   std::unique_ptr<MenuManager> menuManager;
-  if (logger) {
+  if (logger && machineOps) {
     menuManager = std::make_unique<MenuManager>(logger, machineOps.get());
 
-    // Set other component references
+    // Set toolbar reference if available
     if (toolbarVertical) {
       menuManager->SetVerticalToolbar(toolbarVertical.get());
     }
+
+    // Set UI component references in MachineOperations (one-time setup)
+    if (configEditor) {
+      machineOps->SetMotionConfigEditor(configEditor.get());
+    }
+
+    if (graphVisualizer) {
+      machineOps->SetGraphVisualizer(graphVisualizer.get());
+    }
+
+    logger->LogInfo("MenuManager initialized with unified MachineOperations interface");
   }
 
 

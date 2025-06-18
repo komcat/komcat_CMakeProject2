@@ -183,8 +183,12 @@ size_t VerticalToolbarMenu::GetComponentCount() const {
   return count;
 }
 
-// NEW METHOD: Cross-check with toolbar_state.json and add missing items
+// DEPRECATED METHOD: Cross-check with toolbar_state.json and add missing items
+// This method is no longer called automatically but kept for potential future use
 void VerticalToolbarMenu::CrossCheckAndAddMissingItems() {
+  m_logger->LogInfo("CrossCheckAndAddMissingItems: Method deprecated - not adding items from toolbar_state.json");
+
+  /* COMMENTED OUT - No longer automatically adding missing items
   try {
     // Load the toolbar state file
     std::ifstream stateFile("toolbar_state.json");
@@ -230,21 +234,20 @@ void VerticalToolbarMenu::CrossCheckAndAddMissingItems() {
       addedCount++;
 
       m_logger->LogInfo("CrossCheckAndAddMissingItems: Added placeholder for '" + windowName +
-        "' (initial state: " + (initialVisibility ? "visible" : "hidden") + ")");
+                       "' (initial state: " + (initialVisibility ? "visible" : "hidden") + ")");
     }
 
     if (addedCount > 0) {
       m_logger->LogInfo("CrossCheckAndAddMissingItems: Added " + std::to_string(addedCount) +
-        " placeholder components from toolbar_state.json");
-    }
-    else {
+                       " placeholder components from toolbar_state.json");
+    } else {
       m_logger->LogInfo("CrossCheckAndAddMissingItems: No missing components found");
     }
 
-  }
-  catch (const std::exception& e) {
+  } catch (const std::exception& e) {
     m_logger->LogError("CrossCheckAndAddMissingItems: Exception - " + std::string(e.what()));
   }
+  */
 }
 
 // NEW METHOD: Check if a component exists
@@ -305,14 +308,12 @@ void VerticalToolbarMenu::RenderUI() {
   // Keep background visible
   ImGui::Begin("Toolbar", nullptr, toolbarFlags); // Added proper title instead of hidden one
 
-  // Add a debug section at the top (collapsible)
+  // Add a simplified debug section at the top (collapsible)
   if (ImGui::CollapsingHeader("Toolbar Info##Debug", ImGuiTreeNodeFlags_None)) {
     ImGui::Text("Total Components: %zu", GetTotalWindowCount());
     ImGui::Text("Visible Windows: %zu", GetVisibleWindowCount());
 
-    if (ImGui::Button("Refresh Missing Items")) {
-      CrossCheckAndAddMissingItems();
-    }
+    // Note: Refresh Missing Items button removed as we no longer auto-add from JSON
     ImGui::Separator();
   }
 
