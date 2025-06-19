@@ -45,23 +45,23 @@ The virtual operations system uses a **composition-based adapter pattern** to pr
 **Purpose**: Core virtual implementation that simulates all machine operations
 
 **Key Features**:
-- ✅ Motion control simulation with realistic timing
-- ✅ IO operations with state tracking
-- ✅ Pneumatic control simulation
-- ✅ Camera operations mock
-- ✅ Scanning functionality simulation
-- ✅ Position tracking and reporting
-- ✅ Comprehensive logging for all operations
+-  Motion control simulation with realistic timing
+-  IO operations with state tracking
+-  Pneumatic control simulation
+-  Camera operations mock
+-  Scanning functionality simulation
+-  Position tracking and reporting
+-  Comprehensive logging for all operations
 
 ### 2. VirtualMachineOperationsAdapter (`virtual_machine_operations_adapter.h`)
 
 **Purpose**: Adapter that provides `MachineOperations` interface for seamless integration
 
 **Key Features**:
-- ✅ Same method signatures as `MachineOperations`
-- ✅ Transparent delegation to virtual operations
-- ✅ Detailed logging with "VirtualAdapter" prefix
-- ✅ Drop-in replacement for real operations
+-  Same method signatures as `MachineOperations`
+-  Transparent delegation to virtual operations
+-  Detailed logging with "VirtualAdapter" prefix
+-  Drop-in replacement for real operations
 
 ## Installation
 
@@ -167,30 +167,30 @@ PYLON_CAMERA=0
 🤖 EXECUTING WITH VIRTUAL MACHINE OPERATIONS:
 ================================================
 1. [START] START (ID: 1)
-   🟢 Starting program...
-   ✅ Block completed successfully
+    Starting program...
+    Block completed successfully
 
 2. [Move Node] MOVE_NODE (ID: 2)
-   🏃 Moving gantry-main to node node_4027...
+   Moving gantry-main to node node_4027...
    [VIRTUAL] Moving gantry-main to node node_4027 in graph Process_Flow
    [VIRTUAL] Movement completed successfully
-   ✅ Block completed successfully
+    Block completed successfully
 
 3. [Wait] WAIT (ID: 3)
    ⏱️  Waiting 1000 ms...
    [VIRTUAL] Waiting for 1000 ms
-   ✅ Block completed successfully
+    Block completed successfully
 
 4. [Set Output] SET_OUTPUT (ID: 4)
    🔌 Setting output IOBottom pin 1 to HIGH
    [VIRTUAL] Set output 1 on IOBottom to HIGH
-   ✅ Block completed successfully
+    Block completed successfully
 
 5. [END] END (ID: 5)
-   🔴 Program finished
-   ✅ Block completed successfully
+    Program finished
+    Block completed successfully
 
-🎉 [SUCCESS] Virtual program execution completed!
+ [SUCCESS] Virtual program execution completed!
 ```
 
 ## API Reference

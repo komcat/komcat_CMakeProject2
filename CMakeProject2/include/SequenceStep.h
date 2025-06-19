@@ -10,7 +10,10 @@
 #include <iostream>          // Add this for console output
 #include <iomanip>           // Add this for formatting
 #include "Programming/UserPromptUI.h"
-
+#include <numeric>      // for std::accumulate
+#include <algorithm>    // for std::min_element, std::max_element
+#include <cmath>        // for std::pow, std::sqrt
+#include <limits>       // for std::numeric_limits
 
 
 // Represents an operation in a sequence
@@ -1252,43 +1255,314 @@ private:
 
 
 /// <summary>
-/// Operation that periodically reads and logs a data value from the GlobalDataStore
-/// for a specified duration and at specified intervals.
+/// Enhanced operation that periodically reads and logs a data value from the GlobalDataStore
+/// for a specified duration and at specified intervals, with comprehensive tracking and statistics.
 /// </summary>
 class PeriodicMonitorDataValueOperation : public SequenceOperation {
 public:
   /// <summary>
-  /// Creates a new operation to periodically monitor a data value.
+  /// Creates a new operation to periodically monitor a data value with tracking.
   /// </summary>
   /// <param name="dataId">The identifier of the data channel to monitor.</param>
   /// <param name="durationMs">The total duration to monitor in milliseconds.</param>
   /// <param name="intervalMs">The interval between readings in milliseconds.</param>
-  PeriodicMonitorDataValueOperation(const std::string& dataId, int durationMs, int intervalMs)
-    : m_dataId(dataId), m_durationMs(durationMs), m_intervalMs(intervalMs) {
+  /// <param name="enableIntermediateLogging">Whether to log every reading (default: false).</param>
+  /// <param name="logEveryN">Log every N readings when intermediate logging is enabled (default: 10).</param>
+  /// <param name="enableThresholdAlerts">Whether to check threshold violations (default: false).</param>
+  /// <param name="minThreshold">Minimum threshold value (default: -1e-6 for nano-scale values).</param>
+  /// <param name="maxThreshold">Maximum threshold value (default: 1e-6 for nano-scale values).</param>
+  PeriodicMonitorDataValueOperation(const std::string& dataId, int durationMs, int intervalMs,
+    bool enableIntermediateLogging = false, int logEveryN = 10,
+    bool enableThresholdAlerts = false, double minThreshold = -1e-6, double maxThreshold = 1e-6)
+    : m_dataId(dataId), m_durationMs(durationMs), m_intervalMs(intervalMs),
+    m_enableIntermediateLogging(enableIntermediateLogging), m_logEveryN(logEveryN),
+    m_enableThresholdAlerts(enableThresholdAlerts),
+    m_minThreshold(minThreshold), m_maxThreshold(maxThreshold) {
   }
 
   /// <summary>
-  /// Executes the operation, reading and logging the specified data value at regular intervals.
+  /// Simple constructor for basic monitoring (no intermediate logging, no thresholds).
+  /// </summary>
+  static std::unique_ptr<PeriodicMonitorDataValueOperation> CreateBasic(
+    const std::string& dataId, int durationMs, int intervalMs) {
+    return std::make_unique<PeriodicMonitorDataValueOperation>(dataId, durationMs, intervalMs);
+  }
+
+  /// <summary>
+  /// Constructor for monitoring with intermediate logging enabled.
+  /// </summary>
+  static std::unique_ptr<PeriodicMonitorDataValueOperation> CreateWithLogging(
+    const std::string& dataId, int durationMs, int intervalMs, int logEveryN = 10) {
+    return std::make_unique<PeriodicMonitorDataValueOperation>(
+      dataId, durationMs, intervalMs, true, logEveryN);
+  }
+
+  /// <summary>
+  /// Constructor for monitoring with threshold alerts enabled.
+  /// </summary>
+  static std::unique_ptr<PeriodicMonitorDataValueOperation> CreateWithThresholds(
+    const std::string& dataId, int durationMs, int intervalMs,
+    double minThreshold, double maxThreshold) {
+    return std::make_unique<PeriodicMonitorDataValueOperation>(
+      dataId, durationMs, intervalMs, false, 10, true, minThreshold, maxThreshold);
+  }
+
+  /// <summary>
+  /// Constructor for full-featured monitoring with both logging and thresholds.
+  /// </summary>
+  static std::unique_ptr<PeriodicMonitorDataValueOperation> CreateFullFeatured(
+    const std::string& dataId, int durationMs, int intervalMs,
+    int logEveryN, double minThreshold, double maxThreshold) {
+    return std::make_unique<PeriodicMonitorDataValueOperation>(
+      dataId, durationMs, intervalMs, true, logEveryN, true, minThreshold, maxThreshold);
+  }
+
+  /// <summary>
+  /// Constructor specifically for nano-scale measurements with appropriate thresholds.
+  /// </summary>
+  static std::unique_ptr<PeriodicMonitorDataValueOperation> CreateForNanoScale(
+    const std::string& dataId, int durationMs, int intervalMs,
+    double minNano = 0.0005, double maxNano = 0.15) {
+    // Convert nano values to actual thresholds (assuming nano means 1e-9 units)
+    double minThreshold = minNano * 1e-9;
+    double maxThreshold = maxNano * 1e-9;
+    return std::make_unique<PeriodicMonitorDataValueOperation>(
+      dataId, durationMs, intervalMs, false, 10, true, minThreshold, maxThreshold);
+  }
+
+  /// <summary>
+  /// Executes the operation with comprehensive tracking and statistics.
   /// </summary>
   /// <param name="ops">Reference to MachineOperations for accessing the data store.</param>
   /// <returns>True if the monitoring completed successfully, false otherwise.</returns>
   bool Execute(MachineOperations& ops) override {
+    // 1. Start operation tracking
+    std::string opId;
     auto startTime = std::chrono::steady_clock::now();
-    auto endTime = startTime + std::chrono::milliseconds(m_durationMs);
+
+    if (ops.GetResultsManager()) {
+      std::map<std::string, std::string> parameters = {
+        {"dataId", m_dataId},
+        {"durationMs", std::to_string(m_durationMs)},
+        {"intervalMs", std::to_string(m_intervalMs)},
+        {"enableIntermediateLogging", m_enableIntermediateLogging ? "true" : "false"},
+        {"logEveryN", std::to_string(m_logEveryN)},
+        {"enableThresholdAlerts", m_enableThresholdAlerts ? "true" : "false"},
+        {"minThreshold", std::to_string(m_minThreshold)},
+        {"maxThreshold", std::to_string(m_maxThreshold)}
+      };
+      opId = ops.GetResultsManager()->StartOperation("PeriodicMonitor", m_dataId,
+        "PeriodicMonitorDataValueOperation", "", parameters);
+    }
 
     ops.LogInfo("Starting periodic monitoring of " + m_dataId +
       " for " + std::to_string(m_durationMs / 1000) + " seconds");
 
+    // 2. Initialize tracking variables
+    std::vector<double> readings;
+    std::vector<std::chrono::steady_clock::time_point> readingTimes;
+    int successfulReads = 0;
+    int failedReads = 0;
+    int thresholdViolations = 0;
+    double startValue = std::numeric_limits<double>::quiet_NaN();
+    double endValue = std::numeric_limits<double>::quiet_NaN();
+    bool hasValidReading = false;
+
+    auto endTime = startTime + std::chrono::milliseconds(m_durationMs);
+    int readingCount = 0;
+
+    // 3. Monitoring loop
     while (std::chrono::steady_clock::now() < endTime) {
-      float value = ops.ReadDataValue(m_dataId);
-      ops.LogInfo(m_dataId + " value: " + std::to_string(value));
+      auto readingStartTime = std::chrono::steady_clock::now();
+
+      try {
+        double value = static_cast<double>(ops.ReadDataValue(m_dataId));
+        readingCount++;
+
+        // Store reading and timestamp
+        readings.push_back(value);
+        readingTimes.push_back(readingStartTime);
+        successfulReads++;
+        hasValidReading = true;
+
+        // Store start value (first successful reading)
+        if (successfulReads == 1) {
+          startValue = value;
+        }
+        endValue = value; // Always update end value with latest reading
+
+        // ALWAYS log each reading with proper precision for nano-scale values
+        // Use scientific notation if value is very small (< 1e-6) or use high precision
+        std::ostringstream valueStream;
+        if (std::abs(value) < 1e-6 && value != 0.0) {
+          valueStream << std::scientific << std::setprecision(6) << value;
+        }
+        else {
+          valueStream << std::fixed << std::setprecision(12) << value;
+        }
+        ops.LogInfo("Read value from " + m_dataId + ": " + valueStream.str());
+
+        // Check threshold violations if enabled
+        if (m_enableThresholdAlerts) {
+          if (value < m_minThreshold || value > m_maxThreshold) {
+            thresholdViolations++;
+
+            // Use scientific notation for very small values
+            std::ostringstream valueStr, minStr, maxStr;
+            valueStr << std::scientific << std::setprecision(6) << value;
+            minStr << std::scientific << std::setprecision(6) << m_minThreshold;
+            maxStr << std::scientific << std::setprecision(6) << m_maxThreshold;
+
+            ops.LogWarning("Threshold violation in " + m_dataId + ": " +
+              valueStr.str() + " (limits: " + minStr.str() +
+              " to " + maxStr.str() + ")");
+          }
+        }
+
+        // Additional intermediate logging if enabled (different from the always-on logging above)
+        if (m_enableIntermediateLogging && (readingCount % m_logEveryN == 0)) {
+          std::ostringstream summaryStream;
+          if (std::abs(value) < 1e-6 && value != 0.0) {
+            summaryStream << std::scientific << std::setprecision(3) << value;
+          }
+          else {
+            summaryStream << std::fixed << std::setprecision(9) << value;
+          }
+          ops.LogInfo("Reading #" + std::to_string(readingCount) + " - " +
+            m_dataId + ": " + summaryStream.str());
+        }
+
+      }
+      catch (const std::exception& e) {
+        failedReads++;
+        ops.LogError("Failed to read " + m_dataId + ": " + std::string(e.what()));
+      }
 
       // Sleep for the interval duration
       std::this_thread::sleep_for(std::chrono::milliseconds(m_intervalMs));
     }
 
-    ops.LogInfo("Completed periodic monitoring of " + m_dataId);
-    return true;
+    // 4. Calculate statistics
+    auto actualEndTime = std::chrono::steady_clock::now();
+    auto totalElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+      actualEndTime - startTime).count();
+
+    // Calculate reading statistics if we have valid data
+    double minValue = std::numeric_limits<double>::quiet_NaN();
+    double maxValue = std::numeric_limits<double>::quiet_NaN();
+    double avgValue = std::numeric_limits<double>::quiet_NaN();
+    double valueRange = std::numeric_limits<double>::quiet_NaN();
+    double stdDeviation = std::numeric_limits<double>::quiet_NaN();
+    double actualIntervalMs = std::numeric_limits<double>::quiet_NaN();
+
+    if (!readings.empty()) {
+      // Min/Max/Average
+      minValue = *std::min_element(readings.begin(), readings.end());
+      maxValue = *std::max_element(readings.begin(), readings.end());
+
+      double sum = std::accumulate(readings.begin(), readings.end(), 0.0);
+      avgValue = sum / readings.size();
+      valueRange = maxValue - minValue;
+
+      // Standard deviation (using double precision for nano-scale values)
+      double variance = 0.0;
+      for (double reading : readings) {
+        variance += std::pow(reading - avgValue, 2);
+      }
+      variance /= readings.size();
+      stdDeviation = std::sqrt(variance);
+
+      // Calculate actual average interval between readings
+      if (readingTimes.size() > 1) {
+        auto totalReadingTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+          readingTimes.back() - readingTimes.front()).count();
+        actualIntervalMs = static_cast<double>(totalReadingTime) / (readingTimes.size() - 1);
+      }
+    }
+
+    // 5. Store comprehensive results
+    if (ops.GetResultsManager() && !opId.empty()) {
+      // Fix: Explicitly specify the type of `resultsManager`  
+      std::shared_ptr<OperationResultsManager> resultsManager = ops.GetResultsManager();
+      // Basic operation info (using scientific notation for very small values)
+      auto formatValue = [](double val) -> std::string {
+        if (std::isnan(val)) return "NaN";
+        if (std::abs(val) < 1e-6) {  // For nano-scale values
+          std::ostringstream ss;
+          ss << std::scientific << std::setprecision(6) << val;
+          return ss.str();
+        }
+        else {
+          return std::to_string(val);
+        }
+      };
+
+      resultsManager->StoreResult(opId, "start_value", formatValue(startValue));
+      resultsManager->StoreResult(opId, "end_value", formatValue(endValue));
+      resultsManager->StoreResult(opId, "successful_reads", std::to_string(successfulReads));
+      resultsManager->StoreResult(opId, "failed_reads", std::to_string(failedReads));
+      resultsManager->StoreResult(opId, "total_elapsed_ms", std::to_string(totalElapsedMs));
+
+      // Statistical data
+      resultsManager->StoreResult(opId, "min_value", formatValue(minValue));
+      resultsManager->StoreResult(opId, "max_value", formatValue(maxValue));
+      resultsManager->StoreResult(opId, "avg_value", formatValue(avgValue));
+      resultsManager->StoreResult(opId, "value_range", formatValue(valueRange));
+      resultsManager->StoreResult(opId, "std_deviation", formatValue(stdDeviation));
+      resultsManager->StoreResult(opId, "actual_interval_ms", std::isnan(actualIntervalMs) ? "NaN" : std::to_string(actualIntervalMs));
+
+      // Threshold monitoring results
+      if (m_enableThresholdAlerts) {
+        resultsManager->StoreResult(opId, "threshold_violations", std::to_string(thresholdViolations));
+        resultsManager->StoreResult(opId, "violation_rate",
+          successfulReads > 0 ? std::to_string((double)thresholdViolations / successfulReads * 100.0) + "%" : "N/A");
+      }
+
+      // Determine success/failure
+      bool operationSuccess = hasValidReading && (failedReads == 0 || successfulReads > failedReads);
+
+      if (operationSuccess) {
+        resultsManager->EndOperation(opId, "success");
+      }
+      else {
+        std::string errorMsg = "Monitoring failed - ";
+        if (!hasValidReading) {
+          errorMsg += "no successful readings";
+        }
+        else {
+          errorMsg += "too many failed reads (" + std::to_string(failedReads) +
+            " failed, " + std::to_string(successfulReads) + " succeeded)";
+        }
+        resultsManager->EndOperation(opId, "failed", errorMsg);
+      }
+    }
+
+    // 6. Final logging with scientific notation for nano-scale values
+    if (hasValidReading) {
+      auto formatForLog = [](double val) -> std::string {
+        if (std::isnan(val)) return "N/A";
+        if (std::abs(val) < 1e-6) {  // For nano-scale values
+          std::ostringstream ss;
+          ss << std::scientific << std::setprecision(3) << val;
+          return ss.str();
+        }
+        else {
+          return std::to_string(val);
+        }
+      };
+
+      ops.LogInfo("Completed periodic monitoring of " + m_dataId +
+        " - Readings: " + std::to_string(successfulReads) +
+        " successful, " + std::to_string(failedReads) + " failed" +
+        " | Range: " + formatForLog(minValue) +
+        " to " + formatForLog(maxValue) +
+        " | Avg: " + formatForLog(avgValue));
+    }
+    else {
+      ops.LogError("Periodic monitoring of " + m_dataId + " failed - no successful readings");
+    }
+
+    return hasValidReading && (failedReads == 0 || successfulReads > failedReads);
   }
 
   /// <summary>
@@ -1296,15 +1570,34 @@ public:
   /// </summary>
   /// <returns>A string describing the monitoring operation.</returns>
   std::string GetDescription() const override {
-    return "Monitor " + m_dataId + " for " +
+    std::string desc = "Monitor " + m_dataId + " for " +
       std::to_string(m_durationMs / 1000) + " seconds";
+
+    if (m_enableIntermediateLogging) {
+      desc += " (log every " + std::to_string(m_logEveryN) + ")";
+    }
+
+    if (m_enableThresholdAlerts) {
+      desc += " (alerts: " + std::to_string(m_minThreshold) +
+        " to " + std::to_string(m_maxThreshold) + ")";
+    }
+
+    return desc;
   }
 
 private:
-  std::string m_dataId;  ///< The identifier of the data channel to monitor
-  int m_durationMs;      ///< The total duration to monitor in milliseconds
-  int m_intervalMs;      ///< The interval between readings in milliseconds
+  std::string m_dataId;           ///< The identifier of the data channel to monitor
+  int m_durationMs;               ///< The total duration to monitor in milliseconds
+  int m_intervalMs;               ///< The interval between readings in milliseconds
+  bool m_enableIntermediateLogging; ///< Whether to log every N readings
+  int m_logEveryN;                ///< Log every N readings when intermediate logging is enabled
+  bool m_enableThresholdAlerts;   ///< Whether to check threshold violations
+  double m_minThreshold;          ///< Minimum threshold value (double precision for nano-scale)
+  double m_maxThreshold;          ///< Maximum threshold value (double precision for nano-scale)
 };
+
+
+
 
 /// <summary>
 /// Operation that reads a single data value from the GlobalDataStore and logs it.
@@ -1892,70 +2185,266 @@ private:
 // Problem: ImGui::OpenPopup() is being called from background thread
 // Solution: Use a flag-based approach instead of direct ImGui calls
 
-// ===================================================================
-// CORRECTED UserPromptOperation for SequenceStep.h
-// ===================================================================
-
+/// <summary>
+/// Enhanced operation that displays a user prompt with comprehensive tracking and statistics.
+/// Tracks user response time, timeout handling, and operation success metrics.
+/// </summary>
 class UserPromptOperation : public SequenceOperation {
 public:
-  UserPromptOperation(const std::string& title, const std::string& message, UserPromptUI& promptUI)
-    : m_title(title), m_message(message), m_promptUI(promptUI), m_completed(false), m_result(PromptResult::PENDING) {
+  /// <summary>
+  /// Creates a new user prompt operation with tracking.
+  /// </summary>
+  /// <param name="title">The title of the prompt dialog.</param>
+  /// <param name="message">The message to display to the user.</param>
+  /// <param name="promptUI">Reference to the UserPromptUI for displaying the prompt.</param>
+  /// <param name="timeoutSeconds">Timeout in seconds (default: 3600 = 1 hour).</param>
+  /// <param name="enableResponseTimeTracking">Whether to track detailed response timing (default: true).</param>
+  UserPromptOperation(const std::string& title, const std::string& message, UserPromptUI& promptUI,
+    int timeoutSeconds = 3600, bool enableResponseTimeTracking = true)
+    : m_title(title), m_message(message), m_promptUI(promptUI),
+    m_timeoutSeconds(timeoutSeconds), m_enableResponseTimeTracking(enableResponseTimeTracking),
+    m_completed(false), m_result(PromptResult::PENDING) {
   }
 
-  // FIXED: Remove "UserPromptOperation::" - it's already inside the class
+  /// <summary>
+  /// Simple constructor for basic prompts (1 hour timeout, response tracking enabled).
+  /// </summary>
+  static std::unique_ptr<UserPromptOperation> CreateBasic(
+    const std::string& title, const std::string& message, UserPromptUI& promptUI) {
+    return std::make_unique<UserPromptOperation>(title, message, promptUI);
+  }
+
+  /// <summary>
+  /// Constructor for prompts with custom timeout.
+  /// </summary>
+  static std::unique_ptr<UserPromptOperation> CreateWithTimeout(
+    const std::string& title, const std::string& message, UserPromptUI& promptUI,
+    int timeoutSeconds) {
+    return std::make_unique<UserPromptOperation>(title, message, promptUI, timeoutSeconds);
+  }
+
+  /// <summary>
+  /// Constructor for prompts with minimal tracking (no response time tracking).
+  /// </summary>
+  static std::unique_ptr<UserPromptOperation> CreateMinimalTracking(
+    const std::string& title, const std::string& message, UserPromptUI& promptUI,
+    int timeoutSeconds = 3600) {
+    return std::make_unique<UserPromptOperation>(title, message, promptUI, timeoutSeconds, false);
+  }
+
+  /// <summary>
+  /// Executes the user prompt with comprehensive tracking.
+  /// </summary>
+  /// <param name="ops">Reference to MachineOperations for logging and results tracking.</param>
+  /// <returns>True if user confirmed (YES), false for NO/CANCEL/TIMEOUT.</returns>
   bool Execute(MachineOperations& ops) override {
+    // 1. Start operation tracking
+    std::string opId;
+    auto startTime = std::chrono::steady_clock::now();
+
+    std::shared_ptr<OperationResultsManager> resultsManager = ops.GetResultsManager();
+    if (resultsManager) {
+      std::map<std::string, std::string> parameters = {
+        {"title", m_title},
+        {"message_length", std::to_string(m_message.length())},
+        {"timeout_seconds", std::to_string(m_timeoutSeconds)},
+        {"enableResponseTimeTracking", m_enableResponseTimeTracking ? "true" : "false"}
+      };
+      opId = resultsManager->StartOperation("UserPrompt", m_title,
+        "UserPromptOperation", "", parameters);
+    }
+
     ops.LogInfo("Requesting user prompt: " + m_title);
+
+    // 2. Initialize tracking variables
+    auto promptDisplayTime = std::chrono::steady_clock::now();
+    auto userResponseTime = std::chrono::steady_clock::time_point{};
+    bool timedOut = false;
+    bool userResponded = false;
+    int pollCount = 0;
 
     // Reset completion state
     m_completed = false;
     m_result = PromptResult::PENDING;
 
-    // Use RequestPrompt (thread-safe) instead of ShowPrompt
-    m_promptUI.RequestPrompt(m_title, m_message, [this](PromptResult result) {
+    // 3. Display prompt using RequestPrompt (thread-safe)
+    m_promptUI.RequestPrompt(m_title, m_message, [this, &userResponseTime, &userResponded](PromptResult result) {
+      userResponseTime = std::chrono::steady_clock::now();
+      userResponded = true;
       m_result = result;
       m_completed = true;
     });
 
-    // Wait for user response with timeout
-    int timeoutSeconds = 3600; // 30 second timeout
+    // 4. Wait for user response with timeout and tracking
+    int timeoutMs = m_timeoutSeconds * 1000;
     int waitedMs = 0;
-    while (!m_completed && waitedMs < (timeoutSeconds * 1000)) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      waitedMs += 100;
+    const int pollIntervalMs = 100;
+
+    while (!m_completed && waitedMs < timeoutMs) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(pollIntervalMs));
+      waitedMs += pollIntervalMs;
+      pollCount++;
+
+      // Optional: Log periodic status for very long prompts
+      if (m_enableResponseTimeTracking && m_timeoutSeconds >= 300 && // 5+ minute timeout
+        waitedMs % 30000 == 0) { // Every 30 seconds
+        ops.LogInfo("Still waiting for user response to: " + m_title +
+          " (" + std::to_string(waitedMs / 1000) + "s elapsed)");
+      }
     }
 
+    // 5. Handle timeout
     if (!m_completed) {
-      ops.LogWarning("User prompt timed out after " + std::to_string(timeoutSeconds) + " seconds");
-      return false;
+      timedOut = true;
+      ops.LogWarning("User prompt timed out after " + std::to_string(m_timeoutSeconds) + " seconds");
     }
 
-    // Handle result
-    switch (m_result) {
-    case PromptResult::YES:
-      ops.LogInfo("User confirmed YES - continuing execution");
-      return true;
-    case PromptResult::NO:
-      ops.LogWarning("User selected NO - stopping execution");
-      return false;
-    case PromptResult::CANCELLED:
-      ops.LogWarning("User cancelled prompt - stopping execution");
-      return false;
-    default:
-      ops.LogError("Unknown prompt result - stopping execution");
-      return false;
+    // 6. Calculate timing statistics
+    auto endTime = std::chrono::steady_clock::now();
+    auto totalElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+      endTime - startTime).count();
+
+    float responseTimeMs = std::numeric_limits<float>::quiet_NaN();
+    float promptToResponseMs = std::numeric_limits<float>::quiet_NaN();
+
+    if (userResponded && m_enableResponseTimeTracking) {
+      responseTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        userResponseTime - startTime).count();
+      promptToResponseMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        userResponseTime - promptDisplayTime).count();
     }
+
+    // 7. Determine operation success and result
+    bool operationSuccess = false;
+    std::string resultString = "unknown";
+    std::string userAction = "none";
+
+    if (timedOut) {
+      resultString = "timeout";
+      userAction = "timeout";
+    }
+    else {
+      switch (m_result) {
+      case PromptResult::YES:
+        resultString = "yes";
+        userAction = "confirmed";
+        operationSuccess = true;
+        ops.LogInfo("User confirmed YES - continuing execution");
+        break;
+      case PromptResult::NO:
+        resultString = "no";
+        userAction = "declined";
+        ops.LogWarning("User selected NO - stopping execution");
+        break;
+      case PromptResult::CANCELLED:
+        resultString = "cancelled";
+        userAction = "cancelled";
+        ops.LogWarning("User cancelled prompt - stopping execution");
+        break;
+      default:
+        resultString = "unknown";
+        userAction = "unknown";
+        ops.LogError("Unknown prompt result - stopping execution");
+        break;
+      }
+    }
+
+    // 8. Store comprehensive results
+    if (resultsManager && !opId.empty()) {
+      // Basic operation info
+      resultsManager->StoreResult(opId, "user_response", resultString);
+      resultsManager->StoreResult(opId, "user_action", userAction);
+      resultsManager->StoreResult(opId, "total_elapsed_ms", std::to_string(totalElapsedMs));
+      resultsManager->StoreResult(opId, "timed_out", timedOut ? "true" : "false");
+      resultsManager->StoreResult(opId, "user_responded", userResponded ? "true" : "false");
+
+      // Timing statistics (if enabled and available)
+      if (m_enableResponseTimeTracking) {
+        resultsManager->StoreResult(opId, "response_time_ms",
+          std::isnan(responseTimeMs) ? "NaN" : std::to_string(responseTimeMs));
+        resultsManager->StoreResult(opId, "prompt_to_response_ms",
+          std::isnan(promptToResponseMs) ? "NaN" : std::to_string(promptToResponseMs));
+        resultsManager->StoreResult(opId, "poll_count", std::to_string(pollCount));
+
+        // Response speed categorization
+        if (!std::isnan(responseTimeMs)) {
+          std::string responseSpeed;
+          if (responseTimeMs < 5000) responseSpeed = "fast";           // < 5 seconds
+          else if (responseTimeMs < 30000) responseSpeed = "normal";   // 5-30 seconds
+          else if (responseTimeMs < 300000) responseSpeed = "slow";    // 30s-5min
+          else responseSpeed = "very_slow";                            // > 5 minutes
+
+          resultsManager->StoreResult(opId, "response_speed", responseSpeed);
+        }
+      }
+
+      // Timeout utilization (how much of the timeout was used)
+      if (m_timeoutSeconds > 0) {
+        float timeoutUtilization = (float)totalElapsedMs / (m_timeoutSeconds * 1000) * 100.0f;
+        resultsManager->StoreResult(opId, "timeout_utilization_percent",
+          std::to_string(timeoutUtilization));
+      }
+
+      // End operation with appropriate status
+      if (timedOut) {
+        resultsManager->EndOperation(opId, "timeout",
+          "User prompt timed out after " + std::to_string(m_timeoutSeconds) + " seconds");
+      }
+      else if (operationSuccess) {
+        resultsManager->EndOperation(opId, "success");
+      }
+      else {
+        resultsManager->EndOperation(opId, "user_declined",
+          "User " + userAction + " the prompt");
+      }
+    }
+
+    // 9. Final logging with summary
+    if (m_enableResponseTimeTracking && userResponded) {
+      ops.LogInfo("User prompt completed: " + m_title +
+        " - Response: " + resultString +
+        " | Time: " + (std::isnan(responseTimeMs) ? "N/A" : std::to_string((int)responseTimeMs)) + "ms");
+    }
+    else {
+      ops.LogInfo("User prompt completed: " + m_title + " - Response: " + resultString);
+    }
+
+    return operationSuccess;
   }
 
+  /// <summary>
+  /// Gets a human-readable description of this operation.
+  /// </summary>
+  /// <returns>A string describing the user prompt operation.</returns>
   std::string GetDescription() const override {
-    return "User prompt: " + m_title;
+    std::string desc = "User prompt: " + m_title;
+
+    if (m_timeoutSeconds != 3600) { // Non-default timeout
+      if (m_timeoutSeconds >= 60) {
+        desc += " (timeout: " + std::to_string(m_timeoutSeconds / 60) + "m)";
+      }
+      else {
+        desc += " (timeout: " + std::to_string(m_timeoutSeconds) + "s)";
+      }
+    }
+
+    if (!m_enableResponseTimeTracking) {
+      desc += " (minimal tracking)";
+    }
+
+    return desc;
   }
 
 private:
-  std::string m_title;
-  std::string m_message;
-  UserPromptUI& m_promptUI;
-  std::atomic<bool> m_completed;
-  std::atomic<PromptResult> m_result;
+  std::string m_title;              ///< The title of the prompt dialog
+  std::string m_message;            ///< The message to display to the user
+  UserPromptUI& m_promptUI;         ///< Reference to the UserPromptUI
+  int m_timeoutSeconds;             ///< Timeout in seconds
+  bool m_enableResponseTimeTracking; ///< Whether to track detailed response timing
+
+  // Runtime state (thread-safe)
+  std::atomic<bool> m_completed;    ///< Whether the prompt has been completed
+  std::atomic<PromptResult> m_result; ///< The user's response result
 };
 
 

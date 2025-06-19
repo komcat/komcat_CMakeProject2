@@ -352,8 +352,19 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<PeriodicMonitorDataValueOperation>(
 			"GPIB-Current", 210000, 5000)); // Monitor every 5 seconds for 210 seconds total
 
+		//exmaple
+		//-------------------------
+		//// Enable threshold alerts for your nano current range
+		//sequence->AddOperation(std::make_shared<PeriodicMonitorDataValueOperation>(
+		//	"GPIB-Current", 210000, 5000, false, 10, true, 0.0005e-9, 0.15e-9));
 
-
+		//// Or use the nano-scale factory method
+		//auto monitor = PeriodicMonitorDataValueOperation::CreateForNanoScale(
+		//	"GPIB-Current", 210000, 5000, 0.001, 0.1);
+		//sequence->AddOperation(monitor);
+		//-------------------------
+		// 
+		// 
 		// 8. Retract UV_Head
 		sequence->AddOperation(std::make_shared<RetractSlideOperation>("UV_Head"));
 

@@ -43,7 +43,7 @@ void MacroManager::AddProgram(const std::string& programName, const std::string&
   SavedProgram program;
   program.name = programName;
 
-  // ✅ FIX: Extract just filename without path and extension for filePath storage
+  //  FIX: Extract just filename without path and extension for filePath storage
   std::string filename = filePath;
   size_t lastSlash = filename.find_last_of("/\\");
   if (lastSlash != std::string::npos) {
@@ -54,7 +54,7 @@ void MacroManager::AddProgram(const std::string& programName, const std::string&
     filename = filename.substr(0, lastDot);
   }
 
-  program.filePath = filename;  // ✅ Store just filename for ProgramManager compatibility
+  program.filePath = filename;  //  Store just filename for ProgramManager compatibility
   program.description = "";
 
   m_savedPrograms[programName] = program;
@@ -75,7 +75,7 @@ void MacroManager::ScanForPrograms() {
   std::map<std::string, SavedProgram> manualPrograms = m_savedPrograms;
   m_savedPrograms.clear();
 
-  // ✅ FIX: Only scan programs/ folder (remove other paths)
+  //  FIX: Only scan programs/ folder (remove other paths)
   std::vector<std::string> searchPaths = {
       "programs/"
   };
@@ -99,7 +99,7 @@ void MacroManager::ScanForPrograms() {
           std::string fileName = findFileData.cFileName;
           std::string fullPath = path + fileName;
 
-          // ✅ FIX: Use actual filename without extension as key and display name
+          //  FIX: Use actual filename without extension as key and display name
           std::string fileNameOnly = fileName;
           size_t lastDot = fileNameOnly.find_last_of(".");
           if (lastDot != std::string::npos) {
@@ -107,8 +107,8 @@ void MacroManager::ScanForPrograms() {
           }
 
           SavedProgram program;
-          program.name = fileNameOnly;           // ✅ Use actual filename (no fancy display name)
-          program.filePath = fileNameOnly;       // ✅ Store just filename for ProgramManager compatibility
+          program.name = fileNameOnly;           //  Use actual filename (no fancy display name)
+          program.filePath = fileNameOnly;       //  Store just filename for ProgramManager compatibility
           program.description = "Program from " + path;
 
           m_savedPrograms[fileNameOnly] = program;
@@ -130,7 +130,7 @@ void MacroManager::ScanForPrograms() {
           if (entry.is_regular_file() && entry.path().extension() == ".json") {
             std::string fileName = entry.path().filename().string();
 
-            // ✅ FIX: Use actual filename without extension
+            //  FIX: Use actual filename without extension
             std::string fileNameOnly = fileName;
             size_t lastDot = fileNameOnly.find_last_of(".");
             if (lastDot != std::string::npos) {
@@ -138,8 +138,8 @@ void MacroManager::ScanForPrograms() {
             }
 
             SavedProgram program;
-            program.name = fileNameOnly;           // ✅ Use actual filename
-            program.filePath = fileNameOnly;       // ✅ Store just filename
+            program.name = fileNameOnly;           //  Use actual filename
+            program.filePath = fileNameOnly;       //  Store just filename
             program.description = "Program from " + path;
 
             m_savedPrograms[fileNameOnly] = program;
@@ -383,11 +383,11 @@ void MacroManager::SaveMacro(const std::string& macroName, const std::string& fi
       {"programs", nlohmann::json::array()}
     };
 
-    // ✅ FIX: Save programs with actual filenames
+    //  FIX: Save programs with actual filenames
     for (const auto& program : macro.programs) {
       macroJson["programs"].push_back({
         {"name", program.name},
-        {"file_path", program.filePath},  // ✅ Use actual filename (not full path)
+        {"file_path", program.filePath},  //  Use actual filename (not full path)
         {"description", program.description}
         });
     }
@@ -500,7 +500,7 @@ void MacroManager::ExecuteSingleProgram(const std::string& programName) {
 
   printf("[MACRO DEBUG] [LOAD] Loading program into BlockUI...\n");
 
-  // ✅ FIX: Use actual filename directly (not display name)
+  //  FIX: Use actual filename directly (not display name)
   m_blockUI->LoadProgram(programIt->second.filePath);
 
   printf("[MACRO DEBUG] [WAIT] Waiting 100ms for UI update...\n");

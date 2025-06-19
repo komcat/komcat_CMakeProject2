@@ -236,7 +236,7 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
                   m_resultsManager->StoreResult(opId, "distance_moved", std::to_string(distance));
                   m_resultsManager->StoreResult(opId, "already_at_target", "true");
                   StorePositionResult(opId, "final", currentPos);
-                  m_resultsManager->EndOperation(opId, "success");  // ✅ FIXED: EndOperation called
+                  m_resultsManager->EndOperation(opId, "success");  //  FIXED: EndOperation called
                 }
 
                 return true;
@@ -252,7 +252,7 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
 
     // Store failure result
     if (m_resultsManager && !opId.empty()) {
-      m_resultsManager->EndOperation(opId, "failed", "Failed to get current node for device");  // ✅ FIXED: EndOperation called
+      m_resultsManager->EndOperation(opId, "failed", "Failed to get current node for device");  //  FIXED: EndOperation called
     }
     return false;
   }
@@ -276,7 +276,7 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
       if (m_motionLayer.GetCurrentPosition(deviceName, currentPos)) {
         StorePositionResult(opId, "final", currentPos);
       }
-      m_resultsManager->EndOperation(opId, "success");  // ✅ FIXED: EndOperation called
+      m_resultsManager->EndOperation(opId, "success");  //  FIXED: EndOperation called
     }
 
     return true;
@@ -297,7 +297,7 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
     ApplyCameraExposureForNode(targetNodeId);
   }
 
-  // Store final results - ✅ FIXED: This section was missing/incomplete
+  // Store final results -  FIXED: This section was missing/incomplete
   if (m_resultsManager && !opId.empty()) {
     if (success) {
       // Get final position and calculate distance
@@ -312,10 +312,10 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
       }
       m_resultsManager->StoreResult(opId, "current_node", currentNodeId);
       m_resultsManager->StoreResult(opId, "target_node", targetNodeId);
-      m_resultsManager->EndOperation(opId, "success");  // ✅ FIXED: EndOperation called
+      m_resultsManager->EndOperation(opId, "success");  //  FIXED: EndOperation called
     }
     else {
-      m_resultsManager->EndOperation(opId, "failed", "Path execution failed");  // ✅ FIXED: EndOperation called
+      m_resultsManager->EndOperation(opId, "failed", "Path execution failed");  //  FIXED: EndOperation called
     }
   }
 

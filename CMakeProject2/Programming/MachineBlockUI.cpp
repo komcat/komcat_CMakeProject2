@@ -694,7 +694,7 @@ void MachineBlockUI::RenderCanvas() {
 				if (ImGui::MenuItem("Start Connection")) {
 					// Calculate the start position for the connection
 					ImVec2 startPos = GetBlockOutputPoint(*m_selectedBlock, canvasPos);
-					StartConnection(m_selectedBlock, startPos);  // ✅ CORRECT - 2 arguments
+					StartConnection(m_selectedBlock, startPos);  //  CORRECT - 2 arguments
 					ImGui::CloseCurrentPopup();
 				}
 			}
@@ -2150,7 +2150,7 @@ void MachineBlockUI::ClearAll() {
 	m_isDragging = false;
 	m_draggedBlock = nullptr;
 
-	// ✅ CORRECT - Use public method
+	//  CORRECT - Use public method
 	if (m_programManager) {
 		m_programManager->SetCurrentProgram("");  // Clear current program
 	}
@@ -2294,7 +2294,7 @@ void MachineBlockUI::SaveProgram(const std::string& programName) {
 	}
 }
 // Load Program implementation
-// ✅ FIXED CODE:
+//  FIXED CODE:
 void MachineBlockUI::LoadProgram(const std::string& programName) {
 	try {
 		nlohmann::json programJson;
@@ -2364,7 +2364,7 @@ void MachineBlockUI::LoadProgram(const std::string& programName) {
 		}
 		m_nextBlockId = maxId + 1;
 
-		// ✅ CRITICAL FIX: Set current program name after successful load
+		//  CRITICAL FIX: Set current program name after successful load
 		if (m_programManager) {
 			m_programManager->SetCurrentProgram(programName);
 		}
@@ -2375,7 +2375,7 @@ void MachineBlockUI::LoadProgram(const std::string& programName) {
 	}
 	catch (const std::exception& e) {
 		printf("[ERROR] Error loading program: %s\n", e.what());
-		// ✅ ALSO: Clear current program if load failed
+		//  ALSO: Clear current program if load failed
 		if (m_programManager) {
 			m_programManager->SetCurrentProgram("");
 		}
@@ -2403,7 +2403,7 @@ void MachineBlockUI::ExecuteProgramAsSequence() {
 // CORRECTED VERSION: ExecuteProgramAsSequence method
 void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComplete) {
 	if (!m_machineOps) {
-		printf("❌ Cannot execute: MachineOperations not set!\n");
+		printf("[NO] Cannot execute: MachineOperations not set!\n");
 		if (onComplete) onComplete(false);
 		return;
 	}
@@ -2421,14 +2421,14 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 	}
 
 	if (!ValidateProgram()) {
-		printf("❌ Cannot execute: Program is invalid!\n");
+		printf("[NO] Cannot execute: Program is invalid!\n");
 		if (onComplete) onComplete(false);
 		return;
 	}
 
 	auto executionOrder = GetExecutionOrder();
 	if (executionOrder.empty()) {
-		printf("❌ No execution path found!\n");
+		printf("[NO] No execution path found!\n");
 		if (onComplete) onComplete(false);
 		return;
 	}
@@ -2473,7 +2473,7 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 	m_currentSequence = converter.ConvertBlocksToSequence(executionOrder, programName);
 
 	if (!m_currentSequence) {
-		printf("❌ Failed to convert blocks to sequence!\n");
+		printf("[NO] Failed to convert blocks to sequence!\n");
 		if (onComplete) onComplete(false);
 		return;
 	}
@@ -2481,7 +2481,7 @@ void MachineBlockUI::ExecuteProgramAsSequence(std::function<void(bool)> onComple
 	m_isExecuting = true;
 	m_executionStatus = "Executing with Real-Time Feedback...";
 
-	printf("\n🚀 EXECUTING BLOCK PROGRAM WITH REAL-TIME FEEDBACK:\n");
+	printf("\n EXECUTING BLOCK PROGRAM WITH REAL-TIME FEEDBACK:\n");
 	printf("========================================\n");
 	printf("Program: %s\n", programName.c_str());
 	printf("Blocks: %zu operations\n", executionOrder.size());
@@ -2569,7 +2569,7 @@ void MachineBlockUI::MonitorSequenceProgress(std::atomic<bool>& executionComplet
 
 			m_feedbackUI->UpdateBlock(gridId, "Processing", "Running", details);
 
-			printf("   🔧 Hardware executing: %s (ID: %d)\n", block->label.c_str(), block->id);
+			printf("    Hardware executing: %s (ID: %d)\n", block->label.c_str(), block->id);
 		}
 
 		// Estimate execution time per block (this is approximate)
@@ -2582,7 +2582,7 @@ void MachineBlockUI::MonitorSequenceProgress(std::atomic<bool>& executionComplet
 		if (!executionComplete && m_feedbackUI) {
 			m_feedbackUI->UpdateBlock(gridId, "Complete", "Success",
 				"Hardware operation completed successfully");
-			printf("   ✅ Hardware completed: %s (ID: %d)\n", block->label.c_str(), block->id);
+			printf("    Hardware completed: %s (ID: %d)\n", block->label.c_str(), block->id);
 		}
 
 		currentBlock++;
@@ -2650,13 +2650,13 @@ int MachineBlockUI::GetEstimatedBlockExecutionTime(MachineBlock* block) {
 // Rename the original method for debug purposes
 void MachineBlockUI::ExecuteProgramDebugOnly() {
 	if (!ValidateProgram()) {
-		printf("❌ Cannot execute: Program is invalid!\n");
+		printf("[NO] Cannot execute: Program is invalid!\n");
 		return;
 	}
 
 	auto executionOrder = GetExecutionOrder();
 	if (executionOrder.empty()) {
-		printf("❌ No execution path found!\n");
+		printf("[NO] No execution path found!\n");
 		return;
 	}
 
@@ -2666,7 +2666,7 @@ void MachineBlockUI::ExecuteProgramDebugOnly() {
 		m_feedbackUI->Show();
 	}
 
-	printf("\n🚀 DEBUG MODE - SIMULATING PROGRAM EXECUTION:\n");
+	printf("\n DEBUG MODE - SIMULATING PROGRAM EXECUTION:\n");
 	printf("========================================\n");
 
 	// Simulate execution with feedback updates
@@ -2704,7 +2704,7 @@ void MachineBlockUI::ExecuteProgramDebugOnly() {
 	}
 
 	printf("========================================\n");
-	printf("✅ Debug simulation completed! (%zu blocks)\n", executionOrder.size());
+	printf(" Debug simulation completed! (%zu blocks)\n", executionOrder.size());
 	printf("💡 To execute for real, call SetMachineOperations() first.\n\n");
 }
 
@@ -3336,13 +3336,13 @@ std::vector<MachineBlock*> MachineBlockUI::CreateSingleBlockExecutionOrder(Machi
 
 void MachineBlockUI::ExecuteProgramWithVirtualOps() {
 	if (!ValidateProgram()) {
-		printf("❌ Cannot execute: Program is invalid!\n");
+		printf("[NO] Cannot execute: Program is invalid!\n");
 		return;
 	}
 
 	auto executionOrder = GetExecutionOrder();
 	if (executionOrder.empty()) {
-		printf("❌ No execution path found!\n");
+		printf("[NO] No execution path found!\n");
 		return;
 	}
 
@@ -3402,11 +3402,11 @@ void MachineBlockUI::ExecuteProgramWithVirtualOps() {
 					}
 
 					m_feedbackUI->UpdateBlock(gridId, "Complete", "Success", details);
-					printf("   ✅ Block completed successfully\n\n");
+					printf("    Block completed successfully\n\n");
 				}
 				else {
 					m_feedbackUI->UpdateBlock(gridId, "Incomplete", "Failed", "Virtual execution failed");
-					printf("   ❌ Block execution failed, stopping program\n");
+					printf("   [NO] Block execution failed, stopping program\n");
 					break;
 				}
 			}
@@ -3421,7 +3421,7 @@ void MachineBlockUI::ExecuteProgramWithVirtualOps() {
 		m_isExecuting = false;
 		m_executionStatus = "Virtual Execution Completed";
 
-		printf("🎉 [SUCCESS] Virtual program execution completed!\n");
+		printf(" [SUCCESS] Virtual program execution completed!\n");
 	});
 
 	// Detach thread so execution continues in background while UI stays responsive
@@ -3438,11 +3438,11 @@ void MachineBlockUI::ExecuteProgramWithVirtualOps() {
 bool MachineBlockUI::ExecuteBlockWithVirtualOps(MachineBlock* block) {
 	switch (block->type) {
 	case BlockType::START:
-		printf("   🟢 Starting program...\n");
+		printf("    Starting program...\n");
 		return true;
 
 	case BlockType::END:
-		printf("   🔴 Program finished\n");
+		printf("    Program finished\n");
 		return true;
 
 	case BlockType::MOVE_NODE: {
@@ -3450,13 +3450,13 @@ bool MachineBlockUI::ExecuteBlockWithVirtualOps(MachineBlock* block) {
 		std::string graphName = GetParameterValue(*block, "graph_name");
 		std::string nodeId = GetParameterValue(*block, "node_id");
 
-		printf("   🏃 Moving %s to node %s...\n", deviceName.c_str(), nodeId.c_str());
+		printf("   Moving %s to node %s...\n", deviceName.c_str(), nodeId.c_str());
 		return m_virtualOps->MoveDeviceToNode(deviceName, graphName, nodeId, true);
 	}
 
 	case BlockType::WAIT: {
 		int milliseconds = std::stoi(GetParameterValue(*block, "milliseconds"));
-		printf("   ⏱️  Waiting %d ms...\n", milliseconds);
+		printf("     Waiting %d ms...\n", milliseconds);
 		m_virtualOps->Wait(milliseconds);
 		return true;
 	}
@@ -3466,7 +3466,7 @@ bool MachineBlockUI::ExecuteBlockWithVirtualOps(MachineBlock* block) {
 		int pin = std::stoi(GetParameterValue(*block, "pin"));
 		bool state = GetParameterValue(*block, "state") == "true";
 
-		printf("   🔌 Setting output %s pin %d to %s\n",
+		printf("    Setting output %s pin %d to %s\n",
 			deviceName.c_str(), pin, state ? "HIGH" : "LOW");
 		return m_virtualOps->SetOutput(deviceName, pin, state);
 	}
@@ -3475,13 +3475,13 @@ bool MachineBlockUI::ExecuteBlockWithVirtualOps(MachineBlock* block) {
 		std::string deviceName = GetParameterValue(*block, "device_name");
 		int pin = std::stoi(GetParameterValue(*block, "pin"));
 
-		printf("   🔌 Clearing output %s pin %d\n", deviceName.c_str(), pin);
+		printf("    Clearing output %s pin %d\n", deviceName.c_str(), pin);
 		// Clear output = set to false/LOW
 		return m_virtualOps->SetOutput(deviceName, pin, false);
 	}
 
 	default:
-		printf("   ❓ Unknown block type\n");
+		printf("    Unknown block type\n");
 		return true;
 	}
 }
@@ -3521,7 +3521,7 @@ void MachineBlockUI::ExecuteSequenceWithSimpleMonitoring() {
 				}
 
 				m_feedbackUI->UpdateBlock(gridId, "Processing", "Running", details);
-				printf("   🔧 Hardware executing: %s (ID: %d)\n", block->label.c_str(), block->id);
+				printf("    Hardware executing: %s (ID: %d)\n", block->label.c_str(), block->id);
 			}
 
 			// Wait for this block to be marked as complete
@@ -3531,7 +3531,7 @@ void MachineBlockUI::ExecuteSequenceWithSimpleMonitoring() {
 			if (m_feedbackUI) {
 				m_feedbackUI->UpdateBlock(gridId, "Complete", "Success",
 					"Hardware operation completed successfully");
-				printf("   ✅ Hardware completed: %s (ID: %d)\n", block->label.c_str(), block->id);
+				printf("    Hardware completed: %s (ID: %d)\n", block->label.c_str(), block->id);
 			}
 
 			currentBlockIndex++;
