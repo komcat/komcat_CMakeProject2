@@ -736,10 +736,11 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
 
 		// Move to safe position
-		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
-			"gantry-main", "node_4027")); // Safe position
-		// Wait for dispenser to extend
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_3618")); // Safe Left position
 		sequence->AddOperation(std::make_shared<WaitOperation>(500));
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe Left position
 		//sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 		//	"gantry-main", "Process_Flow", "node_4027")); // Safe position
 		// 2. Move hex-left to home position
@@ -821,10 +822,11 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
 
 		// Move to safe position
-		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
-			"gantry-main", "node_4027")); // Safe position
-
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_3618")); // Safe Left position
 		sequence->AddOperation(std::make_shared<WaitOperation>(500));
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe Left position
 		// 2. Move hex-left to home position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"hex-left", "Process_Flow", "node_5480"));
@@ -860,9 +862,9 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"hex-right", "Process_Flow", "node_5190")); // Reject position
 
-		// 3. Move gantry-main to dispense1safe
-		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
-			"gantry-main", "dispense1safe"));
+		// NEW CODE (guaranteed blocking):
+		sequence->AddOperation(std::make_shared<BlockingMoveToPointNameOperation>(
+			"gantry-main", "dispense1safe", 30000)); // 30 second timeout
 
 		// 4. Extend dispenser head
 		sequence->AddOperation(std::make_shared<ExtendSlideOperation>("Dispenser_Head"));
@@ -896,10 +898,14 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
 
 		// Move to safe position
-		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
-			"gantry-main", "node_4027")); // Safe position
-		sequence->AddOperation(std::make_shared<WaitOperation>(500));
+		//sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
+		//	"gantry-main", "node_4027")); // Safe position
 
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main","Process_Flow", "node_3618")); // Safe Left position
+		sequence->AddOperation(std::make_shared<WaitOperation>(500));
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe Left position
 		// 2. Move hex-left to home position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"hex-left", "Process_Flow", "node_5480"));
@@ -925,9 +931,9 @@ namespace ProcessBuilders {
 			"hex-left", "Process_Flow", "node_5531")); // Reject position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"hex-right", "Process_Flow", "node_5190")); // Reject position
-		// 3. Move gantry-main to dispense2safe
-		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
-			"gantry-main", "dispense2safe"));
+		// NEW CODE (guaranteed blocking):
+		sequence->AddOperation(std::make_shared<BlockingMoveToPointNameOperation>(
+			"gantry-main", "dispense2safe", 30000)); // 30 second timeout
 
 		// 4. Extend dispenser head
 		sequence->AddOperation(std::make_shared<ExtendSlideOperation>("Dispenser_Head"));
@@ -961,9 +967,14 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
 
 		// Move to safe position
-		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
-			"gantry-main", "node_4027")); // Safe position
+		//sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
+		//	"gantry-main", "node_4027")); // Safe position
+
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_3618")); // Safe Left position
 		sequence->AddOperation(std::make_shared<WaitOperation>(500));
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Safe Left position
 		// 2. Move hex-left to home position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"hex-left", "Process_Flow", "node_5480"));

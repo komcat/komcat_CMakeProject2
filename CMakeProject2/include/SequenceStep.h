@@ -1812,3 +1812,168 @@ private:
   std::string m_safePositionName;
   double m_zOffset;
 };
+
+
+// Add this to SequenceStep.h with the other operation classes
+
+/// <summary>
+/// Enhanced blocking move operation that explicitly waits for motion completion
+/// This operation provides stronger guarantees that movement is complete before
+/// continuing to the next sequence step.
+/// </summary>
+class BlockingMoveToPointNameOperation : public SequenceOperation {
+public:
+  /// <summary>
+  /// Creates a new blocking move operation
+  /// </summary>
+  /// <param name="deviceName">Name of the device/controller to move</param>
+  /// <param name="positionName">Named position to move to</param>
+  /// <param name="timeoutMs">Maximum time to wait for motion completion (default: 30 seconds)</param>
+  BlockingMoveToPointNameOperation(const std::string& deviceName,
+    const std::string& positionName,
+    int timeoutMs = 30000)
+    : m_deviceName(deviceName), m_positionName(positionName), m_timeoutMs(timeoutMs) {
+  }
+
+  /// <summary>
+  /// Executes the move operation with explicit motion completion waiting
+  /// </summary>
+  /// <param name="ops">Reference to MachineOperations</param>
+  /// <returns>True if move completed successfully, false otherwise</returns>
+  bool Execute(MachineOperations& ops) override {
+    ops.LogInfo("Starting BLOCKING move of " + m_deviceName + " to position '" + m_positionName + "'");
+
+    // Step 1: Start the move (with blocking=true)
+    bool moveStarted = ops.MoveToPointName(m_deviceName, m_positionName, true);
+    if (!moveStarted) {
+      ops.LogError("Failed to start move operation for " + m_deviceName);
+      return false;
+    }
+
+    ops.LogInfo("Move command sent, now explicitly waiting for motion completion...");
+
+    // Step 2: Explicitly wait for motion completion with timeout
+    bool motionCompleted = ops.WaitForDeviceMotionCompletion(m_deviceName, m_timeoutMs);
+    if (!motionCompleted) {
+      ops.LogError("Timeout waiting for " + m_deviceName + " motion to complete after " +
+        std::to_string(m_timeoutMs) + "ms");
+      return false;
+    }
+
+    // Step 3: Small additional settling delay for mechanical systems
+    ops.Wait(100);  // 100ms settling time
+
+    ops.LogInfo("BLOCKING move of " + m_deviceName + " to '" + m_positionName + "' completed successfully");
+    return true;
+  }
+
+  /// <summary>
+  /// Gets a description of this operation for logging and debugging
+  /// </summary>
+  /// <returns>Human-readable description</returns>
+  std::string GetDescription() const override {
+    return "BLOCKING move " + m_deviceName + " to named position '" + m_positionName +
+      "' (timeout: " + std::to_string(m_timeoutMs) + "ms)";
+  }
+
+private:
+  std::string m_deviceName;  ///< Name of the device to move
+  std::string m_positionName; ///< Target position name
+  int m_timeoutMs;           ///< Timeout for motion completion
+};
+
+/// <summary>
+/// Non-blocking move operation for cases where you want to start multiple moves in parallel
+/// </summary>
+class NonBlockingMoveToPointNameOperation : public SequenceOperation {
+public:
+  /// <summary>
+  /// Creates a new non-blocking move operation
+  /// </summary>
+  /// <param name="deviceName">Name of the device/controller to move</param>
+  /// <param name="positionName">Named position to move to</param>
+  NonBlockingMoveToPointNameOperation(const std::string& deviceName,
+    const std::string& positionName)
+    : m_deviceName(deviceName), m_positionName(positionName) {
+  }
+
+  /// <summary>
+  /// Executes the move operation without waiting for completion
+  /// </summary>
+  /// <param name="ops">Reference to MachineOperations</param>
+  /// <returns>True if move started successfully, false otherwise</returns>
+  bool Execute(MachineOperations& ops) override {
+    ops.LogInfo("Starting NON-BLOCKING move of " + m_deviceName + " to position '" + m_positionName + "'");
+
+    // Start the move with blocking=false
+    bool moveStarted = ops.MoveToPointName(m_deviceName, m_positionName, false);
+    if (!moveStarted) {
+      ops.LogError("Failed to start non-blocking move operation for " + m_deviceName);
+      return false;
+    }
+
+    ops.LogInfo("Non-blocking move command sent for " + m_deviceName + " - continuing to next operation");
+    return true;
+  }
+
+  /// <summary>
+  /// Gets a description of this operation for logging and debugging
+  /// </summary>
+  /// <returns>Human-readable description</returns>
+  std::string GetDescription() const override {
+    return "NON-BLOCKING move " + m_deviceName + " to named position '" + m_positionName + "'";
+  }
+
+private:
+  std::string m_deviceName;   ///< Name of the device to move
+  std::string m_positionName; ///< Target position name
+};
+
+/// <summary>
+/// Wait for motion completion operation - useful after non-blocking moves
+/// </summary>
+class WaitForMotionCompletionOperation : public SequenceOperation {
+public:
+  /// <summary>
+  /// Creates a new wait for motion completion operation
+  /// </summary>
+  /// <param name="deviceName">Name of the device to wait for</param>
+  /// <param name="timeoutMs">Maximum time to wait (default: 30 seconds)</param>
+  WaitForMotionCompletionOperation(const std::string& deviceName, int timeoutMs = 30000)
+    : m_deviceName(deviceName), m_timeoutMs(timeoutMs) {
+  }
+
+  /// <summary>
+  /// Waits for the specified device to complete its motion
+  /// </summary>
+  /// <param name="ops">Reference to MachineOperations</param>
+  /// <returns>True if motion completed within timeout, false otherwise</returns>
+  bool Execute(MachineOperations& ops) override {
+    ops.LogInfo("Waiting for motion completion of " + m_deviceName +
+      " (timeout: " + std::to_string(m_timeoutMs) + "ms)");
+
+    bool completed = ops.WaitForDeviceMotionCompletion(m_deviceName, m_timeoutMs);
+
+    if (completed) {
+      ops.LogInfo("Motion completed for " + m_deviceName);
+    }
+    else {
+      ops.LogError("Timeout waiting for motion completion of " + m_deviceName);
+    }
+
+    return completed;
+  }
+
+  /// <summary>
+  /// Gets a description of this operation for logging and debugging
+  /// </summary>
+  /// <returns>Human-readable description</returns>
+  std::string GetDescription() const override {
+    return "Wait for motion completion of " + m_deviceName +
+      " (timeout: " + std::to_string(m_timeoutMs) + "ms)";
+  }
+
+private:
+  std::string m_deviceName; ///< Name of the device to wait for
+  int m_timeoutMs;          ///< Timeout in milliseconds
+};
