@@ -21,10 +21,15 @@ set(SDL2_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/sdl2")
 set(SDL2_INCLUDE_DIR "${SDL2_DIR}/include")
 
 
+# Add SQLite configuration
+set(SQLITE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/sqlite")
+set(SQLITE_INCLUDE_DIR "${SQLITE_DIR}")
 
 
-
-
+# SQLite source files
+set(SQLITE_SOURCES
+    "${SQLITE_DIR}/sqlite3.c"
+)
 
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/imgui-docking")
 # Define path to ACSC files
@@ -137,6 +142,7 @@ add_executable(CMakeProject2
     "include/randomwindow.cpp"
     "include/randomwindow.h"
     ${IMGUI_SOURCES}
+     ${SQLITE_SOURCES}  # Add SQLite source
     "include/tcp_client.h"
     "include/tcp_client.cpp"
     "include/client_manager.h"
@@ -337,6 +343,7 @@ target_include_directories(CMakeProject2 PRIVATE
     ${EZIIO_DIR_INCLUDE}
     ${EZIIO_DIR_INCLUDE_x64}
     ${SDL2_TTF_INCLUDE_DIR}
+    ${SQLITE_INCLUDE_DIR}  # Add SQLite include
 )
 
 # Link libraries - directly reference libraries
@@ -350,6 +357,15 @@ target_link_libraries(CMakeProject2 PRIVATE
     ${EZIIO_LIBRARY}  # Added EziMOTIONPlusE library
     ${SDL2_TTF_LIBRARY}  # Added SDL2_ttf library
     nlohmann_json::nlohmann_json
+)
+
+# SQLite compile definitions
+target_compile_definitions(CMakeProject2 PRIVATE
+    SQLITE_ENABLE_FTS5
+    SQLITE_ENABLE_JSON1
+    SQLITE_ENABLE_RTREE
+    SQLITE_THREADSAFE=1
+    SQLITE_ENABLE_COLUMN_METADATA
 )
 
 # For Windows, we need to copy the SDL2.dll and PI_GCS2_DLL

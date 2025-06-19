@@ -6,6 +6,7 @@
 #include <chrono>
 #include <iomanip>
 #include "include/SMU/keithley2400_operations.h" // Include the SMU operations header
+#include "external/sqlite/sqlite3.h"
 
 // Updated constructor
 MachineOperations::MachineOperations(
