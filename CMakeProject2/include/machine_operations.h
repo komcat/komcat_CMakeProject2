@@ -59,20 +59,29 @@ public:
 	double GetSequenceSuccessRate(const std::string& sequenceName = "");
 
 
-
+	//update method with caller Context
+	//updated
 
 	// NEW: Methods that accept caller context for tracking
 	bool MoveDeviceToNode(const std::string& deviceName, const std::string& graphName,
 		const std::string& targetNodeId, bool blocking = true,
 		const std::string& callerContext = "");  // NEW parameter
 
+	bool MoveToPointName(const std::string& deviceName, const std::string& positionName,
+		bool blocking = true, const std::string& callerContext = "");
+
+	bool MoveRelative(const std::string& deviceName, const std::string& axis,
+		double distance, bool blocking = true,
+		const std::string& callerContext = "");
+
 	bool MovePathFromTo(const std::string& deviceName, const std::string& graphName,
 		const std::string& startNodeId, const std::string& endNodeId,
-		bool blocking = true);
+		bool blocking = true, const std::string& callerContext = "");
+	//----------------updated section
 
-	bool MoveToPointName(const std::string& deviceName, const std::string& positionName, bool blocking = true);
-	bool MoveRelative(const std::string& deviceName, const std::string& axis,
-		double distance, bool blocking = true);
+
+
+
 
 	// IO control methods
 	bool SetOutput(const std::string& deviceName, int outputPin, bool state,
@@ -82,6 +91,8 @@ public:
 	bool ReadInput(int deviceId, int inputPin, bool& state);
 	bool ClearLatch(const std::string& deviceName, int inputPin);
 	bool ClearLatch(int deviceId, uint32_t latchMask);
+	bool ClearOutput(const std::string& deviceName, int outputPin,
+		const std::string& callerContext = "");
 
 	// Pneumatic control methods
 	bool ExtendSlide(const std::string& slideName, bool waitForCompletion = true, int timeoutMs = 5000);

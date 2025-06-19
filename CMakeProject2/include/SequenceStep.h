@@ -84,6 +84,80 @@ private:
   bool m_state;
   int m_delayMs;
 };
+
+
+
+// Clear output operation with configurable delay
+class ClearOutputOperation : public SequenceOperation {
+public:
+  ClearOutputOperation(const std::string& deviceName, int pin, int delayMs = 200)
+    : m_deviceName(deviceName), m_pin(pin), m_delayMs(delayMs) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate caller context with operation details
+    std::string callerContext = "ClearOutputOperation_" + m_deviceName + "_pin" +
+      std::to_string(m_pin);
+
+    // Pass caller context to MachineOperations (clear = false)
+    bool result = ops.SetOutput(m_deviceName, m_pin, false, callerContext);
+
+    // Add a delay after clearing the output
+    if (result && m_delayMs > 0) {
+      ops.Wait(m_delayMs);
+    }
+
+    return result;
+  }
+
+  std::string GetDescription() const override {
+    return "Clear output " + m_deviceName + " pin " + std::to_string(m_pin) +
+      " (delay: " + std::to_string(m_delayMs) + "ms)";
+  }
+
+private:
+  std::string m_deviceName;
+  int m_pin;
+  int m_delayMs;
+};
+
+// Alternative: Dedicated ClearOutput method approach
+// If you prefer a separate method instead of using SetOutput(false)
+
+class ClearOutputOperationDedicated : public SequenceOperation {
+public:
+  ClearOutputOperationDedicated(const std::string& deviceName, int pin, int delayMs = 200)
+    : m_deviceName(deviceName), m_pin(pin), m_delayMs(delayMs) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate caller context with operation details
+    std::string callerContext = "ClearOutputOperationDedicated_" + m_deviceName + "_pin" +
+      std::to_string(m_pin);
+
+    // Use dedicated ClearOutput method (you'd need to implement this)
+    bool result = ops.ClearOutput(m_deviceName, m_pin, callerContext);
+
+    // Add a delay after clearing the output
+    if (result && m_delayMs > 0) {
+      ops.Wait(m_delayMs);
+    }
+
+    return result;
+  }
+
+  std::string GetDescription() const override {
+    return "Clear output " + m_deviceName + " pin " + std::to_string(m_pin) +
+      " (delay: " + std::to_string(m_delayMs) + "ms)";
+  }
+
+private:
+  std::string m_deviceName;
+  int m_pin;
+  int m_delayMs;
+};
+
+
 // Sequence step - executes a sequence of operations
 class SequenceStep : public ProcessStep {
 public:
@@ -270,7 +344,9 @@ private:
   std::string m_laserName;
 };
 
-// Add this to SequenceStep.h with the other operation classes
+
+
+// 1. UPDATE THE LEGACY MoveToPointNameOperation class:
 class MoveToPointNameOperation : public SequenceOperation {
 public:
   MoveToPointNameOperation(const std::string& deviceName, const std::string& positionName)
@@ -278,7 +354,11 @@ public:
   }
 
   bool Execute(MachineOperations& ops) override {
-    return ops.MoveToPointName(m_deviceName, m_positionName, true);
+    // Generate caller context - FOLLOWING EXISTING PATTERN
+    std::string callerContext = "MoveToPointNameOperation_" + m_deviceName + "_to_" + m_positionName;
+
+    // Pass caller context to MachineOperations  
+    return ops.MoveToPointName(m_deviceName, m_positionName, true, callerContext);
   }
 
   std::string GetDescription() const override {
@@ -626,6 +706,7 @@ private:
 };
 
 // Add this after the other operation classes in SequenceStep.h
+// REPLACE existing MoveRelativeOperation class in SequenceStep.h:
 class MoveRelativeOperation : public SequenceOperation {
 public:
   MoveRelativeOperation(const std::string& deviceName, const std::string& axis, double distance)
@@ -633,7 +714,12 @@ public:
   }
 
   bool Execute(MachineOperations& ops) override {
-    return ops.MoveRelative(m_deviceName, m_axis, m_distance, true);
+    // Generate caller context with operation details - FOLLOWING EXISTING PATTERN
+    std::string callerContext = "MoveRelativeOperation_" + m_deviceName + "_" + m_axis +
+      "_" + std::to_string(m_distance);
+
+    // Pass caller context to MachineOperations
+    return ops.MoveRelative(m_deviceName, m_axis, m_distance, true, callerContext);
   }
 
   std::string GetDescription() const override {
@@ -1788,7 +1874,8 @@ public:
         " (Z offset: " + std::to_string(m_zOffset) + ")");
 
       // Move to safe position first
-      bool moveSuccess = ops.MoveRelative(m_deviceName, "Z", m_zOffset, true);
+      std::string callerContext = "CreateSafeDispensePositionOperation_" + m_deviceName + "_Z_" + std::to_string(m_zOffset);
+      bool moveSuccess = ops.MoveRelative(m_deviceName, "Z", m_zOffset, true, callerContext);
       if (!moveSuccess) {
         ops.LogError("Failed to move to safe position");
         return false;
@@ -1831,30 +1918,23 @@ private:
 /// This operation provides stronger guarantees that movement is complete before
 /// continuing to the next sequence step.
 /// </summary>
+// UPDATE BlockingMoveToPointNameOperation in SequenceStep.h:
 class BlockingMoveToPointNameOperation : public SequenceOperation {
 public:
-  /// <summary>
-  /// Creates a new blocking move operation
-  /// </summary>
-  /// <param name="deviceName">Name of the device/controller to move</param>
-  /// <param name="positionName">Named position to move to</param>
-  /// <param name="timeoutMs">Maximum time to wait for motion completion (default: 30 seconds)</param>
   BlockingMoveToPointNameOperation(const std::string& deviceName,
     const std::string& positionName,
     int timeoutMs = 30000)
     : m_deviceName(deviceName), m_positionName(positionName), m_timeoutMs(timeoutMs) {
   }
 
-  /// <summary>
-  /// Executes the move operation with explicit motion completion waiting
-  /// </summary>
-  /// <param name="ops">Reference to MachineOperations</param>
-  /// <returns>True if move completed successfully, false otherwise</returns>
   bool Execute(MachineOperations& ops) override {
     ops.LogInfo("Starting BLOCKING move of " + m_deviceName + " to position '" + m_positionName + "'");
 
-    // Step 1: Start the move (with blocking=true)
-    bool moveStarted = ops.MoveToPointName(m_deviceName, m_positionName, true);
+    // Generate caller context - FOLLOWING EXISTING PATTERN
+    std::string callerContext = "BlockingMoveToPointNameOperation_" + m_deviceName + "_to_" + m_positionName;
+
+    // Step 1: Start the move (with blocking=true) - NOW WITH CALLER CONTEXT
+    bool moveStarted = ops.MoveToPointName(m_deviceName, m_positionName, true, callerContext);
     if (!moveStarted) {
       ops.LogError("Failed to start move operation for " + m_deviceName);
       return false;
@@ -1877,46 +1957,36 @@ public:
     return true;
   }
 
-  /// <summary>
-  /// Gets a description of this operation for logging and debugging
-  /// </summary>
-  /// <returns>Human-readable description</returns>
   std::string GetDescription() const override {
     return "BLOCKING move " + m_deviceName + " to named position '" + m_positionName +
       "' (timeout: " + std::to_string(m_timeoutMs) + "ms)";
   }
 
 private:
-  std::string m_deviceName;  ///< Name of the device to move
-  std::string m_positionName; ///< Target position name
-  int m_timeoutMs;           ///< Timeout for motion completion
+  std::string m_deviceName;
+  std::string m_positionName;
+  int m_timeoutMs;
 };
 
 /// <summary>
 /// Non-blocking move operation for cases where you want to start multiple moves in parallel
 /// </summary>
+// UPDATE NonBlockingMoveToPointNameOperation in SequenceStep.h:
 class NonBlockingMoveToPointNameOperation : public SequenceOperation {
 public:
-  /// <summary>
-  /// Creates a new non-blocking move operation
-  /// </summary>
-  /// <param name="deviceName">Name of the device/controller to move</param>
-  /// <param name="positionName">Named position to move to</param>
   NonBlockingMoveToPointNameOperation(const std::string& deviceName,
     const std::string& positionName)
     : m_deviceName(deviceName), m_positionName(positionName) {
   }
 
-  /// <summary>
-  /// Executes the move operation without waiting for completion
-  /// </summary>
-  /// <param name="ops">Reference to MachineOperations</param>
-  /// <returns>True if move started successfully, false otherwise</returns>
   bool Execute(MachineOperations& ops) override {
     ops.LogInfo("Starting NON-BLOCKING move of " + m_deviceName + " to position '" + m_positionName + "'");
 
-    // Start the move with blocking=false
-    bool moveStarted = ops.MoveToPointName(m_deviceName, m_positionName, false);
+    // Generate caller context - FOLLOWING EXISTING PATTERN
+    std::string callerContext = "NonBlockingMoveToPointNameOperation_" + m_deviceName + "_to_" + m_positionName;
+
+    // Start the move with blocking=false - NOW WITH CALLER CONTEXT
+    bool moveStarted = ops.MoveToPointName(m_deviceName, m_positionName, false, callerContext);
     if (!moveStarted) {
       ops.LogError("Failed to start non-blocking move operation for " + m_deviceName);
       return false;
@@ -1926,18 +1996,16 @@ public:
     return true;
   }
 
-  /// <summary>
-  /// Gets a description of this operation for logging and debugging
-  /// </summary>
-  /// <returns>Human-readable description</returns>
   std::string GetDescription() const override {
     return "NON-BLOCKING move " + m_deviceName + " to named position '" + m_positionName + "'";
   }
 
 private:
-  std::string m_deviceName;   ///< Name of the device to move
-  std::string m_positionName; ///< Target position name
+  std::string m_deviceName;
+  std::string m_positionName;
 };
+
+
 
 /// <summary>
 /// Wait for motion completion operation - useful after non-blocking moves

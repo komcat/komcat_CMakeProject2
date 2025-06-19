@@ -283,7 +283,12 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
   }
 
   // Plan and execute path
-  bool success = MovePathFromTo(deviceName, graphName, currentNodeId, targetNodeId, blocking);
+ // bool success = MovePathFromTo(deviceName, graphName, currentNodeId, targetNodeId, blocking);
+
+  // When calling MovePathFromTo internally, pass through the caller context:
+  bool success = MovePathFromTo(deviceName, graphName, currentNodeId, targetNodeId, blocking, callerContext);
+
+
 
   // Apply camera exposure settings if the gantry moved successfully
   if (success && deviceName == "gantry-main" && m_autoExposureEnabled) {
@@ -317,23 +322,77 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
   return success;
 }
 
-// Move a device along a path from start to end node
-bool MachineOperations::MovePathFromTo(const std::string& deviceName, const std::string& graphName,
-  const std::string& startNodeId, const std::string& endNodeId,
-  bool blocking) {
+
+// 3. UPDATE MovePathFromTo method with database tracking:
+bool MachineOperations::MovePathFromTo(const std::string& deviceName,
+  const std::string& graphName,
+  const std::string& startNodeId,
+  const std::string& endNodeId,
+  bool blocking,
+  const std::string& callerContext) {
+
+  // Start operation tracking
+  std::string opId;
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"graph_name", graphName},
+        {"start_node", startNodeId},
+        {"end_node", endNodeId},
+        {"blocking", blocking ? "true" : "false"}
+    };
+    opId = m_resultsManager->StartOperation("MovePathFromTo", deviceName, callerContext, "", parameters);
+  }
+
   m_logger->LogInfo("MachineOperations: Planning path for device " + deviceName +
     " from " + startNodeId + " to " + endNodeId + " in graph " + graphName);
+
+  // Store start position if tracking enabled
+  PositionStruct startPos;
+  bool hasStartPos = false;
+  if (m_resultsManager && !opId.empty()) {
+    if (m_motionLayer.GetCurrentPosition(deviceName, startPos)) {
+      StorePositionResult(opId, "start", startPos);
+      hasStartPos = true;
+    }
+  }
 
   // Plan the path
   if (!m_motionLayer.PlanPath(graphName, startNodeId, endNodeId)) {
     m_logger->LogError("MachineOperations: Failed to plan path from " +
       startNodeId + " to " + endNodeId);
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", "Path planning failed");
+    }
     return false;
   }
 
   // Execute the path
   m_logger->LogInfo("MachineOperations: Executing path");
   bool success = m_motionLayer.ExecutePath(blocking);
+
+  // Store final results
+  if (m_resultsManager && !opId.empty()) {
+    if (success) {
+      // Get final position and calculate path distance
+      PositionStruct finalPos;
+      if (m_motionLayer.GetCurrentPosition(deviceName, finalPos)) {
+        StorePositionResult(opId, "final", finalPos);
+
+        if (hasStartPos) {
+          double pathDistance = GetDistanceBetweenPositions(startPos, finalPos);
+          m_resultsManager->StoreResult(opId, "path_distance", std::to_string(pathDistance));
+        }
+      }
+
+      m_resultsManager->StoreResult(opId, "start_node", startNodeId);
+      m_resultsManager->StoreResult(opId, "end_node", endNodeId);
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_resultsManager->EndOperation(opId, "failed", "Path execution failed");
+    }
+  }
 
   if (success) {
     m_logger->LogInfo("MachineOperations: Path execution " +
@@ -346,12 +405,42 @@ bool MachineOperations::MovePathFromTo(const std::string& deviceName, const std:
   return success;
 }
 
-bool MachineOperations::MoveToPointName(const std::string& deviceName, const std::string& positionName, bool blocking) {
+
+// 1. UPDATE MoveToPointName method with database tracking:
+bool MachineOperations::MoveToPointName(const std::string& deviceName,
+  const std::string& positionName,
+  bool blocking,
+  const std::string& callerContext) {
+
+  // Start operation tracking
+  std::string opId;
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"position_name", positionName},
+        {"blocking", blocking ? "true" : "false"}
+    };
+    opId = m_resultsManager->StartOperation("MoveToPointName", deviceName, callerContext, "", parameters);
+  }
+
   m_logger->LogInfo("MachineOperations: Moving device " + deviceName + " to named position " + positionName);
+
+  // Store start position if tracking enabled
+  PositionStruct startPos;
+  bool hasStartPos = false;
+  if (m_resultsManager && !opId.empty()) {
+    if (m_motionLayer.GetCurrentPosition(deviceName, startPos)) {
+      StorePositionResult(opId, "start", startPos);
+      hasStartPos = true;
+    }
+  }
 
   // Check if the device is connected
   if (!IsDeviceConnected(deviceName)) {
     m_logger->LogError("MachineOperations: Device not connected: " + deviceName);
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", "Device not connected");
+    }
     return false;
   }
 
@@ -359,10 +448,19 @@ bool MachineOperations::MoveToPointName(const std::string& deviceName, const std
   auto posOpt = m_motionLayer.GetConfigManager().GetNamedPosition(deviceName, positionName);
   if (!posOpt.has_value()) {
     m_logger->LogError("MachineOperations: Position " + positionName + " not found for device " + deviceName);
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", "Position not found");
+    }
     return false;
   }
 
   const auto& targetPosition = posOpt.value().get();
+
+  // Store target position info
+  if (m_resultsManager && !opId.empty()) {
+    StorePositionResult(opId, "target", targetPosition);
+  }
 
   // Log detailed position information
   std::stringstream positionLog;
@@ -382,18 +480,33 @@ bool MachineOperations::MoveToPointName(const std::string& deviceName, const std
 
   m_logger->LogInfo(positionLog.str());
 
-  // Determine which controller to use and move to position
+  // Use the motion layer to perform the movement
   bool success = false;
-
-  // Use the motion layer to perform the movement instead of direct controller calls
-  // This avoids the need to access the controller managers directly
   if (blocking) {
-    // For blocking moves, use direct position coordinates
     success = m_motionLayer.MoveToPosition(deviceName, targetPosition, true);
   }
   else {
-    // For non-blocking moves, use direct position coordinates
     success = m_motionLayer.MoveToPosition(deviceName, targetPosition, false);
+  }
+
+  // Store final results
+  if (m_resultsManager && !opId.empty()) {
+    if (success) {
+      // Get final position and calculate distance if we had a start position
+      PositionStruct finalPos;
+      if (m_motionLayer.GetCurrentPosition(deviceName, finalPos)) {
+        StorePositionResult(opId, "final", finalPos);
+
+        if (hasStartPos) {
+          double distance = GetDistanceBetweenPositions(startPos, finalPos);
+          m_resultsManager->StoreResult(opId, "distance_moved", std::to_string(distance));
+        }
+      }
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_resultsManager->EndOperation(opId, "failed", "Move operation failed");
+    }
   }
 
   if (success) {
@@ -405,7 +518,6 @@ bool MachineOperations::MoveToPointName(const std::string& deviceName, const std
 
   return success;
 }
-
 
 
 // 2. UPDATE the SetOutput method (replace the existing one):
@@ -540,6 +652,9 @@ bool MachineOperations::ReadInput(int deviceId, int inputPin, bool& state) {
   return true;
 }
 
+
+
+
 // Clear latch by device name and pin
 bool MachineOperations::ClearLatch(const std::string& deviceName, int inputPin) {
   m_logger->LogInfo("MachineOperations: Clearing latch for input pin " +
@@ -572,6 +687,95 @@ bool MachineOperations::ClearLatch(int deviceId, uint32_t latchMask) {
 
   return device->clearLatch(latchMask);
 }
+
+
+
+bool MachineOperations::ClearOutput(const std::string& deviceName, int outputPin,
+  const std::string& callerContext) {
+
+  // Start operation tracking with caller context
+  std::string opId;
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"output_pin", std::to_string(outputPin)},
+        {"action", "clear"}
+    };
+
+    // Extract sequence name from caller context if possible
+    std::string sequenceName = "";
+    if (callerContext.find("Initialization") != std::string::npos) {
+      sequenceName = "Initialization";
+    }
+    else if (callerContext.find("ProcessStep") != std::string::npos) {
+      sequenceName = "Process";
+    }
+    else if (callerContext.find("Cleanup") != std::string::npos) {
+      sequenceName = "Cleanup";
+    }
+
+    opId = m_resultsManager->StartOperation("ClearOutput", deviceName,
+      callerContext, sequenceName, parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Clearing output pin " + std::to_string(outputPin) +
+    " on device " + deviceName +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")") +
+    (opId.empty() ? "" : " [" + opId + "]"));
+
+  bool success = false;
+  std::string errorMessage = "";
+
+  try {
+    // Get device by name
+    EziIODevice* device = m_ioManager.getDeviceByName(deviceName);
+    if (!device) {
+      errorMessage = "Device not found";
+      if (m_resultsManager && !opId.empty()) {
+        m_resultsManager->EndOperation(opId, "failed", errorMessage);
+      }
+      m_logger->LogError("MachineOperations: " + errorMessage);
+      return false;
+    }
+
+    // Store previous state if possible (optional enhancement)
+    bool previousState = false;
+    // You could read current state here if your hardware supports it
+    // device->getOutput(outputPin, previousState); // If this method exists
+
+    // Execute the clear operation (set to false)
+    success = device->setOutput(outputPin, false);
+
+    if (success) {
+      if (m_resultsManager && !opId.empty()) {
+        m_resultsManager->StoreResult(opId, "previous_state", "unknown"); // or actual previous state
+        m_resultsManager->StoreResult(opId, "final_state", "false");
+        m_resultsManager->StoreResult(opId, "action_performed", "clear");
+        m_resultsManager->EndOperation(opId, "success");
+      }
+      m_logger->LogInfo("MachineOperations: Successfully cleared output pin " +
+        std::to_string(outputPin) + " on device " + deviceName);
+    }
+    else {
+      errorMessage = "Failed to clear output";
+      if (m_resultsManager && !opId.empty()) {
+        m_resultsManager->EndOperation(opId, "failed", errorMessage);
+      }
+      m_logger->LogError("MachineOperations: " + errorMessage);
+    }
+
+  }
+  catch (const std::exception& e) {
+    errorMessage = "Exception: " + std::string(e.what());
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", errorMessage);
+    }
+    m_logger->LogError("MachineOperations: " + errorMessage);
+    success = false;
+  }
+
+  return success;
+}
+
 
 // Extend a pneumatic slide
 bool MachineOperations::ExtendSlide(const std::string& slideName, bool waitForCompletion, int timeoutMs) {
@@ -1587,59 +1791,82 @@ bool MachineOperations::UpdateCameraDisplay() {
 }
 #pragma endregion
 
-bool MachineOperations::MoveRelative(const std::string& deviceName, const std::string& axis,
-  double distance, bool blocking) {
+
+// 2. UPDATE MoveRelative method with database tracking:
+bool MachineOperations::MoveRelative(const std::string& deviceName,
+  const std::string& axis,
+  double distance,
+  bool blocking,
+  const std::string& callerContext) {
+
+  // Start operation tracking
+  std::string opId;
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"axis", axis},
+        {"distance", std::to_string(distance)},
+        {"blocking", blocking ? "true" : "false"}
+    };
+    opId = m_resultsManager->StartOperation("MoveRelative", deviceName, callerContext, "", parameters);
+  }
+
   m_logger->LogInfo("MachineOperations: Moving device " + deviceName +
     " relative on axis " + axis + " by " + std::to_string(distance));
+
+  // Store start position if tracking enabled
+  PositionStruct startPos;
+  bool hasStartPos = false;
+  if (m_resultsManager && !opId.empty()) {
+    if (m_motionLayer.GetCurrentPosition(deviceName, startPos)) {
+      StorePositionResult(opId, "start", startPos);
+      hasStartPos = true;
+    }
+  }
 
   // Check if the device is connected
   if (!IsDeviceConnected(deviceName)) {
     m_logger->LogError("MachineOperations: Device not connected: " + deviceName);
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", "Device not connected");
+    }
     return false;
   }
 
-  // Determine which controller type to use
-  if (IsDevicePIController(deviceName)) {
-    PIController* controller = m_piControllerManager.GetController(deviceName);
-    if (!controller || !controller->IsConnected()) {
-      m_logger->LogError("MachineOperations: No connected PI controller for device " + deviceName);
-      return false;
-    }
+  // Perform the relative move using motion layer
+  bool success = m_motionLayer.MoveRelative(deviceName, axis, distance, blocking);
 
-    bool success = controller->MoveRelative(axis, distance, blocking);
-
+  // Store final results
+  if (m_resultsManager && !opId.empty()) {
     if (success) {
-      m_logger->LogInfo("MachineOperations: Successfully initiated relative move for device " +
-        deviceName + " on axis " + axis);
+      // Get final position and calculate actual distance moved
+      PositionStruct finalPos;
+      if (m_motionLayer.GetCurrentPosition(deviceName, finalPos)) {
+        StorePositionResult(opId, "final", finalPos);
+
+        if (hasStartPos) {
+          double actualDistance = GetDistanceBetweenPositions(startPos, finalPos);
+          m_resultsManager->StoreResult(opId, "actual_distance_moved", std::to_string(actualDistance));
+          m_resultsManager->StoreResult(opId, "command_distance", std::to_string(distance));
+        }
+      }
+      m_resultsManager->EndOperation(opId, "success");
     }
     else {
-      m_logger->LogError("MachineOperations: Failed to move device " + deviceName +
-        " relative on axis " + axis);
+      m_resultsManager->EndOperation(opId, "failed", "Relative move failed");
     }
+  }
 
-    return success;
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully initiated relative move for device " +
+      deviceName + " on axis " + axis);
   }
   else {
-    // For ACS controllers
-    ACSController* controller = m_motionLayer.GetACSControllerManager().GetController(deviceName);
-    if (!controller || !controller->IsConnected()) {
-      m_logger->LogError("MachineOperations: No connected ACS controller for device " + deviceName);
-      return false;
-    }
-
-    bool success = controller->MoveRelative(axis, distance, blocking);
-
-    if (success) {
-      m_logger->LogInfo("MachineOperations: Successfully initiated relative move for device " +
-        deviceName + " on axis " + axis);
-    }
-    else {
-      m_logger->LogError("MachineOperations: Failed to move device " + deviceName +
-        " relative on axis " + axis);
-    }
-
-    return success;
+    m_logger->LogError("MachineOperations: Failed to move device " + deviceName +
+      " relative on axis " + axis);
   }
+
+  return success;
 }
 
 

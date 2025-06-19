@@ -76,6 +76,9 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<RetractSlideOperation>(
 			"Pick_Up_Tool"));
 
+		sequence->AddOperation(std::make_shared<ClearOutputOperationDedicated>(
+			"IOBottom",10));  // Clear L_Gripper (pin 0)
+
 		//// 9. Set output Vacuum_Base (pin 10)
 		//sequence->AddOperation(std::make_shared<SetOutputOperation>(
 		//	"IOBottom", 10, true));
