@@ -229,11 +229,11 @@ void CameraExposureTestUI::RenderUI() {
 
   if (ImGui::Button("Reload Config from File")) {
     if (expManager->LoadConfiguration("camera_exposure_config.json")) {
-      std::cout << "✓ Configuration reloaded successfully" << std::endl;
+      std::cout << "[yes] Configuration reloaded successfully" << std::endl;
       m_cacheValid = false; // Invalidate cache so it refreshes next time UI is used
     }
     else {
-      std::cout << "✗ Failed to reload configuration" << std::endl;
+      std::cout << "[no] Failed to reload configuration" << std::endl;
     }
   }
 
@@ -242,18 +242,18 @@ void CameraExposureTestUI::RenderUI() {
     std::cout << "Testing automatic camera exposure integration..." << std::endl;
 
     if (expManager) {
-      std::cout << "✓ Camera exposure manager exists" << std::endl;
+      std::cout << "[yes] Camera exposure manager exists" << std::endl;
 
       if (autoEnabled) {
-        std::cout << "✓ Auto exposure is enabled" << std::endl;
+        std::cout << "[yes] Auto exposure is enabled" << std::endl;
         std::cout << "Move the gantry to different nodes to see automatic exposure changes" << std::endl;
       }
       else {
-        std::cout << "✗ Auto exposure is disabled - enable it to test automatic changes" << std::endl;
+        std::cout << "[no] Auto exposure is disabled - enable it to test automatic changes" << std::endl;
       }
     }
     else {
-      std::cout << "✗ Camera exposure manager not found" << std::endl;
+      std::cout << "[no] Camera exposure manager not found" << std::endl;
     }
   }
 

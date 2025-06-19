@@ -21,7 +21,8 @@ public:
   virtual std::string GetDescription() const = 0;
 };
 
-// Move device to node operation
+
+// Move device to node operation - UPDATED with caller context
 class MoveToNodeOperation : public SequenceOperation {
 public:
   MoveToNodeOperation(const std::string& deviceName, const std::string& graphName,
@@ -30,7 +31,11 @@ public:
   }
 
   bool Execute(MachineOperations& ops) override {
-    return ops.MoveDeviceToNode(m_deviceName, m_graphName, m_nodeId, true);
+    // Generate caller context with operation details
+    std::string callerContext = "MoveToNodeOperation_" + m_deviceName + "_to_" + m_nodeId;
+
+    // Pass caller context to MachineOperations
+    return ops.MoveDeviceToNode(m_deviceName, m_graphName, m_nodeId, true, callerContext);
   }
 
   std::string GetDescription() const override {
@@ -43,7 +48,8 @@ private:
   std::string m_nodeId;
 };
 
-// Set output operation with configurable delay
+
+// Set output operation - UPDATED with caller context
 class SetOutputOperation : public SequenceOperation {
 public:
   SetOutputOperation(const std::string& deviceName, int pin, bool state, int delayMs = 200)
@@ -51,7 +57,12 @@ public:
   }
 
   bool Execute(MachineOperations& ops) override {
-    bool result = ops.SetOutput(m_deviceName, m_pin, m_state);
+    // Generate caller context with operation details
+    std::string callerContext = "SetOutputOperation_" + m_deviceName + "_pin" +
+      std::to_string(m_pin) + "_" + (m_state ? "ON" : "OFF");
+
+    // Pass caller context to MachineOperations
+    bool result = ops.SetOutput(m_deviceName, m_pin, m_state, callerContext);
 
     // Add a delay after setting the output
     if (result && m_delayMs > 0) {
@@ -73,7 +84,6 @@ private:
   bool m_state;
   int m_delayMs;
 };
-
 // Sequence step - executes a sequence of operations
 class SequenceStep : public ProcessStep {
 public:

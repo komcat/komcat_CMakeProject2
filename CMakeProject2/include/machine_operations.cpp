@@ -7,8 +7,15 @@
 #include <iomanip>
 #include "include/SMU/keithley2400_operations.h" // Include the SMU operations header
 #include "external/sqlite/sqlite3.h"
+// Add these includes at the top:
+#include "include/data/DatabaseManager.h"
+#include "include/data/OperationResultsManager.h"
+
+
+
 
 // Updated constructor
+
 MachineOperations::MachineOperations(
   MotionControlLayer& motionLayer,
   PIControllerManager& piControllerManager,
@@ -16,17 +23,40 @@ MachineOperations::MachineOperations(
   PneumaticManager& pneumaticManager,
   CLD101xOperations* laserOps,
   PylonCameraTest* cameraTest,
-  Keithley2400Operations* smuOps  // Added SMU parameter
+  Keithley2400Operations* smuOps
 ) : m_motionLayer(motionLayer),
 m_piControllerManager(piControllerManager),
 m_ioManager(ioManager),
 m_pneumaticManager(pneumaticManager),
 m_laserOps(laserOps),
-m_smuOps(smuOps),  // Initialize SMU operations
+m_smuOps(smuOps),
 m_cameraTest(cameraTest),
 m_autoExposureEnabled(true)
 {
   m_logger = Logger::GetInstance();
+
+  // Initialize database and results managers
+  try {
+    m_dbManager = std::make_shared<DatabaseManager>();
+    if (!m_dbManager->Initialize()) {
+      m_logger->LogError("MachineOperations: Failed to initialize database: " + m_dbManager->GetLastError());
+      m_dbManager.reset(); // Clear invalid manager
+    }
+
+    if (m_dbManager) {
+      m_resultsManager = std::make_shared<OperationResultsManager>(m_dbManager);
+      m_logger->LogInfo("MachineOperations: Initialized with result tracking");
+    }
+    else {
+      m_logger->LogWarning("MachineOperations: Operating without result tracking due to database error");
+    }
+
+  }
+  catch (const std::exception& e) {
+    m_logger->LogError("MachineOperations: Exception initializing result managers: " + std::string(e.what()));
+    m_dbManager.reset();
+    m_resultsManager.reset();
+  }
 
   // Initialize camera exposure manager
   if (m_cameraTest) {
@@ -43,10 +73,104 @@ MachineOperations::~MachineOperations() {
   m_logger->LogInfo("MachineOperations: Shutting down");
 }
 
-bool MachineOperations::MoveDeviceToNode(const std::string& deviceName, const std::string& graphName,
-  const std::string& targetNodeId, bool blocking) {
+
+// Helper method to store position data
+void MachineOperations::StorePositionResult(const std::string& operationId,
+  const std::string& prefix,
+  const PositionStruct& position) {
+  if (!m_resultsManager) return;
+
+  m_resultsManager->StoreResult(operationId, prefix + "_x", std::to_string(position.x));
+  m_resultsManager->StoreResult(operationId, prefix + "_y", std::to_string(position.y));
+  m_resultsManager->StoreResult(operationId, prefix + "_z", std::to_string(position.z));
+
+  // Include rotation if non-zero
+  if (position.u != 0.0) m_resultsManager->StoreResult(operationId, prefix + "_u", std::to_string(position.u));
+  if (position.v != 0.0) m_resultsManager->StoreResult(operationId, prefix + "_v", std::to_string(position.v));
+  if (position.w != 0.0) m_resultsManager->StoreResult(operationId, prefix + "_w", std::to_string(position.w));
+}
+
+// Public query methods
+std::vector<OperationResult> MachineOperations::GetRecentOperations(int limit) {
+  if (!m_resultsManager) return {};
+  return m_resultsManager->GetOperationHistory(limit);
+}
+
+std::map<std::string, std::string> MachineOperations::GetLastOperationResults(const std::string& methodName) {
+  if (!m_resultsManager) return {};
+  return m_resultsManager->GetLatestResults(methodName);
+}
+
+double MachineOperations::GetAverageOperationTime(const std::string& methodName) {
+  if (!m_resultsManager) return 0.0;
+  return m_resultsManager->GetAverageElapsedTime(methodName);
+}
+
+double MachineOperations::GetOperationSuccessRate(const std::string& methodName) {
+  if (!m_resultsManager) return 0.0;
+  return m_resultsManager->GetSuccessRate(methodName);
+}
+
+std::vector<OperationResult> MachineOperations::GetOperationsBySequence(const std::string& sequenceName, int limit) {
+  if (!m_resultsManager) return {};
+  return m_resultsManager->GetOperationsBySequence(sequenceName, limit);
+}
+
+double MachineOperations::GetSequenceSuccessRate(const std::string& sequenceName) {
+  if (!m_resultsManager) return 0.0;
+  return m_resultsManager->GetSequenceSuccessRate(sequenceName);
+}
+
+
+
+
+// machine_operations.cpp - REPLACE your MoveDeviceToNode method with this:
+
+bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
+  const std::string& graphName,
+  const std::string& targetNodeId,
+  bool blocking,
+  const std::string& callerContext) {
+
+  // Start operation tracking
+  std::string opId;
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"graph_name", graphName},
+        {"target_node", targetNodeId},
+        {"blocking", blocking ? "true" : "false"}
+    };
+
+    // Extract sequence name from caller context
+    std::string sequenceName = "";
+    if (callerContext.find("Initialization") != std::string::npos) {
+      sequenceName = "Initialization";
+    }
+    else if (callerContext.find("ProcessStep") != std::string::npos) {
+      sequenceName = "Process";
+    }
+    else if (callerContext.find("Cleanup") != std::string::npos) {
+      sequenceName = "Cleanup";
+    }
+
+    opId = m_resultsManager->StartOperation("MoveDeviceToNode", deviceName,
+      callerContext, sequenceName, parameters);
+  }
+
   m_logger->LogInfo("MachineOperations: Moving device " + deviceName +
-    " to node " + targetNodeId + " in graph " + graphName);
+    " to node " + targetNodeId + " in graph " + graphName +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")") +
+    (opId.empty() ? "" : " [" + opId + "]"));
+
+  // Get start position for result tracking
+  PositionStruct startPos;
+  bool hasStartPos = false;
+  if (m_resultsManager && !opId.empty()) {
+    hasStartPos = m_motionLayer.GetCurrentPosition(deviceName, startPos);
+    if (hasStartPos) {
+      StorePositionResult(opId, "start", startPos);
+    }
+  }
 
   // RELOAD EXPOSURE CONFIG EVERY TIME TO GUARANTEE FRESH VALUES
   if (m_cameraExposureManager) {
@@ -73,12 +197,10 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName, const st
 
       // Try to get the target node's position
       try {
-        // Get the graph from config manager
         auto graphOpt = m_motionLayer.GetConfigManager().GetGraph(graphName);
         if (graphOpt.has_value()) {
           const auto& graph = graphOpt.value().get();
 
-          // Find the target node in the graph
           const Node* targetNode = nullptr;
           for (const auto& node : graph.Nodes) {
             if (node.Id == targetNodeId && node.Device == deviceName) {
@@ -88,7 +210,6 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName, const st
           }
 
           if (targetNode && !targetNode->Position.empty()) {
-            // Get the named position for this node
             auto posOpt = m_motionLayer.GetConfigManager().GetNamedPosition(deviceName, targetNode->Position);
             if (posOpt.has_value()) {
               const auto& targetPos = posOpt.value().get();
@@ -101,8 +222,7 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName, const st
               m_logger->LogInfo("MachineOperations: Distance to target: " + std::to_string(distance) + " mm");
 
               if (distance < 0.1) { // Within 0.1mm, consider we're already there
-                m_logger->LogInfo("MachineOperations: Device appears to be at target node based on position proximity (distance: " +
-                  std::to_string(distance) + " mm)");
+                m_logger->LogInfo("MachineOperations: Device appears to be at target node based on position proximity");
 
                 // STILL APPLY CAMERA EXPOSURE EVEN IF ALREADY AT NODE
                 if (deviceName == "gantry-main" && m_autoExposureEnabled) {
@@ -111,46 +231,52 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName, const st
                   ApplyCameraExposureForNode(targetNodeId);
                 }
 
+                // Store success result
+                if (m_resultsManager && !opId.empty()) {
+                  m_resultsManager->StoreResult(opId, "distance_moved", std::to_string(distance));
+                  m_resultsManager->StoreResult(opId, "already_at_target", "true");
+                  StorePositionResult(opId, "final", currentPos);
+                  m_resultsManager->EndOperation(opId, "success");  // ✅ FIXED: EndOperation called
+                }
+
                 return true;
               }
-              else {
-                m_logger->LogInfo("MachineOperations: Device is not close enough to target node (distance: " +
-                  std::to_string(distance) + " mm > 0.1 mm tolerance)");
-              }
-            }
-            else {
-              m_logger->LogError("MachineOperations: Target node position '" + targetNode->Position + "' not found in configuration");
             }
           }
-          else {
-            m_logger->LogError("MachineOperations: Target node '" + targetNodeId + "' not found for device '" + deviceName + "' in graph '" + graphName + "'");
-          }
-        }
-        else {
-          m_logger->LogError("MachineOperations: Graph '" + graphName + "' not found in configuration");
         }
       }
       catch (const std::exception& e) {
         m_logger->LogError("MachineOperations: Exception while checking node position: " + std::string(e.what()));
       }
     }
-    else {
-      m_logger->LogError("MachineOperations: Failed to get current position for device " + deviceName);
-    }
 
+    // Store failure result
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", "Failed to get current node for device");  // ✅ FIXED: EndOperation called
+    }
     return false;
   }
 
   // Already at the target node
   if (currentNodeId == targetNodeId) {
-    m_logger->LogInfo("MachineOperations: Device " + deviceName +
-      " is already at node " + targetNodeId);
+    m_logger->LogInfo("MachineOperations: Device " + deviceName + " is already at node " + targetNodeId);
 
-    // STILL APPLY CAMERA EXPOSURE EVEN IF ALREADY AT NODE (in case config changed)
+    // STILL APPLY CAMERA EXPOSURE EVEN IF ALREADY AT NODE
     if (deviceName == "gantry-main" && m_autoExposureEnabled) {
       m_logger->LogInfo("MachineOperations: Device already at " + targetNodeId +
         ", but applying camera exposure with fresh config");
       ApplyCameraExposureForNode(targetNodeId);
+    }
+
+    // Store success result
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->StoreResult(opId, "distance_moved", "0.0");
+      m_resultsManager->StoreResult(opId, "already_at_target", "true");
+      PositionStruct currentPos;
+      if (m_motionLayer.GetCurrentPosition(deviceName, currentPos)) {
+        StorePositionResult(opId, "final", currentPos);
+      }
+      m_resultsManager->EndOperation(opId, "success");  // ✅ FIXED: EndOperation called
     }
 
     return true;
@@ -166,9 +292,30 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName, const st
     ApplyCameraExposureForNode(targetNodeId);
   }
 
+  // Store final results - ✅ FIXED: This section was missing/incomplete
+  if (m_resultsManager && !opId.empty()) {
+    if (success) {
+      // Get final position and calculate distance
+      PositionStruct finalPos;
+      if (m_motionLayer.GetCurrentPosition(deviceName, finalPos)) {
+        StorePositionResult(opId, "final", finalPos);
+
+        if (hasStartPos) {
+          double distance = GetDistanceBetweenPositions(startPos, finalPos);
+          m_resultsManager->StoreResult(opId, "distance_moved", std::to_string(distance));
+        }
+      }
+      m_resultsManager->StoreResult(opId, "current_node", currentNodeId);
+      m_resultsManager->StoreResult(opId, "target_node", targetNodeId);
+      m_resultsManager->EndOperation(opId, "success");  // ✅ FIXED: EndOperation called
+    }
+    else {
+      m_resultsManager->EndOperation(opId, "failed", "Path execution failed");  // ✅ FIXED: EndOperation called
+    }
+  }
+
   return success;
 }
-
 
 // Move a device along a path from start to end node
 bool MachineOperations::MovePathFromTo(const std::string& deviceName, const std::string& graphName,
@@ -261,18 +408,79 @@ bool MachineOperations::MoveToPointName(const std::string& deviceName, const std
 
 
 
-bool MachineOperations::SetOutput(const std::string& deviceName, int outputPin, bool state) {
-  m_logger->LogInfo("MachineOperations: Setting output pin " + std::to_string(outputPin) +
-    " on device " + deviceName + " to " + (state ? "ON" : "OFF"));
+// 2. UPDATE the SetOutput method (replace the existing one):
+bool MachineOperations::SetOutput(const std::string& deviceName, int outputPin, bool state,
+  const std::string& callerContext) {  // ADD this parameter
 
-  // Get device by name
-  EziIODevice* device = m_ioManager.getDeviceByName(deviceName);
-  if (!device) {
-    m_logger->LogError("MachineOperations: Device not found: " + deviceName);
-    return false;
+  // Start operation tracking with caller context
+  std::string opId;
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"output_pin", std::to_string(outputPin)},
+        {"target_state", state ? "true" : "false"}
+    };
+
+    // Extract sequence name from caller context if possible
+    std::string sequenceName = "";
+    if (callerContext.find("Initialization") != std::string::npos) {
+      sequenceName = "Initialization";
+    }
+    else if (callerContext.find("ProcessStep") != std::string::npos) {
+      sequenceName = "Process";
+    }
+
+    opId = m_resultsManager->StartOperation("SetOutput", deviceName,
+      callerContext, sequenceName, parameters);
   }
 
-  return device->setOutput(outputPin, state);
+  m_logger->LogInfo("MachineOperations: Setting output pin " + std::to_string(outputPin) +
+    " on device " + deviceName + " to " + (state ? "ON" : "OFF") +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")") +
+    (opId.empty() ? "" : " [" + opId + "]"));
+
+  bool success = false;
+  std::string errorMessage = "";
+
+  try {
+    // Get device by name
+    EziIODevice* device = m_ioManager.getDeviceByName(deviceName);
+    if (!device) {
+      errorMessage = "Device not found";
+      if (m_resultsManager && !opId.empty()) {
+        m_resultsManager->EndOperation(opId, "failed", errorMessage);
+      }
+      m_logger->LogError("MachineOperations: " + errorMessage);
+      return false;
+    }
+
+    // Execute the operation
+    success = device->setOutput(outputPin, state);
+
+    if (success) {
+      if (m_resultsManager && !opId.empty()) {
+        m_resultsManager->StoreResult(opId, "final_state", state ? "true" : "false");
+        m_resultsManager->EndOperation(opId, "success");
+      }
+    }
+    else {
+      errorMessage = "Failed to set output";
+      if (m_resultsManager && !opId.empty()) {
+        m_resultsManager->EndOperation(opId, "failed", errorMessage);
+      }
+      m_logger->LogError("MachineOperations: " + errorMessage);
+    }
+
+  }
+  catch (const std::exception& e) {
+    errorMessage = "Exception: " + std::string(e.what());
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", errorMessage);
+    }
+    m_logger->LogError("MachineOperations: " + errorMessage);
+    success = false;
+  }
+
+  return success;
 }
 
 // Set an output state by device ID

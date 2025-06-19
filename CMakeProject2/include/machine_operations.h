@@ -12,6 +12,8 @@
 #include "include/camera/CameraExposureManager.h"
 #include "include/motions/MotionConfigEditor.h"
 #include "include/ui/GraphVisualizer.h"
+#include "include/data/DatabaseManager.h"
+#include "include/data/OperationResultsManager.h"
 #include <string>
 #include <vector>
 #include <chrono>
@@ -24,6 +26,7 @@
 
 class CLD101xOperations;
 class Keithley2400Operations;
+
 
 
 class MachineOperations {
@@ -41,9 +44,27 @@ public:
 
 	~MachineOperations();
 
-	// Motion control methods
+	// Add these public methods for result access
+	std::shared_ptr<OperationResultsManager> GetResultsManager() { return m_resultsManager; }
+	std::shared_ptr<DatabaseManager> GetDatabaseManager() { return m_dbManager; }
+
+	// Query operation results
+	std::vector<OperationResult> GetRecentOperations(int limit = 20);
+	std::map<std::string, std::string> GetLastOperationResults(const std::string& methodName = "");
+	double GetAverageOperationTime(const std::string& methodName = "");
+	double GetOperationSuccessRate(const std::string& methodName = "");
+
+	// NEW: Sequence-level queries
+	std::vector<OperationResult> GetOperationsBySequence(const std::string& sequenceName, int limit = 50);
+	double GetSequenceSuccessRate(const std::string& sequenceName = "");
+
+
+
+
+	// NEW: Methods that accept caller context for tracking
 	bool MoveDeviceToNode(const std::string& deviceName, const std::string& graphName,
-		const std::string& targetNodeId, bool blocking = true);
+		const std::string& targetNodeId, bool blocking = true,
+		const std::string& callerContext = "");  // NEW parameter
 
 	bool MovePathFromTo(const std::string& deviceName, const std::string& graphName,
 		const std::string& startNodeId, const std::string& endNodeId,
@@ -54,7 +75,8 @@ public:
 		double distance, bool blocking = true);
 
 	// IO control methods
-	bool SetOutput(const std::string& deviceName, int outputPin, bool state);
+	bool SetOutput(const std::string& deviceName, int outputPin, bool state,
+		const std::string& callerContext = "");  // NEW parameter
 	bool SetOutput(int deviceId, int outputPin, bool state);
 	bool ReadInput(const std::string& deviceName, int inputPin, bool& state);
 	bool ReadInput(int deviceId, int inputPin, bool& state);
@@ -358,4 +380,13 @@ private:
 	// UI Component references for MenuManager access
 	MotionConfigEditor* m_motionConfigEditor = nullptr;
 	GraphVisualizer* m_graphVisualizer = nullptr;
+
+
+	// Add these new members to existing private section
+	std::shared_ptr<DatabaseManager> m_dbManager;
+	std::shared_ptr<OperationResultsManager> m_resultsManager;
+
+	// Helper method for consistent result storage
+	void StorePositionResult(const std::string& operationId, const std::string& prefix,
+		const PositionStruct& position);
 };

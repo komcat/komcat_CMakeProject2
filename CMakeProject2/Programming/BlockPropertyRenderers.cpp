@@ -766,7 +766,7 @@ void SetLaserCurrentRenderer::RenderActions(MachineBlock* block, MachineOperatio
 
   ImGui::Spacing();
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f)); // Yellow
-  ImGui::TextWrapped("⚠️  Safety: Ensure TEC is on and stable before setting high current!");
+  ImGui::TextWrapped("[CAUTION] Safety: Ensure TEC is on and stable before setting high current!");
   ImGui::PopStyleColor();
 }
 
@@ -846,7 +846,7 @@ void LaserOnRenderer::RenderProperties(MachineBlock* block, MachineOperations* m
 
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f)); // Red
   ImGui::TextWrapped("Turns the laser ON.");
-  ImGui::TextWrapped("⚠️ Ensure current is set and TEC is stable first!");
+  ImGui::TextWrapped("[CAUTION] Ensure current is set and TEC is stable first!");
   ImGui::PopStyleColor();
 
   ImGui::Spacing();
@@ -924,7 +924,7 @@ void LaserOffRenderer::RenderProperties(MachineBlock* block, MachineOperations* 
 
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f)); // Gray
   ImGui::TextWrapped("Turns the laser OFF safely.");
-  ImGui::TextWrapped("✅ Safe operation - stops laser emission.");
+  ImGui::TextWrapped("[Yes] Safe operation - stops laser emission.");
   ImGui::PopStyleColor();
 
   ImGui::Spacing();
@@ -949,7 +949,7 @@ void LaserOffRenderer::RenderActions(MachineBlock* block, MachineOperations* mac
 
   ImGui::Spacing();
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
-  ImGui::TextWrapped("✅ Safe operation - turns laser OFF");
+  ImGui::TextWrapped("[Yes] Safe operation - turns laser OFF");
   ImGui::PopStyleColor();
 }
 
@@ -1106,7 +1106,7 @@ void TECOnRenderer::RenderProperties(MachineBlock* block, MachineOperations* mac
 
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.8f, 1.0f, 1.0f)); // Light blue
   ImGui::TextWrapped("Turns the TEC (Thermoelectric Cooler) ON.");
-  ImGui::TextWrapped("✅ Required before laser operation for temperature stability.");
+  ImGui::TextWrapped("[Yes] Required before laser operation for temperature stability.");
   ImGui::PopStyleColor();
 
   ImGui::Spacing();
@@ -1179,7 +1179,7 @@ void TECOffRenderer::RenderProperties(MachineBlock* block, MachineOperations* ma
 
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.7f, 1.0f)); // Dark blue
   ImGui::TextWrapped("Turns the TEC (Thermoelectric Cooler) OFF.");
-  ImGui::TextWrapped("⚠️ Use after turning laser OFF to save power.");
+  ImGui::TextWrapped("[CAUTION] Use after turning laser OFF to save power.");
   ImGui::PopStyleColor();
 
   ImGui::Spacing();
@@ -1250,7 +1250,7 @@ void PromptRenderer::RenderProperties(MachineBlock* block, MachineOperations* ma
 
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f)); // Gold
   ImGui::TextWrapped("💭 Pauses program execution and waits for user confirmation.");
-  ImGui::TextWrapped("⚠️ Program will STOP if user selects NO or CANCEL.");
+  ImGui::TextWrapped("[CAUTION] Program will STOP if user selects NO or CANCEL.");
   ImGui::PopStyleColor();
 
   ImGui::Spacing();
@@ -1450,7 +1450,7 @@ void MoveRelativeAxisRenderer::RenderActions(MachineBlock* block, MachineOperati
 
   ImGui::Spacing();
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f)); // Yellow
-  ImGui::TextWrapped("⚠️ Safety: Small movements first! Start with 0.1mm to test.");
+  ImGui::TextWrapped("[CAUTION] Safety: Small movements first! Start with 0.1mm to test.");
   ImGui::PopStyleColor();
 }
 
@@ -2210,7 +2210,7 @@ void ScanOperationRenderer::RenderProperties(MachineBlock* block, MachineOperati
       ImGui::SameLine();
       ImGui::SetNextItemWidth(150);
       char buffer[256];
-      strcpy(buffer, param.value.c_str());
+      strcpy_s(buffer, sizeof(buffer), param.value.c_str());
       if (ImGui::InputText("##device_name", buffer, sizeof(buffer))) {
         param.value = buffer;
       }
@@ -2223,7 +2223,7 @@ void ScanOperationRenderer::RenderProperties(MachineBlock* block, MachineOperati
       ImGui::SameLine();
       ImGui::SetNextItemWidth(150);
       char buffer[256];
-      strcpy(buffer, param.value.c_str());
+      strcpy_s(buffer, sizeof(buffer), param.value.c_str());
       if (ImGui::InputText("##data_channel", buffer, sizeof(buffer))) {
         param.value = buffer;
       }
@@ -2236,7 +2236,7 @@ void ScanOperationRenderer::RenderProperties(MachineBlock* block, MachineOperati
       ImGui::SameLine();
       ImGui::SetNextItemWidth(120);
       char buffer[256];
-      strcpy(buffer, param.value.c_str());
+      strcpy_s(buffer, sizeof(buffer), param.value.c_str());
       if (ImGui::InputText("##step_sizes", buffer, sizeof(buffer))) {
         param.value = buffer;
       }
@@ -2261,7 +2261,7 @@ void ScanOperationRenderer::RenderProperties(MachineBlock* block, MachineOperati
       ImGui::SameLine();
       ImGui::SetNextItemWidth(100);
       char buffer[256];
-      strcpy(buffer, param.value.c_str());
+      strcpy_s(buffer, sizeof(buffer), param.value.c_str());
       if (ImGui::InputText("##axes", buffer, sizeof(buffer))) {
         param.value = buffer;
       }
@@ -2345,10 +2345,10 @@ void ScanOperationRenderer::RenderActions(MachineBlock* block, MachineOperations
     if (machineOps && !params.deviceName.empty()) {
       bool success = machineOps->StopScan(params.deviceName);
       if (success) {
-        printf("✅ Scan stopped successfully on %s\n", params.deviceName.c_str());
+        printf("[Yes] Scan stopped successfully on %s\n", params.deviceName.c_str());
       }
       else {
-        printf("❌ Failed to stop scan on %s\n", params.deviceName.c_str());
+        printf("[Fail] Failed to stop scan on %s\n", params.deviceName.c_str());
       }
     }
   }
@@ -2376,40 +2376,40 @@ void ScanOperationRenderer::RenderValidation(MachineBlock* block) {
 
   // Validate device name
   if (params.deviceName.empty()) {
-    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "❌ Device name is required");
+    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "[Fail] Device name is required");
     hasErrors = true;
   }
 
   // Validate data channel
   if (params.dataChannel.empty()) {
-    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "❌ Data channel is required");
+    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "[Fail] Data channel is required");
     hasErrors = true;
   }
 
   // Validate step sizes
   auto stepSizes = ParseStepSizes(params.stepSizesStr);
   if (stepSizes.empty()) {
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "⚠️ Invalid step sizes, will use defaults");
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "[CAUTION] Invalid step sizes, will use defaults");
   }
 
   // Validate axes
   auto axes = ParseAxes(params.axesStr);
   if (axes.empty()) {
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "⚠️ Invalid axes, will use defaults (Z,X,Y)");
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "[CAUTION] Invalid axes, will use defaults (Z,X,Y)");
   }
 
   // Validate settling time
   if (params.settlingTimeMs < 50) {
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "⚠️ Settling time very low (< 50ms)");
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "[CAUTION] Settling time very low (< 50ms)");
   }
 
   // Validate timeout
   if (params.timeoutMinutes < 1) {
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "⚠️ Timeout very short (< 1 minute)");
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "[CAUTION] Timeout very short (< 1 minute)");
   }
 
   if (!hasErrors) {
-    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "✅ Configuration valid");
+    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "[Yes] Configuration valid");
   }
 }
 
@@ -2443,12 +2443,12 @@ ScanOperationRenderer::ScanParameters ScanOperationRenderer::ExtractScanParamete
 
 void ScanOperationRenderer::RenderTestButton(const ScanParameters& params, MachineOperations* machineOps) {
   if (!machineOps) {
-    printf("❌ No machine operations available for testing\n");
+    printf("[Fail] No machine operations available for testing\n");
     return;
   }
 
   if (params.deviceName.empty() || params.dataChannel.empty()) {
-    printf("❌ Cannot test: Device name and data channel are required\n");
+    printf("[Fail] Cannot test: Device name and data channel are required\n");
     return;
   }
 
@@ -2467,10 +2467,10 @@ void ScanOperationRenderer::RenderTestButton(const ScanParameters& params, Machi
   );
 
   if (success) {
-    printf("✅ Test scan started successfully\n");
+    printf("[Yes] Test scan started successfully\n");
   }
   else {
-    printf("❌ Failed to start test scan\n");
+    printf("[Fail] Failed to start test scan\n");
   }
 }
 
@@ -2536,5 +2536,5 @@ std::vector<std::string> ScanOperationRenderer::ParseAxes(const std::string& axe
     }
   }
 
-  return axes;  // ✅ Now properly returns the parsed axes vector
+  return axes;  // [Yes] Now properly returns the parsed axes vector
 }

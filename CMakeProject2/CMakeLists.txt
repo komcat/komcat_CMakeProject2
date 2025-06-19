@@ -310,7 +310,7 @@ add_executable(CMakeProject2
  "Programming/MacroManager.h" 
  "Programming/MacroManager.cpp"
  "Programming/MacroEditState.h"
- "include/ui/MenuManager.h" "include/ui/MenuManager.cpp")
+ "include/ui/MenuManager.h" "include/ui/MenuManager.cpp" "include/data/DatabaseManager.h" "include/data/OperationResultsManager.h" "include/data/DatabaseManager.cpp" "include/data/OperationResultsManager.cpp")
 
 
 
