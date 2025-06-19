@@ -291,7 +291,7 @@ public:
 
 private:
 	Logger* m_logger;
-	
+	bool m_enableDebug = false;
 	
 	// Core system references
 	MotionControlLayer& m_motionLayer;

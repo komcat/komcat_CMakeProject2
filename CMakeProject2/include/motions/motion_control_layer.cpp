@@ -74,9 +74,12 @@ bool MotionControlLayer::PlanPath(const std::string& graphName, const std::strin
 	// Log all edges in the graph
 	m_logger->LogInfo("Graph Edges:");
 	for (const auto& edge : graph.Edges) {
-		m_logger->LogInfo("Edge: " + edge.Source + " -> " + edge.Target +
-			" (Bidirectional: " +
-			(edge.Conditions.IsBidirectional ? "Yes" : "No") + ")");
+
+		if (m_enableDebug) {
+			m_logger->LogInfo("Edge: " + edge.Source + " -> " + edge.Target +
+				" (Bidirectional: " +
+				(edge.Conditions.IsBidirectional ? "Yes" : "No") + ")");
+		}
 	}
 
 	// Use the config manager to find a path between nodes
