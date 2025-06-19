@@ -29,7 +29,7 @@ void BlockPropertyRenderer::RenderParameter(BlockParameter& param) {
   }
   else {
     char buffer[256];
-    strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+    strncpy_s(buffer, sizeof(buffer), param.value.c_str(), sizeof(buffer) - 1);
     buffer[sizeof(buffer) - 1] = '\0';
 
     if (ImGui::InputText("##value", buffer, sizeof(buffer))) {
@@ -871,18 +871,18 @@ void LaserOnRenderer::RenderActions(MachineBlock* block, MachineOperations* mach
 
   ImGui::Spacing();
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.2f, 0.2f, 1.0f)); // Red
-  ImGui::TextWrapped("🚨 DANGER: Laser radiation when ON!");
+  ImGui::TextWrapped("DANGER: Laser radiation when ON!");
   ImGui::PopStyleColor();
 }
 
 void LaserOnRenderer::RenderValidation(MachineBlock* block) {
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f)); // Green
-  ImGui::TextWrapped("LASER_ON block is ready to execute.");
+  ImGui::TextWrapped("||  LASER_ON block is ready to execute.  ||");
   ImGui::PopStyleColor();
 
   ImGui::Spacing();
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f)); // Yellow
-  ImGui::TextWrapped("💡 Tip: Use SET_LASER_CURRENT before LASER_ON");
+  ImGui::TextWrapped("***Tip: Use SET_LASER_CURRENT before LASER_ON");
   ImGui::PopStyleColor();
 }
 
@@ -1031,7 +1031,7 @@ void SetTECTemperatureRenderer::RenderActions(MachineBlock* block, MachineOperat
 
   ImGui::Spacing();
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f)); // Yellow
-  ImGui::TextWrapped("💡 Note: Temperature stabilization may take time");
+  ImGui::TextWrapped("***Note: Temperature stabilization may take time");
   ImGui::PopStyleColor();
 }
 
@@ -1131,7 +1131,7 @@ void TECOnRenderer::RenderActions(MachineBlock* block, MachineOperations* machin
 
   ImGui::Spacing();
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f)); // Yellow
-  ImGui::TextWrapped("💡 Best Practice: Turn TEC ON → Set Temperature → Wait for Stability");
+  ImGui::TextWrapped("***Best Practice: Turn TEC ON-->Set Temperature-->Wait for Stability");
   ImGui::PopStyleColor();
 }
 
@@ -1204,7 +1204,7 @@ void TECOffRenderer::RenderActions(MachineBlock* block, MachineOperations* machi
 
   ImGui::Spacing();
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f)); // Yellow
-  ImGui::TextWrapped("💡 Recommended: Turn Laser OFF before TEC OFF");
+  ImGui::TextWrapped("***Recommended: Turn Laser OFF before TEC OFF");
   ImGui::PopStyleColor();
 }
 
@@ -1249,7 +1249,7 @@ void PromptRenderer::RenderProperties(MachineBlock* block, MachineOperations* ma
   ImGui::Separator();
 
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f)); // Gold
-  ImGui::TextWrapped("💭 Pauses program execution and waits for user confirmation.");
+  ImGui::TextWrapped("[ || ]Pauses program execution and waits for user confirmation.");
   ImGui::TextWrapped("[CAUTION] Program will STOP if user selects NO or CANCEL.");
   ImGui::PopStyleColor();
 
@@ -1318,7 +1318,7 @@ void MoveToPositionRenderer::RenderProperties(MachineBlock* block, MachineOperat
 
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.7f, 1.0f, 1.0f)); // Light blue
   ImGui::TextWrapped("Moves a controller to a saved position by name.");
-  ImGui::TextWrapped("💡 Use 'Save Current Position' to create named positions first.");
+  ImGui::TextWrapped("***Use 'Save Current Position' to create named positions first.");
   ImGui::PopStyleColor();
 
   ImGui::Spacing();
@@ -1351,7 +1351,7 @@ void MoveToPositionRenderer::RenderActions(MachineBlock* block, MachineOperation
 
   ImGui::Spacing();
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f)); // Yellow
-  ImGui::TextWrapped("💡 Tip: Create named positions using MOVE_NODE blocks first.");
+  ImGui::TextWrapped("***Tip: Create named positions using MOVE_NODE blocks first.");
   ImGui::PopStyleColor();
 }
 
@@ -1416,7 +1416,7 @@ void MoveRelativeAxisRenderer::RenderProperties(MachineBlock* block, MachineOper
 
   ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.4f, 1.0f, 1.0f)); // Light purple
   ImGui::TextWrapped("Moves a controller relative to its current position on a specific axis.");
-  ImGui::TextWrapped("💡 Use positive values to move in + direction, negative for - direction.");
+  ImGui::TextWrapped("***Use positive values to move in + direction, negative for - direction.");
   ImGui::PopStyleColor();
 
   ImGui::Spacing();
@@ -1539,7 +1539,7 @@ void KeithleyResetRenderer::RenderProperties(MachineBlock* block, MachineOperati
   for (auto& param : block->parameters) {
     if (param.name == "client_name") {
       char buffer[256];
-      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      strncpy_s(buffer, sizeof(buffer), param.value.c_str(), sizeof(buffer) - 1);
       buffer[sizeof(buffer) - 1] = '\0';
 
       if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
@@ -1589,7 +1589,7 @@ void KeithleyResetRenderer::RenderActions(MachineBlock* block, MachineOperations
 
 void KeithleyResetRenderer::RenderValidation(MachineBlock* block) {
   // No specific validation needed for reset command
-  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Reset command is valid");
+  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "[OK] Reset command is valid");
 }
 
 // Keithley Set Output Renderer Implementation
@@ -1607,7 +1607,7 @@ void KeithleySetOutputRenderer::RenderProperties(MachineBlock* block, MachineOpe
     }
     else if (param.name == "client_name") {
       char buffer[256];
-      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      strncpy_s(buffer, sizeof(buffer), param.value.c_str(), sizeof(buffer) - 1);
       buffer[sizeof(buffer) - 1] = '\0';
 
       if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
@@ -1658,7 +1658,7 @@ void KeithleySetOutputRenderer::RenderActions(MachineBlock* block, MachineOperat
 }
 
 void KeithleySetOutputRenderer::RenderValidation(MachineBlock* block) {
-  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Output control is valid");
+  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "[OK] Output control is valid");
 }
 
 // Keithley Voltage Source Renderer Implementation
@@ -1687,7 +1687,7 @@ void KeithleyVoltageSourceRenderer::RenderProperties(MachineBlock* block, Machin
     }
     else if (param.name == "range") {
       char buffer[64];
-      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      strncpy_s(buffer, sizeof(buffer), param.value.c_str(), sizeof(buffer) - 1);
       buffer[sizeof(buffer) - 1] = '\0';
 
       if (ImGui::InputText("Range", buffer, sizeof(buffer))) {
@@ -1699,7 +1699,7 @@ void KeithleyVoltageSourceRenderer::RenderProperties(MachineBlock* block, Machin
     }
     else if (param.name == "client_name") {
       char buffer[256];
-      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      strncpy_s(buffer, sizeof(buffer), param.value.c_str(), sizeof(buffer) - 1);
       buffer[sizeof(buffer) - 1] = '\0';
 
       if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
@@ -1734,7 +1734,7 @@ void KeithleyVoltageSourceRenderer::RenderActions(MachineBlock* block, MachineOp
         ImGui::OpenPopup("Voltage Setup Failed");
       }
     }
-    catch (const std::exception& e) {
+    catch (const std::exception&) {
       ImGui::OpenPopup("Invalid Parameters");
     }
   }
@@ -1807,10 +1807,10 @@ void KeithleyVoltageSourceRenderer::RenderValidation(MachineBlock* block) {
   }
 
   if (isValid) {
-    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Voltage source parameters are valid");
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "[OK] Voltage source parameters are valid");
   }
   else {
-    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ %s", errorMsg.c_str());
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "[Fail] %s", errorMsg.c_str());
   }
 }
 
@@ -1840,7 +1840,7 @@ void KeithleyCurrentSourceRenderer::RenderProperties(MachineBlock* block, Machin
     }
     else if (param.name == "range") {
       char buffer[64];
-      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      strncpy_s(buffer, sizeof(buffer), param.value.c_str(), sizeof(buffer) - 1);
       buffer[sizeof(buffer) - 1] = '\0';
 
       if (ImGui::InputText("Range", buffer, sizeof(buffer))) {
@@ -1852,7 +1852,7 @@ void KeithleyCurrentSourceRenderer::RenderProperties(MachineBlock* block, Machin
     }
     else if (param.name == "client_name") {
       char buffer[256];
-      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      strncpy_s(buffer, sizeof(buffer), param.value.c_str(), sizeof(buffer) - 1);
       buffer[sizeof(buffer) - 1] = '\0';
 
       if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
@@ -1887,7 +1887,7 @@ void KeithleyCurrentSourceRenderer::RenderActions(MachineBlock* block, MachineOp
         ImGui::OpenPopup("Current Setup Failed");
       }
     }
-    catch (const std::exception& e) {
+    catch (const std::exception&) {
       ImGui::OpenPopup("Invalid Parameters");
     }
   }
@@ -1960,10 +1960,10 @@ void KeithleyCurrentSourceRenderer::RenderValidation(MachineBlock* block) {
   }
 
   if (isValid) {
-    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Current source parameters are valid");
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "[OK] Current source parameters are valid");
   }
   else {
-    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ %s", errorMsg.c_str());
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "[Fail] %s", errorMsg.c_str());
   }
 }
 
@@ -1976,7 +1976,7 @@ void KeithleyReadVoltageRenderer::RenderProperties(MachineBlock* block, MachineO
   for (auto& param : block->parameters) {
     if (param.name == "client_name") {
       char buffer[256];
-      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      strncpy_s(buffer, sizeof(buffer), param.value.c_str(), sizeof(buffer) - 1);
       buffer[sizeof(buffer) - 1] = '\0';
 
       if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
@@ -2009,7 +2009,7 @@ void KeithleyReadVoltageRenderer::RenderActions(MachineBlock* block, MachineOper
 }
 
 void KeithleyReadVoltageRenderer::RenderValidation(MachineBlock* block) {
-  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Voltage read command is valid");
+  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "[OK] Voltage read command is valid");
 }
 
 // Keithley Read Current Renderer Implementation
@@ -2021,7 +2021,7 @@ void KeithleyReadCurrentRenderer::RenderProperties(MachineBlock* block, MachineO
   for (auto& param : block->parameters) {
     if (param.name == "client_name") {
       char buffer[256];
-      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      strncpy_s(buffer, sizeof(buffer), param.value.c_str(), sizeof(buffer) - 1);
       buffer[sizeof(buffer) - 1] = '\0';
 
       if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
@@ -2054,7 +2054,7 @@ void KeithleyReadCurrentRenderer::RenderActions(MachineBlock* block, MachineOper
 }
 
 void KeithleyReadCurrentRenderer::RenderValidation(MachineBlock* block) {
-  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Current read command is valid");
+  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "[OK] Current read command is valid");
 }
 
 // Keithley Read Resistance Renderer Implementation
@@ -2066,7 +2066,7 @@ void KeithleyReadResistanceRenderer::RenderProperties(MachineBlock* block, Machi
   for (auto& param : block->parameters) {
     if (param.name == "client_name") {
       char buffer[256];
-      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      strncpy_s(buffer, sizeof(buffer), param.value.c_str(), sizeof(buffer) - 1);
       buffer[sizeof(buffer) - 1] = '\0';
 
       if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
@@ -2094,12 +2094,12 @@ void KeithleyReadResistanceRenderer::RenderActions(MachineBlock* block, MachineO
 
   if (hasReading) {
     ImGui::SameLine();
-    ImGui::Text("Last Reading: %.3f Ω", lastResistanceReading);
+    ImGui::Text("Last Reading: %.3f Ohms", lastResistanceReading);
   }
 }
 
 void KeithleyReadResistanceRenderer::RenderValidation(MachineBlock* block) {
-  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Resistance read command is valid");
+  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "[OK] Resistance read command is valid");
 }
 
 // Keithley Send Command Renderer Implementation
@@ -2110,7 +2110,7 @@ void KeithleySendCommandRenderer::RenderProperties(MachineBlock* block, MachineO
   for (auto& param : block->parameters) {
     if (param.name == "command") {
       char buffer[512];
-      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      strncpy_s(buffer, sizeof(buffer), param.value.c_str(), sizeof(buffer) - 1);
       buffer[sizeof(buffer) - 1] = '\0';
 
       if (ImGui::InputText("SCPI Command", buffer, sizeof(buffer))) {
@@ -2122,7 +2122,7 @@ void KeithleySendCommandRenderer::RenderProperties(MachineBlock* block, MachineO
     }
     else if (param.name == "client_name") {
       char buffer[256];
-      strncpy(buffer, param.value.c_str(), sizeof(buffer) - 1);
+      strncpy_s(buffer, sizeof(buffer), param.value.c_str(), sizeof(buffer) - 1);
       buffer[sizeof(buffer) - 1] = '\0';
 
       if (ImGui::InputText("Client Name", buffer, sizeof(buffer))) {
@@ -2188,13 +2188,13 @@ void KeithleySendCommandRenderer::RenderValidation(MachineBlock* block) {
   std::string command = GetParameterValue(*block, "command");
 
   if (command.empty()) {
-    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ SCPI command is required");
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "[Fail] SCPI command is required");
   }
   else if (command.length() > 256) {
-    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ Command too long (max 256 characters)");
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "[Fail] Command too long (max 256 characters)");
   }
   else {
-    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ SCPI command is valid");
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "[OK] SCPI command is valid");
   }
 }
 
@@ -2303,7 +2303,7 @@ void ScanOperationRenderer::RenderProperties(MachineBlock* block, MachineOperati
       ImGui::Text("%.1fµm", stepSizes[i] * 1000);
       if (i < stepSizes.size() - 1) {
         ImGui::SameLine();
-        ImGui::Text(" → ");
+        ImGui::Text("-->");
       }
     }
   }
@@ -2315,7 +2315,7 @@ void ScanOperationRenderer::RenderProperties(MachineBlock* block, MachineOperati
       ImGui::Text("%s", axes[i].c_str());
       if (i < axes.size() - 1) {
         ImGui::SameLine();
-        ImGui::Text(" → ");
+        ImGui::Text("-->");
       }
     }
   }
@@ -2330,20 +2330,21 @@ void ScanOperationRenderer::RenderActions(MachineBlock* block, MachineOperations
 
   // Show current scan status
   RenderScanStatus(params, machineOps);
-
   ImGui::Spacing();
 
   // Test scan button
   if (ImGui::Button("Test Scan", ImVec2(100, 0))) {
     RenderTestButton(params, machineOps);
   }
-
   ImGui::SameLine();
 
-  // Stop scan button
+  // Stop scan button - UPDATED with caller context
   if (ImGui::Button("Stop Scan", ImVec2(100, 0))) {
     if (machineOps && !params.deviceName.empty()) {
-      bool success = machineOps->StopScan(params.deviceName);
+      // Generate caller context for UI stop action
+      std::string callerContext = "ScanOperationRenderer_UI_StopButton_" + params.deviceName;
+
+      bool success = machineOps->StopScan(params.deviceName, callerContext);
       if (success) {
         printf("[Yes] Scan stopped successfully on %s\n", params.deviceName.c_str());
       }
@@ -2352,19 +2353,17 @@ void ScanOperationRenderer::RenderActions(MachineBlock* block, MachineOperations
       }
     }
   }
-
   ImGui::SameLine();
 
-  // Check device connection
+  // Check device connection - UPDATED without emoji
   if (ImGui::Button("Check Device", ImVec2(100, 0))) {
     if (machineOps && !params.deviceName.empty()) {
       bool connected = machineOps->IsDeviceConnected(params.deviceName);
-      printf("🔌 Device %s: %s\n", params.deviceName.c_str(),
+      printf("Device %s: %s\n", params.deviceName.c_str(),
         connected ? "Connected" : "Disconnected");
     }
   }
 }
-
 void ScanOperationRenderer::RenderValidation(MachineBlock* block) {
   ScanParameters params = ExtractScanParameters(block);
 
@@ -2455,15 +2454,19 @@ void ScanOperationRenderer::RenderTestButton(const ScanParameters& params, Machi
   auto stepSizes = ParseStepSizes(params.stepSizesStr);
   auto axes = ParseAxes(params.axesStr);
 
-  printf("🔍 Starting test scan on %s using %s...\n",
+  printf("Starting test scan on %s using %s...\n",
     params.deviceName.c_str(), params.dataChannel.c_str());
+
+  // Generate caller context for UI test scan
+  std::string callerContext = "ScanOperationRenderer_UI_TestButton_" + params.deviceName + "_" + params.dataChannel;
 
   bool success = machineOps->StartScan(
     params.deviceName,
     params.dataChannel,
     stepSizes,
     params.settlingTimeMs,
-    axes
+    axes,
+    callerContext
   );
 
   if (success) {
@@ -2473,7 +2476,6 @@ void ScanOperationRenderer::RenderTestButton(const ScanParameters& params, Machi
     printf("[Fail] Failed to start test scan\n");
   }
 }
-
 void ScanOperationRenderer::RenderScanStatus(const ScanParameters& params, MachineOperations* machineOps) {
   if (!machineOps || params.deviceName.empty()) {
     ImGui::Text("Status: No device specified");
@@ -2485,13 +2487,13 @@ void ScanOperationRenderer::RenderScanStatus(const ScanParameters& params, Machi
   std::string status = machineOps->GetScanStatus(params.deviceName);
 
   if (isActive) {
-    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "🔍 SCANNING ACTIVE");
-    ImGui::ProgressBar(progress / 100.0f, ImVec2(200, 0));
+    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "SCANNING ACTIVE");
+    ImGui::ProgressBar(static_cast<float>(progress) / 100.0f, ImVec2(200, 0));
     ImGui::Text("Status: %s", status.c_str());
     ImGui::Text("Progress: %.1f%%", progress);
   }
   else {
-    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "⏸️ No active scan");
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No active scan");
     ImGui::Text("Status: %s", status.c_str());
   }
 }

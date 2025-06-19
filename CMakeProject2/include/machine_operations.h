@@ -79,33 +79,57 @@ public:
 		bool blocking = true, const std::string& callerContext = "");
 	//----------------updated section
 
+	// Pneumatic control methods
+// Pneumatic control methods - ADD callerContext parameter
+	bool ExtendSlide(const std::string& slideName, bool waitForCompletion = true,
+		int timeoutMs = 5000, const std::string& callerContext = "");
 
+	bool RetractSlide(const std::string& slideName, bool waitForCompletion = true,
+		int timeoutMs = 5000, const std::string& callerContext = "");
 
+	SlideState GetSlideState(const std::string& slideName);
 
+	bool WaitForSlideState(const std::string& slideName, SlideState targetState,
+		int timeoutMs = 5000, const std::string& callerContext = "");
 
+	//----------------updated section
 	// IO control methods
 	bool SetOutput(const std::string& deviceName, int outputPin, bool state,
 		const std::string& callerContext = "");  // NEW parameter
 	bool SetOutput(int deviceId, int outputPin, bool state);
-	bool ReadInput(const std::string& deviceName, int inputPin, bool& state);
-	bool ReadInput(int deviceId, int inputPin, bool& state);
-	bool ClearLatch(const std::string& deviceName, int inputPin);
-	bool ClearLatch(int deviceId, uint32_t latchMask);
+	// ReadInput methods - ADD callerContext parameter
+	bool ReadInput(const std::string& deviceName, int inputPin, bool& state,
+		const std::string& callerContext = "");  // NEW parameter
+
+	bool ReadInput(int deviceId, int inputPin, bool& state);  // Keep existing
+	// ClearLatch methods - ADD callerContext parameter  
+	bool ClearLatch(const std::string& deviceName, int inputPin,
+		const std::string& callerContext = "");  // NEW parameter
+
+	bool ClearLatch(int deviceId, uint32_t latchMask);  // Keep existing
 	bool ClearOutput(const std::string& deviceName, int outputPin,
 		const std::string& callerContext = "");
 
-	// Pneumatic control methods
-	bool ExtendSlide(const std::string& slideName, bool waitForCompletion = true, int timeoutMs = 5000);
-	bool RetractSlide(const std::string& slideName, bool waitForCompletion = true, int timeoutMs = 5000);
-	SlideState GetSlideState(const std::string& slideName);
-	bool WaitForSlideState(const std::string& slideName, SlideState targetState, int timeoutMs = 5000);
+	//----------------updated section
 
-	// Utility methods
-	void Wait(int milliseconds);
-	float ReadDataValue(const std::string& dataId, float defaultValue = 0.0f);
-	bool HasDataValue(const std::string& dataId);
+
 
 	// Scanning methods
+	// Scanning methods - UPDATED with callerContext
+	bool PerformScan(const std::string& deviceName, const std::string& dataChannel,
+		const std::vector<double>& stepSizes, int settlingTimeMs,
+		const std::vector<std::string>& axesToScan = { "Z", "X", "Y" },
+		const std::string& callerContext = "");  // NEW parameter
+
+	bool StartScan(const std::string& deviceName, const std::string& dataChannel,
+		const std::vector<double>& stepSizes, int settlingTimeMs,
+		const std::vector<std::string>& axesToScan = { "Z", "X", "Y" },
+		const std::string& callerContext = "");  // NEW parameter
+
+	bool StopScan(const std::string& deviceName,
+		const std::string& callerContext = "");  // NEW parameter
+
+
 	bool PerformScan(const std::string& deviceName, const std::string& dataChannel,
 		const std::vector<double>& stepSizes, int settlingTimeMs,
 		const std::vector<std::string>& axesToScan = { "Z", "X", "Y" });
@@ -123,6 +147,17 @@ public:
 
 	// Get scan results
 	bool GetScanPeak(const std::string& deviceName, double& value, PositionStruct& position) const;
+
+	//----------------updated section
+
+
+
+
+	// Utility methods
+	void Wait(int milliseconds);
+	float ReadDataValue(const std::string& dataId, float defaultValue = 0.0f);
+	bool HasDataValue(const std::string& dataId);
+
 
 	// Device status methods
 	bool IsDeviceConnected(const std::string& deviceName);

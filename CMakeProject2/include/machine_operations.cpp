@@ -604,33 +604,87 @@ bool MachineOperations::SetOutput(int deviceId, int outputPin, bool state) {
 }
 
 // Read input state by device name
-bool MachineOperations::ReadInput(const std::string& deviceName, int inputPin, bool& state) {
-  m_logger->LogInfo("MachineOperations: Reading input pin " + std::to_string(inputPin) +
-    " on device " + deviceName);
+// UPDATED ReadInput method with tracking
+bool MachineOperations::ReadInput(const std::string& deviceName, int inputPin, bool& state,
+  const std::string& callerContext) {
 
-  // Get device by name
+  // 1. Start operation tracking
+  std::string opId;
+  auto startTime = std::chrono::steady_clock::now();
+
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"device_name", deviceName},
+        {"input_pin", std::to_string(inputPin)}
+    };
+    opId = m_resultsManager->StartOperation("ReadInput", deviceName, callerContext, "", parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Reading input pin " + std::to_string(inputPin) +
+    " on device " + deviceName +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")"));
+
+  // 2. Get device by name
   EziIODevice* device = m_ioManager.getDeviceByName(deviceName);
   if (!device) {
+    auto endTime = std::chrono::steady_clock::now();
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+      m_resultsManager->EndOperation(opId, "failed", "Device not found: " + deviceName);
+    }
+
     m_logger->LogError("MachineOperations: Device not found: " + deviceName);
     return false;
   }
 
-  // Read inputs
+  // 3. Read inputs
   uint32_t inputs = 0, latch = 0;
   if (!device->readInputs(inputs, latch)) {
+    auto endTime = std::chrono::steady_clock::now();
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+      m_resultsManager->EndOperation(opId, "failed", "Failed to read inputs from device " + deviceName);
+    }
+
     m_logger->LogError("MachineOperations: Failed to read inputs from device " + deviceName);
     return false;
   }
 
-  // Check if the pin is within range
+  // 4. Check if the pin is within range
   if (inputPin >= device->getInputCount()) {
+    auto endTime = std::chrono::steady_clock::now();
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->StoreResult(opId, "input_count", std::to_string(device->getInputCount()));
+      m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+      m_resultsManager->EndOperation(opId, "failed", "Invalid input pin " + std::to_string(inputPin));
+    }
+
     m_logger->LogError("MachineOperations: Invalid input pin " + std::to_string(inputPin) +
       " for device " + deviceName);
     return false;
   }
 
-  // Check the pin state
+  // 5. Check the pin state
   state = ConvertPinStateToBoolean(inputs, inputPin);
+
+  // 6. Store results and end tracking
+  auto endTime = std::chrono::steady_clock::now();
+  auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->StoreResult(opId, "pin_state", state ? "HIGH" : "LOW");
+    m_resultsManager->StoreResult(opId, "raw_inputs", "0x" + std::to_string(inputs));
+    m_resultsManager->StoreResult(opId, "latch_value", "0x" + std::to_string(latch));
+    m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+    m_resultsManager->EndOperation(opId, "success");
+  }
+
   return true;
 }
 
@@ -656,21 +710,66 @@ bool MachineOperations::ReadInput(int deviceId, int inputPin, bool& state) {
 
 
 // Clear latch by device name and pin
-bool MachineOperations::ClearLatch(const std::string& deviceName, int inputPin) {
-  m_logger->LogInfo("MachineOperations: Clearing latch for input pin " +
-    std::to_string(inputPin) + " on device " + deviceName);
 
-  // Get device by name
+// UPDATED ClearLatch method with tracking
+bool MachineOperations::ClearLatch(const std::string& deviceName, int inputPin,
+  const std::string& callerContext) {
+
+  // 1. Start operation tracking
+  std::string opId;
+  auto startTime = std::chrono::steady_clock::now();
+
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"device_name", deviceName},
+        {"input_pin", std::to_string(inputPin)}
+    };
+    opId = m_resultsManager->StartOperation("ClearLatch", deviceName, callerContext, "", parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Clearing latch for input pin " +
+    std::to_string(inputPin) + " on device " + deviceName +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")"));
+
+  // 2. Get device by name
   EziIODevice* device = m_ioManager.getDeviceByName(deviceName);
   if (!device) {
+    auto endTime = std::chrono::steady_clock::now();
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+      m_resultsManager->EndOperation(opId, "failed", "Device not found: " + deviceName);
+    }
+
     m_logger->LogError("MachineOperations: Device not found: " + deviceName);
     return false;
   }
 
-  // Create mask for this pin
+  // 3. Create mask for this pin and clear latch
   uint32_t latchMask = 1 << inputPin;
-  return device->clearLatch(latchMask);
+  bool success = device->clearLatch(latchMask);
+
+  // 4. Store results and end tracking
+  auto endTime = std::chrono::steady_clock::now();
+  auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->StoreResult(opId, "latch_mask", "0x" + std::to_string(latchMask));
+    m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+
+    if (success) {
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_resultsManager->EndOperation(opId, "failed", "Failed to clear latch for pin " + std::to_string(inputPin));
+    }
+  }
+
+  return success;
 }
+
+
 
 // Clear latch by device ID and mask
 bool MachineOperations::ClearLatch(int deviceId, uint32_t latchMask) {
@@ -778,76 +877,222 @@ bool MachineOperations::ClearOutput(const std::string& deviceName, int outputPin
 
 
 // Extend a pneumatic slide
-bool MachineOperations::ExtendSlide(const std::string& slideName, bool waitForCompletion, int timeoutMs) {
+bool MachineOperations::ExtendSlide(const std::string& slideName, bool waitForCompletion,
+  int timeoutMs, const std::string& callerContext) {
+
+  // 1. Start operation tracking
+  std::string opId;
+  auto startTime = std::chrono::steady_clock::now();
+
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"slideName", slideName},
+        {"waitForCompletion", waitForCompletion ? "true" : "false"},
+        {"timeoutMs", std::to_string(timeoutMs)}
+    };
+    opId = m_resultsManager->StartOperation("ExtendSlide", slideName, callerContext, "", parameters);
+  }
+
   m_logger->LogInfo("MachineOperations: Extending slide " + slideName);
 
+  // 2. Store initial state
+  SlideState initialState = m_pneumaticManager.getSlideState(slideName);
+
+  // 3. Execute extend operation
   bool success = m_pneumaticManager.extendSlide(slideName);
   if (!success) {
+    auto endTime = std::chrono::steady_clock::now();
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->StoreResult(opId, "initial_state", std::to_string(static_cast<int>(initialState)));
+      m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+      m_resultsManager->EndOperation(opId, "failed", "Failed to extend slide " + slideName);
+    }
+
     m_logger->LogError("MachineOperations: Failed to extend slide " + slideName);
     return false;
   }
 
-  // If waiting for completion is requested
+  // 4. Wait for completion if requested
+  bool finalSuccess = true;
   if (waitForCompletion) {
-    return WaitForSlideState(slideName, SlideState::EXTENDED, timeoutMs);
+    finalSuccess = WaitForSlideState(slideName, SlideState::EXTENDED, timeoutMs, callerContext);
   }
 
-  return true;
+  // 5. Store results and end tracking
+  auto endTime = std::chrono::steady_clock::now();
+  auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+  if (m_resultsManager && !opId.empty()) {
+    SlideState finalState = m_pneumaticManager.getSlideState(slideName);
+
+    m_resultsManager->StoreResult(opId, "initial_state", std::to_string(static_cast<int>(initialState)));
+    m_resultsManager->StoreResult(opId, "final_state", std::to_string(static_cast<int>(finalState)));
+    m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+    m_resultsManager->StoreResult(opId, "wait_for_completion", waitForCompletion ? "true" : "false");
+
+    if (finalSuccess) {
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_resultsManager->EndOperation(opId, "failed", "Slide extend operation failed or timed out");
+    }
+  }
+
+  return finalSuccess;
 }
 
 // Retract a pneumatic slide
-bool MachineOperations::RetractSlide(const std::string& slideName, bool waitForCompletion, int timeoutMs) {
+bool MachineOperations::RetractSlide(const std::string& slideName, bool waitForCompletion,
+  int timeoutMs, const std::string& callerContext) {
+
+  // 1. Start operation tracking
+  std::string opId;
+  auto startTime = std::chrono::steady_clock::now();
+
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"slideName", slideName},
+        {"waitForCompletion", waitForCompletion ? "true" : "false"},
+        {"timeoutMs", std::to_string(timeoutMs)}
+    };
+    opId = m_resultsManager->StartOperation("RetractSlide", slideName, callerContext, "", parameters);
+  }
+
   m_logger->LogInfo("MachineOperations: Retracting slide " + slideName);
 
+  // 2. Store initial state
+  SlideState initialState = m_pneumaticManager.getSlideState(slideName);
+
+  // 3. Execute retract operation
   bool success = m_pneumaticManager.retractSlide(slideName);
   if (!success) {
+    auto endTime = std::chrono::steady_clock::now();
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->StoreResult(opId, "initial_state", std::to_string(static_cast<int>(initialState)));
+      m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+      m_resultsManager->EndOperation(opId, "failed", "Failed to retract slide " + slideName);
+    }
+
     m_logger->LogError("MachineOperations: Failed to retract slide " + slideName);
     return false;
   }
 
-  // If waiting for completion is requested
+  // 4. Wait for completion if requested
+  bool finalSuccess = true;
   if (waitForCompletion) {
-    return WaitForSlideState(slideName, SlideState::RETRACTED, timeoutMs);
+    finalSuccess = WaitForSlideState(slideName, SlideState::RETRACTED, timeoutMs, callerContext);
   }
 
-  return true;
-}
+  // 5. Store results and end tracking
+  auto endTime = std::chrono::steady_clock::now();
+  auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
 
+  if (m_resultsManager && !opId.empty()) {
+    SlideState finalState = m_pneumaticManager.getSlideState(slideName);
+
+    m_resultsManager->StoreResult(opId, "initial_state", std::to_string(static_cast<int>(initialState)));
+    m_resultsManager->StoreResult(opId, "final_state", std::to_string(static_cast<int>(finalState)));
+    m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+    m_resultsManager->StoreResult(opId, "wait_for_completion", waitForCompletion ? "true" : "false");
+
+    if (finalSuccess) {
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_resultsManager->EndOperation(opId, "failed", "Slide retract operation failed or timed out");
+    }
+  }
+
+  return finalSuccess;
+}
 // Get the current state of a pneumatic slide
 SlideState MachineOperations::GetSlideState(const std::string& slideName) {
   return m_pneumaticManager.getSlideState(slideName);
 }
 
 // Wait for a pneumatic slide to reach a specific state
-bool MachineOperations::WaitForSlideState(const std::string& slideName, SlideState targetState, int timeoutMs) {
+bool MachineOperations::WaitForSlideState(const std::string& slideName, SlideState targetState,
+  int timeoutMs, const std::string& callerContext) {
+
+  // 1. Start operation tracking
+  std::string opId;
+  auto startTime = std::chrono::steady_clock::now();
+
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"slideName", slideName},
+        {"targetState", std::to_string(static_cast<int>(targetState))},
+        {"timeoutMs", std::to_string(timeoutMs)}
+    };
+    opId = m_resultsManager->StartOperation("WaitForSlideState", slideName, callerContext, "", parameters);
+  }
+
   m_logger->LogInfo("MachineOperations: Waiting for slide " + slideName +
     " to reach state: " + std::to_string(static_cast<int>(targetState)));
 
-  auto startTime = std::chrono::steady_clock::now();
-  auto endTime = startTime + std::chrono::milliseconds(timeoutMs);
+  // 2. Store initial state
+  SlideState initialState = m_pneumaticManager.getSlideState(slideName);
 
+  auto endTime = startTime + std::chrono::milliseconds(timeoutMs);
+  bool success = false;
+  SlideState finalState = initialState;
+
+  // 3. Wait loop
   while (std::chrono::steady_clock::now() < endTime) {
     SlideState currentState = m_pneumaticManager.getSlideState(slideName);
+    finalState = currentState;
 
     if (currentState == targetState) {
+      success = true;
       m_logger->LogInfo("MachineOperations: Slide " + slideName + " reached target state");
-      return true;
+      break;
     }
 
     // Check for error state
     if (currentState == SlideState::P_ERROR) {
       m_logger->LogError("MachineOperations: Slide " + slideName + " is in ERROR state");
-      return false;
+      break;
     }
 
     // Sleep to avoid CPU spinning
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 
-  m_logger->LogError("MachineOperations: Timeout waiting for slide " + slideName +
-    " to reach target state");
-  return false;
+  // 4. Handle timeout
+  if (!success && finalState != SlideState::P_ERROR) {
+    m_logger->LogError("MachineOperations: Timeout waiting for slide " + slideName +
+      " to reach target state");
+  }
+
+  // 5. Store results and end tracking
+  auto actualEndTime = std::chrono::steady_clock::now();
+  auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(actualEndTime - startTime).count();
+
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->StoreResult(opId, "initial_state", std::to_string(static_cast<int>(initialState)));
+    m_resultsManager->StoreResult(opId, "final_state", std::to_string(static_cast<int>(finalState)));
+    m_resultsManager->StoreResult(opId, "target_state", std::to_string(static_cast<int>(targetState)));
+    m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+
+    if (success) {
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else if (finalState == SlideState::P_ERROR) {
+      m_resultsManager->EndOperation(opId, "failed", "Slide entered ERROR state");
+    }
+    else {
+      m_resultsManager->EndOperation(opId, "failed", "Timeout waiting for target state");
+    }
+  }
+
+  return success;
 }
+
+
 
 // Wait for a specified time
 void MachineOperations::Wait(int milliseconds) {
@@ -872,59 +1117,135 @@ bool MachineOperations::HasDataValue(const std::string& dataId) {
   return hasValue;
 }
 
-// Perform a scan operation
+
+// CORRECTED PerformScan method with tracking
 bool MachineOperations::PerformScan(const std::string& deviceName, const std::string& dataChannel,
   const std::vector<double>& stepSizes, int settlingTimeMs,
-  const std::vector<std::string>& axesToScan) {
-  m_logger->LogInfo("MachineOperations: Starting scan for device " + deviceName +
-    " using data channel " + dataChannel);
+  const std::vector<std::string>& axesToScan, const std::string& callerContext) {
 
-  // Get the PI controller for the device
+  // 1. Start operation tracking
+  std::string opId;
+  auto startTime = std::chrono::steady_clock::now();
+
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"device_name", deviceName},
+        {"data_channel", dataChannel},
+        {"settling_time_ms", std::to_string(settlingTimeMs)},
+        {"axes_count", std::to_string(axesToScan.size())},
+        {"steps_count", std::to_string(stepSizes.size())}
+    };
+
+    // Add step sizes and axes to parameters
+    for (size_t i = 0; i < stepSizes.size() && i < 3; ++i) {
+      parameters["step_size_" + std::to_string(i)] = std::to_string(stepSizes[i]);
+    }
+    for (size_t i = 0; i < axesToScan.size() && i < 3; ++i) {
+      parameters["axis_" + std::to_string(i)] = axesToScan[i];
+    }
+
+    opId = m_resultsManager->StartOperation("PerformScan", deviceName, callerContext, "", parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Starting scan for device " + deviceName +
+    " using data channel " + dataChannel +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")") +
+    (opId.empty() ? "" : " [" + opId + "]"));  // ADD: operation ID to log
+
+  // 2. Get the PI controller for the device
   PIController* controller = m_piControllerManager.GetController(deviceName);
   if (!controller || !controller->IsConnected()) {
+    auto endTime = std::chrono::steady_clock::now();
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+      m_resultsManager->EndOperation(opId, "failed", "No connected PI controller for device " + deviceName);
+    }
+
     m_logger->LogError("MachineOperations: No connected PI controller for device " + deviceName);
     return false;
   }
 
-  // Setup scanning parameters
+  // 3. Setup scanning parameters
   ScanningParameters params = ScanningParameters::CreateDefault();
   params.axesToScan = axesToScan;
   params.stepSizes = stepSizes;
   params.motionSettleTimeMs = settlingTimeMs;
 
+  bool scanSuccess = false;
+  std::string errorMessage;
+
   try {
-    // Validate parameters
+    // 4. Validate parameters
     params.Validate();
 
-    // Create scanning algorithm
+    // 5. Create scanning algorithm
     GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
     ScanningAlgorithm scanner(*controller, *dataStore, deviceName, dataChannel, params);
 
-    // Start the scan (blocking)
+    // 6. Start the scan (blocking)
     m_logger->LogInfo("MachineOperations: Executing scan");
     bool success = scanner.StartScan();
 
     if (success) {
       m_logger->LogInfo("MachineOperations: Scan started for device " + deviceName);
 
-      // Wait for scan to complete
+      // 7. Wait for scan to complete
       while (scanner.IsScanningActive()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
 
       m_logger->LogInfo("MachineOperations: Scan completed for device " + deviceName);
-      return true;
+      scanSuccess = true;
     }
     else {
-      m_logger->LogError("MachineOperations: Failed to start scan for device " + deviceName);
-      return false;
+      errorMessage = "Failed to start scan for device " + deviceName;
+      m_logger->LogError("MachineOperations: " + errorMessage);
+      scanSuccess = false;
     }
   }
   catch (const std::exception& e) {
-    m_logger->LogError("MachineOperations: Exception during scan: " + std::string(e.what()));
-    return false;
+    errorMessage = "Exception during scan: " + std::string(e.what());
+    m_logger->LogError("MachineOperations: " + errorMessage);
+    scanSuccess = false;
   }
+
+  // 8. Store results and end tracking
+  auto endTime = std::chrono::steady_clock::now();
+  auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+    m_resultsManager->StoreResult(opId, "scan_type", "blocking_perform_scan");
+
+    if (scanSuccess) {
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_resultsManager->EndOperation(opId, "failed", errorMessage.empty() ? "PerformScan operation failed" : errorMessage);  // IMPROVE: fallback error message
+    }
+  }
+
+  return scanSuccess;
 }
+
+
+
+
+
+
+
+// Keep existing PerformScan method without callerContext (for backward compatibility)
+bool MachineOperations::PerformScan(const std::string& deviceName, const std::string& dataChannel,
+  const std::vector<double>& stepSizes, int settlingTimeMs,
+  const std::vector<std::string>& axesToScan) {
+  return PerformScan(deviceName, dataChannel, stepSizes, settlingTimeMs, axesToScan, "");
+}
+
+
+
+
 
 // Check if device is connected
 bool MachineOperations::IsDeviceConnected(const std::string& deviceName) {
@@ -1078,10 +1399,43 @@ bool MachineOperations::WaitForLaserTemperature(float targetTemp, float toleranc
 }
 
 
+
+
+// CORRECTED StartScan method with proper tracking
 bool MachineOperations::StartScan(const std::string& deviceName, const std::string& dataChannel,
   const std::vector<double>& stepSizes, int settlingTimeMs,
-  const std::vector<std::string>& axesToScan) {
-  // Check if a scan is already active for this device
+  const std::vector<std::string>& axesToScan, const std::string& callerContext) {
+
+  // 1. Start operation tracking
+  std::string opId;
+  auto startTime = std::chrono::steady_clock::now();
+
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"device_name", deviceName},
+        {"data_channel", dataChannel},
+        {"settling_time_ms", std::to_string(settlingTimeMs)},
+        {"axes_count", std::to_string(axesToScan.size())},
+        {"steps_count", std::to_string(stepSizes.size())}
+    };
+
+    // Add step sizes and axes to parameters
+    for (size_t i = 0; i < stepSizes.size() && i < 3; ++i) {
+      parameters["step_size_" + std::to_string(i)] = std::to_string(stepSizes[i]);
+    }
+    for (size_t i = 0; i < axesToScan.size() && i < 3; ++i) {
+      parameters["axis_" + std::to_string(i)] = axesToScan[i];
+    }
+
+    opId = m_resultsManager->StartOperation("StartScan", deviceName, callerContext, "", parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Starting asynchronous scan for device " + deviceName +
+    " using data channel " + dataChannel +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")") +
+    (opId.empty() ? "" : " [" + opId + "]"));
+
+  // 2. Check if a scan is already active for this device
   bool needsReset = false;
   {
     std::lock_guard<std::mutex> lock(m_scanMutex);
@@ -1089,6 +1443,14 @@ bool MachineOperations::StartScan(const std::string& deviceName, const std::stri
       // Check if the scan is truly active or just stalled
       auto& scanner = m_activeScans[deviceName];
       if (scanner && scanner->IsScanningActive()) {
+        auto endTime = std::chrono::steady_clock::now();
+        auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+        if (m_resultsManager && !opId.empty()) {
+          m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+          m_resultsManager->EndOperation(opId, "failed", "Scan already in progress for device " + deviceName);
+        }
+
         m_logger->LogWarning("MachineOperations: Scan already in progress for device " + deviceName);
         return false;
       }
@@ -1114,96 +1476,106 @@ bool MachineOperations::StartScan(const std::string& deviceName, const std::stri
     ResetScanState(deviceName);
   }
 
-  // Continue with the original StartScan logic
-  // Get the PI controller for the device
+  // 3. Get the PI controller for the device
   PIController* controller = m_piControllerManager.GetController(deviceName);
   if (!controller || !controller->IsConnected()) {
+    auto endTime = std::chrono::steady_clock::now();
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+      m_resultsManager->EndOperation(opId, "failed", "No connected PI controller for device " + deviceName);
+    }
+
     m_logger->LogError("MachineOperations: No connected PI controller for device " + deviceName);
     return false;
   }
 
-  // Rest of the method continues as before...
-  // Setup scanning parameters
+  // 4. Setup scanning parameters
   ScanningParameters params = ScanningParameters::CreateDefault();
   params.axesToScan = axesToScan;
   params.stepSizes = stepSizes;
   params.motionSettleTimeMs = settlingTimeMs;
 
-    try {
-      // Validate parameters
-      params.Validate();
+  bool scanStartSuccess = false;
+  std::string errorMessage;
 
-      // Create and configure the scanning algorithm
-      auto scanner = std::make_unique<ScanningAlgorithm>(
-        *controller,
-        *GlobalDataStore::GetInstance(), // Use global data store
-        deviceName,
-        dataChannel,
-        params
-      );
+  try {
+    // 5. Validate parameters
+    params.Validate();
 
-      // Initialize scan info - create it in the map if it doesn't exist yet
+    // 6. Create and configure the scanning algorithm
+    auto scanner = std::make_unique<ScanningAlgorithm>(
+      *controller,
+      *GlobalDataStore::GetInstance(), // Use global data store
+      deviceName,
+      dataChannel,
+      params
+    );
+
+    // 7. Initialize scan info - create it in the map if it doesn't exist yet
+    {
+      std::lock_guard<std::mutex> lock(m_scanMutex);
+
+      // Create the entry if it doesn't exist
+      if (m_scanInfo.find(deviceName) == m_scanInfo.end()) {
+        m_scanInfo.emplace(std::piecewise_construct,
+          std::forward_as_tuple(deviceName),
+          std::forward_as_tuple());
+      }
+
+      // Initialize the values directly
+      m_scanInfo[deviceName].isActive.store(true);
+      m_scanInfo[deviceName].progress.store(0.0);
+
+      // Set the status with proper locking
       {
-        std::lock_guard<std::mutex> lock(m_scanMutex);
-
-        // Create the entry if it doesn't exist
-        if (m_scanInfo.find(deviceName) == m_scanInfo.end()) {
-          m_scanInfo.emplace(std::piecewise_construct,
-            std::forward_as_tuple(deviceName),
-            std::forward_as_tuple());
-        }
-
-        // Initialize the values directly
-        m_scanInfo[deviceName].isActive.store(true);
-        m_scanInfo[deviceName].progress.store(0.0);
-
-        // Set the status with proper locking
-        {
-          std::lock_guard<std::mutex> statusLock(m_scanInfo[deviceName].statusMutex);
-          m_scanInfo[deviceName].status = "Starting scan...";
-        }
+        std::lock_guard<std::mutex> statusLock(m_scanInfo[deviceName].statusMutex);
+        m_scanInfo[deviceName].status = "Starting scan...";
       }
+    }
 
-      // Set callbacks to update status
-      scanner->SetProgressCallback([this, deviceName](const ScanProgressEventArgs& args) {
-        this->m_scanInfo[deviceName].progress.store(args.GetProgress());
-        std::lock_guard<std::mutex> lock(this->m_scanInfo[deviceName].statusMutex);
-        this->m_scanInfo[deviceName].status = args.GetStatus();
-      });
+    // 8. Set callbacks to update status
+    scanner->SetProgressCallback([this, deviceName](const ScanProgressEventArgs& args) {
+      this->m_scanInfo[deviceName].progress.store(args.GetProgress());
+      std::lock_guard<std::mutex> lock(this->m_scanInfo[deviceName].statusMutex);
+      this->m_scanInfo[deviceName].status = args.GetStatus();
+    });
 
-      scanner->SetPeakUpdateCallback([this, deviceName](double value, const PositionStruct& position, const std::string& context) {
-        std::lock_guard<std::mutex> lock(this->m_scanInfo[deviceName].peakMutex);
-        this->m_scanInfo[deviceName].peakValue = value;
-        this->m_scanInfo[deviceName].peakPosition = position;
-      });
+    scanner->SetPeakUpdateCallback([this, deviceName](double value, const PositionStruct& position, const std::string& context) {
+      std::lock_guard<std::mutex> lock(this->m_scanInfo[deviceName].peakMutex);
+      this->m_scanInfo[deviceName].peakValue = value;
+      this->m_scanInfo[deviceName].peakPosition = position;
+    });
 
-      scanner->SetCompletionCallback([this, deviceName](const ScanCompletedEventArgs& args) {
-        // Update status, but don't remove scanner here
-        this->m_scanInfo[deviceName].isActive.store(false);
-        this->m_scanInfo[deviceName].progress.store(1.0);
-        std::lock_guard<std::mutex> lock(this->m_scanInfo[deviceName].statusMutex);
-        this->m_scanInfo[deviceName].status = "Scan completed";
+    scanner->SetCompletionCallback([this, deviceName](const ScanCompletedEventArgs& args) {
+      // Update status, but don't remove scanner here
+      this->m_scanInfo[deviceName].isActive.store(false);
+      this->m_scanInfo[deviceName].progress.store(1.0);
+      std::lock_guard<std::mutex> lock(this->m_scanInfo[deviceName].statusMutex);
+      this->m_scanInfo[deviceName].status = "Scan completed";
 
-        // Schedule cleanup to happen later from the main thread
-        // We can't erase from m_activeScans here since we're running in the scanner's thread
-        // The scanner will be cleaned up when another scan is started or the program ends
-      });
+      // Schedule cleanup to happen later from the main thread
+      // We can't erase from m_activeScans here since we're running in the scanner's thread
+      // The scanner will be cleaned up when another scan is started or the program ends
+    });
 
-      scanner->SetErrorCallback([this, deviceName](const ScanErrorEventArgs& args) {
-        // Update status, but don't remove scanner here
-        this->m_scanInfo[deviceName].isActive.store(false);
-        std::lock_guard<std::mutex> lock(this->m_scanInfo[deviceName].statusMutex);
-        this->m_scanInfo[deviceName].status = "Error: " + args.GetError();
+    scanner->SetErrorCallback([this, deviceName](const ScanErrorEventArgs& args) {
+      // Update status, but don't remove scanner here
+      this->m_scanInfo[deviceName].isActive.store(false);
+      std::lock_guard<std::mutex> lock(this->m_scanInfo[deviceName].statusMutex);
+      this->m_scanInfo[deviceName].status = "Error: " + args.GetError();
 
-        // Same as above - don't erase from m_activeScans here
-      });
+      // Same as above - don't erase from m_activeScans here
+    });
 
-      // Start the scan
-      if (!scanner->StartScan()) {
-        m_logger->LogError("MachineOperations: Failed to start scan for device " + deviceName);
-        return false;
-      }
-
+    // 9. Start the scan
+    if (!scanner->StartScan()) {
+      errorMessage = "Failed to start scan for device " + deviceName;
+      m_logger->LogError("MachineOperations: " + errorMessage);
+      scanStartSuccess = false;
+    }
+    else {
       // Store the scanner
       {
         std::lock_guard<std::mutex> lock(m_scanMutex);
@@ -1211,17 +1583,68 @@ bool MachineOperations::StartScan(const std::string& deviceName, const std::stri
       }
 
       m_logger->LogInfo("MachineOperations: Scan started for device " + deviceName);
-      return true;
+      scanStartSuccess = true;
     }
-    catch (const std::exception& e) {
-      m_logger->LogError("MachineOperations: Exception during scan setup: " + std::string(e.what()));
-      return false;
+  }
+  catch (const std::exception& e) {
+    errorMessage = "Exception during scan setup: " + std::string(e.what());
+    m_logger->LogError("MachineOperations: " + errorMessage);
+    scanStartSuccess = false;
+  }
+
+  // 10. Store results and end tracking
+  auto endTime = std::chrono::steady_clock::now();
+  auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+    m_resultsManager->StoreResult(opId, "scan_type", "asynchronous_start_scan");
+
+    if (scanStartSuccess) {
+      m_resultsManager->EndOperation(opId, "success");
     }
+    else {
+      m_resultsManager->EndOperation(opId, "failed", errorMessage.empty() ? "StartScan operation failed" : errorMessage);
+    }
+  }
+
+  return scanStartSuccess;
 }
 
-// Modify the StopScan method to ensure proper cleanup
-bool MachineOperations::StopScan(const std::string& deviceName) {
+
+
+
+
+
+// Keep existing StartScan method without callerContext (for backward compatibility)
+bool MachineOperations::StartScan(const std::string& deviceName, const std::string& dataChannel,
+  const std::vector<double>& stepSizes, int settlingTimeMs,
+  const std::vector<std::string>& axesToScan) {
+  return StartScan(deviceName, dataChannel, stepSizes, settlingTimeMs, axesToScan, "");
+}
+
+
+// StopScan method with tracking - keeping existing complex logic
+bool MachineOperations::StopScan(const std::string& deviceName, const std::string& callerContext) {
+
+  // 1. Start operation tracking
+  std::string opId;
+  auto startTime = std::chrono::steady_clock::now();
+
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"device_name", deviceName}
+    };
+    opId = m_resultsManager->StartOperation("StopScan", deviceName, callerContext, "", parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Stopping scan for device " + deviceName +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")") +
+    (opId.empty() ? "" : " [" + opId + "]"));
+
+  // 2. EXISTING COMPLEX LOGIC (unchanged)
   std::unique_ptr<ScanningAlgorithm> scanner;
+  bool success = false;
 
   // Get the scanner and remove it from active scans
   {
@@ -1236,20 +1659,19 @@ bool MachineOperations::StopScan(const std::string& deviceName) {
         std::lock_guard<std::mutex> statusLock(infoIt->second.statusMutex);
         infoIt->second.status = "No active scan";
       }
-
       m_logger->LogWarning("MachineOperations: No active scan found for device " + deviceName + ", but reset status anyway");
-      return true; // Return success since the end goal is achieved (no active scan)
+      success = true; // Return success since the end goal is achieved (no active scan)
     }
-
-    scanner = std::move(it->second);
-    m_activeScans.erase(it);
+    else {
+      scanner = std::move(it->second);
+      m_activeScans.erase(it);
+    }
   }
 
   // Stop the scan
   if (scanner) {
     scanner->HaltScan();
     m_logger->LogInfo("MachineOperations: Scan stopped for device " + deviceName);
-
     // Update scan status
     auto it = m_scanInfo.find(deviceName);
     if (it != m_scanInfo.end()) {
@@ -1257,12 +1679,37 @@ bool MachineOperations::StopScan(const std::string& deviceName) {
       std::lock_guard<std::mutex> lock(it->second.statusMutex);
       it->second.status = "Scan stopped by user";
     }
-
     // Use our safe cleanup method
-    return SafelyCleanupScanner(deviceName);
+    success = SafelyCleanupScanner(deviceName);
+  }
+  else if (!success) {
+    success = false;
   }
 
-  return false;
+  // 3. Store results and end tracking
+  auto endTime = std::chrono::steady_clock::now();
+  auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+
+    if (success) {
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_resultsManager->EndOperation(opId, "failed", "StopScan operation failed");
+    }
+  }
+
+  return success;
+}
+
+
+
+
+// Keep existing StopScan method without callerContext (for backward compatibility)
+bool MachineOperations::StopScan(const std::string& deviceName) {
+  return StopScan(deviceName, "");
 }
 
 // Add a new method to machine_operations.cpp to reset scan state if needed

@@ -11,44 +11,7 @@ class UserInteractionManager;
 
 // Additional operation types needed for our processes
 
-// Extend slide operation
-class ExtendSlideOperation : public SequenceOperation {
-public:
-	ExtendSlideOperation(const std::string& slideName)
-		: m_slideName(slideName) {
-	}
 
-	bool Execute(MachineOperations& ops) override {
-		return ops.ExtendSlide(m_slideName, true);
-	}
-
-	std::string GetDescription() const override {
-		return "Extend pneumatic slide " + m_slideName;
-	}
-
-private:
-	std::string m_slideName;
-};
-
-// Wait operation
-class WaitOperation : public SequenceOperation {
-public:
-	WaitOperation(int milliseconds)
-		: m_milliseconds(milliseconds) {
-	}
-
-	bool Execute(MachineOperations& ops) override {
-		ops.Wait(m_milliseconds);
-		return true;
-	}
-
-	std::string GetDescription() const override {
-		return "Wait for " + std::to_string(m_milliseconds) + " ms";
-	}
-
-private:
-	int m_milliseconds;
-};
 
 // User interaction manager (declaration)
 class UserInteractionManager {

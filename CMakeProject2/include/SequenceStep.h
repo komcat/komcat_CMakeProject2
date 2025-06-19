@@ -179,24 +179,273 @@ private:
 
 };
 
-// Retract slide operation
-class RetractSlideOperation : public SequenceOperation {
+// Wait operation
+class WaitOperation : public SequenceOperation {
 public:
-  RetractSlideOperation(const std::string& slideName)
-    : m_slideName(slideName) {
+  WaitOperation(int milliseconds)
+    : m_milliseconds(milliseconds) {
   }
 
   bool Execute(MachineOperations& ops) override {
-    return ops.RetractSlide(m_slideName, true);
+    ops.Wait(m_milliseconds);
+    return true;
   }
 
   std::string GetDescription() const override {
-    return "Retract pneumatic slide " + m_slideName;
+    return "Wait for " + std::to_string(m_milliseconds) + " ms";
+  }
+
+private:
+  int m_milliseconds;
+};
+
+
+// Enhanced ExtendSlideOperation with complete tracking
+class ExtendSlideOperation : public SequenceOperation {
+public:
+  ExtendSlideOperation(const std::string& slideName, bool waitForCompletion = true, int timeoutMs = 5000)
+    : m_slideName(slideName), m_waitForCompletion(waitForCompletion), m_timeoutMs(timeoutMs) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate descriptive caller context for COMPLETE operation
+    std::string callerContext = "ExtendSlideOperation_Complete_" + m_slideName;
+
+    // 1. Start COMPLETE operation tracking
+    std::string opId;
+    auto overallStartTime = std::chrono::steady_clock::now();
+
+    auto resultsManager = ops.GetResultsManager();
+    if (resultsManager) {
+      std::map<std::string, std::string> parameters = {
+          {"slide_name", m_slideName},
+          {"wait_for_completion", m_waitForCompletion ? "true" : "false"},
+          {"timeout_ms", std::to_string(m_timeoutMs)},
+          {"operation_type", "complete_extend_with_tracking"}
+      };
+
+      opId = resultsManager->StartOperation("CompleteExtendSlide", m_slideName, callerContext, "", parameters);
+    }
+
+    // 2. Get initial state
+    SlideState initialState = ops.GetSlideState(m_slideName);
+    auto extendStartTime = std::chrono::steady_clock::now();
+
+    ops.LogInfo("ExtendSlideOperation: Starting complete extend tracking for " + m_slideName +
+      " (initial state: " + std::to_string(static_cast<int>(initialState)) + ")");
+
+    // 3. Execute the extend operation (this will create a separate ExtendSlide operation)
+    bool extendSuccess = ops.ExtendSlide(m_slideName, m_waitForCompletion, m_timeoutMs, callerContext + "_ExtendSlide");
+
+    auto operationEndTime = std::chrono::steady_clock::now();
+
+    // 4. Get final state
+    SlideState finalState = ops.GetSlideState(m_slideName);
+
+    // 5. Calculate timing
+    auto totalElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(operationEndTime - overallStartTime).count();
+    auto extendElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(operationEndTime - extendStartTime).count();
+
+    // 6. Determine operation result
+    bool operationSuccess = false;
+    std::string resultReason;
+
+    if (!extendSuccess) {
+      resultReason = "extend_operation_failed";
+    }
+    else if (!m_waitForCompletion) {
+      operationSuccess = true;
+      resultReason = "extend_initiated_no_wait";
+    }
+    else if (finalState == SlideState::EXTENDED) {
+      operationSuccess = true;
+      resultReason = "successfully_extended";
+    }
+    else if (finalState == SlideState::P_ERROR) {
+      resultReason = "slide_error_state";
+    }
+    else if (finalState == SlideState::MOVING) {
+      resultReason = "still_moving_timeout";
+    }
+    else {
+      resultReason = "unexpected_final_state";
+    }
+
+    // 7. Store comprehensive results
+    if (resultsManager && !opId.empty()) {
+      resultsManager->StoreResult(opId, "total_operation_time_ms", std::to_string(totalElapsedMs));
+      resultsManager->StoreResult(opId, "actual_extend_time_ms", std::to_string(extendElapsedMs));
+      resultsManager->StoreResult(opId, "initial_state", std::to_string(static_cast<int>(initialState)));
+      resultsManager->StoreResult(opId, "final_state", std::to_string(static_cast<int>(finalState)));
+      resultsManager->StoreResult(opId, "initial_state_name", SlideStateToString(initialState));
+      resultsManager->StoreResult(opId, "final_state_name", SlideStateToString(finalState));
+      resultsManager->StoreResult(opId, "operation_result", resultReason);
+      resultsManager->StoreResult(opId, "state_changed", (initialState != finalState) ? "true" : "false");
+
+      if (operationSuccess) {
+        ops.LogInfo("ExtendSlideOperation: Successfully completed - " + resultReason);
+        resultsManager->EndOperation(opId, "success");
+      }
+      else {
+        ops.LogError("ExtendSlideOperation: Failed - " + resultReason);
+        resultsManager->EndOperation(opId, "failed", resultReason);
+      }
+
+      // Performance metrics
+      if (initialState != SlideState::EXTENDED && finalState == SlideState::EXTENDED) {
+        resultsManager->StoreResult(opId, "actual_movement_time_ms", std::to_string(extendElapsedMs));
+      }
+    }
+
+    return operationSuccess;
+  }
+
+  std::string GetDescription() const override {
+    return "Complete extend slide " + m_slideName +
+      (m_waitForCompletion ? " (wait for completion)" : " (no wait)") +
+      " with full tracking";
   }
 
 private:
   std::string m_slideName;
+  bool m_waitForCompletion;
+  int m_timeoutMs;
+
+  // Helper function to convert slide state to string
+  std::string SlideStateToString(SlideState state) const {
+    switch (state) {
+    case SlideState::EXTENDED: return "EXTENDED";
+    case SlideState::RETRACTED: return "RETRACTED";
+    case SlideState::MOVING: return "MOVING";
+    case SlideState::P_ERROR: return "ERROR";
+    default: return "UNKNOWN";
+    }
+  }
 };
+
+// Enhanced RetractSlideOperation with complete tracking
+class RetractSlideOperation : public SequenceOperation {
+public:
+  RetractSlideOperation(const std::string& slideName, bool waitForCompletion = true, int timeoutMs = 5000)
+    : m_slideName(slideName), m_waitForCompletion(waitForCompletion), m_timeoutMs(timeoutMs) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate descriptive caller context for COMPLETE operation
+    std::string callerContext = "RetractSlideOperation_Complete_" + m_slideName;
+
+    // 1. Start COMPLETE operation tracking
+    std::string opId;
+    auto overallStartTime = std::chrono::steady_clock::now();
+
+    auto resultsManager = ops.GetResultsManager();
+    if (resultsManager) {
+      std::map<std::string, std::string> parameters = {
+          {"slide_name", m_slideName},
+          {"wait_for_completion", m_waitForCompletion ? "true" : "false"},
+          {"timeout_ms", std::to_string(m_timeoutMs)},
+          {"operation_type", "complete_retract_with_tracking"}
+      };
+
+      opId = resultsManager->StartOperation("CompleteRetractSlide", m_slideName, callerContext, "", parameters);
+    }
+
+    // 2. Get initial state
+    SlideState initialState = ops.GetSlideState(m_slideName);
+    auto retractStartTime = std::chrono::steady_clock::now();
+
+    ops.LogInfo("RetractSlideOperation: Starting complete retract tracking for " + m_slideName +
+      " (initial state: " + std::to_string(static_cast<int>(initialState)) + ")");
+
+    // 3. Execute the retract operation (this will create a separate RetractSlide operation)
+    bool retractSuccess = ops.RetractSlide(m_slideName, m_waitForCompletion, m_timeoutMs, callerContext + "_RetractSlide");
+
+    auto operationEndTime = std::chrono::steady_clock::now();
+
+    // 4. Get final state
+    SlideState finalState = ops.GetSlideState(m_slideName);
+
+    // 5. Calculate timing
+    auto totalElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(operationEndTime - overallStartTime).count();
+    auto retractElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(operationEndTime - retractStartTime).count();
+
+    // 6. Determine operation result
+    bool operationSuccess = false;
+    std::string resultReason;
+
+    if (!retractSuccess) {
+      resultReason = "retract_operation_failed";
+    }
+    else if (!m_waitForCompletion) {
+      operationSuccess = true;
+      resultReason = "retract_initiated_no_wait";
+    }
+    else if (finalState == SlideState::RETRACTED) {
+      operationSuccess = true;
+      resultReason = "successfully_retracted";
+    }
+    else if (finalState == SlideState::P_ERROR) {
+      resultReason = "slide_error_state";
+    }
+    else if (finalState == SlideState::MOVING) {
+      resultReason = "still_moving_timeout";
+    }
+    else {
+      resultReason = "unexpected_final_state";
+    }
+
+    // 7. Store comprehensive results
+    if (resultsManager && !opId.empty()) {
+      resultsManager->StoreResult(opId, "total_operation_time_ms", std::to_string(totalElapsedMs));
+      resultsManager->StoreResult(opId, "actual_retract_time_ms", std::to_string(retractElapsedMs));
+      resultsManager->StoreResult(opId, "initial_state", std::to_string(static_cast<int>(initialState)));
+      resultsManager->StoreResult(opId, "final_state", std::to_string(static_cast<int>(finalState)));
+      resultsManager->StoreResult(opId, "initial_state_name", SlideStateToString(initialState));
+      resultsManager->StoreResult(opId, "final_state_name", SlideStateToString(finalState));
+      resultsManager->StoreResult(opId, "operation_result", resultReason);
+      resultsManager->StoreResult(opId, "state_changed", (initialState != finalState) ? "true" : "false");
+
+      if (operationSuccess) {
+        ops.LogInfo("RetractSlideOperation: Successfully completed - " + resultReason);
+        resultsManager->EndOperation(opId, "success");
+      }
+      else {
+        ops.LogError("RetractSlideOperation: Failed - " + resultReason);
+        resultsManager->EndOperation(opId, "failed", resultReason);
+      }
+
+      // Performance metrics
+      if (initialState != SlideState::RETRACTED && finalState == SlideState::RETRACTED) {
+        resultsManager->StoreResult(opId, "actual_movement_time_ms", std::to_string(retractElapsedMs));
+      }
+    }
+
+    return operationSuccess;
+  }
+
+  std::string GetDescription() const override {
+    return "Complete retract slide " + m_slideName +
+      (m_waitForCompletion ? " (wait for completion)" : " (no wait)") +
+      " with full tracking";
+  }
+
+private:
+  std::string m_slideName;
+  bool m_waitForCompletion;
+  int m_timeoutMs;
+
+  // Helper function to convert slide state to string
+  std::string SlideStateToString(SlideState state) const {
+    switch (state) {
+    case SlideState::EXTENDED: return "EXTENDED";
+    case SlideState::RETRACTED: return "RETRACTED";
+    case SlideState::MOVING: return "MOVING";
+    case SlideState::P_ERROR: return "ERROR";
+    default: return "UNKNOWN";
+    }
+  }
+};
+
 
 // Add these to SequenceStep.h
 
@@ -374,6 +623,8 @@ private:
 // SCANNING OPERATIONS - NEW ADDITIONS
 
 // Start Scan operation
+
+// UPDATED StartScanOperation with caller context
 class StartScanOperation : public SequenceOperation {
 public:
   StartScanOperation(const std::string& deviceName, const std::string& dataChannel,
@@ -385,7 +636,11 @@ public:
   }
 
   bool Execute(MachineOperations& ops) override {
-    return ops.StartScan(m_deviceName, m_dataChannel, m_stepSizes, m_settlingTimeMs, m_axesToScan);
+    // Generate descriptive caller context
+    std::string callerContext = "StartScanOperation_" + m_deviceName + "_" + m_dataChannel;
+
+    // Call machine operations with tracking
+    return ops.StartScan(m_deviceName, m_dataChannel, m_stepSizes, m_settlingTimeMs, m_axesToScan, callerContext);
   }
 
   std::string GetDescription() const override {
@@ -413,7 +668,7 @@ private:
   std::vector<std::string> m_axesToScan;
 };
 
-// Stop Scan operation
+// UPDATED StopScanOperation with caller context
 class StopScanOperation : public SequenceOperation {
 public:
   StopScanOperation(const std::string& deviceName)
@@ -421,7 +676,11 @@ public:
   }
 
   bool Execute(MachineOperations& ops) override {
-    return ops.StopScan(m_deviceName);
+    // Generate descriptive caller context
+    std::string callerContext = "StopScanOperation_" + m_deviceName;
+
+    // Call machine operations with tracking
+    return ops.StopScan(m_deviceName, callerContext);
   }
 
   std::string GetDescription() const override {
@@ -448,7 +707,8 @@ public:
       // Check if we've exceeded the timeout
       if (std::chrono::steady_clock::now() > endTime) {
         // Timeout occurred, stop the scan
-        ops.StopScan(m_deviceName);
+        std::string callerContext = "WaitForScanCompletionOperation_" + m_deviceName + "_timeout";
+        ops.StopScan(m_deviceName, callerContext);
         return false;
       }
 
@@ -472,7 +732,7 @@ private:
 
 
 
-// Scan operation with automatic wait for completion
+
 class RunScanOperation : public SequenceOperation {
 public:
   RunScanOperation(
@@ -491,26 +751,104 @@ public:
   }
 
   bool Execute(MachineOperations& ops) override {
-    // 1. Start the scan
-    if (!ops.StartScan(m_deviceName, m_dataChannel, m_stepSizes, m_settlingTimeMs, m_axesToScan)) {
+    // Generate descriptive caller context for COMPLETE scan operation
+    std::string callerContext = "RunScanOperation_Complete_" + m_deviceName + "_" + m_dataChannel;
+
+    // 1. Start COMPLETE scan tracking (not just StartScan)
+    std::string opId;
+    auto overallStartTime = std::chrono::steady_clock::now();
+
+    auto resultsManager = ops.GetResultsManager();
+    if (resultsManager) {
+      std::map<std::string, std::string> parameters = {
+          {"device_name", m_deviceName},
+          {"data_channel", m_dataChannel},
+          {"settling_time_ms", std::to_string(m_settlingTimeMs)},
+          {"timeout_ms", std::to_string(m_timeoutMs)},
+          {"axes_count", std::to_string(m_axesToScan.size())},
+          {"steps_count", std::to_string(m_stepSizes.size())}
+      };
+
+      // Add step sizes and axes to parameters
+      for (size_t i = 0; i < m_stepSizes.size() && i < 3; ++i) {
+        parameters["step_size_" + std::to_string(i)] = std::to_string(m_stepSizes[i]);
+      }
+      for (size_t i = 0; i < m_axesToScan.size() && i < 3; ++i) {
+        parameters["axis_" + std::to_string(i)] = m_axesToScan[i];
+      }
+
+      opId = resultsManager->StartOperation("CompleteScan", m_deviceName, callerContext, "", parameters);
+    }
+
+    // 2. Start the scan with tracking (this will create a separate StartScan operation)
+    if (!ops.StartScan(m_deviceName, m_dataChannel, m_stepSizes, m_settlingTimeMs, m_axesToScan, callerContext + "_Start")) {
+      // End complete scan tracking with failure
+      if (resultsManager && !opId.empty()) {
+        auto endTime = std::chrono::steady_clock::now();
+        auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - overallStartTime).count();
+
+        resultsManager->StoreResult(opId, "total_scan_time_ms", std::to_string(elapsedMs));
+        resultsManager->StoreResult(opId, "scan_result", "failed_to_start");
+        resultsManager->EndOperation(opId, "failed", "Failed to start scan");
+      }
       return false;
     }
 
-    // 2. Wait for completion
-    auto startTime = std::chrono::steady_clock::now();
-    auto endTime = startTime + std::chrono::milliseconds(m_timeoutMs);
+    // 3. Wait for completion with progress tracking
+    auto scanStartTime = std::chrono::steady_clock::now();
+    auto endTime = scanStartTime + std::chrono::milliseconds(m_timeoutMs);
+
+    bool scanCompleted = false;
+    bool timedOut = false;
 
     while (ops.IsScanActive(m_deviceName)) {
       if (std::chrono::steady_clock::now() > endTime) {
-        ops.StopScan(m_deviceName);
-        return false;
+        // Timeout - stop the scan
+        std::string stopContext = callerContext + "_timeout_stop";
+        ops.StopScan(m_deviceName, stopContext);
+        timedOut = true;
+        break;
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    // Note: The scanning algorithm automatically moves to the peak position,
-    // so we don't need to do that explicitly here.
-    return true;
+    auto overallEndTime = std::chrono::steady_clock::now();
+    auto totalElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(overallEndTime - overallStartTime).count();
+    auto scanElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(overallEndTime - scanStartTime).count();
+
+    // 4. Get scan results
+    double peakValue = 0.0;
+    PositionStruct peakPosition;
+    bool hasPeak = ops.GetScanPeak(m_deviceName, peakValue, peakPosition);
+
+    // 5. Store comprehensive results
+    if (resultsManager && !opId.empty()) {
+      resultsManager->StoreResult(opId, "total_scan_time_ms", std::to_string(totalElapsedMs));
+      resultsManager->StoreResult(opId, "actual_scan_time_ms", std::to_string(scanElapsedMs));
+
+      if (timedOut) {
+        resultsManager->StoreResult(opId, "scan_result", "timeout");
+        resultsManager->StoreResult(opId, "timeout_after_ms", std::to_string(m_timeoutMs));
+        resultsManager->EndOperation(opId, "failed", "Scan timed out after " + std::to_string(m_timeoutMs / 1000) + " seconds");
+      }
+      else if (hasPeak) {
+        resultsManager->StoreResult(opId, "scan_result", "success");
+        resultsManager->StoreResult(opId, "peak_value", std::to_string(peakValue));
+        resultsManager->StoreResult(opId, "peak_position_x", std::to_string(peakPosition.x));
+        resultsManager->StoreResult(opId, "peak_position_y", std::to_string(peakPosition.y));
+        resultsManager->StoreResult(opId, "peak_position_z", std::to_string(peakPosition.z));
+        resultsManager->StoreResult(opId, "scan_status", ops.GetScanStatus(m_deviceName));
+        resultsManager->EndOperation(opId, "success");
+        scanCompleted = true;
+      }
+      else {
+        resultsManager->StoreResult(opId, "scan_result", "completed_no_peak");
+        resultsManager->StoreResult(opId, "scan_status", ops.GetScanStatus(m_deviceName));
+        resultsManager->EndOperation(opId, "failed", "Scan completed but no peak found");
+      }
+    }
+
+    return scanCompleted && !timedOut;
   }
 
   std::string GetDescription() const override {
@@ -526,9 +864,8 @@ public:
       if (i < m_stepSizes.size() - 1) stepsStr += ", ";
     }
 
-    return "Run scan on " + m_deviceName + " using " + m_dataChannel +
-      " over " + axesStr + " axes with " + stepsStr +
-      " steps (auto-moves to peak)";
+    return "Run complete scan on " + m_deviceName + " using " + m_dataChannel +
+      " over " + axesStr + " axes with " + stepsStr + " steps (with full tracking)";
   }
 
 private:
@@ -538,6 +875,187 @@ private:
   int m_settlingTimeMs;
   std::vector<std::string> m_axesToScan;
   int m_timeoutMs;
+};
+
+
+
+
+// BlockingRunScanOperation (complete scan with full tracking from start to finish)
+class BlockingRunScanOperation : public SequenceOperation {
+public:
+  BlockingRunScanOperation(
+    const std::string& deviceName,
+    const std::string& dataChannel,
+    const std::vector<double>& stepSizes = { 0.002, 0.001, 0.0005 },
+    int settlingTimeMs = 300,
+    const std::vector<std::string>& axesToScan = { "Z", "X", "Y" })
+    : m_deviceName(deviceName),
+    m_dataChannel(dataChannel),
+    m_stepSizes(stepSizes),
+    m_settlingTimeMs(settlingTimeMs),
+    m_axesToScan(axesToScan) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate descriptive caller context for COMPLETE scan operation
+    std::string callerContext = "BlockingRunScanOperation_" + m_deviceName + "_" + m_dataChannel;
+
+    // 1. Start COMPLETE scan tracking (not just PerformScan)
+    std::string opId;
+    auto overallStartTime = std::chrono::steady_clock::now();
+
+    auto resultsManager = ops.GetResultsManager();
+    if (resultsManager) {
+      std::map<std::string, std::string> parameters = {
+          {"device_name", m_deviceName},
+          {"data_channel", m_dataChannel},
+          {"settling_time_ms", std::to_string(m_settlingTimeMs)},
+          {"axes_count", std::to_string(m_axesToScan.size())},
+          {"steps_count", std::to_string(m_stepSizes.size())},
+          {"scan_type", "blocking_complete_scan"}
+      };
+
+      // Add step sizes and axes to parameters
+      for (size_t i = 0; i < m_stepSizes.size() && i < 3; ++i) {
+        parameters["step_size_" + std::to_string(i)] = std::to_string(m_stepSizes[i]);
+      }
+      for (size_t i = 0; i < m_axesToScan.size() && i < 3; ++i) {
+        parameters["axis_" + std::to_string(i)] = m_axesToScan[i];
+      }
+
+      opId = resultsManager->StartOperation("BlockingCompleteScan", m_deviceName, callerContext, "", parameters);
+    }
+
+    ops.LogInfo("BlockingRunScanOperation: Starting complete scan tracking for " + m_deviceName);
+
+    // 2. Execute the blocking scan (this will create a separate PerformScan operation)
+    auto scanStartTime = std::chrono::steady_clock::now();
+    bool scanSuccess = ops.PerformScan(m_deviceName, m_dataChannel, m_stepSizes, m_settlingTimeMs, m_axesToScan, callerContext + "_PerformScan");
+    auto scanEndTime = std::chrono::steady_clock::now();
+
+    // 3. Calculate timing
+    auto totalElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(scanEndTime - overallStartTime).count();
+    auto scanElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(scanEndTime - scanStartTime).count();
+
+    // 4. Get scan results
+    double peakValue = 0.0;
+    PositionStruct peakPosition;
+    bool hasPeak = ops.GetScanPeak(m_deviceName, peakValue, peakPosition);
+    std::string scanStatus = ops.GetScanStatus(m_deviceName);
+
+    // 5. Store comprehensive results
+    if (resultsManager && !opId.empty()) {
+      resultsManager->StoreResult(opId, "total_operation_time_ms", std::to_string(totalElapsedMs));
+      resultsManager->StoreResult(opId, "actual_scan_time_ms", std::to_string(scanElapsedMs));
+      resultsManager->StoreResult(opId, "scan_final_status", scanStatus);
+
+      if (scanSuccess) {
+        if (hasPeak) {
+          resultsManager->StoreResult(opId, "scan_result", "success_with_peak");
+          resultsManager->StoreResult(opId, "peak_value", std::to_string(peakValue));
+          resultsManager->StoreResult(opId, "peak_position_x", std::to_string(peakPosition.x));
+          resultsManager->StoreResult(opId, "peak_position_y", std::to_string(peakPosition.y));
+          resultsManager->StoreResult(opId, "peak_position_z", std::to_string(peakPosition.z));
+          resultsManager->StoreResult(opId, "peak_position_u", std::to_string(peakPosition.u));
+          resultsManager->StoreResult(opId, "peak_position_v", std::to_string(peakPosition.v));
+          resultsManager->StoreResult(opId, "peak_position_w", std::to_string(peakPosition.w));
+
+          ops.LogInfo("BlockingRunScanOperation: Scan completed successfully with peak value " + std::to_string(peakValue));
+          resultsManager->EndOperation(opId, "success");
+        }
+        else {
+          resultsManager->StoreResult(opId, "scan_result", "success_no_peak");
+          ops.LogWarning("BlockingRunScanOperation: Scan completed but no peak found");
+          resultsManager->EndOperation(opId, "success"); // Still success, just no peak
+        }
+      }
+      else {
+        resultsManager->StoreResult(opId, "scan_result", "failed");
+        ops.LogError("BlockingRunScanOperation: Scan failed");
+        resultsManager->EndOperation(opId, "failed", "Blocking scan operation failed");
+      }
+
+      // Additional performance metrics
+      if (totalElapsedMs > 0) {
+        resultsManager->StoreResult(opId, "scan_efficiency_pct", std::to_string((scanElapsedMs * 100) / totalElapsedMs));
+      }
+    }
+
+    return scanSuccess;
+  }
+
+  std::string GetDescription() const override {
+    std::string axesStr;
+    for (size_t i = 0; i < m_axesToScan.size(); ++i) {
+      axesStr += m_axesToScan[i];
+      if (i < m_axesToScan.size() - 1) axesStr += ", ";
+    }
+
+    std::string stepsStr;
+    for (size_t i = 0; i < m_stepSizes.size(); ++i) {
+      stepsStr += std::to_string(m_stepSizes[i] * 1000) + " µm";
+      if (i < m_stepSizes.size() - 1) stepsStr += ", ";
+    }
+
+    return "Blocking complete scan on " + m_deviceName + " using " + m_dataChannel +
+      " over " + axesStr + " axes with " + stepsStr + " steps (full tracking)";
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_dataChannel;
+  std::vector<double> m_stepSizes;
+  int m_settlingTimeMs;
+  std::vector<std::string> m_axesToScan;
+};
+
+// Keep the original PerformScanOperation for simple cases (just delegates to PerformScan)
+class PerformScanOperation : public SequenceOperation {
+public:
+  PerformScanOperation(
+    const std::string& deviceName,
+    const std::string& dataChannel,
+    const std::vector<double>& stepSizes = { 0.002, 0.001, 0.0005 },
+    int settlingTimeMs = 300,
+    const std::vector<std::string>& axesToScan = { "Z", "X", "Y" })
+    : m_deviceName(deviceName),
+    m_dataChannel(dataChannel),
+    m_stepSizes(stepSizes),
+    m_settlingTimeMs(settlingTimeMs),
+    m_axesToScan(axesToScan) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate descriptive caller context
+    std::string callerContext = "PerformScanOperation_" + m_deviceName + "_" + m_dataChannel;
+
+    // Simple delegation to machine operations (only PerformScan tracking)
+    return ops.PerformScan(m_deviceName, m_dataChannel, m_stepSizes, m_settlingTimeMs, m_axesToScan, callerContext);
+  }
+
+  std::string GetDescription() const override {
+    std::string axesStr;
+    for (size_t i = 0; i < m_axesToScan.size(); ++i) {
+      axesStr += m_axesToScan[i];
+      if (i < m_axesToScan.size() - 1) axesStr += ", ";
+    }
+
+    std::string stepsStr;
+    for (size_t i = 0; i < m_stepSizes.size(); ++i) {
+      stepsStr += std::to_string(m_stepSizes[i] * 1000) + " µm";
+      if (i < m_stepSizes.size() - 1) stepsStr += ", ";
+    }
+
+    return "Perform scan on " + m_deviceName + " using " + m_dataChannel +
+      " over " + axesStr + " axes with " + stepsStr + " steps (basic tracking)";
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_dataChannel;
+  std::vector<double> m_stepSizes;
+  int m_settlingTimeMs;
+  std::vector<std::string> m_axesToScan;
 };
 
 
@@ -2054,4 +2572,63 @@ public:
 private:
   std::string m_deviceName; ///< Name of the device to wait for
   int m_timeoutMs;          ///< Timeout in milliseconds
+};
+
+
+// ReadInput operation with internal storage (RECOMMENDED for sequences)
+class ReadInputOperation : public SequenceOperation {
+public:
+  ReadInputOperation(const std::string& deviceName, int inputPin)
+    : m_deviceName(deviceName), m_inputPin(inputPin), m_lastState(false) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate descriptive caller context
+    std::string callerContext = "ReadInputOperation_" + m_deviceName + "_pin" +
+      std::to_string(m_inputPin);
+
+    // Call machine operations with tracking
+    return ops.ReadInput(m_deviceName, m_inputPin, m_lastState, callerContext);
+  }
+
+  std::string GetDescription() const override {
+    return "Read input " + m_deviceName + " pin " + std::to_string(m_inputPin) +
+      " (last state: " + (m_lastState ? "HIGH" : "LOW") + ")";
+  }
+
+  // Getter methods for accessing the read state
+  bool GetLastState() const { return m_lastState; }
+  bool IsHigh() const { return m_lastState; }
+  bool IsLow() const { return !m_lastState; }
+  std::string GetStateString() const { return m_lastState ? "HIGH" : "LOW"; }
+
+private:
+  std::string m_deviceName;
+  int m_inputPin;
+  bool m_lastState;  // Internal storage for the state
+};
+
+// ClearLatch operation with tracking
+class ClearLatchOperation : public SequenceOperation {
+public:
+  ClearLatchOperation(const std::string& deviceName, int inputPin)
+    : m_deviceName(deviceName), m_inputPin(inputPin) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate descriptive caller context
+    std::string callerContext = "ClearLatchOperation_" + m_deviceName + "_pin" +
+      std::to_string(m_inputPin);
+
+    // Call machine operations with tracking
+    return ops.ClearLatch(m_deviceName, m_inputPin, callerContext);
+  }
+
+  std::string GetDescription() const override {
+    return "Clear latch " + m_deviceName + " pin " + std::to_string(m_inputPin);
+  }
+
+private:
+  std::string m_deviceName;
+  int m_inputPin;
 };
