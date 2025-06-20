@@ -95,7 +95,7 @@
 
 #include "include/ui/MenuManager.h"
 
-
+#include "include/ui/OperationsDisplayUI.h"
 
 
 
@@ -1697,9 +1697,19 @@ int main(int argc, char* argv[])
     logger->LogInfo("MenuManager initialized with unified MachineOperations interface");
   }
 
+  // ADD OPERATIONS DISPLAY UI INITIALIZATION
+  std::unique_ptr<OperationsDisplayUI> operationsDisplayUI;
+  if (moduleConfig.isEnabled("OPERATIONS_DISPLAY") && machineOps) {
+    operationsDisplayUI = std::make_unique<OperationsDisplayUI>(*machineOps);
+    logger->LogInfo("Operations Display UI initialized");
+  }
 
 
-
+  // Add operations display to data category
+  if (operationsDisplayUI) {
+    toolbarVertical->AddReferenceToCategory("Data",
+      CreateHierarchicalUI(*operationsDisplayUI, "Operations Monitor"));
+  }
 
 
   // Main loop
@@ -1915,7 +1925,10 @@ int main(int argc, char* argv[])
       motionGraphic->RenderUI();
     }
 
-
+    // Render operations display UI
+    if (operationsDisplayUI) {
+      operationsDisplayUI->RenderUI();
+    }
 
     // ADD MACHINE BLOCK UI RENDERING
     if (machineBlockUI) {

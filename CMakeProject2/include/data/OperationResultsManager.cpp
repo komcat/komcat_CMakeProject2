@@ -139,8 +139,8 @@ std::vector<OperationResult> OperationResultsManager::GetOperationHistory(int li
     result.operationId = record.at("operation_id");
     result.methodName = record.at("method_name");
     result.deviceName = record.count("device_name") ? record.at("device_name") : "";
-    result.callerContext = record.count("caller_context") ? record.at("caller_context") : "";  // NEW
-    result.sequenceName = record.count("sequence_name") ? record.at("sequence_name") : "";     // NEW
+    result.callerContext = record.count("caller_context") ? record.at("caller_context") : "";
+    result.sequenceName = record.count("sequence_name") ? record.at("sequence_name") : "";
     result.status = record.at("status");
 
     // Parse elapsed time
@@ -153,14 +153,45 @@ std::vector<OperationResult> OperationResultsManager::GetOperationHistory(int li
       }
     }
 
+    // FIX: Parse timestamp from start_time field
+    if (record.count("start_time") && !record.at("start_time").empty()) {
+      try {
+        std::string timeStr = record.at("start_time");
+        // Parse "YYYY-MM-DD HH:MM:SS" format
+        std::tm tm = {};
+        std::istringstream ss(timeStr);
+        ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
+        if (!ss.fail()) {
+          result.timestamp = std::chrono::system_clock::from_time_t(std::mktime(&tm));
+        }
+        else {
+          // If parsing fails, use current time as fallback
+          result.timestamp = std::chrono::system_clock::now();
+        }
+      }
+      catch (const std::exception&) {
+        result.timestamp = std::chrono::system_clock::now();
+      }
+    }
+    else {
+      result.timestamp = std::chrono::system_clock::now();
+    }
+
     // Get all result data for this operation
     result.data = GetAllResults(result.operationId);
+
+    // FIX: Add error message to data if it exists in database
+    if (record.count("error_message") && !record.at("error_message").empty()) {
+      result.data["error_message"] = record.at("error_message");
+    }
 
     results.push_back(result);
   }
 
   return results;
 }
+
+
 
 std::vector<OperationResult> OperationResultsManager::GetOperationsByMethod(const std::string& methodName, int limit) {
   std::string whereClause = "method_name = '" + methodName + "'";
