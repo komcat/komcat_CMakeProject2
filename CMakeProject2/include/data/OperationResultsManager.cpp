@@ -538,8 +538,14 @@ bool OperationResultsManager::CleanupOldOperations(int maxAgeHours) {
 
   std::time_t cutoff = std::chrono::system_clock::to_time_t(cutoffTime);
   std::stringstream ss;
-  ss << std::put_time(std::gmtime(&cutoff), "%Y-%m-%d %H:%M:%S");
-
+  std::tm tm_buf;
+  if (gmtime_s(&tm_buf, &cutoff) == 0) {
+    ss << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
+  }
+  else {
+    // Handle error case - gmtime_s failed
+    ss << "invalid_time";
+  }
   std::string query = "DELETE FROM operations WHERE start_time < ?";
   return m_dbManager->ExecutePreparedStatement(query, { ss.str() });
 }
@@ -564,11 +570,19 @@ std::string OperationResultsManager::GenerateOperationId() {
     now.time_since_epoch()) % 1000;
 
   std::stringstream ss;
-  ss << "op_"
-    << std::put_time(std::gmtime(&time_t), "%Y%m%d_%H%M%S")
-    << "_" << std::setfill('0') << std::setw(3) << ms.count()
-    << "_" << std::setfill('0') << std::setw(3) << (m_operationCounter++);
-
+  std::tm tm_buf;
+  if (gmtime_s(&tm_buf, &time_t) == 0) {
+    ss << "op_"
+      << std::put_time(&tm_buf, "%Y%m%d_%H%M%S")
+      << "_" << std::setfill('0') << std::setw(3) << ms.count()
+      << "_" << std::setfill('0') << std::setw(3) << (m_operationCounter++);
+  }
+  else {
+    // Handle error case - gmtime_s failed
+    ss << "op_invalid_time_"
+      << std::setfill('0') << std::setw(3) << ms.count()
+      << "_" << std::setfill('0') << std::setw(3) << (m_operationCounter++);
+  }
   return ss.str();
 }
 
@@ -577,8 +591,14 @@ std::string OperationResultsManager::GetCurrentTimestamp() {
   auto time_t = std::chrono::system_clock::to_time_t(now);
 
   std::stringstream ss;
-  ss << std::put_time(std::gmtime(&time_t), "%Y-%m-%d %H:%M:%S");
-  return ss.str();
+  std::tm tm_buf;
+  if (gmtime_s(&tm_buf, &time_t) == 0) {
+    ss << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
+  }
+  else {
+    // Handle error case - gmtime_s failed
+    ss << "invalid_time";
+  }  return ss.str();
 }
 
 int64_t OperationResultsManager::CalculateElapsedTime(const std::string& operationId) {
@@ -592,4 +612,23 @@ int64_t OperationResultsManager::CalculateElapsedTime(const std::string& operati
   }
 
   return 0;
+}
+
+std::string OperationResultsManager::GetRunningOperationsHash() const {
+  std::string query = "SELECT operation_id, status, elapsed_time_ms FROM operations WHERE status = 'running' ORDER BY operation_id";
+
+  std::vector<std::vector<std::string>> results;
+  if (!m_dbManager->ExecuteQuery(query, results)) {
+    return "";
+  }
+
+  std::string hashInput;
+  for (const auto& row : results) {
+    if (row.size() >= 3) {
+      hashInput += row[0] + "|" + row[1] + "|" + row[2] + ";";
+    }
+  }
+
+  // Simple hash - could use std::hash or more sophisticated method
+  return std::to_string(std::hash<std::string>{}(hashInput));
 }

@@ -72,7 +72,8 @@ public:
   // Maintenance
   bool CleanupOldOperations(int maxAgeHours = 24);
   bool CleanupByCount(int maxOperations = 10000);
-
+  // Hash-based change detection for running operations
+  std::string GetRunningOperationsHash() const;
 private:
   std::shared_ptr<DatabaseManager> m_dbManager;
   std::atomic<uint64_t> m_operationCounter{ 1 };
@@ -84,4 +85,6 @@ private:
   std::string GetCurrentTimestamp();
   int64_t CalculateElapsedTime(const std::string& operationId);
   bool CreateOperationTables();
+
+ 
 };

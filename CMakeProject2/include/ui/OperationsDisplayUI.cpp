@@ -10,11 +10,14 @@ OperationsDisplayUI::OperationsDisplayUI(MachineOperations& machineOps)
   m_logger = Logger::GetInstance();
   m_resultsManager = m_machineOps.GetResultsManager();
 
+  // NEW: Initialize timezone offset
+  InitializeTimezone();
+
   if (!m_resultsManager) {
     m_logger->LogWarning("OperationsDisplayUI: No results manager available");
   }
   else {
-    m_logger->LogInfo("OperationsDisplayUI: Initialized successfully");
+    m_logger->LogInfo("OperationsDisplayUI: Initialized successfully with timezone " + m_timezoneDisplayName);
     RefreshOperationsList(); // Initial load
   }
 }
@@ -34,7 +37,10 @@ void OperationsDisplayUI::RenderUI() {
   ImGui::SetNextWindowSize(ImVec2(displaySize.x * 0.8f, displaySize.y * 0.7f), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.1f, displaySize.y * 0.15f), ImGuiCond_FirstUseEver);
 
-  if (ImGui::Begin(m_windowTitle.c_str(), &m_showWindow, ImGuiWindowFlags_MenuBar)) {
+  // Include timezone in window title
+  std::string windowTitle = m_windowTitle + " (" + m_timezoneDisplayName + ")";
+
+  if (ImGui::Begin(windowTitle.c_str(), &m_showWindow, ImGuiWindowFlags_MenuBar)) {
 
     // Menu bar
     if (ImGui::BeginMenuBar()) {
@@ -45,11 +51,24 @@ void OperationsDisplayUI::RenderUI() {
         }
         ImGui::Separator();
 
+        // NEW: Right panel toggle
+        if (ImGui::MenuItem("Toggle Details Panel", nullptr, m_showRightPanel)) {
+          m_showRightPanel = !m_showRightPanel;
+          m_logger->LogInfo("OperationsDisplayUI: Details panel " +
+            std::string(m_showRightPanel ? "shown" : "hidden"));
+        }
+
+        ImGui::Separator();
+
         // Refresh interval options
         if (ImGui::SliderInt("Refresh Interval (ms)",
           reinterpret_cast<int*>(&m_refreshInterval), 500, 5000)) {
           // Interval changed
         }
+
+        ImGui::Separator();
+        // Show timezone info in menu
+        ImGui::Text("Timezone: %s", m_timezoneDisplayName.c_str());
 
         ImGui::EndMenu();
       }
@@ -70,36 +89,45 @@ void OperationsDisplayUI::RenderUI() {
       ImGui::EndMenuBar();
     }
 
-    // Main content area with splitter
-    float availableWidth = ImGui::GetContentRegionAvail().x;
+    // Main content area - conditional layout based on panel visibility
+    if (m_showRightPanel) {
+      // Two-panel layout with splitter
+      float availableWidth = ImGui::GetContentRegionAvail().x;
 
-    // Left panel
-    ImGui::BeginChild("LeftPanel", ImVec2(m_leftPanelWidth, 0), true);
-    RenderLeftPanel();
-    ImGui::EndChild();
+      // Left panel - Operations list
+      ImGui::BeginChild("LeftPanel", ImVec2(m_leftPanelWidth, 0), true);
+      RenderLeftPanel();
+      ImGui::EndChild();
 
-    // Splitter
-    ImGui::SameLine();
-    ImGui::Button("##splitter", ImVec2(8.0f, -1));
-    if (ImGui::IsItemActive()) {
-      float delta = ImGui::GetIO().MouseDelta.x;
-      m_leftPanelWidth += delta;
-      m_leftPanelWidth = (std::clamp)(m_leftPanelWidth, m_minPanelWidth,
-        (std::min)(m_maxPanelWidth, availableWidth - 100.0f));
+      // Splitter
+      ImGui::SameLine();
+      ImGui::Button("##splitter", ImVec2(8.0f, -1));
+      if (ImGui::IsItemActive()) {
+        float delta = ImGui::GetIO().MouseDelta.x;
+        m_leftPanelWidth += delta;
+        m_leftPanelWidth = (std::clamp)(m_leftPanelWidth, m_minPanelWidth,
+          (std::min)(m_maxPanelWidth, availableWidth - 100.0f));
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+      }
+      ImGui::SameLine();
+
+      // Right panel - Operation details
+      ImGui::BeginChild("RightPanel", ImVec2(0, 0), true);
+      RenderRightPanel();
+      ImGui::EndChild();
     }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+    else {
+      // Single panel layout - full width operations list
+      ImGui::BeginChild("FullPanel", ImVec2(0, 0), true);
+      RenderLeftPanel();
+      ImGui::EndChild();
     }
-
-    // Right panel
-    ImGui::SameLine();
-    float rightPanelWidth = availableWidth - m_leftPanelWidth - 16.0f; // Account for splitter
-    ImGui::BeginChild("RightPanel", ImVec2(rightPanelWidth, 0), true);
-    RenderRightPanel();
-    ImGui::EndChild();
   }
   ImGui::End();
 }
+
 
 void OperationsDisplayUI::RenderLeftPanel() {
   ImGui::Text("Operations List");
@@ -122,7 +150,7 @@ void OperationsDisplayUI::RenderRightPanel() {
   ImGui::Text("Selected ID: %s", m_selectedOperationId.c_str());
   ImGui::Text("Selected Index: %d / %d", m_selectedOperationIndex, (int)m_operations.size());
 
-  // FIXED: Check if we have a valid selection by ID
+  // Check if we have a valid selection by ID
   if (!m_selectedOperationId.empty()) {
     // Find the operation by ID in current list
     bool found = false;
@@ -224,7 +252,7 @@ void OperationsDisplayUI::RenderOperationsList() {
 
       ImGui::TableNextRow();
 
-      // FIXED: Simple checkbox selection 
+      // Simple checkbox selection 
       bool isSelected = (m_selectedOperationId == op.operationId);
 
       // Select column with checkbox
@@ -270,9 +298,9 @@ void OperationsDisplayUI::RenderOperationsList() {
         ImGui::Text("-");
       }
 
-      // Time column
+      // Time column - NOW SHOWS RELATIVE TIME
       ImGui::TableNextColumn();
-      ImGui::Text("%s", FormatTimestamp(op.timestamp).c_str());
+      ImGui::Text("%s", FormatRelativeTime(op.timestamp).c_str());
 
       displayedCount++;
     }
@@ -285,8 +313,6 @@ void OperationsDisplayUI::RenderOperationsList() {
     (std::min)(m_displayCount, static_cast<int>(m_operations.size())),
     static_cast<int>(m_operations.size()));
 }
-
-
 
 void OperationsDisplayUI::RenderOperationDetails() {
   const auto& op = m_selectedOperation;
@@ -308,12 +334,18 @@ void OperationsDisplayUI::RenderOperationDetails() {
     ImGui::Text("Sequence: %s", op.sequenceName.c_str());
   }
 
-  // Timing info
+  // Timing info with timezone display
   ImGui::Separator();
   ImGui::Text("Timing Information:");
 
-  // Use the timestamp field (which should be populated from start_time)
-  ImGui::Text("Operation Time: %s", FormatTimestamp(op.timestamp).c_str());
+  // Show both formatted time and timezone info
+  auto localTime = ConvertToLocalTime(op.timestamp);
+  auto time_t = std::chrono::system_clock::to_time_t(localTime);
+
+  std::stringstream fullTime;
+  fullTime << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+
+  ImGui::Text("Operation Time: %s (%s)", fullTime.str().c_str(), m_timezoneDisplayName.c_str());
 
   if (op.elapsedTimeMs > 0) {
     ImGui::Text("Duration: %s", FormatDuration(op.elapsedTimeMs).c_str());
@@ -366,9 +398,10 @@ void OperationsDisplayUI::CheckForUpdates() {
   }
 
   try {
-    // First, do a lightweight check - just get the count and latest operation
+    // Lightweight checks - get count, latest operation, and running operations hash
     auto latestOp = m_resultsManager->GetLatestOperation();
     int currentCount = m_resultsManager->GetOperationCount();
+    std::string currentRunningHash = m_resultsManager->GetRunningOperationsHash();
 
     // Check if we need to refresh
     bool needsRefresh = false;
@@ -383,12 +416,18 @@ void OperationsDisplayUI::CheckForUpdates() {
       needsRefresh = true;
       m_logger->LogInfo("OperationsDisplayUI: New latest operation detected: " + latestOp.operationId);
     }
+    else if (currentRunningHash != m_lastRunningOpsHash) {
+      needsRefresh = true;
+      m_logger->LogInfo("OperationsDisplayUI: Running operations status changed (hash: " +
+        m_lastRunningOpsHash + " -> " + currentRunningHash + ")");
+    }
 
     // Only do full refresh if something actually changed
     if (needsRefresh) {
       RefreshOperationsList();
       m_lastKnownOperationCount = currentCount;
       m_lastKnownLatestOpId = latestOp.operationId;
+      m_lastRunningOpsHash = currentRunningHash;
     }
 
   }
@@ -398,6 +437,7 @@ void OperationsDisplayUI::CheckForUpdates() {
     RefreshOperationsList();
   }
 }
+
 
 bool OperationsDisplayUI::NeedsRefresh() const {
   if (!m_resultsManager) return false;
@@ -415,7 +455,7 @@ void OperationsDisplayUI::RefreshOperationsList() {
   if (!m_resultsManager) {
     m_operations.clear();
     m_selectedOperationIndex = -1;
-    m_selectedOperationId.clear();  // FIXED: Clear ID selection too
+    m_selectedOperationId.clear();
     return;
   }
 
@@ -432,7 +472,7 @@ void OperationsDisplayUI::RefreshOperationsList() {
     }
     m_lastKnownOperationCount = m_resultsManager->GetOperationCount();
 
-    // FIXED: Try to restore selection by operation ID
+    // Try to restore selection by operation ID
     bool selectionRestored = false;
     if (!selectedOpId.empty()) {
       for (int i = 0; i < static_cast<int>(m_operations.size()); i++) {
@@ -460,7 +500,7 @@ void OperationsDisplayUI::RefreshOperationsList() {
     m_logger->LogError("OperationsDisplayUI: Error refreshing operations: " + std::string(e.what()));
     m_operations.clear();
     m_selectedOperationIndex = -1;
-    m_selectedOperationId.clear();  // FIXED: Clear ID selection too
+    m_selectedOperationId.clear();
   }
 }
 
@@ -519,10 +559,57 @@ std::string OperationsDisplayUI::FormatDuration(int64_t milliseconds) const {
 }
 
 std::string OperationsDisplayUI::FormatTimestamp(const std::chrono::system_clock::time_point& timePoint) const {
-  auto time_t = std::chrono::system_clock::to_time_t(timePoint);
+  // Convert UTC database time to local time
+  auto localTime = ConvertToLocalTime(timePoint);
+  auto time_t = std::chrono::system_clock::to_time_t(localTime);
+
   std::stringstream ss;
   ss << std::put_time(std::localtime(&time_t), "%H:%M:%S");
   return ss.str();
+}
+
+std::string OperationsDisplayUI::FormatRelativeTime(const std::chrono::system_clock::time_point& timePoint) const {
+  auto now = std::chrono::system_clock::now();
+
+  // Convert the database timePoint to local time first
+  auto localTimePoint = ConvertToLocalTime(timePoint);
+
+  // Calculate duration between now and the local time
+  auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - localTimePoint);
+  int64_t seconds = duration.count();
+
+  // Handle negative values (future times or clock sync issues)
+  if (seconds < 0) {
+    seconds = -seconds;
+    if (seconds < 60) {
+      return "in " + std::to_string(seconds) + " sec";
+    }
+    else if (seconds < 3600) {
+      int64_t minutes = seconds / 60;
+      return "in " + std::to_string(minutes) + " min";
+    }
+    else {
+      int64_t hours = seconds / 3600;
+      return "in " + std::to_string(hours) + " hour" + (hours > 1 ? "s" : "");
+    }
+  }
+
+  // Normal past times
+  if (seconds < 60) {
+    return std::to_string(seconds) + " sec ago";
+  }
+  else if (seconds < 3600) { // Less than 1 hour
+    int64_t minutes = seconds / 60;
+    return std::to_string(minutes) + " min ago";
+  }
+  else if (seconds < 86400) { // Less than 1 day
+    int64_t hours = seconds / 3600;
+    return std::to_string(hours) + " hour" + (hours > 1 ? "s" : "") + " ago";
+  }
+  else { // 1 day or more
+    int64_t days = seconds / 86400;
+    return std::to_string(days) + " day" + (days > 1 ? "s" : "") + " ago";
+  }
 }
 
 ImVec4 OperationsDisplayUI::GetStatusColor(const std::string& status) const {
@@ -553,4 +640,52 @@ const char* OperationsDisplayUI::GetStatusIcon(const std::string& status) const 
   else {
     return "?";
   }
+}
+
+void OperationsDisplayUI::InitializeTimezone() {
+  // Get current UTC time
+  auto now_utc = std::chrono::system_clock::now();
+  auto utc_time_t = std::chrono::system_clock::to_time_t(now_utc);
+
+  // Convert to local and UTC tm structures
+  std::tm local_tm = *std::localtime(&utc_time_t);
+  std::tm utc_tm = *std::gmtime(&utc_time_t);
+
+  // Convert back to time_t to get actual time difference
+  time_t local_time = std::mktime(&local_tm);
+  time_t utc_time = std::mktime(&utc_tm);
+
+  // Calculate timezone offset in seconds, then convert to hours
+  int offset_seconds = static_cast<int>(std::difftime(local_time, utc_time));
+  int offset_hours = offset_seconds / 3600;
+
+  // For debugging - let's also try a simpler approach
+  auto local_now = std::chrono::system_clock::now();
+  auto utc_now = std::chrono::system_clock::now(); // This is already UTC
+
+  // Alternative method: use the tm_gmtoff field if available (Unix/Linux)
+#ifdef __unix__
+  struct tm* local_tm_ptr = std::localtime(&utc_time_t);
+  if (local_tm_ptr && local_tm_ptr->tm_gmtoff != 0) {
+    offset_hours = static_cast<int>(local_tm_ptr->tm_gmtoff / 3600);
+  }
+#endif
+
+  m_timezoneOffset = std::chrono::hours(offset_hours);
+
+  // Create display name (e.g., "UTC+8", "UTC-5")
+  if (offset_hours >= 0) {
+    m_timezoneDisplayName = "UTC+" + std::to_string(offset_hours);
+  }
+  else {
+    m_timezoneDisplayName = "UTC" + std::to_string(offset_hours);
+  }
+
+  m_logger->LogInfo("OperationsDisplayUI: Timezone initialized to " + m_timezoneDisplayName +
+    " (offset: " + std::to_string(offset_hours) + " hours)");
+}
+
+std::chrono::system_clock::time_point OperationsDisplayUI::ConvertToLocalTime(
+  const std::chrono::system_clock::time_point& utcTime) const {
+  return utcTime + m_timezoneOffset;
 }

@@ -199,6 +199,8 @@ private:
   // UI state
   bool m_showWindow = true;
 
+	bool m_ShowFeedbackWindow = true; // Flag to control feedback window visibility
+
   // Block management
   std::vector<std::unique_ptr<MachineBlock>> m_programBlocks;
   std::vector<BlockCategory> m_blockCategories;

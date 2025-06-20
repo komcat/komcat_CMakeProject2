@@ -834,7 +834,7 @@ void MachineBlockUI::RenderCannotSaveDialog() {
 
 void MachineBlockUI::RenderFeedbackAndPrompts() {
 	// Render feedback UI
-	if (m_feedbackUI) {
+	if (m_feedbackUI && m_ShowFeedbackWindow) {
 		m_feedbackUI->Render();  // ADD THIS LINE
 	}
 

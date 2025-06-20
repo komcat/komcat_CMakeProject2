@@ -43,6 +43,10 @@ private:
   int m_lastKnownOperationCount = 0;
   std::string m_lastKnownLatestOpId;
 
+  // NEW: Timezone support
+  std::chrono::hours m_timezoneOffset;
+  std::string m_timezoneDisplayName;
+
   // Data
   std::vector<OperationResult> m_operations;
   int m_selectedOperationIndex = -1;
@@ -83,11 +87,16 @@ private:
   bool PassesFilters(const OperationResult& op) const;
   std::string FormatDuration(int64_t milliseconds) const;
   std::string FormatTimestamp(const std::chrono::system_clock::time_point& timePoint) const;
+  std::string FormatRelativeTime(const std::chrono::system_clock::time_point& timePoint) const; // NEW
   ImVec4 GetStatusColor(const std::string& status) const;
   const char* GetStatusIcon(const std::string& status) const;
 
+  // NEW: Timezone helpers
+  void InitializeTimezone();
+  std::chrono::system_clock::time_point ConvertToLocalTime(const std::chrono::system_clock::time_point& utcTime) const;
+
   // Selection tracking
-
-  std::string m_selectedOperationId;  // NEW: Track by ID instead of index
-
+  std::string m_selectedOperationId;  // Track by ID instead of index
+  std::string m_lastRunningOpsHash;
+  bool m_showRightPanel = true;  // NEW: Toggle for right panel visibility
 };
