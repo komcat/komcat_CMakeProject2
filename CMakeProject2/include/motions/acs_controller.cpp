@@ -1205,3 +1205,104 @@ bool ACSController::CopyPositionToClipboard() {
 
   return true;
 }
+
+
+bool ACSController::RunBuffer(int bufferNumber, const std::string& labelName) {
+  if (!m_isConnected) {
+    m_logger->LogError("ACSController: Cannot run buffer - not connected");
+    return false;
+  }
+
+  // Validate buffer number (0-63 depending on controller)
+  if (bufferNumber < 0 || bufferNumber > 63) {
+    m_logger->LogError("ACSController: Invalid buffer number " + std::to_string(bufferNumber) +
+      ". Must be between 0 and 63");
+    return false;
+  }
+
+  // Prepare label parameter
+  char* labelPtr = nullptr;
+  char labelBuffer[256] = { 0 };
+
+  if (!labelName.empty()) {
+    // Validate label name (must start with underscore or A-Z)
+    std::string upperLabel = labelName;
+    std::transform(upperLabel.begin(), upperLabel.end(), upperLabel.begin(), ::toupper);
+
+    if (upperLabel[0] != '_' && (upperLabel[0] < 'A' || upperLabel[0] > 'Z')) {
+      m_logger->LogError("ACSController: Invalid label name '" + labelName +
+        "'. Label must start with underscore or letter A-Z");
+      return false;
+    }
+
+    // Copy to buffer for ACS API
+    strncpy(labelBuffer, upperLabel.c_str(), sizeof(labelBuffer) - 1);
+    labelBuffer[sizeof(labelBuffer) - 1] = '\0';
+    labelPtr = labelBuffer;
+
+    m_logger->LogInfo("ACSController: Running buffer " + std::to_string(bufferNumber) +
+      " from label " + labelName);
+  }
+  else {
+    m_logger->LogInfo("ACSController: Running buffer " + std::to_string(bufferNumber) +
+      " from start");
+  }
+
+  // Call ACS API function
+  if (!acsc_RunBuffer(m_controllerId, bufferNumber, labelPtr, ACSC_SYNCHRONOUS)) {
+    int error = acsc_GetLastError();
+    m_logger->LogError("ACSController: Failed to run buffer " + std::to_string(bufferNumber) +
+      ". Error code: " + std::to_string(error));
+    return false;
+  }
+
+  m_logger->LogInfo("ACSController: Successfully started buffer " + std::to_string(bufferNumber));
+  return true;
+}
+
+bool ACSController::StopBuffer(int bufferNumber) {
+  if (!m_isConnected) {
+    m_logger->LogError("ACSController: Cannot stop buffer - not connected");
+    return false;
+  }
+
+  // Validate buffer number (0-63 depending on controller)
+  if (bufferNumber < 0 || bufferNumber > 63) {
+    m_logger->LogError("ACSController: Invalid buffer number " + std::to_string(bufferNumber) +
+      ". Must be between 0 and 63");
+    return false;
+  }
+
+  m_logger->LogInfo("ACSController: Stopping buffer " + std::to_string(bufferNumber));
+
+  // Call ACS API function
+  if (!acsc_StopBuffer(m_controllerId, bufferNumber, ACSC_SYNCHRONOUS)) {
+    int error = acsc_GetLastError();
+    m_logger->LogError("ACSController: Failed to stop buffer " + std::to_string(bufferNumber) +
+      ". Error code: " + std::to_string(error));
+    return false;
+  }
+
+  m_logger->LogInfo("ACSController: Successfully stopped buffer " + std::to_string(bufferNumber));
+  return true;
+}
+
+bool ACSController::StopAllBuffers() {
+  if (!m_isConnected) {
+    m_logger->LogError("ACSController: Cannot stop all buffers - not connected");
+    return false;
+  }
+
+  m_logger->LogInfo("ACSController: Stopping all buffers");
+
+  // Use ACSC_NONE to stop all buffers
+  if (!acsc_StopBuffer(m_controllerId, ACSC_NONE, ACSC_SYNCHRONOUS)) {
+    int error = acsc_GetLastError();
+    m_logger->LogError("ACSController: Failed to stop all buffers. Error code: " +
+      std::to_string(error));
+    return false;
+  }
+
+  m_logger->LogInfo("ACSController: Successfully stopped all buffers");
+  return true;
+}

@@ -17,6 +17,7 @@
 // Forward declaration of the adapter class
 class MotionControlHierarchicalAdapter;
 
+
 // Class to handle path planning and execution
 class MotionControlLayer {
 public:
@@ -113,6 +114,23 @@ public:
   // NEW: Get access to the motion config manager for node lookups
   const MotionConfigManager& GetMotionConfigManager() const { return m_configManager; }
 
+  bool SetDeviceVelocity(const std::string& deviceName, double velocity);
+  bool GetDeviceVelocity(const std::string& deviceName, double& velocity);
+
+  struct VelocityLimits {
+    double min;
+    double max;
+    double defaultValue;
+  };
+  VelocityLimits GetVelocityLimits(const std::string& deviceName) const;
+
+
+
+  // ACS-specific buffer program methods (acsc_ prefix)
+  bool acsc_RunBuffer(const std::string& deviceName, int bufferNumber, const std::string& labelName = "");
+  bool acsc_StopBuffer(const std::string& deviceName, int bufferNumber);
+  bool acsc_StopAllBuffers(const std::string& deviceName);
+  bool acsc_IsBufferRunning(const std::string& deviceName, int bufferNumber);
 
 private:
   // References to managers

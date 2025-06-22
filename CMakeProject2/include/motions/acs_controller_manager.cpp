@@ -356,3 +356,77 @@ void ACSControllerManager::RenderUI() {
 
   ImGui::End();
 }
+
+
+// Add these implementations to acs_controller_manager.cpp:
+
+bool ACSControllerManager::acsc_RunBuffer(const std::string& deviceName, int bufferNumber, const std::string& labelName) {
+  auto controller = GetController(deviceName);
+  if (!controller) {
+    m_logger->LogError("ACSControllerManager: No controller found for device " + deviceName);
+    return false;
+  }
+
+  if (!controller->IsConnected()) {
+    m_logger->LogError("ACSControllerManager: Controller for device " + deviceName + " is not connected");
+    return false;
+  }
+
+  m_logger->LogInfo("ACSControllerManager: Running buffer " + std::to_string(bufferNumber) +
+    " on device " + deviceName +
+    (labelName.empty() ? "" : " from label " + labelName));
+
+  return controller->RunBuffer(bufferNumber, labelName);
+}
+
+bool ACSControllerManager::acsc_StopBuffer(const std::string& deviceName, int bufferNumber) {
+  auto controller = GetController(deviceName);
+  if (!controller) {
+    m_logger->LogError("ACSControllerManager: No controller found for device " + deviceName);
+    return false;
+  }
+
+  if (!controller->IsConnected()) {
+    m_logger->LogError("ACSControllerManager: Controller for device " + deviceName + " is not connected");
+    return false;
+  }
+
+  m_logger->LogInfo("ACSControllerManager: Stopping buffer " + std::to_string(bufferNumber) +
+    " on device " + deviceName);
+
+  return controller->StopBuffer(bufferNumber);
+}
+
+bool ACSControllerManager::acsc_StopAllBuffers(const std::string& deviceName) {
+  auto controller = GetController(deviceName);
+  if (!controller) {
+    m_logger->LogError("ACSControllerManager: No controller found for device " + deviceName);
+    return false;
+  }
+
+  if (!controller->IsConnected()) {
+    m_logger->LogError("ACSControllerManager: Controller for device " + deviceName + " is not connected");
+    return false;
+  }
+
+  m_logger->LogInfo("ACSControllerManager: Stopping all buffers on device " + deviceName);
+
+  return controller->StopAllBuffers();
+}
+
+bool ACSControllerManager::acsc_IsBufferRunning(const std::string& deviceName, int bufferNumber) {
+  auto controller = GetController(deviceName);
+  if (!controller) {
+    return false;
+  }
+
+  if (!controller->IsConnected()) {
+    return false;
+  }
+
+  // If you implement IsBufferRunning in ACSController, uncomment:
+   //return controller->IsBufferRunning(bufferNumber);
+
+  // For now, return false (not implemented yet in ACSController)
+  return false;
+}

@@ -1470,3 +1470,177 @@ bool MotionControlLayer::ReloadMotionConfig() {
 	}
 }
 
+
+bool MotionControlLayer::SetDeviceVelocity(const std::string& deviceName, double velocity) {
+	m_logger->LogInfo("MotionControlLayer: Setting velocity for device " + deviceName +
+		" to " + std::to_string(velocity));
+
+	// Check if device exists
+	auto deviceOpt = m_configManager.GetDevice(deviceName);
+	if (!deviceOpt.has_value()) {
+		m_logger->LogError("MotionControlLayer: Device not found: " + deviceName);
+		return false;
+	}
+
+	// Controller-specific velocity validation
+	double minVelocity = 0.1;  // Universal minimum
+	double maxVelocity;
+	double defaultVelocity;
+
+	if (IsDevicePIController(deviceName)) {
+		defaultVelocity = 10.0;  // PI default: 10mm/s
+		maxVelocity = 20.0;      // PI max: 20mm/s
+	}
+	else {
+		defaultVelocity = 30.0;  // ACS default: 30mm/s  
+		maxVelocity = 80.0;      // ACS max: 80mm/s
+	}
+
+	// Validate velocity range
+	if (velocity < minVelocity || velocity > maxVelocity) {
+		std::string controllerType = IsDevicePIController(deviceName) ? "PI" : "ACS";
+		m_logger->LogError("MotionControlLayer: Velocity " + std::to_string(velocity) +
+			" for " + controllerType + " controller is outside valid range [" +
+			std::to_string(minVelocity) + ", " + std::to_string(maxVelocity) + "]");
+		return false;
+	}
+
+	// Determine which controller manager to use
+	if (IsDevicePIController(deviceName)) {
+		PIController* controller = m_piControllerManager.GetController(deviceName);
+		if (!controller || !controller->IsConnected()) {
+			m_logger->LogError("MotionControlLayer: PI controller not available for " + deviceName);
+			return false;
+		}
+
+		// Set velocity for all axes (X, Y, Z, U, V, W)
+		bool success = true;
+		std::vector<std::string> axes = { "X", "Y", "Z", "U", "V", "W" };
+		for (const auto& axis : axes) {
+			if (!controller->SetVelocity(axis, velocity)) {
+				m_logger->LogError("MotionControlLayer: Failed to set velocity for axis " + axis);
+				success = false;
+			}
+		}
+		return success;
+	}
+	else {
+		ACSController* controller = m_acsControllerManager.GetController(deviceName);
+		if (!controller || !controller->IsConnected()) {
+			m_logger->LogError("MotionControlLayer: ACS controller not available for " + deviceName);
+			return false;
+		}
+
+		// Set velocity for all available axes
+		bool success = true;
+		std::vector<std::string> axes = { "X", "Y", "Z" };
+		for (const auto& axis : axes) {
+			if (!controller->SetVelocity(axis, velocity)) {
+				m_logger->LogError("MotionControlLayer: Failed to set velocity for axis " + axis);
+				success = false;
+			}
+		}
+		return success;
+	}
+}
+
+// Add to motion_control_layer.cpp:
+MotionControlLayer::VelocityLimits MotionControlLayer::GetVelocityLimits(const std::string& deviceName) const {
+	VelocityLimits limits;
+	limits.min = 0.1;  // Universal minimum
+
+	if (IsDevicePIController(deviceName)) {
+		limits.defaultValue = 10.0;  // PI default: 10mm/s
+		limits.max = 20.0;           // PI max: 20mm/s
+	}
+	else {
+		limits.defaultValue = 30.0;  // ACS default: 30mm/s  
+		limits.max = 80.0;           // ACS max: 80mm/s
+	}
+
+	return limits;
+}
+
+
+bool MotionControlLayer::GetDeviceVelocity(const std::string& deviceName, double& velocity) {
+	m_logger->LogInfo("MotionControlLayer: Getting velocity for device " + deviceName);
+
+	// Check if device exists
+	auto deviceOpt = m_configManager.GetDevice(deviceName);
+	if (!deviceOpt.has_value()) {
+		m_logger->LogError("MotionControlLayer: Device not found: " + deviceName);
+		return false;
+	}
+
+	// Determine which controller manager to use
+	if (IsDevicePIController(deviceName)) {
+		PIController* controller = m_piControllerManager.GetController(deviceName);
+		if (!controller || !controller->IsConnected()) {
+			m_logger->LogError("MotionControlLayer: PI controller not available for " + deviceName);
+			return false;
+		}
+
+		// Get velocity from first available axis (they should all be the same for device-level control)
+		// Try X axis first, fallback to others if needed
+		std::vector<std::string> axes = { "X", "Y", "Z", "U", "V", "W" };
+		for (const auto& axis : axes) {
+			if (controller->GetVelocity(axis, velocity)) {
+				m_logger->LogInfo("MotionControlLayer: Retrieved velocity " + std::to_string(velocity) +
+					" mm/s for device " + deviceName + " from axis " + axis);
+				return true;
+			}
+		}
+
+		m_logger->LogError("MotionControlLayer: Failed to get velocity from any PI controller axis");
+		return false;
+	}
+	else {
+		ACSController* controller = m_acsControllerManager.GetController(deviceName);
+		if (!controller || !controller->IsConnected()) {
+			m_logger->LogError("MotionControlLayer: ACS controller not available for " + deviceName);
+			return false;
+		}
+
+		// Get velocity from first available axis
+		std::vector<std::string> axes = { "X", "Y", "Z" };
+		for (const auto& axis : axes) {
+			if (controller->GetVelocity(axis, velocity)) {
+				m_logger->LogInfo("MotionControlLayer: Retrieved velocity " + std::to_string(velocity) +
+					" mm/s for device " + deviceName + " from axis " + axis);
+				return true;
+			}
+		}
+
+		m_logger->LogError("MotionControlLayer: Failed to get velocity from any ACS controller axis");
+		return false;
+	}
+}
+
+
+// Add these implementations to motion_control_layer.cpp:
+
+bool MotionControlLayer::acsc_RunBuffer(const std::string& deviceName, int bufferNumber, const std::string& labelName) {
+	m_logger->LogInfo("MotionControlLayer: Running ACS buffer " + std::to_string(bufferNumber) +
+		" on device " + deviceName +
+		(labelName.empty() ? "" : " from label " + labelName));
+
+	// Only delegate to ACS controller manager
+	return m_acsControllerManager.acsc_RunBuffer(deviceName, bufferNumber, labelName);
+}
+
+bool MotionControlLayer::acsc_StopBuffer(const std::string& deviceName, int bufferNumber) {
+	m_logger->LogInfo("MotionControlLayer: Stopping ACS buffer " + std::to_string(bufferNumber) +
+		" on device " + deviceName);
+
+	return m_acsControllerManager.acsc_StopBuffer(deviceName, bufferNumber);
+}
+
+bool MotionControlLayer::acsc_StopAllBuffers(const std::string& deviceName) {
+	m_logger->LogInfo("MotionControlLayer: Stopping all ACS buffers on device " + deviceName);
+
+	return m_acsControllerManager.acsc_StopAllBuffers(deviceName);
+}
+
+bool MotionControlLayer::acsc_IsBufferRunning(const std::string& deviceName, int bufferNumber) {
+	return m_acsControllerManager.acsc_IsBufferRunning(deviceName, bufferNumber);
+}

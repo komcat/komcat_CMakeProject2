@@ -3121,3 +3121,226 @@ private:
   std::string m_deviceName;
   int m_inputPin;
 };
+
+
+
+/// <summary>
+/// Store current device speed operation - captures current speed for later restoration
+/// </summary>
+class StoreCurrentSpeedOperation : public SequenceOperation {
+public:
+  StoreCurrentSpeedOperation(const std::string& deviceName, const std::string& storageKey = "")
+    : m_deviceName(deviceName), m_storageKey(storageKey.empty() ? deviceName + "_stored_speed" : storageKey) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    std::string callerContext = "StoreCurrentSpeedOperation_" + m_deviceName + "_" + m_storageKey;
+
+    // Get current speed from device (you'll need to implement this)
+    double currentSpeed = 0.0;
+    bool success = ops.GetDeviceSpeed(m_deviceName, currentSpeed, callerContext);
+
+    if (success) {
+      // Store the speed in a static map for later retrieval
+      GetStoredSpeeds()[m_storageKey] = currentSpeed;
+      ops.LogInfo("Stored current speed " + std::to_string(currentSpeed) +
+        " mm/s for device " + m_deviceName + " with key '" + m_storageKey + "'");
+    }
+    else {
+      ops.LogWarning("Failed to get current speed for " + m_deviceName + ", using default");
+      // Store default speeds based on controller type
+      double defaultSpeed = ops.IsDevicePIController(m_deviceName) ? 10.0 : 30.0;
+      GetStoredSpeeds()[m_storageKey] = defaultSpeed;
+      ops.LogInfo("Stored default speed " + std::to_string(defaultSpeed) +
+        " mm/s for device " + m_deviceName + " with key '" + m_storageKey + "'");
+    }
+
+    return true;
+  }
+
+  std::string GetDescription() const override {
+    return "Store current speed for device " + m_deviceName + " (key: " + m_storageKey + ")";
+  }
+
+  // Static method to access stored speeds
+  static std::map<std::string, double>& GetStoredSpeeds() {
+    static std::map<std::string, double> storedSpeeds;
+    return storedSpeeds;
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_storageKey;
+};
+
+/// <summary>
+/// Set device speed operation
+/// </summary>
+class SetDeviceSpeedOperation : public SequenceOperation {
+public:
+  SetDeviceSpeedOperation(const std::string& deviceName, double speed)
+    : m_deviceName(deviceName), m_speed(speed) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    std::string callerContext = "SetDeviceSpeedOperation_" + m_deviceName + "_" + std::to_string(m_speed);
+
+    ops.LogInfo("Setting speed for device " + m_deviceName + " to " + std::to_string(m_speed) + " mm/s");
+
+    return ops.SetDeviceSpeed(m_deviceName, m_speed, callerContext);
+  }
+
+  std::string GetDescription() const override {
+    return "Set speed for device " + m_deviceName + " to " + std::to_string(m_speed) + " mm/s";
+  }
+
+private:
+  std::string m_deviceName;
+  double m_speed;
+};
+
+/// <summary>
+/// Restore previously stored device speed operation
+/// </summary>
+class RestoreStoredSpeedOperation : public SequenceOperation {
+public:
+  RestoreStoredSpeedOperation(const std::string& deviceName, const std::string& storageKey = "")
+    : m_deviceName(deviceName), m_storageKey(storageKey.empty() ? deviceName + "_stored_speed" : storageKey) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    std::string callerContext = "RestoreStoredSpeedOperation_" + m_deviceName + "_" + m_storageKey;
+
+    auto& storedSpeeds = StoreCurrentSpeedOperation::GetStoredSpeeds();
+    auto it = storedSpeeds.find(m_storageKey);
+
+    if (it != storedSpeeds.end()) {
+      double storedSpeed = it->second;
+      ops.LogInfo("Restoring stored speed " + std::to_string(storedSpeed) +
+        " mm/s for device " + m_deviceName + " from key '" + m_storageKey + "'");
+
+      return ops.SetDeviceSpeed(m_deviceName, storedSpeed, callerContext);
+    }
+    else {
+      ops.LogError("No stored speed found for key '" + m_storageKey + "' - cannot restore");
+      return false;
+    }
+  }
+
+  std::string GetDescription() const override {
+    return "Restore stored speed for device " + m_deviceName + " (key: " + m_storageKey + ")";
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_storageKey;
+};
+
+
+
+// Add these new sequence operation classes to SequenceStep.h:
+
+// ACS Run Buffer operation with tracking
+class ACSRunBufferOperation : public SequenceOperation {
+public:
+  ACSRunBufferOperation(const std::string& deviceName, int bufferNumber, const std::string& labelName = "")
+    : m_deviceName(deviceName), m_bufferNumber(bufferNumber), m_labelName(labelName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate descriptive caller context
+    std::string callerContext = "ACSRunBufferOperation_" + m_deviceName + "_buffer" +
+      std::to_string(m_bufferNumber) +
+      (m_labelName.empty() ? "" : "_" + m_labelName);
+
+    // Call machine operations with tracking
+    return ops.acsc_RunBuffer(m_deviceName, m_bufferNumber, m_labelName, callerContext);
+  }
+
+  std::string GetDescription() const override {
+    return "Run ACS buffer " + std::to_string(m_bufferNumber) + " on " + m_deviceName +
+      (m_labelName.empty() ? "" : " from label " + m_labelName);
+  }
+
+private:
+  std::string m_deviceName;
+  int m_bufferNumber;
+  std::string m_labelName;
+};
+
+// ACS Stop Buffer operation with tracking
+class ACSStopBufferOperation : public SequenceOperation {
+public:
+  ACSStopBufferOperation(const std::string& deviceName, int bufferNumber)
+    : m_deviceName(deviceName), m_bufferNumber(bufferNumber) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate descriptive caller context
+    std::string callerContext = "ACSStopBufferOperation_" + m_deviceName + "_buffer" +
+      std::to_string(m_bufferNumber);
+
+    // Call machine operations with tracking
+    return ops.acsc_StopBuffer(m_deviceName, m_bufferNumber, callerContext);
+  }
+
+  std::string GetDescription() const override {
+    return "Stop ACS buffer " + std::to_string(m_bufferNumber) + " on " + m_deviceName;
+  }
+
+private:
+  std::string m_deviceName;
+  int m_bufferNumber;
+};
+
+// ACS Stop All Buffers operation with tracking
+class ACSStopAllBuffersOperation : public SequenceOperation {
+public:
+  ACSStopAllBuffersOperation(const std::string& deviceName)
+    : m_deviceName(deviceName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate descriptive caller context
+    std::string callerContext = "ACSStopAllBuffersOperation_" + m_deviceName;
+
+    // Call machine operations with tracking
+    return ops.acsc_StopAllBuffers(m_deviceName, callerContext);
+  }
+
+  std::string GetDescription() const override {
+    return "Stop all ACS buffers on " + m_deviceName;
+  }
+
+private:
+  std::string m_deviceName;
+};
+
+// ACS Buffer Status Check operation
+class ACSBufferStatusOperation : public SequenceOperation {
+public:
+  ACSBufferStatusOperation(const std::string& deviceName, int bufferNumber)
+    : m_deviceName(deviceName), m_bufferNumber(bufferNumber), m_isRunning(false) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Check buffer status (no caller context needed for status queries)
+    m_isRunning = ops.acsc_IsBufferRunning(m_deviceName, m_bufferNumber);
+    return true; // Status check always succeeds
+  }
+
+  std::string GetDescription() const override {
+    return "Check ACS buffer " + std::to_string(m_bufferNumber) + " status on " + m_deviceName +
+      " (status: " + (m_isRunning ? "RUNNING" : "STOPPED") + ")";
+  }
+
+  // Getter methods for accessing the status
+  bool IsRunning() const { return m_isRunning; }
+  bool IsStopped() const { return !m_isRunning; }
+  std::string GetStatusString() const { return m_isRunning ? "RUNNING" : "STOPPED"; }
+
+private:
+  std::string m_deviceName;
+  int m_bufferNumber;
+  bool m_isRunning;
+};

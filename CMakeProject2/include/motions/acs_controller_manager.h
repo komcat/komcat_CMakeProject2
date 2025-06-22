@@ -60,6 +60,13 @@ public:
   //    controller->SetWindowVisible(m_isWindowVisible);
   //  }
   //}
+
+  // ACS-specific buffer program methods (acsc_ prefix)
+  bool acsc_RunBuffer(const std::string& deviceName, int bufferNumber, const std::string& labelName = "");
+  bool acsc_StopBuffer(const std::string& deviceName, int bufferNumber);
+  bool acsc_StopAllBuffers(const std::string& deviceName);
+  bool acsc_IsBufferRunning(const std::string& deviceName, int bufferNumber);
+
 private:
   MotionConfigManager& m_configManager;
   std::map<std::string, std::unique_ptr<ACSController>> m_controllers;

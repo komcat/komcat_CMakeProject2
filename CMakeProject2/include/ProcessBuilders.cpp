@@ -860,10 +860,7 @@ namespace ProcessBuilders {
 
 	std::unique_ptr<SequenceStep> BuildDispenseEpoxy1Sequence(
 		MachineOperations& machineOps, UserInteractionManager& uiManager) {
-
 		auto sequence = std::make_unique<SequenceStep>("Dispense Epoxy at Location 1", machineOps);
-
-
 
 		// 1. Retract dispenser head first for safety
 		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
@@ -876,63 +873,56 @@ namespace ProcessBuilders {
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"hex-right", "Process_Flow", "node_5190")); // Reject position
 
-		// NEW CODE (guaranteed blocking):
+		// 3. Move to safe dispense position (blocking)
 		sequence->AddOperation(std::make_shared<BlockingMoveToPointNameOperation>(
 			"gantry-main", "dispense1safe", 30000)); // 30 second timeout
 
 		// 4. Extend dispenser head
 		sequence->AddOperation(std::make_shared<ExtendSlideOperation>("Dispenser_Head"));
 
-		// 5. Move to position name gantry-main to dispense1
-		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
-			"gantry-main", "dispense1"));
+		// 5. Store current speed for later restoration
+		sequence->AddOperation(std::make_shared<StoreCurrentSpeedOperation>("gantry-main", "dispense_original_speed"));
 
-		// 6. Wait 1 sec
+		// 6. Set slow speed for precise dispensing (0.5 mm/s)
+		sequence->AddOperation(std::make_shared<SetDeviceSpeedOperation>("gantry-main", 0.5));
+
+		// 7. Move to dispense position at slow speed
+		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>("gantry-main", "dispense1"));
+
+		// 8. Wait 1 sec
 		sequence->AddOperation(std::make_shared<WaitOperation>(1000));
 
-		// 7. Set output dispenser shot (pin 15 according to IOConfig.json)
-		sequence->AddOperation(std::make_shared<SetOutputOperation>(
-			"IOBottom", 15, true)); // Dispenser_Shot pin 15
-
-		// 8. Wait 50ms
+		// 9. Dispense epoxy
+		sequence->AddOperation(std::make_shared<SetOutputOperation>("IOBottom", 15, true)); // Dispenser_Shot pin 15
+		sequence->AddOperation(std::make_shared<WaitOperation>(50));
+		sequence->AddOperation(std::make_shared<SetOutputOperation>("IOBottom", 15, false)); // Clear Dispenser_Shot
 		sequence->AddOperation(std::make_shared<WaitOperation>(50));
 
-		// 9. Clear output
-		sequence->AddOperation(std::make_shared<SetOutputOperation>(
-			"IOBottom", 15, false)); // Clear Dispenser_Shot
+		// 10. Move back to safe position (still at slow speed)
+		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>("gantry-main", "dispense1safe"));
 
-		// 10. Wait 50ms
-		sequence->AddOperation(std::make_shared<WaitOperation>(50));
-
-		// 11. Move to position name gantry-main to dispense1safe
-		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
-			"gantry-main", "dispense1safe"));
+		// 11. Restore original speed
+		sequence->AddOperation(std::make_shared<RestoreStoredSpeedOperation>("gantry-main", "dispense_original_speed"));
 
 		// 12. Retract dispenser head (non-blocking)
 		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
 
 		// Move to safe position
-		//sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
-		//	"gantry-main", "node_4027")); // Safe position
-
-		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"gantry-main","Process_Flow", "node_3618")); // Safe Left position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>("gantry-main", "Process_Flow", "node_3618")); // Safe Left position
 		sequence->AddOperation(std::make_shared<WaitOperation>(500));
-		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"gantry-main", "Process_Flow", "node_4027")); // Safe Left position
-		// 2. Move hex-left to home position
-		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"hex-left", "Process_Flow", "node_5480"));
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>("gantry-main", "Process_Flow", "node_4027")); // Safe Left position
 
-		// 3. Move hex-right to home position
-		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"hex-right", "Process_Flow", "node_5136"));
+		// Move hex stages to home position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>("hex-left", "Process_Flow", "node_5480"));
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>("hex-right", "Process_Flow", "node_5136"));
+
 		return sequence;
 	}
 
+
+
 	std::unique_ptr<SequenceStep> BuildDispenseEpoxy2Sequence(
 		MachineOperations& machineOps, UserInteractionManager& uiManager) {
-
 		auto sequence = std::make_unique<SequenceStep>("Dispense Epoxy at Location 2", machineOps);
 
 		// 1. Retract dispenser head first for safety
@@ -945,62 +935,84 @@ namespace ProcessBuilders {
 			"hex-left", "Process_Flow", "node_5531")); // Reject position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
 			"hex-right", "Process_Flow", "node_5190")); // Reject position
-		// NEW CODE (guaranteed blocking):
+
+		// 3. Move to safe dispense position (blocking)
 		sequence->AddOperation(std::make_shared<BlockingMoveToPointNameOperation>(
 			"gantry-main", "dispense2safe", 30000)); // 30 second timeout
 
 		// 4. Extend dispenser head
 		sequence->AddOperation(std::make_shared<ExtendSlideOperation>("Dispenser_Head"));
 
-		// 5. Move to position name gantry-main to dispense2
-		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
-			"gantry-main", "dispense2"));
+		// 5. Store current speed for later restoration
+		sequence->AddOperation(std::make_shared<StoreCurrentSpeedOperation>("gantry-main", "dispense2_original_speed"));
 
-		// 6. Wait 1 sec
+		// 6. Set slow speed for precise dispensing (0.5 mm/s)
+		sequence->AddOperation(std::make_shared<SetDeviceSpeedOperation>("gantry-main", 0.5));
+
+		// 7. Move to dispense position at slow speed
+		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>("gantry-main", "dispense2"));
+
+		// 8. Wait 1 sec
 		sequence->AddOperation(std::make_shared<WaitOperation>(1000));
 
-		// 7. Set output dispenser shot (pin 15 according to IOConfig.json)
-		sequence->AddOperation(std::make_shared<SetOutputOperation>(
-			"IOBottom", 15, true)); // Dispenser_Shot pin 15
-
-		// 8. Wait 50ms
+		// 9. Dispense epoxy
+		sequence->AddOperation(std::make_shared<SetOutputOperation>("IOBottom", 15, true)); // Dispenser_Shot pin 15
+		sequence->AddOperation(std::make_shared<WaitOperation>(50));
+		sequence->AddOperation(std::make_shared<SetOutputOperation>("IOBottom", 15, false)); // Clear Dispenser_Shot
 		sequence->AddOperation(std::make_shared<WaitOperation>(50));
 
-		// 9. Clear output
-		sequence->AddOperation(std::make_shared<SetOutputOperation>(
-			"IOBottom", 15, false)); // Clear Dispenser_Shot
+		// 10. Move back to safe position (still at slow speed)
+		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>("gantry-main", "dispense2safe"));
 
-		// 10. Wait 50ms
-		sequence->AddOperation(std::make_shared<WaitOperation>(50));
-
-		// 11. Move to position name gantry-main to dispense2safe
-		sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
-			"gantry-main", "dispense2safe"));
+		// 11. Restore original speed
+		sequence->AddOperation(std::make_shared<RestoreStoredSpeedOperation>("gantry-main", "dispense2_original_speed"));
 
 		// 12. Retract dispenser head (non-blocking)
 		sequence->AddOperation(std::make_shared<RetractSlideOperation>("Dispenser_Head"));
 
 		// Move to safe position
-		//sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
-		//	"gantry-main", "node_4027")); // Safe position
-
-		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"gantry-main", "Process_Flow", "node_3618")); // Safe Left position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>("gantry-main", "Process_Flow", "node_3618")); // Safe Left position
 		sequence->AddOperation(std::make_shared<WaitOperation>(500));
-		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"gantry-main", "Process_Flow", "node_4027")); // Safe Left position
-		// 2. Move hex-left to home position
-		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"hex-left", "Process_Flow", "node_5480"));
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>("gantry-main", "Process_Flow", "node_4027")); // Safe Left position
 
-		// 3. Move hex-right to home position
-		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"hex-right", "Process_Flow", "node_5136"));
+		// Move hex stages to home position
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>("hex-left", "Process_Flow", "node_5480"));
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>("hex-right", "Process_Flow", "node_5136"));
+
 		return sequence;
 	}
 
 
 
+// If you prefer to use nodes instead of named positions:
+	std::unique_ptr<SequenceStep> ProcessBuilders::BuildHomingSequenceWithNodes(MachineOperations& machineOps, UserInteractionManager& uiManager) {
+		auto sequence = std::make_unique<SequenceStep>("Homing_Sequence_Nodes", machineOps);
+
+	
+		// 1. Move gantry-main to safe position (using node)
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"gantry-main", "Process_Flow", "node_4027")); // Replace with actual safe node ID
+
+
+		// 2. Move hex-left to home position (using node)
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"hex-left", "Process_Flow", "node_5480")); // Replace with actual home node ID
+
+		// 3. Move hex-right to home position (using node)
+		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+			"hex-right", "Process_Flow", "node_5136")); // Replace with actual home node ID
+
+		// 4. Run ACS buffer 2 (HOMEALL) on gantry-main
+		sequence->AddOperation(std::make_shared<ACSRunBufferOperation>(
+			"gantry-main", 2, "HOMEALL"));
+
+
+		sequence->AddOperation(std::make_shared<UserConfirmOperation>("Please ensure all axes are homed and ready for the next operation. Click Yes will not continue any action", uiManager));
+		//waitfor move operation complete.
+
+
+		return sequence;
+	}
 
 
 

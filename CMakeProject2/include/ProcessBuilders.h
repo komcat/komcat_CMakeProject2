@@ -84,4 +84,9 @@ namespace ProcessBuilders {
 	std::unique_ptr<SequenceStep> BuildDispenseEpoxy1Sequence(MachineOperations& machineOps, UserInteractionManager& uiManager);
 	std::unique_ptr<SequenceStep> BuildDispenseEpoxy2Sequence(MachineOperations& machineOps, UserInteractionManager& uiManager);
 
+
+	// Build a homing sequence with ACS buffer execution
+	std::unique_ptr<SequenceStep> BuildHomingSequenceWithNodes(MachineOperations& machineOps, UserInteractionManager& uiManager);
+
+
 }

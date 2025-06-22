@@ -77,7 +77,25 @@ public:
 	bool MovePathFromTo(const std::string& deviceName, const std::string& graphName,
 		const std::string& startNodeId, const std::string& endNodeId,
 		bool blocking = true, const std::string& callerContext = "");
+
+	bool SetDeviceSpeed(const std::string& deviceName, double velocity,
+		const std::string& callerContext = "");
+	bool GetDeviceSpeed(const std::string& deviceName, double& speed,
+		const std::string& callerContext = "");
 	//----------------updated section
+
+
+// ACS-specific buffer program methods (acsc_ prefix)
+	bool acsc_RunBuffer(const std::string& deviceName, int bufferNumber, const std::string& labelName = "",
+		const std::string& callerContext = "");
+	bool acsc_StopBuffer(const std::string& deviceName, int bufferNumber,
+		const std::string& callerContext = "");
+	bool acsc_StopAllBuffers(const std::string& deviceName,
+		const std::string& callerContext = "");
+	bool acsc_IsBufferRunning(const std::string& deviceName, int bufferNumber);
+
+
+
 
 	// Pneumatic control methods
 // Pneumatic control methods - ADD callerContext parameter

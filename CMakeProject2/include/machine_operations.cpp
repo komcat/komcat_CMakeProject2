@@ -3244,3 +3244,282 @@ bool MachineOperations::SMU_QueryCommand(const std::string& command, std::string
   }
   return result;
 }
+
+bool MachineOperations::SetDeviceSpeed(const std::string& deviceName, double velocity,
+  const std::string& callerContext) {
+
+  // 1. Start operation tracking
+  std::string opId;
+  auto startTime = std::chrono::steady_clock::now();
+
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"device_name", deviceName},
+        {"velocity", std::to_string(velocity)}
+    };
+
+    // Extract sequence name from caller context if possible
+    std::string sequenceName = "";
+    if (callerContext.find("Initialization") != std::string::npos) {
+      sequenceName = "Initialization";
+    }
+    else if (callerContext.find("ProcessStep") != std::string::npos) {
+      sequenceName = "Process";
+    }
+
+    opId = m_resultsManager->StartOperation("SetDeviceSpeed", deviceName,
+      callerContext, sequenceName, parameters);
+  }
+
+  // Get controller type for logging
+  std::string controllerType = "Unknown";
+  if (m_motionLayer.IsDevicePIController(deviceName)) {
+    controllerType = "PI";
+  }
+  else {
+    controllerType = "ACS";
+  }
+
+  m_logger->LogInfo("MachineOperations: Setting speed for " + controllerType + " device " + deviceName +
+    " to " + std::to_string(velocity) + " mm/s" +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")") +
+    (opId.empty() ? "" : " [" + opId + "]"));
+
+  // 2. Store previous velocity if possible
+  double previousVelocity = 0.0;
+  bool hasPreviousVelocity = false;
+  // Note: Could get current velocity here if needed for tracking
+
+  // 3. Execute speed setting through motion layer (includes validation)
+  bool success = m_motionLayer.SetDeviceVelocity(deviceName, velocity);
+
+  // 4. Store results and end tracking
+  auto endTime = std::chrono::steady_clock::now();
+  auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->StoreResult(opId, "controller_type", controllerType);
+    m_resultsManager->StoreResult(opId, "target_velocity", std::to_string(velocity));
+    m_resultsManager->StoreResult(opId, "velocity_units", "mm/s");
+    m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+
+    if (success) {
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_resultsManager->EndOperation(opId, "failed", "Failed to set device speed - check velocity limits");
+    }
+  }
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully set speed for " + controllerType + " device " + deviceName);
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to set speed for " + controllerType + " device " + deviceName +
+      " - velocity may be outside limits (PI: 0.1-20 mm/s, ACS: 0.1-80 mm/s)");
+  }
+
+  return success;
+}
+
+// Add to machine_operations.cpp:
+bool MachineOperations::GetDeviceSpeed(const std::string& deviceName, double& speed,
+  const std::string& callerContext) {
+  std::string opId;
+  auto startTime = std::chrono::steady_clock::now();
+
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"device_name", deviceName}
+    };
+    opId = m_resultsManager->StartOperation("GetDeviceSpeed", deviceName,
+      callerContext, "", parameters);
+  }
+
+  // Get speed through motion layer
+  bool success = m_motionLayer.GetDeviceVelocity(deviceName, speed);
+
+  auto endTime = std::chrono::steady_clock::now();
+  auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+  if (m_resultsManager && !opId.empty()) {
+    if (success) {
+      m_resultsManager->StoreResult(opId, "current_speed", std::to_string(speed));
+    }
+    m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+    m_resultsManager->EndOperation(opId, success ? "success" : "failed");
+  }
+
+  return success;
+}
+
+
+
+// Add these implementations to machine_operations.cpp:
+
+bool MachineOperations::acsc_RunBuffer(const std::string& deviceName, int bufferNumber,
+  const std::string& labelName, const std::string& callerContext) {
+  // Start operation tracking
+  std::string opId;
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"buffer_number", std::to_string(bufferNumber)},
+        {"label_name", labelName},
+        {"device_name", deviceName}
+    };
+
+    // Extract sequence name from caller context
+    std::string sequenceName = "";
+    if (callerContext.find("BufferSequence") != std::string::npos) {
+      sequenceName = "BufferSequence";
+    }
+
+    opId = m_resultsManager->StartOperation("acsc_RunBuffer", deviceName,
+      callerContext, sequenceName, parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Running ACS buffer " + std::to_string(bufferNumber) +
+    " on device " + deviceName +
+    (labelName.empty() ? "" : " from label " + labelName) +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")") +
+    (opId.empty() ? "" : " [" + opId + "]"));
+
+  // Check if device is connected
+  if (!IsDeviceConnected(deviceName)) {
+    m_logger->LogError("MachineOperations: Device not connected: " + deviceName);
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", "Device not connected");
+    }
+    return false;
+  }
+
+  // Call motion layer
+  bool success = m_motionLayer.acsc_RunBuffer(deviceName, bufferNumber, labelName);
+
+  // End operation tracking
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->EndOperation(opId, success ? "completed" : "failed",
+      success ? "Buffer started successfully" : "Failed to start buffer");
+  }
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully started ACS buffer " + std::to_string(bufferNumber) +
+      " on device " + deviceName);
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to start ACS buffer " + std::to_string(bufferNumber) +
+      " on device " + deviceName);
+  }
+
+  return success;
+}
+
+bool MachineOperations::acsc_StopBuffer(const std::string& deviceName, int bufferNumber,
+  const std::string& callerContext) {
+  // Start operation tracking
+  std::string opId;
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"buffer_number", std::to_string(bufferNumber)},
+        {"device_name", deviceName}
+    };
+
+    // Extract sequence name from caller context
+    std::string sequenceName = "";
+    if (callerContext.find("BufferSequence") != std::string::npos) {
+      sequenceName = "BufferSequence";
+    }
+
+    opId = m_resultsManager->StartOperation("acsc_StopBuffer", deviceName,
+      callerContext, sequenceName, parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Stopping ACS buffer " + std::to_string(bufferNumber) +
+    " on device " + deviceName +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")") +
+    (opId.empty() ? "" : " [" + opId + "]"));
+
+  // Check if device is connected
+  if (!IsDeviceConnected(deviceName)) {
+    m_logger->LogError("MachineOperations: Device not connected: " + deviceName);
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", "Device not connected");
+    }
+    return false;
+  }
+
+  // Call motion layer
+  bool success = m_motionLayer.acsc_StopBuffer(deviceName, bufferNumber);
+
+  // End operation tracking
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->EndOperation(opId, success ? "completed" : "failed",
+      success ? "Buffer stopped successfully" : "Failed to stop buffer");
+  }
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully stopped ACS buffer " + std::to_string(bufferNumber) +
+      " on device " + deviceName);
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to stop ACS buffer " + std::to_string(bufferNumber) +
+      " on device " + deviceName);
+  }
+
+  return success;
+}
+
+bool MachineOperations::acsc_StopAllBuffers(const std::string& deviceName, const std::string& callerContext) {
+  // Start operation tracking
+  std::string opId;
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"device_name", deviceName}
+    };
+
+    // Extract sequence name from caller context
+    std::string sequenceName = "";
+    if (callerContext.find("BufferSequence") != std::string::npos) {
+      sequenceName = "BufferSequence";
+    }
+
+    opId = m_resultsManager->StartOperation("acsc_StopAllBuffers", deviceName,
+      callerContext, sequenceName, parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Stopping all ACS buffers on device " + deviceName +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")") +
+    (opId.empty() ? "" : " [" + opId + "]"));
+
+  // Check if device is connected
+  if (!IsDeviceConnected(deviceName)) {
+    m_logger->LogError("MachineOperations: Device not connected: " + deviceName);
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", "Device not connected");
+    }
+    return false;
+  }
+
+  // Call motion layer
+  bool success = m_motionLayer.acsc_StopAllBuffers(deviceName);
+
+  // End operation tracking
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->EndOperation(opId, success ? "completed" : "failed",
+      success ? "All buffers stopped successfully" : "Failed to stop all buffers");
+  }
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully stopped all ACS buffers on device " + deviceName);
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to stop all ACS buffers on device " + deviceName);
+  }
+
+  return success;
+}
+
+bool MachineOperations::acsc_IsBufferRunning(const std::string& deviceName, int bufferNumber) {
+  // This is a query method, no need for operation tracking
+  return m_motionLayer.acsc_IsBufferRunning(deviceName, bufferNumber);
+}

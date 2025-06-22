@@ -69,7 +69,15 @@ public:
   bool CopyPositionToClipboard(); // New method to copy current position as JSON
 
   // Add this method to expose available axes
+  // Buffer program control
+  bool RunBuffer(int bufferNumber, const std::string& labelName = "");
+  bool StopBuffer(int bufferNumber);
 
+  // Optional: Helper to stop all buffers
+  bool StopAllBuffers();
+
+  // Optional: Check if buffer is running (if you need status)
+  bool IsBufferRunning(int bufferNumber);
 private:
   // Communication thread methods
   void StartCommunicationThread();
