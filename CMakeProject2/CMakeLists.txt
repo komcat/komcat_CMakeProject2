@@ -47,6 +47,15 @@ set(PYLON_INCLUDE_DIR "${PYLON_ROOT}/Development/include")
 set(PYLON_LIB_DIR "${PYLON_ROOT}/Development/lib/x64")
 
 
+set(RAYLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/raylib")
+set(RAYLIB_INCLUDE_DIR "${RAYLIB_DIR}/include")
+
+if(WIN32)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(RAYLIB_LIBRARY "${RAYLIB_DIR}/lib/raylib.lib")
+    endif()
+endif()
+
 
 
 
@@ -310,7 +319,7 @@ add_executable(CMakeProject2
  "Programming/MacroManager.h" 
  "Programming/MacroManager.cpp"
  "Programming/MacroEditState.h"
- "include/ui/MenuManager.h" "include/ui/MenuManager.cpp" "include/data/DatabaseManager.h" "include/data/OperationResultsManager.h" "include/data/DatabaseManager.cpp" "include/data/OperationResultsManager.cpp" "include/ui/OperationsDisplayUI.h" "include/ui/OperationsDisplayUI.cpp")
+ "include/ui/MenuManager.h" "include/ui/MenuManager.cpp" "include/data/DatabaseManager.h" "include/data/OperationResultsManager.h" "include/data/DatabaseManager.cpp" "include/data/OperationResultsManager.cpp" "include/ui/OperationsDisplayUI.h" "include/ui/OperationsDisplayUI.cpp"  "raylibclass.h" "raylibclass.cpp" "RaylibToggleButton.h")
 
 
 
@@ -344,6 +353,7 @@ target_include_directories(CMakeProject2 PRIVATE
     ${EZIIO_DIR_INCLUDE_x64}
     ${SDL2_TTF_INCLUDE_DIR}
     ${SQLITE_INCLUDE_DIR}  # Add SQLite include
+    ${RAYLIB_INCLUDE_DIR}  # Add this line
 )
 
 # Link libraries - directly reference libraries
@@ -357,6 +367,12 @@ target_link_libraries(CMakeProject2 PRIVATE
     ${EZIIO_LIBRARY}  # Added EziMOTIONPlusE library
     ${SDL2_TTF_LIBRARY}  # Added SDL2_ttf library
     nlohmann_json::nlohmann_json
+    ${RAYLIB_LIBRARY}  # Add this line
+        # Raylib Windows dependencies
+    winmm     # For timeBeginPeriod/timeEndPeriod
+    gdi32     # For Windows GDI
+    user32    # For Windows user interface
+    shell32   # For Windows shell
 )
 
 # SQLite compile definitions
