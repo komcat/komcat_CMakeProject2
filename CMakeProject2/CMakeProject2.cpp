@@ -1998,20 +1998,20 @@ int main(int argc, char* argv[])
 		ImGui::Render();
 
 		// Debug raylib status
-		if (raylibWindow) {
-			static int debugCounter = 0;
-			debugCounter++;
+		//if (raylibWindow) {
+		//	static int debugCounter = 0;
+		//	debugCounter++;
 
-			// Print status every 5 seconds (300 frames at 60fps)
-			if (debugCounter % 300 == 0) {
-				logger->LogInfo("Raylib Status - Running: " +
-					std::string(raylibWindow->IsRunning() ? "YES" : "NO") +
-					", Visible: " +
-					std::string(raylibWindow->IsVisible() ? "YES" : "NO") +
-					", Should Close: " +
-					std::string(raylibWindow->ShouldClose() ? "YES" : "NO"));
-			}
-		}
+		//	// Print status every 5 seconds (300 frames at 60fps)
+		//	if (debugCounter % 300 == 0) {
+		//		logger->LogInfo("Raylib Status - Running: " +
+		//			std::string(raylibWindow->IsRunning() ? "YES" : "NO") +
+		//			", Visible: " +
+		//			std::string(raylibWindow->IsVisible() ? "YES" : "NO") +
+		//			", Should Close: " +
+		//			std::string(raylibWindow->ShouldClose() ? "YES" : "NO"));
+		//	}
+		//}
 
 
 		glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
