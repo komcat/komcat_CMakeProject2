@@ -1,8 +1,8 @@
-// raylibclass.cpp - Updated with VisualizePage integration
+// raylibclass.cpp - Updated with live video feed implementation
 #include "raylibclass.h"
 #include "include/logger.h"
-#include "StatusPage.h"     // Include the StatusPage
-#include "VisualizePage.h"  // Include the new VisualizePage
+#include "StatusPage.h"
+#include "VisualizePage.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -15,7 +15,8 @@
 
 RaylibWindow::RaylibWindow()
   : isRunning(false), isVisible(false), shouldClose(false), shouldShutdown(false)
-  , piManager(nullptr), dataStore(nullptr), logger(nullptr) {
+  , piManager(nullptr), dataStore(nullptr), logger(nullptr)
+  , newVideoFrameReady(false) {  // Initialize new video flag
 
   // Initialize machine data
   machineData = { 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false };
@@ -42,6 +43,39 @@ RaylibWindow::~RaylibWindow() {
   }
 
   if (logger) logger->LogInfo("RaylibWindow destructor completed");
+}
+
+// NEW: Video frame management methods
+void RaylibWindow::UpdateVideoFrame(const unsigned char* imageData, int width, int height, uint64_t timestamp) {
+  if (!imageData || width <= 0 || height <= 0) return;
+
+  std::lock_guard<std::mutex> lock(videoMutex);
+  currentVideoFrame.UpdateFrame(imageData, width, height, timestamp);
+  newVideoFrameReady.store(true);
+}
+
+void RaylibWindow::ClearVideoFrame() {
+  std::lock_guard<std::mutex> lock(videoMutex);
+  currentVideoFrame.Clear();
+  raylibVideoFrame.Clear();
+  newVideoFrameReady.store(false);
+}
+
+bool RaylibWindow::HasVideoFeed() const {
+  return newVideoFrameReady.load() || raylibVideoFrame.isValid;
+}
+
+VideoFrame RaylibWindow::GetVideoFrameThreadSafe() {
+  std::lock_guard<std::mutex> lock(videoMutex);
+  return currentVideoFrame;  // This will copy the frame data
+}
+
+void RaylibWindow::UpdateRaylibVideoFrame() {
+  if (newVideoFrameReady.load()) {
+    std::lock_guard<std::mutex> lock(videoMutex);
+    raylibVideoFrame = currentVideoFrame;  // Copy frame data
+    newVideoFrameReady.store(false);
+  }
 }
 
 bool RaylibWindow::Initialize() {
@@ -140,21 +174,108 @@ MachineData RaylibWindow::GetMachineDataThreadSafe() {
   return machineData;
 }
 
-// Helper function to render Live Video Page
-void RenderLiveVideoPage(RenderTexture2D& canvas, Vector2& canvasPos) {
-  // Draw the canvas
-  Rectangle sourceRec = { 0, 0, (float)canvas.texture.width, -(float)canvas.texture.height };
-  DrawTextureRec(canvas.texture, sourceRec, canvasPos, WHITE);
+// Helper function to render Live Video Page with video feed
+void RenderLiveVideoPage(RenderTexture2D& canvas, Vector2& canvasPos, VideoFrame& videoFrame, bool& videoPaused) {
+  // Update video texture if we have a new frame and video is not paused
+  static Texture2D videoTexture = { 0 };
+  static bool videoTextureLoaded = false;
 
-  // Draw canvas border
-  DrawRectangleLines((int)canvasPos.x - 2, (int)canvasPos.y - 2,
-    canvas.texture.width + 4, canvas.texture.height + 4, BLACK);
+  if (videoFrame.isValid && !videoPaused) {
+    // Unload previous texture if it exists
+    if (videoTextureLoaded) {
+      UnloadTexture(videoTexture);
+    }
 
-  // Live Video Page UI
+    // Create Image from video frame data (C++17 compatible)
+    Image videoImage;
+    videoImage.data = videoFrame.data.data();
+    videoImage.width = videoFrame.width;
+    videoImage.height = videoFrame.height;
+    videoImage.mipmaps = 1;
+    videoImage.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8;
+
+    // Load texture from image
+    videoTexture = LoadTextureFromImage(videoImage);
+    videoTextureLoaded = true;
+  }
+
+  // Calculate video display area (maintain aspect ratio)
+  int screenWidth = GetScreenWidth();
+  int screenHeight = GetScreenHeight();
+
+  // Reserve space for UI at top
+  int uiHeight = 80;
+  int availableWidth = screenWidth - 20;  // 10px margin on each side
+  int availableHeight = screenHeight - uiHeight - 20;  // Space for UI + margins
+
+  Rectangle videoDisplayArea = { 10, (float)uiHeight, (float)availableWidth, (float)availableHeight };
+
+  if (videoTextureLoaded && videoFrame.isValid) {
+    // Calculate scaled size maintaining aspect ratio
+    float videoAspect = (float)videoFrame.width / (float)videoFrame.height;
+    float containerAspect = videoDisplayArea.width / videoDisplayArea.height;
+
+    float displayWidth, displayHeight;
+    if (videoAspect > containerAspect) {
+      // Video is wider - fit to width
+      displayWidth = videoDisplayArea.width;
+      displayHeight = displayWidth / videoAspect;
+    }
+    else {
+      // Video is taller - fit to height
+      displayHeight = videoDisplayArea.height;
+      displayWidth = displayHeight * videoAspect;
+    }
+
+    // Center the video in the display area
+    float videoX = videoDisplayArea.x + (videoDisplayArea.width - displayWidth) / 2;
+    float videoY = videoDisplayArea.y + (videoDisplayArea.height - displayHeight) / 2;
+
+    Rectangle videoDest = { videoX, videoY, displayWidth, displayHeight };
+    Rectangle videoSource = { 0, 0, (float)videoTexture.width, (float)videoTexture.height };
+
+    // Draw the video
+    DrawTexturePro(videoTexture, videoSource, videoDest, { 0, 0 }, 0.0f, WHITE);
+
+    // Draw video info overlay
+    DrawText(TextFormat("Video: %dx%d", videoFrame.width, videoFrame.height),
+      (int)videoX, (int)videoY - 20, 14, WHITE);
+  }
+  else {
+    // No video available
+    DrawRectangleRec(videoDisplayArea, DARKGRAY);
+    const char* noVideoText = "No Video Feed Available";
+    int textWidth = MeasureText(noVideoText, 20);
+    DrawText(noVideoText,
+      (screenWidth - textWidth) / 2,
+      screenHeight / 2,
+      20, LIGHTGRAY);
+  }
+
+  // Draw UI elements
   DrawText("Live Video Page", 10, 10, 20, DARKBLUE);
-  DrawText("M: Menu | S: Status | R: Rectangles | ESC: Close", 10, 40, 14, GRAY);
-}
+  DrawText("M: Menu | S: Status | R: Rectangles | ESC: Close", 10, 35, 14, GRAY);
 
+  // Video controls
+  static Rectangle playPauseButton = { 10, 50, 80, 25 };
+  static Rectangle stopButton = { 100, 50, 60, 25 };
+
+  Vector2 mousePos = GetMousePosition();
+
+  // Play/Pause button
+  Color playPauseColor = CheckCollisionPointRec(mousePos, playPauseButton) ? LIGHTGRAY : GRAY;
+  DrawRectangleRec(playPauseButton, playPauseColor);
+  DrawRectangleLinesEx(playPauseButton, 1, BLACK);
+  const char* playPauseText = videoPaused ? "Play" : "Pause";
+  DrawText(playPauseText, (int)playPauseButton.x + 15, (int)playPauseButton.y + 5, 14, BLACK);
+
+  if (CheckCollisionPointRec(mousePos, playPauseButton) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    videoPaused = !videoPaused;
+  }
+
+  // Status indicator
+  DrawText(videoPaused ? "PAUSED" : "LIVE", 170, 55, 14, videoPaused ? RED : GREEN);
+}
 // Helper function to render Menu Page
 void RenderMenuPage(Logger* logger) {
   DrawText("Menu Page", 10, 10, 20, DARKBLUE);
@@ -231,20 +352,26 @@ void RaylibWindow::RaylibThreadFunction() {
 
     // Create page instances
     StatusPage statusPage(logger);
-    VisualizePage visualizePage(logger);  // Create VisualizePage instance
+    VisualizePage visualizePage(logger);
 
     // Page system - now with 4 pages
     enum PageType { LIVE_VIDEO_PAGE, MENU_PAGE, STATUS_PAGE, VISUALIZE_PAGE };
     PageType currentPage = LIVE_VIDEO_PAGE;
 
+    // Video playback control
+    bool videoPaused = false;
+
     // Mark as running AFTER successful initialization
     isRunning.store(true);
     isVisible.store(true);
 
-    if (logger) logger->LogInfo("Raylib canvas ready for picture rendering");
+    if (logger) logger->LogInfo("Raylib ready with live video support");
 
     // Main raylib loop
     while (!WindowShouldClose() && !shouldShutdown.load()) {
+
+      // Update video frame for raylib thread
+      UpdateRaylibVideoFrame();
 
       // Handle page switching input
       if (IsKeyPressed(KEY_M)) {
@@ -260,12 +387,17 @@ void RaylibWindow::RaylibThreadFunction() {
         currentPage = VISUALIZE_PAGE;
       }
 
+      // Handle video controls via keyboard
+      if (IsKeyPressed(KEY_SPACE)) {
+        videoPaused = !videoPaused;
+      }
+
       // Render everything
       BeginDrawing();
       ClearBackground(DARKGRAY);
 
       if (currentPage == LIVE_VIDEO_PAGE) {
-        RenderLiveVideoPage(canvas, canvasPos);
+        RenderLiveVideoPage(canvas, canvasPos, raylibVideoFrame, videoPaused);
       }
       else if (currentPage == MENU_PAGE) {
         RenderMenuPage(logger);
@@ -274,7 +406,7 @@ void RaylibWindow::RaylibThreadFunction() {
         statusPage.Render();
       }
       else if (currentPage == VISUALIZE_PAGE) {
-        visualizePage.Render();  // Use the new VisualizePage class
+        visualizePage.Render();
       }
 
       DrawFPS(10, GetScreenHeight() - 30);

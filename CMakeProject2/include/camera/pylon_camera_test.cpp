@@ -33,6 +33,8 @@ PylonCameraTest::PylonCameraTest()
     m_deviceRemoved = true;
   });
 
+
+
   m_camera.SetNewFrameCallback([this](const Pylon::CGrabResultPtr& grabResult) {
     // Process the new frame
     if (grabResult->GrabSucceeded()) {
@@ -67,11 +69,22 @@ PylonCameraTest::PylonCameraTest()
 
         // Signal that a new frame is ready
         m_newFrameReady = true;
+
+
+
+
+        // NEW: Just add this at the end of the callback
+        if (m_enableRaylibFeed && m_raylibWindow) {
+          SendFrameToRaylib();
+        }
+
       }
       catch (const std::exception& e) {
         std::cerr << "Error in frame callback: " << e.what() << std::endl;
       }
     }
+
+
   });
 
   // Set exposure manager callback to log when settings are applied
@@ -95,6 +108,41 @@ PylonCameraTest::~PylonCameraTest() {
   m_formatConverterOutput.Release();
   m_pylonImage.Release();
 }
+
+
+
+// NEW: Add this method
+void PylonCameraTest::SendFrameToRaylib() {
+  if (!m_raylibWindow || !m_formatConverterOutput.IsValid()) {
+    return;
+  }
+
+  // Rate limit updates to avoid overwhelming raylib
+  auto now = std::chrono::steady_clock::now();
+  auto timeSinceLastUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastRaylibUpdate);
+
+  if (timeSinceLastUpdate.count() < (1000 / RAYLIB_FPS_LIMIT)) {
+    return; // Skip this frame to maintain rate limit
+  }
+
+  try {
+    // Get image data
+    const uint8_t* pImageBuffer = static_cast<uint8_t*>(m_formatConverterOutput.GetBuffer());
+    uint32_t width = m_formatConverterOutput.GetWidth();
+    uint32_t height = m_formatConverterOutput.GetHeight();
+
+    if (pImageBuffer && width > 0 && height > 0) {
+      // Send frame to raylib window
+      m_raylibWindow->UpdateVideoFrame(pImageBuffer, width, height, m_lastFrameTimestamp);
+      m_lastRaylibUpdate = now;
+    }
+  }
+  catch (const std::exception& e) {
+    std::cerr << "Error sending frame to raylib: " << e.what() << std::endl;
+  }
+}
+
+
 
 bool PylonCameraTest::ApplyExposureForNode(const std::string& nodeId) {
   if (!m_camera.IsConnected()) {
@@ -439,10 +487,29 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
     }
   }
 
+  // Add this somewhere in the camera controls (maybe after exposure settings):
+  if (ImGui::CollapsingHeader("Raylib Video Feed")) {
+    ImGui::Checkbox("Send to Raylib Window", &m_enableRaylibFeed);
+    ImGui::SameLine();
+    ImGui::TextDisabled("(Live Video page)");
+
+    if (m_raylibWindow) {
+      ImGui::Text("Status: %s", m_raylibWindow->HasVideoFeed() ? "Active" : "Ready");
+    }
+    else {
+      ImGui::TextColored(ImVec4(1, 1, 0, 1), "Raylib window not connected");
+    }
+  }
+
+
   ImGui::End();
 
   // Render the exposure manager UI
   m_exposureManager.RenderUI();
+
+
+
+
 
   // Image display window - always show when we have a valid image
   if ((m_camera.IsGrabbing() || m_hasValidImage) && m_imageWindowOpen) {

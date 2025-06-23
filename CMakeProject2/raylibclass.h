@@ -1,10 +1,11 @@
-// raylibclass.h - Updated for threading
+// raylibclass.h - Updated for live video feed support
 #pragma once
 
 #include "imgui.h"
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <vector>
 
 // Forward declarations
 class PIControllerManager;
@@ -20,6 +21,40 @@ struct MachineData {
   bool hexRightConnected;
 };
 
+// Structure for sharing video frames with raylib
+struct VideoFrame {
+  std::vector<unsigned char> data;
+  int width;
+  int height;
+  bool isValid;
+  uint64_t timestamp;  // For frame rate tracking
+
+  VideoFrame() : width(0), height(0), isValid(false), timestamp(0) {}
+
+  void UpdateFrame(const unsigned char* imageData, int w, int h, uint64_t ts = 0) {
+    if (imageData && w > 0 && h > 0) {
+      width = w;
+      height = h;
+      timestamp = ts;
+      size_t dataSize = w * h * 3; // RGB format
+      data.resize(dataSize);
+      std::memcpy(data.data(), imageData, dataSize);
+      isValid = true;
+    }
+    else {
+      isValid = false;
+    }
+  }
+
+  void Clear() {
+    data.clear();
+    width = 0;
+    height = 0;
+    isValid = false;
+    timestamp = 0;
+  }
+};
+
 class RaylibWindow {
 public:
   RaylibWindow();
@@ -33,8 +68,13 @@ public:
   // Data integration
   void SetPIControllerManager(PIControllerManager* manager);
   void SetDataStore(GlobalDataStore* store);
-  void SetLogger(Logger* loggerInstance);  // Add logger setter
+  void SetLogger(Logger* loggerInstance);
   void UpdateMachineData(const MachineData& data);
+
+  // NEW: Video feed integration
+  void UpdateVideoFrame(const unsigned char* imageData, int width, int height, uint64_t timestamp = 0);
+  void ClearVideoFrame();
+  bool HasVideoFeed() const;
 
   // Thread-safe status
   bool IsVisible() const { return isVisible.load(); }
@@ -52,14 +92,24 @@ private:
   std::mutex dataMutex;
   MachineData machineData;
 
+  // NEW: Video frame data (thread-safe)
+  std::mutex videoMutex;
+  VideoFrame currentVideoFrame;
+  VideoFrame raylibVideoFrame; // Copy for raylib thread
+  std::atomic<bool> newVideoFrameReady;
+
   // Machine integration (accessed from main thread)
   PIControllerManager* piManager;
   GlobalDataStore* dataStore;
-  Logger* logger;  // Add logger pointer
+  Logger* logger;
 
   // Thread functions
   void RaylibThreadFunction();
   void RenderScene();
   void UpdateFromMachineData();
   MachineData GetMachineDataThreadSafe();
+
+  // NEW: Video frame management
+  VideoFrame GetVideoFrameThreadSafe();
+  void UpdateRaylibVideoFrame();
 };

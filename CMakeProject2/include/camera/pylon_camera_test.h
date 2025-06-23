@@ -4,6 +4,7 @@
 #include "CameraExposureManager.h"
 #include "imgui.h"
 #include "nlohmann/json.hpp"  // Add this
+#include "raylibclass.h"
 #include <mutex>
 #include <atomic>
 #include <chrono>
@@ -82,6 +83,14 @@ public:
 	// Get the pixel-to-mm calibration factors
 	float GetPixelToMMFactorX() const { return m_pixelToMMFactorX; }
 	float GetPixelToMMFactorY() const { return m_pixelToMMFactorY; }
+
+	// NEW: Raylib video feed integration (add these to PUBLIC section)
+	void SetRaylibWindow(RaylibWindow* raylibWindow) { m_raylibWindow = raylibWindow; }
+	bool IsRaylibFeedEnabled() const { return m_enableRaylibFeed; }
+	void SetRaylibFeedEnabled(bool enabled) { m_enableRaylibFeed = enabled; }
+
+	// NEW: Method to send frame to raylib window (add to private section)
+	void SendFrameToRaylib();
 
 private:
 	// Creates a new OpenGL texture from the current frame
@@ -177,8 +186,6 @@ private:
 
 	bool m_controlWindowOpen = true;
 	bool m_imageWindowOpen = true;
-
-private:
 	// Cached UI calculations
 	mutable float m_cachedDisplayWidth = 0.0f;
 	mutable float m_cachedDisplayHeight = 0.0f;
@@ -200,4 +207,13 @@ private:
 
 	// Save calibration to JSON file  
 	bool SaveCalibrationToFile();
+
+
+
+
+	// NEW: Raylib video feed integration (add these to PRIVATE section)
+	RaylibWindow* m_raylibWindow = nullptr;
+	bool m_enableRaylibFeed = false;
+	std::chrono::steady_clock::time_point m_lastRaylibUpdate;
+	static constexpr int RAYLIB_FPS_LIMIT = 60;
 };

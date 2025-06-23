@@ -1740,6 +1740,13 @@ int main(int argc, char* argv[])
 	}
 
 
+	// In main.cpp, after creating pylonCameraTest and raylibWindow:
+	if (pylonCameraTest && raylibWindow) {
+		pylonCameraTest->SetRaylibWindow(raylibWindow.get());
+		logger->LogInfo("Connected camera to raylib window for video feed");
+	}
+
+
 	// Main loop
 	bool done = false;
 	bool cameraDisconnectedWarningShown = false;
