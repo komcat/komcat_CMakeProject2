@@ -319,7 +319,7 @@ add_executable(CMakeProject2
  "Programming/MacroManager.h" 
  "Programming/MacroManager.cpp"
  "Programming/MacroEditState.h"
- "include/ui/MenuManager.h" "include/ui/MenuManager.cpp" "include/data/DatabaseManager.h" "include/data/OperationResultsManager.h" "include/data/DatabaseManager.cpp" "include/data/OperationResultsManager.cpp" "include/ui/OperationsDisplayUI.h" "include/ui/OperationsDisplayUI.cpp"  "raylibclass.h" "raylibclass.cpp" "RaylibToggleButton.h")
+ "include/ui/MenuManager.h" "include/ui/MenuManager.cpp" "include/data/DatabaseManager.h" "include/data/OperationResultsManager.h" "include/data/DatabaseManager.cpp" "include/data/OperationResultsManager.cpp" "include/ui/OperationsDisplayUI.h" "include/ui/OperationsDisplayUI.cpp"  "raylibclass.h" "raylibclass.cpp" "RaylibToggleButton.h" "StatusPage.h" "StatusPage.cpp" "VisualizePage.h" "VisualizePage.cpp")
 
 
 

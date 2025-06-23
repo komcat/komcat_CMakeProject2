@@ -1,6 +1,8 @@
-// raylibclass.cpp - Threaded implementation
+// raylibclass.cpp - Updated with VisualizePage integration
 #include "raylibclass.h"
-#include "include/logger.h"  // Add logger include
+#include "include/logger.h"
+#include "StatusPage.h"     // Include the StatusPage
+#include "VisualizePage.h"  // Include the new VisualizePage
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -13,7 +15,7 @@
 
 RaylibWindow::RaylibWindow()
   : isRunning(false), isVisible(false), shouldClose(false), shouldShutdown(false)
-  , piManager(nullptr), dataStore(nullptr), logger(nullptr) {  // Initialize logger to nullptr
+  , piManager(nullptr), dataStore(nullptr), logger(nullptr) {
 
   // Initialize machine data
   machineData = { 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false };
@@ -138,12 +140,75 @@ MachineData RaylibWindow::GetMachineDataThreadSafe() {
   return machineData;
 }
 
+// Helper function to render Live Video Page
+void RenderLiveVideoPage(RenderTexture2D& canvas, Vector2& canvasPos) {
+  // Draw the canvas
+  Rectangle sourceRec = { 0, 0, (float)canvas.texture.width, -(float)canvas.texture.height };
+  DrawTextureRec(canvas.texture, sourceRec, canvasPos, WHITE);
+
+  // Draw canvas border
+  DrawRectangleLines((int)canvasPos.x - 2, (int)canvasPos.y - 2,
+    canvas.texture.width + 4, canvas.texture.height + 4, BLACK);
+
+  // Live Video Page UI
+  DrawText("Live Video Page", 10, 10, 20, DARKBLUE);
+  DrawText("M: Menu | S: Status | R: Rectangles | ESC: Close", 10, 40, 14, GRAY);
+}
+
+// Helper function to render Menu Page
+void RenderMenuPage(Logger* logger) {
+  DrawText("Menu Page", 10, 10, 20, DARKBLUE);
+  DrawText("V: Live Video | S: Status | R: Rectangles | ESC: Close", 10, 40, 14, GRAY);
+
+  // Button properties
+  int buttonWidth = 200;
+  int buttonHeight = 60;
+  int buttonSpacing = 20;
+  int startX = GetScreenWidth() / 2 - buttonWidth / 2;
+  int startY = 100;
+
+  Vector2 mousePos = GetMousePosition();
+
+  // Draw 5 buttons in a column
+  for (int i = 0; i < 5; i++) {
+    Rectangle button = {
+      (float)startX,
+      (float)(startY + i * (buttonHeight + buttonSpacing)),
+      (float)buttonWidth,
+      (float)buttonHeight
+    };
+
+    // Check if mouse is over button
+    bool isHovered = CheckCollisionPointRec(mousePos, button);
+    Color buttonColor = isHovered ? LIGHTGRAY : GRAY;
+    Color textColor = isHovered ? BLACK : WHITE;
+
+    // Check if button is clicked
+    if (isHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+      if (logger) logger->LogInfo("Step " + std::to_string(i + 1) + " button clicked");
+    }
+
+    // Draw button
+    DrawRectangleRec(button, buttonColor);
+    DrawRectangleLinesEx(button, 2, BLACK);
+
+    // Draw button text
+    const char* buttonText = TextFormat("Step %d", i + 1);
+    int textWidth = MeasureText(buttonText, 20);
+    DrawText(buttonText,
+      (int)(button.x + button.width / 2 - textWidth / 2),
+      (int)(button.y + button.height / 2 - 10),
+      20, textColor);
+  }
+}
+
 void RaylibWindow::RaylibThreadFunction() {
   try {
     if (logger) logger->LogInfo("Raylib thread function starting...");
 
     // Initialize raylib in this thread
-    InitWindow(800, 600, "TEST RAYLIB WINDOW");
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    InitWindow(1200, 800, "Raylib Canvas Window");
 
     if (!IsWindowReady()) {
       if (logger) logger->LogError("Failed to create raylib window in thread");
@@ -153,29 +218,65 @@ void RaylibWindow::RaylibThreadFunction() {
     if (logger) logger->LogInfo("Raylib window created successfully in thread");
     SetTargetFPS(60);
 
-    // No need for camera setup since we're only showing text
+    // Create a render texture as canvas for picture rendering
+    RenderTexture2D canvas = LoadRenderTexture(600, 400);
+
+    // Canvas position on screen
+    Vector2 canvasPos = { 100, 100 };
+
+    // Initialize canvas with white background
+    BeginTextureMode(canvas);
+    ClearBackground(WHITE);
+    EndTextureMode();
+
+    // Create page instances
+    StatusPage statusPage(logger);
+    VisualizePage visualizePage(logger);  // Create VisualizePage instance
+
+    // Page system - now with 4 pages
+    enum PageType { LIVE_VIDEO_PAGE, MENU_PAGE, STATUS_PAGE, VISUALIZE_PAGE };
+    PageType currentPage = LIVE_VIDEO_PAGE;
 
     // Mark as running AFTER successful initialization
     isRunning.store(true);
     isVisible.store(true);
 
-    if (logger) logger->LogInfo("Raylib thread fully initialized, entering main loop");
+    if (logger) logger->LogInfo("Raylib canvas ready for picture rendering");
 
     // Main raylib loop
     while (!WindowShouldClose() && !shouldShutdown.load()) {
 
-      // No camera updates needed for text-only display
+      // Handle page switching input
+      if (IsKeyPressed(KEY_M)) {
+        currentPage = MENU_PAGE;
+      }
+      if (IsKeyPressed(KEY_V)) {
+        currentPage = LIVE_VIDEO_PAGE;
+      }
+      if (IsKeyPressed(KEY_S)) {
+        currentPage = STATUS_PAGE;
+      }
+      if (IsKeyPressed(KEY_R)) {  // R for Rectangles/Visualize
+        currentPage = VISUALIZE_PAGE;
+      }
 
-      // Render
+      // Render everything
       BeginDrawing();
-      ClearBackground(DARKBLUE);
+      ClearBackground(DARKGRAY);
 
-      // Just display the test text - no 3D scene
-      DrawText("TEST RAYLIB WINDOW OK!!!", 200, 300, 60, WHITE);
+      if (currentPage == LIVE_VIDEO_PAGE) {
+        RenderLiveVideoPage(canvas, canvasPos);
+      }
+      else if (currentPage == MENU_PAGE) {
+        RenderMenuPage(logger);
+      }
+      else if (currentPage == STATUS_PAGE) {
+        statusPage.Render();
+      }
+      else if (currentPage == VISUALIZE_PAGE) {
+        visualizePage.Render();  // Use the new VisualizePage class
+      }
 
-      // Optional: Add some additional info
-      DrawText("Raylib Integration Successful", 250, 400, 30, LIGHTGRAY);
-      DrawText("ESC: Close window", 10, 10, 20, LIGHTGRAY);
       DrawFPS(10, GetScreenHeight() - 30);
 
       EndDrawing();
@@ -184,6 +285,7 @@ void RaylibWindow::RaylibThreadFunction() {
     if (logger) logger->LogInfo("Raylib thread main loop ended, cleaning up...");
 
     // Cleanup
+    UnloadRenderTexture(canvas);
     CloseWindow();
     shouldClose.store(true);
 
