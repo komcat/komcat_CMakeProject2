@@ -331,6 +331,12 @@ void RaylibWindow::RaylibThreadFunction() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(1200, 800, "Raylib Canvas Window");
 
+    // ADD THIS LINE to disable raylib debug output
+    SetTraceLogLevel(LOG_WARNING); // Only show warnings and errors
+    // Or use LOG_ERROR to only show errors
+    // Or use LOG_NONE to disable all raylib logging
+
+
     if (!IsWindowReady()) {
       if (logger) logger->LogError("Failed to create raylib window in thread");
       return;
