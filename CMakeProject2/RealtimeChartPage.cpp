@@ -85,29 +85,29 @@ void RealtimeChartPage::updateData() {
   double currentTime = std::chrono::duration<double>(now.time_since_epoch()).count();
 
   // Debug: Check available channels
-  if (m_logger) {
-    static int debugCount = 0;
-    if (++debugCount % 300 == 0) { // Log every 5 seconds at 60 FPS
-      auto channels = m_dataStore->GetAvailableChannels();
-      m_logger->LogInfo("RealtimeChart: Available channels: " + std::to_string(channels.size()));
-      for (const auto& ch : channels) {
-        float val = m_dataStore->GetValue(ch, -999.0f);
-        m_logger->LogInfo("  Channel: " + ch + " = " + std::to_string(val));
-      }
-    }
-  }
+  //if (m_logger) {
+  //  static int debugCount = 0;
+  //  if (++debugCount % 300 == 0) { // Log every 5 seconds at 60 FPS
+  //    auto channels = m_dataStore->GetAvailableChannels();
+  //    m_logger->LogInfo("RealtimeChart: Available channels: " + std::to_string(channels.size()));
+  //    for (const auto& ch : channels) {
+  //      float val = m_dataStore->GetValue(ch, -999.0f);
+  //      m_logger->LogInfo("  Channel: " + ch + " = " + std::to_string(val));
+  //    }
+  //  }
+  //}
 
   // Try to get current value from data store
   if (m_dataStore->HasValue(m_dataChannel)) {
     float newValue = m_dataStore->GetValue(m_dataChannel, 0.0f);
 
     // Debug: Log value changes
-    if (m_logger && std::abs(newValue - m_currentValue) > 1e-15f) {
-      static int valueChangeCount = 0;
-      if (++valueChangeCount % 60 == 0) { // Log every second
-        m_logger->LogInfo("RealtimeChart: " + m_dataChannel + " = " + std::to_string(newValue));
-      }
-    }
+    //if (m_logger && std::abs(newValue - m_currentValue) > 1e-15f) {
+    //  static int valueChangeCount = 0;
+    //  if (++valueChangeCount % 60 == 0) { // Log every second
+    //    m_logger->LogInfo("RealtimeChart: " + m_dataChannel + " = " + std::to_string(newValue));
+    //  }
+    //}
 
     m_currentValue = newValue;
 
