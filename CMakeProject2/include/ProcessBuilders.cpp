@@ -207,7 +207,7 @@ namespace ProcessBuilders {
 		// 4. Start camera grabbing
 		sequence->AddOperation(std::make_shared<WaitForCameraReadyOperation>());
 		sequence->AddOperation(std::make_shared<StartCameraGrabbingOperation>());
-		sequence->AddOperation(std::make_shared<CaptureImageOperation>("place_check.png"));
+		sequence->AddOperation(std::make_shared<CaptureImageOperation>());
 
 
 		return sequence;

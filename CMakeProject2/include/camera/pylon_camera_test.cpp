@@ -467,6 +467,13 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
       std::cout << "Camera disconnected" << std::endl;
       m_frameCounter = 0;
     }
+
+    // ADD NEW WINDOW CONTROL SECTION HERE
+    ImGui::Separator();
+    ImGui::Text("Window Controls:");
+    if (ImGui::Button(m_imageWindowOpen ? "Hide Image Window" : "Show Image Window")) {
+      m_imageWindowOpen = !m_imageWindowOpen;
+    }
   }
 
   // Device removal handling
@@ -501,15 +508,10 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
     }
   }
 
-
   ImGui::End();
 
   // Render the exposure manager UI
   m_exposureManager.RenderUI();
-
-
-
-
 
   // Image display window - always show when we have a valid image
   if ((m_camera.IsGrabbing() || m_hasValidImage) && m_imageWindowOpen) {
@@ -640,7 +642,7 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
             }
 
             if (success) {
-              std::cout << "✓ Gantry movement commands sent successfully" << std::endl;
+              std::cout << "[Yes] Gantry movement commands sent successfully" << std::endl;
             }
             else {
               std::cout << "✗ Failed to send gantry movement commands" << std::endl;
@@ -648,9 +650,6 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
           }
         }
       }
-
-
-
     }
     else {
       ImGui::Text("Waiting for valid image from camera...");
@@ -665,7 +664,6 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
     ImGui::End();
   }
 }
-
 
 // This method should replace the original RenderUI method
 void PylonCameraTest::RenderUI() {
@@ -856,7 +854,7 @@ bool PylonCameraTest::LoadCalibrationFromFile() {
       m_pixelToMMFactorY = config["pixelToMillimeterFactorY"].get<float>();
     }
 
-    std::cout << "✓ Camera calibration loaded: X=" << m_pixelToMMFactorX
+    std::cout << "[Yes] Camera calibration loaded: X=" << m_pixelToMMFactorX
       << ", Y=" << m_pixelToMMFactorY << " mm/pixel" << std::endl;
     return true;
   }
@@ -882,7 +880,7 @@ bool PylonCameraTest::SaveCalibrationToFile() {
     file << std::setw(2) << config << std::endl;
     file.close();
 
-    std::cout << "✓ Camera calibration saved: X=" << m_pixelToMMFactorX
+    std::cout << "[Yes] Camera calibration saved: X=" << m_pixelToMMFactorX
       << ", Y=" << m_pixelToMMFactorY << " mm/pixel" << std::endl;
     return true;
   }

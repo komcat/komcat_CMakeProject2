@@ -105,6 +105,13 @@ public:
 	// Show complete camera status
 	void ShowCameraStatus(PylonCamera& camera) const;
 
+
+	// Set a camera instance for testing settings
+	void SetTestCamera(PylonCamera* camera) { m_testCamera = camera; }
+
+	// Get the test camera instance
+	PylonCamera* GetTestCamera() const { return m_testCamera; }
+
 private:
 	// Apply the actual camera settings
 	bool ApplyCameraSettings(PylonCamera& camera, const CameraExposureSettings& settings);
@@ -152,4 +159,7 @@ private:
 
 	std::string m_currentAppliedNodeId;
 	CameraExposureSettings m_currentAppliedSettings;
+
+	// Camera instance for testing settings
+	PylonCamera* m_testCamera = nullptr;
 };

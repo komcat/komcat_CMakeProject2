@@ -629,7 +629,7 @@ ImVec4 OperationsDisplayUI::GetStatusColor(const std::string& status) const {
 
 const char* OperationsDisplayUI::GetStatusIcon(const std::string& status) const {
   if (status == "success" || status == "completed") {
-    return "✓";
+    return "[Yes]";
   }
   else if (status == "failed" || status == "error") {
     return "✗";

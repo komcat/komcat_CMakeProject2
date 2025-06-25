@@ -49,7 +49,7 @@ bool CameraExposureManager::LoadConfiguration(const std::string& configPath) {
       // Update modification timestamp
       UpdateModificationTime();
 
-      std::cout << "✓ Configuration loaded successfully!" << std::endl;
+      std::cout << "[Yes] Configuration loaded successfully!" << std::endl;
       std::cout << "  - Previous settings: " << oldSettingsCount << " nodes" << std::endl;
       std::cout << "  - New settings: " << m_nodeSettings.size() << " nodes" << std::endl;
     }
@@ -107,7 +107,7 @@ bool CameraExposureManager::ParseConfiguration(const nlohmann::json& config) {
     if (settings.contains("default")) {
       m_defaultSettings = JsonToSettings(settings["default"]);
       std::cout << "  - Default settings: "
-        << m_defaultSettings.exposure_time << "μs, "
+        << m_defaultSettings.exposure_time << "us, "
         << m_defaultSettings.gain << "dB" << std::endl;
     }
 
@@ -122,7 +122,7 @@ bool CameraExposureManager::ParseConfiguration(const nlohmann::json& config) {
         m_nodeSettings[nodeId] = nodeSettings;
 
         std::cout << "    * " << nodeId << ": "
-          << nodeSettings.exposure_time << "μs, "
+          << nodeSettings.exposure_time << "us, "
           << nodeSettings.gain << "dB"
           << " (" << nodeSettings.description << ")" << std::endl;
       }
@@ -485,7 +485,7 @@ void CameraExposureManager::RenderUI() {
 
     // Handle description input safely
     static char descBuffer[256];
-    strncpy(descBuffer, defaultEdit.description.c_str(), sizeof(descBuffer) - 1);
+    strncpy_s(descBuffer, sizeof(descBuffer), defaultEdit.description.c_str(), sizeof(descBuffer) - 1);
     descBuffer[sizeof(descBuffer) - 1] = '\0';
 
     if (ImGui::InputText("Description", descBuffer, sizeof(descBuffer))) {
@@ -501,6 +501,443 @@ void CameraExposureManager::RenderUI() {
       defaultEdit = m_defaultSettings;
     }
   }
+
+
+  // Add this section to CameraExposureManager::RenderUI() method
+// Insert after the "Default Settings" section and before "Node Settings"
+
+// Add New Node Settings section
+  if (ImGui::CollapsingHeader("Add New Node Settings")) {
+
+    // Structure to hold node info
+    struct NodeInfo {
+      std::string nodeId;
+      std::string positionName;
+      std::string displayText;
+    };
+
+    static char newNodeId[256] = "";
+    static CameraExposureSettings newNodeSettings;
+    static bool copyFromExisting = false;
+    static char copyFromNodeId[256] = "";
+    static std::vector<std::string> motionNodes;
+    static std::vector<NodeInfo> motionNodeInfos;  // ADD THIS LINE - was missing!
+    static bool motionNodesLoaded = false;
+    static int selectedMotionNodeIndex = -1;
+
+    // Load motion nodes from config (one-time load)
+    if (!motionNodesLoaded) {
+      motionNodes.clear();
+      motionNodeInfos.clear();  // Clear this too
+      try {
+        std::ifstream motionConfigFile("motion_config.json");
+        if (motionConfigFile.is_open()) {
+          nlohmann::json motionConfig;
+          motionConfigFile >> motionConfig;
+
+          // Extract nodes from Process_Flow graph
+          if (motionConfig.contains("Graphs") &&
+            motionConfig["Graphs"].contains("Process_Flow") &&
+            motionConfig["Graphs"]["Process_Flow"].contains("Nodes")) {
+
+            for (const auto& node : motionConfig["Graphs"]["Process_Flow"]["Nodes"]) {
+              if (node.contains("Id")) {
+                NodeInfo nodeInfo;
+                nodeInfo.nodeId = node["Id"].get<std::string>();
+
+                // Get position name if available
+                if (node.contains("Position")) {
+                  nodeInfo.positionName = node["Position"].get<std::string>();
+                  nodeInfo.displayText = nodeInfo.nodeId + " (" + nodeInfo.positionName + ")";
+                }
+                else {
+                  nodeInfo.positionName = "";
+                  nodeInfo.displayText = nodeInfo.nodeId;
+                }
+
+                motionNodes.push_back(nodeInfo.nodeId); // Keep for compatibility
+                motionNodeInfos.push_back(nodeInfo);    // Add to the new vector
+              }
+            }
+          }
+          motionConfigFile.close();
+          std::cout << "Loaded " << motionNodeInfos.size() << " motion nodes for camera exposure UI" << std::endl;
+        }
+      }
+      catch (const std::exception& e) {
+        std::cout << "Could not load motion nodes: " << e.what() << std::endl;
+      }
+      motionNodesLoaded = true;
+    }
+
+    ImGui::Text("Create exposure settings for a new node:");
+
+    // Motion Config Node Selector
+    ImGui::Text("Select from Motion Config:");
+    if (!motionNodeInfos.empty()) {
+      // Create a combo box with motion nodes showing node ID and position name
+      std::string previewText = selectedMotionNodeIndex >= 0 ?
+        motionNodeInfos[selectedMotionNodeIndex].displayText : "Select a node...";
+
+      if (ImGui::BeginCombo("Motion Nodes", previewText.c_str())) {
+
+        for (int i = 0; i < motionNodeInfos.size(); i++) {
+          const NodeInfo& nodeInfo = motionNodeInfos[i];
+          bool isSelected = (selectedMotionNodeIndex == i);
+
+          // Check if this node already has exposure settings
+          bool hasSettings = HasSettingsForNode(nodeInfo.nodeId);
+
+          // Set text color: bright white for available nodes, gray for nodes with existing settings
+          ImVec4 textColor = hasSettings ? ImVec4(0.6f, 0.6f, 0.6f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+
+          // Override text color when selected to ensure readability
+          if (isSelected) {
+            // Use black text on blue selection background
+            textColor = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
+          }
+
+          ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+          if (ImGui::Selectable(nodeInfo.displayText.c_str(), isSelected)) {
+            selectedMotionNodeIndex = i;
+            // Copy the selected node ID to the input field
+            strncpy(newNodeId, nodeInfo.nodeId.c_str(), sizeof(newNodeId) - 1);
+            newNodeId[sizeof(newNodeId) - 1] = '\0';
+          }
+          ImGui::PopStyleColor();
+
+          if (hasSettings && ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Node already has exposure settings");
+          }
+
+          if (isSelected) {
+            ImGui::SetItemDefaultFocus();
+          }
+        }
+        ImGui::EndCombo();
+      }
+    }
+    else {
+      ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "No motion nodes found in motion_config.json");
+    }
+
+    ImGui::Separator();
+    ImGui::Text("Or enter custom Node ID:");
+
+    // Manual Node ID input
+    ImGui::InputText("Node ID", newNodeId, sizeof(newNodeId));
+    ImGui::SameLine();
+    if (ImGui::Button("Clear")) {
+      newNodeId[0] = '\0';
+      selectedMotionNodeIndex = -1;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Reload Motion Config")) {
+      motionNodesLoaded = false; // Force reload on next frame
+    }
+
+    // Copy from existing node option
+    ImGui::Checkbox("Copy from existing node", &copyFromExisting);
+
+    if (copyFromExisting) {
+      ImGui::InputText("Copy from Node ID", copyFromNodeId, sizeof(copyFromNodeId));
+      ImGui::SameLine();
+      if (ImGui::Button("Copy Settings")) {
+        std::string sourceNodeId(copyFromNodeId);
+        if (HasSettingsForNode(sourceNodeId)) {
+          newNodeSettings = GetSettingsForNode(sourceNodeId);
+          // Update description
+          newNodeSettings.description = "Copied from " + sourceNodeId;
+        }
+        else {
+          newNodeSettings = m_defaultSettings;
+          newNodeSettings.description = "Copied from default";
+        }
+      }
+    }
+
+    // New node settings configuration
+    ImGui::Separator();
+    ImGui::Text("Configure Settings for New Node:");
+
+    ImGui::InputDouble("Exposure Time (us)", &newNodeSettings.exposure_time, 1.0f, 100.0f, "%.0f");
+    ImGui::InputDouble("Gain (0-10 scale)", &newNodeSettings.gain, 0.1, 1.0, "%.1f");
+    ImGui::Checkbox("Exposure Auto", &newNodeSettings.exposure_auto);
+    ImGui::Checkbox("Gain Auto", &newNodeSettings.gain_auto);
+
+    // Description input
+    static char descBuffer[256];
+    strncpy(descBuffer, newNodeSettings.description.c_str(), sizeof(descBuffer) - 1);
+    descBuffer[sizeof(descBuffer) - 1] = '\0';
+
+    if (ImGui::InputText("Description", descBuffer, sizeof(descBuffer))) {
+      newNodeSettings.description = std::string(descBuffer);
+    }
+
+    // Add node button
+    ImGui::Separator();
+    bool canAddNode = strlen(newNodeId) > 0;
+
+    // Test Current Settings button - add this BEFORE the Add Node Settings button
+    if (ImGui::Button("Test Current Settings on Camera")) {
+      // Apply the current settings temporarily to the camera for preview
+      std::cout << "Testing exposure settings on camera:" << std::endl;
+      std::cout << "  Exposure Time: " << newNodeSettings.exposure_time << " μs" << std::endl;
+      std::cout << "  Gain: " << newNodeSettings.gain << " dB" << std::endl;
+      std::cout << "  Exposure Auto: " << (newNodeSettings.exposure_auto ? "On" : "Off") << std::endl;
+      std::cout << "  Gain Auto: " << (newNodeSettings.gain_auto ? "On" : "Off") << std::endl;
+
+      // Apply settings to camera using the same method as existing nodes
+      // This uses the existing ApplyCameraSettings method
+      try {
+        // Get a camera instance and check if it's valid
+        PylonCamera* testCamera = GetTestCamera();
+        if (!testCamera) {
+          std::cout << "✗ No test camera available" << std::endl;
+          ImGui::OpenPopup("Test Settings Failed");
+          return; // Exit early if no camera
+        }
+
+        if (!testCamera->IsConnected()) {
+          std::cout << "✗ Test camera is not connected" << std::endl;
+          ImGui::OpenPopup("Test Settings Failed");
+          return; // Exit early if camera not connected
+        }
+
+        // Create a temporary camera settings object
+        CameraExposureSettings testSettings = newNodeSettings;
+        testSettings.description = "Test settings from UI";
+
+        // Apply the settings using the existing camera application logic
+        // Dereference the pointer to get a reference for ApplyCameraSettings
+        bool success = ApplyCameraSettings(*testCamera, testSettings);
+
+        if (success) {
+          std::cout << "✓ Test settings applied successfully to camera" << std::endl;
+          ImGui::OpenPopup("Test Settings Applied");
+        }
+        else {
+          std::cout << "✗ Failed to apply test settings to camera" << std::endl;
+          ImGui::OpenPopup("Test Settings Failed");
+        }
+
+      }
+      catch (const std::exception& e) {
+        std::cout << "Error applying test settings: " << e.what() << std::endl;
+        ImGui::OpenPopup("Test Settings Failed");
+      }
+    }
+
+    // Show popup confirmation that settings were applied for testing
+    if (ImGui::BeginPopupModal("Test Settings Applied", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+      ImGui::TextColored(ImVec4(0, 1, 0, 1), "✓ Settings successfully applied to camera for testing!");
+      ImGui::Text("Check the camera image to verify the exposure looks good.");
+      ImGui::Separator();
+      ImGui::Text("Applied settings:");
+      ImGui::Text("  Exposure Time: %.0f μs", newNodeSettings.exposure_time);
+      ImGui::Text("  Gain: %.1f dB", newNodeSettings.gain);
+      ImGui::Text("  Exposure Auto: %s", newNodeSettings.exposure_auto ? "On" : "Off");
+      ImGui::Text("  Gain Auto: %s", newNodeSettings.gain_auto ? "On" : "Off");
+      ImGui::Separator();
+      ImGui::TextColored(ImVec4(1, 1, 0, 1), "Note: These are temporary test settings.");
+      ImGui::Text("Click 'Add Node Settings' to save them permanently.");
+
+      if (ImGui::Button("OK")) {
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
+    }
+
+    // Show popup for failed settings application
+    if (ImGui::BeginPopupModal("Test Settings Failed", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+      ImGui::TextColored(ImVec4(1, 0, 0, 1), "✗ Failed to apply settings to camera!");
+      ImGui::Text("Make sure the camera is connected and grabbing.");
+      ImGui::Separator();
+      ImGui::Text("Attempted settings:");
+      ImGui::Text("  Exposure Time: %.0f μs", newNodeSettings.exposure_time);
+      ImGui::Text("  Gain: %.1f dB", newNodeSettings.gain);
+
+      if (ImGui::Button("OK")) {
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
+    }
+
+    ImGui::SameLine();
+
+    // Add verification button
+    if (ImGui::Button("Verify Current Camera Settings")) {
+      std::cout << "Reading current camera settings for verification..." << std::endl;
+
+      try {
+        // Get camera instance and check if it's valid
+        PylonCamera* testCamera = GetTestCamera();
+        if (!testCamera) {
+          std::cout << "✗ No test camera available for verification" << std::endl;
+          return; // Exit early if no camera
+        }
+
+        if (!testCamera->IsConnected()) {
+          std::cout << "✗ Test camera is not connected" << std::endl;
+          return; // Exit early if camera not connected
+        }
+
+        // Read what's actually applied to the camera (dereference pointer to reference)
+        CameraExposureSettings currentSettings = ReadCurrentCameraSettings(*testCamera);
+
+        std::cout << "Current camera settings:" << std::endl;
+        std::cout << "  Actual Exposure Time: " << currentSettings.exposure_time << " μs" << std::endl;
+        std::cout << "  Actual Gain: " << currentSettings.gain << " dB" << std::endl;
+        std::cout << "  Actual Exposure Auto: " << (currentSettings.exposure_auto ? "On" : "Off") << std::endl;
+        std::cout << "  Actual Gain Auto: " << (currentSettings.gain_auto ? "On" : "Off") << std::endl;
+
+        ImGui::OpenPopup("Current Camera Settings");
+
+      }
+      catch (const std::exception& e) {
+        std::cout << "Error reading camera settings: " << e.what() << std::endl;
+      }
+    }
+
+    // Show popup with current camera settings
+    if (ImGui::BeginPopupModal("Current Camera Settings", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+      ImGui::Text("Current camera settings (as read from hardware):");
+      ImGui::Separator();
+
+      try {
+        PylonCamera* testCamera = GetTestCamera();
+        if (testCamera && testCamera->IsConnected()) {
+          CameraExposureSettings currentSettings = ReadCurrentCameraSettings(*testCamera);
+          ImGui::Text("Exposure Time: %.0f μs", currentSettings.exposure_time);
+          ImGui::Text("Gain: %.1f dB", currentSettings.gain);
+          ImGui::Text("Exposure Auto: %s", currentSettings.exposure_auto ? "On" : "Off");
+          ImGui::Text("Gain Auto: %s", currentSettings.gain_auto ? "On" : "Off");
+        }
+        else {
+          ImGui::TextColored(ImVec4(1, 0, 0, 1), "Camera not available or not connected");
+        }
+      }
+      catch (const std::exception& e) {
+        ImGui::TextColored(ImVec4(1, 0, 0, 1), "Error reading camera: %s", e.what());
+      }
+
+      if (ImGui::Button("OK")) {
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
+    }
+
+    ImGui::SameLine();
+
+    if (!canAddNode) {
+      ImGui::BeginDisabled();
+    }
+
+    if (ImGui::Button("Add Node Settings")) {
+      std::string nodeId(newNodeId);
+
+      // Check if node already exists
+      if (HasSettingsForNode(nodeId)) {
+        // Show confirmation dialog or warning
+        ImGui::OpenPopup("Node Exists");
+      }
+      else {
+        // Add the new node settings
+        SetSettingsForNode(nodeId, newNodeSettings);
+        UpdateModificationTime();
+
+        // Clear the form
+        newNodeId[0] = '\0';
+        newNodeSettings = m_defaultSettings;
+        newNodeSettings.description = "";
+
+        std::cout << "Added new exposure settings for node: " << nodeId << std::endl;
+      }
+    }
+
+    if (!canAddNode) {
+      ImGui::EndDisabled();
+      ImGui::SameLine();
+      ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "Enter a Node ID");
+    }
+
+    // Confirmation popup for existing nodes
+    if (ImGui::BeginPopupModal("Node Exists", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+      ImGui::Text("Node '%s' already has exposure settings.", newNodeId);
+      ImGui::Text("Do you want to overwrite the existing settings?");
+      ImGui::Separator();
+
+      if (ImGui::Button("Yes, Overwrite")) {
+        std::string nodeId(newNodeId);
+        SetSettingsForNode(nodeId, newNodeSettings);
+        UpdateModificationTime();
+
+        // Clear the form
+        newNodeId[0] = '\0';
+        newNodeSettings = m_defaultSettings;
+        newNodeSettings.description = "";
+
+        std::cout << "Overwrote exposure settings for node: " << nodeId << std::endl;
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::SameLine();
+      if (ImGui::Button("No, Cancel")) {
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
+    }
+
+    // Quick presets section
+    ImGui::Separator();
+    ImGui::Text("Quick Presets:");
+
+    if (ImGui::Button("Low Light (High Exposure)")) {
+      newNodeSettings.exposure_time = 15000.0;
+      newNodeSettings.gain = 3.0;
+      newNodeSettings.exposure_auto = false;
+      newNodeSettings.gain_auto = false;
+      newNodeSettings.description = "Low light viewing preset";
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Bright Light (Low Exposure)")) {
+      newNodeSettings.exposure_time = 500.0;
+      newNodeSettings.gain = 0.0;
+      newNodeSettings.exposure_auto = false;
+      newNodeSettings.gain_auto = false;
+      newNodeSettings.description = "Bright light viewing preset";
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Auto Mode")) {
+      newNodeSettings.exposure_time = 5000.0;
+      newNodeSettings.gain = 1.0;
+      newNodeSettings.exposure_auto = true;
+      newNodeSettings.gain_auto = true;
+      newNodeSettings.description = "Automatic exposure and gain";
+    }
+
+    // Show existing nodes for reference
+    if (ImGui::CollapsingHeader("Existing Nodes (for reference)")) {
+      ImGui::BeginChild("ExistingNodesList", ImVec2(0, 150), true);
+      for (const auto& [nodeId, settings] : m_nodeSettings) {
+        if (ImGui::Selectable(nodeId.c_str())) {
+          // Copy the node ID to the copy field
+          strncpy(copyFromNodeId, nodeId.c_str(), sizeof(copyFromNodeId) - 1);
+          copyFromNodeId[sizeof(copyFromNodeId) - 1] = '\0';
+          copyFromExisting = true;
+        }
+        if (ImGui::IsItemHovered()) {
+          ImGui::SetTooltip("Click to use as copy source\n%s\nExp: %.0fμs, Gain: %.1f",
+            settings.description.c_str(), settings.exposure_time, settings.gain);
+        }
+      }
+      ImGui::EndChild();
+      ImGui::TextDisabled("Click any existing node to use as copy source");
+    }
+  }
+
+
+
+
 
   // Node settings display and editing
   if (ImGui::CollapsingHeader("Node Settings")) {
@@ -612,8 +1049,8 @@ CameraExposureSettings CameraExposureManager::ReadCurrentCameraSettings(PylonCam
           double minExposure = exposureTime.GetMin();
           double maxExposure = exposureTime.GetMax();
 
-          std::cout << "Current exposure time: " << currentSettings.exposure_time << " μs"
-            << " (range: " << minExposure << "-" << maxExposure << " μs)" << std::endl;
+          std::cout << "Current exposure time: " << currentSettings.exposure_time << " us"
+            << " (range: " << minExposure << "-" << maxExposure << " us)" << std::endl;
           exposureFound = true;
         }
       }
@@ -664,7 +1101,7 @@ CameraExposureSettings CameraExposureManager::ReadCurrentCameraSettings(PylonCam
           double gainRatio = static_cast<double>(rawValue - minGain) / (maxGain - minGain);
           currentSettings.gain = gainRatio * 10.0;
 
-          std::cout << "Current gain raw: " << rawValue << " (≈" << currentSettings.gain
+          std::cout << "Current gain raw: " << rawValue << " (== " << currentSettings.gain
             << " on 0-10 scale, range: " << minGain << "-" << maxGain << ")" << std::endl;
           gainFound = true;
         }
@@ -719,10 +1156,10 @@ CameraExposureSettings CameraExposureManager::ReadCurrentCameraSettings(PylonCam
       for (const auto& paramName : paramsToCheck) {
         try {
           if (internalCamera.GetNodeMap().GetNode(paramName.c_str())) {
-            std::cout << "  ✓ " << paramName << " - Available" << std::endl;
+            std::cout << "  [Yes] " << paramName << " - Available" << std::endl;
           }
           else {
-            std::cout << "  ✗ " << paramName << " - Not available" << std::endl;
+            std::cout << "  [No] " << paramName << " - Not available" << std::endl;
           }
         }
         catch (const Pylon::GenericException& e) {
@@ -765,13 +1202,13 @@ bool CameraExposureManager::VerifySettingsApplied(PylonCamera& camera, const std
   bool gainAutoMatch = (actualSettings.gain_auto == expectedSettings.gain_auto);
 
   std::cout << "\nComparison results:" << std::endl;
-  std::cout << "  - Exposure Time: " << (exposureMatch ? "✓ MATCH" : "✗ MISMATCH") << std::endl;
-  std::cout << "  - Gain: " << (gainMatch ? "✓ MATCH" : "✗ MISMATCH") << std::endl;
-  std::cout << "  - Exposure Auto: " << (exposureAutoMatch ? "✓ MATCH" : "✗ MISMATCH") << std::endl;
-  std::cout << "  - Gain Auto: " << (gainAutoMatch ? "✓ MATCH" : "✗ MISMATCH") << std::endl;
+  std::cout << "  - Exposure Time: " << (exposureMatch ? "[Yes] MATCH" : "[No] MISMATCH") << std::endl;
+  std::cout << "  - Gain: " << (gainMatch ? "[Yes] MATCH" : "[No] MISMATCH") << std::endl;
+  std::cout << "  - Exposure Auto: " << (exposureAutoMatch ? "[Yes] MATCH" : "[No] MISMATCH") << std::endl;
+  std::cout << "  - Gain Auto: " << (gainAutoMatch ? "[Yes] MATCH" : "[No] MISMATCH") << std::endl;
 
   bool allMatch = exposureMatch && gainMatch && exposureAutoMatch && gainAutoMatch;
-  std::cout << "\nOverall result: " << (allMatch ? "✓ ALL SETTINGS APPLIED CORRECTLY" : "✗ SETTINGS MISMATCH") << std::endl;
+  std::cout << "\nOverall result: " << (allMatch ? "[Yes] ALL SETTINGS APPLIED CORRECTLY" : "[No] SETTINGS MISMATCH") << std::endl;
   std::cout << "============================================\n" << std::endl;
 
   return allMatch;
@@ -811,7 +1248,7 @@ void CameraExposureManager::ShowCameraStatus(PylonCamera& camera) const {
 
       if (internalCamera.GetNodeMap().GetNode("ExposureTimeAbs")) {
         Pylon::CFloatParameter exposureTime(internalCamera.GetNodeMap(), "ExposureTimeAbs");
-        std::cout << "Exposure Time: " << exposureTime.GetValue() << " μs"
+        std::cout << "Exposure Time: " << exposureTime.GetValue() << " us"
           << " (range: " << exposureTime.GetMin() << "-" << exposureTime.GetMax() << ")" << std::endl;
       }
     }

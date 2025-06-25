@@ -1145,7 +1145,9 @@ int main(int argc, char* argv[])
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-	ImGui::StyleColorsLight();
+	//ImGui::StyleColorsLight();
+	//ImGui::StyleColorsDark();
+	ImGui::StyleColorsClassic();
 	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
 	ImGui_ImplOpenGL3_Init("#version 130");
 
@@ -1474,7 +1476,15 @@ int main(int argc, char* argv[])
 		cameraExposureTestUI = std::make_unique<CameraExposureTestUI>(*machineOps);
 		logger->LogInfo("CameraExposureTestUI initialized");
 	}
+	
 
+	// After creating the camera exposure manager:
+	if (machineOps && machineOps->GetCameraExposureManager()) {
+		// Get the camera from PylonCameraTest
+		if (pylonCameraTest) {
+			machineOps->GetCameraExposureManager()->SetTestCamera(&pylonCameraTest->GetCamera());
+		}
+	}
 
 
 

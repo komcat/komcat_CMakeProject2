@@ -94,7 +94,7 @@ ScanStep AdaptivePowerScanner::adaptivePowerScan(const ScanStep& startPosition) 
       if (current.value > before.value) {
         anyAxisImproved = true;
         double improvement = (current.value - before.value) / before.value;
-        std::cout << "✓ " << axis << " improved by "
+        std::cout << "[Yes] " << axis << " improved by "
           << std::fixed << std::setprecision(2)
           << (improvement * 100) << "%" << std::endl;
       }
