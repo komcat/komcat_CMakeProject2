@@ -1,4 +1,4 @@
-// VisualizePage.cpp - Implementation with raylib includes ONLY here
+// VisualizePage.cpp - Implementation with custom font
 #include "VisualizePage.h"
 #include "include/logger.h"
 
@@ -7,13 +7,42 @@
 #include <math.h>
 
 VisualizePage::VisualizePage(Logger* logger)
-  : m_logger(logger), m_animationTime(0.0f), m_rectangleCount(8) {
+  : m_logger(logger), m_animationTime(0.0f), m_rectangleCount(8), m_customFont(nullptr), m_fontLoaded(false) {
+
   if (m_logger) {
     m_logger->LogInfo("VisualizePage created");
+  }
+
+  // Load the custom font
+  Font* customFont = new Font();
+  *customFont = LoadFont("assets/fonts/CascadiaCode-Regular.ttf");
+
+  if (customFont->texture.id != 0) {
+    m_customFont = customFont;
+    m_fontLoaded = true;
+    if (m_logger) {
+      m_logger->LogInfo("CascadiaCode-Regular font loaded successfully");
+    }
+  }
+  else {
+    delete customFont;
+    m_customFont = nullptr;
+    m_fontLoaded = false;
+    if (m_logger) {
+      m_logger->LogWarning("Failed to load CascadiaCode-Regular font, using default");
+    }
   }
 }
 
 VisualizePage::~VisualizePage() {
+  // Clean up font
+  if (m_fontLoaded && m_customFont) {
+    Font* customFont = static_cast<Font*>(m_customFont);
+    UnloadFont(*customFont);
+    delete customFont;
+    m_customFont = nullptr;
+  }
+
   if (m_logger) {
     m_logger->LogInfo("VisualizePage destroyed");
   }
@@ -23,13 +52,24 @@ void VisualizePage::Render() {
   // Update animation time
   m_animationTime += GetFrameTime();
 
-  // Page title
-  DrawText("Visualize Page", 10, 10, 20, DARKBLUE);
-  DrawText("R: Rectangles | V: Live | M: Menu | S: Status | ESC: Close", 10, 40, 14, GRAY);
+  // Helper function to draw text with custom font or fallback
+  auto DrawCustomText = [this](const char* text, int posX, int posY, int fontSize, Color color) {
+    if (m_fontLoaded && m_customFont) {
+      Font* customFont = static_cast<Font*>(m_customFont);
+      DrawTextEx(*customFont, text, { (float)posX, (float)posY }, (float)fontSize, 1.0f, color);
+    }
+    else {
+      DrawText(text, posX, posY, fontSize, color);
+    }
+  };
 
-  // Interactive controls
-  DrawText("Press +/- to change rectangle count", 10, 70, 14, DARKGREEN);
-  DrawText(TextFormat("Rectangle Count: %d", m_rectangleCount), 10, 90, 14, BLACK);
+  // Page title - using custom font
+  DrawCustomText("Visualize Page", 10, 10, 20, DARKBLUE);
+  DrawCustomText("R: Rectangles | V: Live | M: Menu | S: Status | ESC: Close", 10, 40, 14, GRAY);
+
+  // Interactive controls - using custom font
+  DrawCustomText("Press +/- to change rectangle count", 10, 70, 14, DARKGREEN);
+  DrawCustomText(TextFormat("Rectangle Count: %d", m_rectangleCount), 10, 90, 14, BLACK);
 
   // Handle input for rectangle count
   if (IsKeyPressed(KEY_KP_ADD) || IsKeyPressed(KEY_EQUAL)) {
@@ -70,34 +110,42 @@ void VisualizePage::Render() {
     DrawRectangle(x, y, animatedSize, animatedSize, rectColor);
     DrawRectangleLines(x, y, animatedSize, animatedSize, BLACK);
 
-    // Draw rectangle number
-    DrawText(TextFormat("%d", i + 1), x + animatedSize / 2 - 5, y + animatedSize / 2 - 8, 16, WHITE);
+    // Draw rectangle number - using custom font
+    DrawCustomText(TextFormat("%d", i + 1), x + animatedSize / 2 - 8, y + animatedSize / 2 - 8, 16, WHITE);
   }
 
-  // Draw some static rectangles for comparison
-  DrawText("Static Rectangles:", 600, 130, 16, DARKBLUE);
+  // Draw some static rectangles for comparison - using custom font
+  DrawCustomText("Static Rectangles:", 600, 130, 16, DARKBLUE);
 
   // Red rectangle
   DrawRectangle(600, 160, 100, 60, RED);
   DrawRectangleLines(600, 160, 100, 60, DARKGRAY);
-  DrawText("Red", 630, 180, 16, WHITE);
+  DrawCustomText("Red", 630, 180, 16, WHITE);
 
   // Green rectangle
   DrawRectangle(720, 160, 100, 60, GREEN);
   DrawRectangleLines(720, 160, 100, 60, DARKGRAY);
-  DrawText("Green", 745, 180, 16, WHITE);
+  DrawCustomText("Green", 745, 180, 16, WHITE);
 
   // Blue rectangle
   DrawRectangle(600, 240, 100, 60, BLUE);
   DrawRectangleLines(600, 240, 100, 60, DARKGRAY);
-  DrawText("Blue", 630, 260, 16, WHITE);
+  DrawCustomText("Blue", 630, 260, 16, WHITE);
 
   // Yellow rectangle
   DrawRectangle(720, 240, 100, 60, YELLOW);
   DrawRectangleLines(720, 240, 100, 60, DARKGRAY);
-  DrawText("Yellow", 740, 260, 16, BLACK);
+  DrawCustomText("Yellow", 740, 260, 16, BLACK);
 
-  // Show animation info
-  DrawText(TextFormat("Animation Time: %.2f seconds", m_animationTime), 10, GetScreenHeight() - 60, 14, PURPLE);
-  DrawText("Rectangles are animated with color and size changes!", 10, GetScreenHeight() - 40, 14, PURPLE);
+  // Show animation info - using custom font
+  DrawCustomText(TextFormat("Animation Time: %.2f seconds", m_animationTime), 10, GetScreenHeight() - 60, 14, PURPLE);
+  DrawCustomText("Rectangles are animated with color and size changes!", 10, GetScreenHeight() - 40, 14, PURPLE);
+
+  // Add font status info
+  if (m_fontLoaded) {
+    DrawCustomText("Font: CascadiaCode-Regular (Loaded)", 10, GetScreenHeight() - 20, 12, DARKGREEN);
+  }
+  else {
+    DrawCustomText("Font: Default (CascadiaCode failed to load)", 10, GetScreenHeight() - 20, 12, RED);
+  }
 }

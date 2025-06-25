@@ -1,4 +1,4 @@
-// VisualizePage.h - Clean header with NO raylib includes
+// VisualizePage.h - Add font support
 #pragma once
 
 // Forward declaration only - no raylib includes in header
@@ -18,4 +18,8 @@ private:
   // Animation variables (no raylib types here)
   float m_animationTime;
   int m_rectangleCount;
+
+  // Font support (keep as void* to avoid raylib includes in header)
+  void* m_customFont;  // Will be cast to Font in .cpp
+  bool m_fontLoaded;
 };

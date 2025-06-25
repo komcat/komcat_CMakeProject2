@@ -3,6 +3,9 @@
 #include "include/logger.h"
 #include "StatusPage.h"
 #include "VisualizePage.h"
+// 1. ADD INCLUDE at the top with other includes:
+#include "RealtimeChartPage.h"
+#include "include/data/global_data_store.h"  // ADD THIS LINE
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -12,6 +15,15 @@
 
 #include <raylib.h>
 #include <iostream>
+    // Page system - now with 4 pages
+enum PageType { 
+  LIVE_VIDEO_PAGE,
+  MENU_PAGE,
+  STATUS_PAGE, 
+  VISUALIZE_PAGE,
+  REALTIME_CHART_PAGE  // ADD THIS LINE
+};
+
 
 RaylibWindow::RaylibWindow()
   : isRunning(false), isVisible(false), shouldClose(false), shouldShutdown(false)
@@ -20,6 +32,9 @@ RaylibWindow::RaylibWindow()
 
   // Initialize machine data
   machineData = { 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false };
+
+
+
 }
 
 RaylibWindow::~RaylibWindow() {
@@ -254,7 +269,7 @@ void RenderLiveVideoPage(RenderTexture2D& canvas, Vector2& canvasPos, VideoFrame
 
   // Draw UI elements
   DrawText("Live Video Page", 10, 10, 20, DARKBLUE);
-  DrawText("M: Menu | S: Status | R: Rectangles | ESC: Close", 10, 35, 14, GRAY);
+  DrawText("M: Menu | S: Status | R: Rectangles | C: Chart | ESC: Close", 10, 35, 14, GRAY);
 
   // Video controls
   static Rectangle playPauseButton = { 10, 50, 80, 25 };
@@ -359,9 +374,32 @@ void RaylibWindow::RaylibThreadFunction() {
     // Create page instances
     StatusPage statusPage(logger);
     VisualizePage visualizePage(logger);
+    RealtimeChartPage realtimeChartPage(logger);  // ADD THIS LINE
+    // 4. ADD data store connection (after dataStore is set up):
+    if (dataStore) {
+      realtimeChartPage.SetDataStore(dataStore);  // ADD THIS LINE
 
-    // Page system - now with 4 pages
-    enum PageType { LIVE_VIDEO_PAGE, MENU_PAGE, STATUS_PAGE, VISUALIZE_PAGE };
+      
+    }
+    if (logger) {
+      logger->LogInfo("Raylib thread: Checking dataStore connection...");
+      if (dataStore) {
+        logger->LogInfo("Raylib thread: dataStore found, connecting to RealtimeChartPage");
+        realtimeChartPage.SetDataStore(dataStore);
+
+        // Test the connection immediately
+        auto channels = dataStore->GetAvailableChannels();
+        logger->LogInfo("Raylib thread: dataStore has " + std::to_string(channels.size()) + " channels");
+        for (const auto& ch : channels) {
+          logger->LogInfo("  Available: " + ch);
+        }
+      }
+      else {
+        logger->LogError("Raylib thread: dataStore is NULL!");
+      }
+    }
+
+
     PageType currentPage = LIVE_VIDEO_PAGE;
 
     // Video playback control
@@ -392,6 +430,9 @@ void RaylibWindow::RaylibThreadFunction() {
       if (IsKeyPressed(KEY_R)) {  // R for Rectangles/Visualize
         currentPage = VISUALIZE_PAGE;
       }
+      if (IsKeyPressed(KEY_C)) {          // ADD THIS BLOCK
+        currentPage = REALTIME_CHART_PAGE;
+      }
 
       // Handle video controls via keyboard
       if (IsKeyPressed(KEY_SPACE)) {
@@ -414,7 +455,9 @@ void RaylibWindow::RaylibThreadFunction() {
       else if (currentPage == VISUALIZE_PAGE) {
         visualizePage.Render();
       }
-
+      else if (currentPage == REALTIME_CHART_PAGE) {  // ADD THIS BLOCK
+        realtimeChartPage.Render();
+      }
       DrawFPS(10, GetScreenHeight() - 30);
 
       EndDrawing();

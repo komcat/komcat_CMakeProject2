@@ -1723,7 +1723,6 @@ int main(int argc, char* argv[])
 	}
 	
 
-	// After other initializations (around line 200)
 	std::unique_ptr<RaylibWindow> raylibWindow;
 	if (moduleConfig.isEnabled("RAYLIB_3D_WINDOW")) {
 		raylibWindow = std::make_unique<RaylibWindow>();
@@ -1731,21 +1730,17 @@ int main(int argc, char* argv[])
 		// Set the logger first
 		raylibWindow->SetLogger(logger);
 
-		// Initialize in separate thread (won't block main thread)
+		// SET CONNECTIONS BEFORE INITIALIZING
+		if (piControllerManager) {
+			raylibWindow->SetPIControllerManager(piControllerManager.get());
+		}
+		if (dataStore) {
+			raylibWindow->SetDataStore(dataStore);  // MOVE THIS HERE
+		}
+
+		// THEN initialize the thread
 		if (raylibWindow->Initialize()) {
 			logger->LogInfo("Raylib 3D Window thread started successfully");
-
-			// Connect to your systems
-			if (piControllerManager) {
-				raylibWindow->SetPIControllerManager(piControllerManager.get());
-			}
-			if (dataStore) {
-				raylibWindow->SetDataStore(dataStore);
-			}
-		}
-		else {
-			logger->LogError("Failed to start Raylib 3D Window thread");
-			raylibWindow.reset();
 		}
 	}
 
