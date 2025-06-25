@@ -1,4 +1,4 @@
-// raylibclass.h - Updated for live video feed support
+// raylibclass.h - Updated for live video feed support and ScanningUI integration
 #pragma once
 
 #include "imgui.h"
@@ -6,9 +6,6 @@
 #include <atomic>
 #include <mutex>
 #include <vector>
-
-
-
 
 // Forward declarations
 class PIControllerManager;
@@ -72,6 +69,7 @@ public:
   void SetPIControllerManager(PIControllerManager* manager);
   void SetDataStore(GlobalDataStore* store);
   void SetLogger(Logger* loggerInstance);
+  void SetMachineOperations(void* machineOps);  // Change from SetScanningUI
   void UpdateMachineData(const MachineData& data);
 
   // NEW: Video feed integration
@@ -105,6 +103,8 @@ private:
   PIControllerManager* piManager;
   GlobalDataStore* dataStore;
   Logger* logger;
+  void* machineOperations;  // Change from scanningUI
+
 
   // Thread functions
   void RaylibThreadFunction();

@@ -27,9 +27,40 @@
 class CLD101xOperations;
 class Keithley2400Operations;
 
+extern "C" {
+	bool MachineOperations_PerformScan(void* machineOpsPtr,
+		const char* deviceName,
+		const char* dataChannel,
+		const double* stepSizes,
+		int stepSizeCount,
+		int settlingTimeMs,
+		const char** axes,
+		int axesCount,
+		const char* callerContext);
 
+	bool MachineOperations_StartScan(void* machineOpsPtr,
+		const char* deviceName,
+		const char* dataChannel,
+		const double* stepSizes,
+		int stepSizeCount,
+		int settlingTimeMs,
+		const char** axes,
+		int axesCount,
+		const char* callerContext);
+
+	bool MachineOperations_StopScan(void* machineOpsPtr,
+		const char* deviceName,
+		const char* callerContext);
+
+	// ADD THIS NEW WRAPPER:
+	bool MachineOperations_IsScanActive(void* machineOpsPtr,
+		const char* deviceName);
+}
 
 class MachineOperations {
+
+
+
 public:
 	MachineOperations(
 		MotionControlLayer& motionLayer,
@@ -375,6 +406,16 @@ public:
 	GraphVisualizer* GetGraphVisualizer() { return m_graphVisualizer; }
 	const GraphVisualizer* GetGraphVisualizer() const { return m_graphVisualizer; }
 
+	// Scanning operations for RealtimeChartPage buttons
+	bool ExecuteRunScan(const std::string& device,
+		const std::string& dataChannel,
+		const std::vector<double>& stepSizes,
+		int settlingTimeMs = 300,
+		const std::vector<std::string>& axes = { "Z", "X", "Y" });
+
+	bool StopAllOperations();
+	bool IsOperationRunning() const;
+
 private:
 	Logger* m_logger;
 	bool m_enableDebug = false;
@@ -454,3 +495,5 @@ private:
 	void StorePositionResult(const std::string& operationId, const std::string& prefix,
 		const PositionStruct& position);
 };
+
+

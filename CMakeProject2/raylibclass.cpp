@@ -1,4 +1,4 @@
-// raylibclass.cpp - Updated with live video feed implementation
+// raylibclass.cpp - Updated with live video feed implementation and ScanningUI
 #include "raylibclass.h"
 #include "include/logger.h"
 #include "StatusPage.h"
@@ -16,10 +16,10 @@
 #include <raylib.h>
 #include <iostream>
     // Page system - now with 4 pages
-enum PageType { 
+enum PageType {
   LIVE_VIDEO_PAGE,
   MENU_PAGE,
-  STATUS_PAGE, 
+  STATUS_PAGE,
   VISUALIZE_PAGE,
   REALTIME_CHART_PAGE  // ADD THIS LINE
 };
@@ -27,14 +27,11 @@ enum PageType {
 
 RaylibWindow::RaylibWindow()
   : isRunning(false), isVisible(false), shouldClose(false), shouldShutdown(false)
-  , piManager(nullptr), dataStore(nullptr), logger(nullptr)
+  , piManager(nullptr), dataStore(nullptr), logger(nullptr), machineOperations(nullptr)  // Change variable name
   , newVideoFrameReady(false) {  // Initialize new video flag
 
   // Initialize machine data
   machineData = { 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false };
-
-
-
 }
 
 RaylibWindow::~RaylibWindow() {
@@ -177,6 +174,14 @@ void RaylibWindow::SetDataStore(GlobalDataStore* store) {
 
 void RaylibWindow::SetLogger(Logger* loggerInstance) {
   logger = loggerInstance;
+}
+
+// ADD THIS NEW METHOD:
+void RaylibWindow::SetMachineOperations(void* machineOpsPtr) {  // Change method name and parameter
+  machineOperations = machineOpsPtr;
+  if (logger) {
+    logger->LogInfo("RaylibWindow: MachineOperations reference set");
+  }
 }
 
 void RaylibWindow::UpdateMachineData(const MachineData& data) {
@@ -375,30 +380,28 @@ void RaylibWindow::RaylibThreadFunction() {
     StatusPage statusPage(logger);
     VisualizePage visualizePage(logger);
     RealtimeChartPage realtimeChartPage(logger);  // ADD THIS LINE
-    // 4. ADD data store connection (after dataStore is set up):
+
+    // CONNECT MACHINE OPERATIONS TO REALTIME CHART PAGE:
     if (dataStore) {
-      realtimeChartPage.SetDataStore(dataStore);  // ADD THIS LINE
-
-      
-    }
-    if (logger) {
-      logger->LogInfo("Raylib thread: Checking dataStore connection...");
-      if (dataStore) {
-        logger->LogInfo("Raylib thread: dataStore found, connecting to RealtimeChartPage");
-        realtimeChartPage.SetDataStore(dataStore);
-
-        // Test the connection immediately
-        auto channels = dataStore->GetAvailableChannels();
-        logger->LogInfo("Raylib thread: dataStore has " + std::to_string(channels.size()) + " channels");
-        for (const auto& ch : channels) {
-          logger->LogInfo("  Available: " + ch);
-        }
-      }
-      else {
-        logger->LogError("Raylib thread: dataStore is NULL!");
+      realtimeChartPage.SetDataStore(dataStore);
+      if (logger) {
+        logger->LogInfo("RaylibWindow: Connected dataStore to RealtimeChartPage");
       }
     }
 
+    if (machineOperations) {  // Change from scanningUI
+      realtimeChartPage.SetMachineOperations(machineOperations);  // Change method name
+      if (logger) {
+        logger->LogInfo("RaylibWindow: Connected MachineOperations to RealtimeChartPage");
+      }
+    }
+
+    if (piManager) {
+      realtimeChartPage.SetPIControllerManager(piManager);
+      if (logger) {
+        logger->LogInfo("RaylibWindow: Connected PIControllerManager to RealtimeChartPage");
+      }
+    }
 
     PageType currentPage = LIVE_VIDEO_PAGE;
 
@@ -409,7 +412,7 @@ void RaylibWindow::RaylibThreadFunction() {
     isRunning.store(true);
     isVisible.store(true);
 
-    if (logger) logger->LogInfo("Raylib ready with live video support");
+    if (logger) logger->LogInfo("Raylib ready with live video support and MachineOperations integration");
 
     // Main raylib loop
     while (!WindowShouldClose() && !shouldShutdown.load()) {

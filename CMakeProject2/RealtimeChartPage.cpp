@@ -2,14 +2,55 @@
 #include "RealtimeChartPage.h"
 #include "include/logger.h"
 #include "include/data/global_data_store.h"
+
 #include <raylib.h>
 #include <algorithm>
 #include <cmath>
 
+// Forward declaration approach to avoid header conflicts
+// We'll use void* pointers and cast them when needed
+// Forward declare MachineOperations class to enable casting
+class MachineOperations;
+
+extern "C" {
+  bool MachineOperations_PerformScan(void* machineOpsPtr,
+    const char* deviceName,
+    const char* dataChannel,
+    const double* stepSizes,
+    int stepSizeCount,
+    int settlingTimeMs,
+    const char** axes,
+    int axesCount,
+    const char* callerContext);
+}
+extern "C" {
+  bool MachineOperations_StartScan(void* machineOpsPtr,
+    const char* deviceName,
+    const char* dataChannel,
+    const double* stepSizes,
+    int stepSizeCount,
+    int settlingTimeMs,
+    const char** axes,
+    int axesCount,
+    const char* callerContext);
+}
+extern "C" {
+  // ADD THIS:
+  bool MachineOperations_StopScan(void* machineOpsPtr,
+    const char* deviceName,
+    const char* callerContext);
+}
+
+// Declare the C wrapper function
+extern "C" bool MachineOperations_IsScanActive(void* machineOpsPtr, const char* deviceName);
+
 RealtimeChartPage::RealtimeChartPage(Logger* logger)
   : m_logger(logger), m_dataStore(nullptr), m_fontLoaded(false),
+  m_machineOperations(nullptr), m_piControllerManager(nullptr),  // Update variable names
   m_dataChannel("GPIB-Current"), m_timeWindow(10.0f),
-  m_currentValue(0.0f), m_scaledValue(0.0f) {
+  m_currentValue(0.0f), m_scaledValue(0.0f),
+  m_leftCoarseState(ScanState::IDLE), m_leftFineState(ScanState::IDLE),
+  m_rightCoarseState(ScanState::IDLE), m_rightFineState(ScanState::IDLE) {
 
   if (m_logger) {
     m_logger->LogInfo("RealtimeChartPage created");
@@ -45,9 +86,23 @@ void RealtimeChartPage::SetDataStore(GlobalDataStore* store) {
   m_dataStore = store;
 }
 
+void RealtimeChartPage::SetMachineOperations(void* machineOps) {  // Change method name and parameter
+  m_machineOperations = machineOps;
+}
+
+void RealtimeChartPage::SetPIControllerManager(void* piManager) {
+  m_piControllerManager = piManager;
+}
+
 void RealtimeChartPage::Render() {
   // Update data first
   updateData();
+
+  // Update button states from scanning system
+  updateButtonStatesFromScanning();
+
+  // Handle button clicks
+  handleButtonClicks();
 
   // Page title and navigation info
   DrawText("Realtime Chart (C)", 10, 10, 20, DARKBLUE);
@@ -64,6 +119,9 @@ void RealtimeChartPage::Render() {
 
   // Render digital display (top 60%)
   renderDigitalDisplay();
+
+  // Render buttons
+  renderButtons();
 
   // Render chart (bottom 40%)
   renderChart();
@@ -84,30 +142,9 @@ void RealtimeChartPage::updateData() {
   auto now = std::chrono::steady_clock::now();
   double currentTime = std::chrono::duration<double>(now.time_since_epoch()).count();
 
-  // Debug: Check available channels
-  //if (m_logger) {
-  //  static int debugCount = 0;
-  //  if (++debugCount % 300 == 0) { // Log every 5 seconds at 60 FPS
-  //    auto channels = m_dataStore->GetAvailableChannels();
-  //    m_logger->LogInfo("RealtimeChart: Available channels: " + std::to_string(channels.size()));
-  //    for (const auto& ch : channels) {
-  //      float val = m_dataStore->GetValue(ch, -999.0f);
-  //      m_logger->LogInfo("  Channel: " + ch + " = " + std::to_string(val));
-  //    }
-  //  }
-  //}
-
   // Try to get current value from data store
   if (m_dataStore->HasValue(m_dataChannel)) {
     float newValue = m_dataStore->GetValue(m_dataChannel, 0.0f);
-
-    // Debug: Log value changes
-    //if (m_logger && std::abs(newValue - m_currentValue) > 1e-15f) {
-    //  static int valueChangeCount = 0;
-    //  if (++valueChangeCount % 60 == 0) { // Log every second
-    //    m_logger->LogInfo("RealtimeChart: " + m_dataChannel + " = " + std::to_string(newValue));
-    //  }
-    //}
 
     m_currentValue = newValue;
 
@@ -209,6 +246,292 @@ void RealtimeChartPage::renderDigitalDisplay() {
   DrawText(infoText, 20, topSectionHeight - 30, 16, DARKGRAY);
 }
 
+void RealtimeChartPage::renderButtons() {
+  int screenWidth = GetScreenWidth();
+  int screenHeight = GetScreenHeight();
+  int topSectionHeight = (int)(screenHeight * 0.6f);
+
+  // Button dimensions
+  int buttonWidth = 120;
+  int buttonHeight = 50;
+  int buttonSpacing = 20;
+
+  // Left side buttons
+  int leftX = 30;
+  int leftCoarseY = 150;
+  int leftFineY = leftCoarseY + buttonHeight + buttonSpacing;
+
+  Rectangle leftCoarseBtn = { (float)leftX, (float)leftCoarseY, (float)buttonWidth, (float)buttonHeight };
+  Rectangle leftFineBtn = { (float)leftX, (float)leftFineY, (float)buttonWidth, (float)buttonHeight };
+
+  // Right side buttons  
+  int rightX = screenWidth - buttonWidth - 30;
+  int rightCoarseY = 150;
+  int rightFineY = rightCoarseY + buttonHeight + buttonSpacing;
+
+  Rectangle rightCoarseBtn = { (float)rightX, (float)rightCoarseY, (float)buttonWidth, (float)buttonHeight };
+  Rectangle rightFineBtn = { (float)rightX, (float)rightFineY, (float)buttonWidth, (float)buttonHeight };
+
+  // Stop button (center, below value display)
+  int stopWidth = 100;
+  int stopHeight = 40;
+  int stopX = screenWidth / 2 - stopWidth / 2;
+  int stopY = topSectionHeight - 80;
+
+  Rectangle stopBtn = { (float)stopX, (float)stopY, (float)stopWidth, (float)stopHeight };
+
+  // Draw buttons
+  drawButton(leftCoarseBtn, "Left Coarse", m_leftCoarseState);
+  drawButton(leftFineBtn, "Left Fine", m_leftFineState);
+  drawButton(rightCoarseBtn, "Right Coarse", m_rightCoarseState);
+  drawButton(rightFineBtn, "Right Fine", m_rightFineState);
+
+  // Stop button (always red when any scanning is active)
+  bool anyScanning = (m_leftCoarseState == ScanState::SCANNING ||
+    m_leftFineState == ScanState::SCANNING ||
+    m_rightCoarseState == ScanState::SCANNING ||
+    m_rightFineState == ScanState::SCANNING);
+
+  Color stopColor = anyScanning ? RED : DARKGRAY;
+  Vector2 mousePos = GetMousePosition();
+  bool stopHovered = CheckCollisionPointRec(mousePos, stopBtn);
+
+  if (stopHovered && anyScanning) {
+    stopColor = MAROON; // Darker red when hovered
+  }
+
+  DrawRectangleRec(stopBtn, stopColor);
+  DrawRectangleLinesEx(stopBtn, 2, BLACK);
+
+  // Draw stop button text with custom font
+  Font font = m_fontLoaded ? m_customFont : GetFontDefault();
+  const char* stopText = "STOP";
+  int fontSize = 16;
+  Vector2 stopTextSize = MeasureTextEx(font, stopText, fontSize, 2);
+  Vector2 stopTextPos = {
+    stopBtn.x + stopBtn.width / 2 - stopTextSize.x / 2,
+    stopBtn.y + stopBtn.height / 2 - stopTextSize.y / 2
+  };
+
+  DrawTextEx(font, stopText, stopTextPos, fontSize, 2, WHITE);
+}
+
+bool RealtimeChartPage::drawButton(Rectangle rect, const char* text, ScanState state) {
+  Vector2 mousePos = GetMousePosition();
+  bool isHovered = CheckCollisionPointRec(mousePos, rect);
+
+  // Button color based on state
+  Color buttonColor;
+  switch (state) {
+  case ScanState::IDLE:
+    buttonColor = isHovered ? Color{ 0, 200, 0, 255 } : GREEN; // Brighter green on hover
+    break;
+  case ScanState::SCANNING:
+    buttonColor = YELLOW;
+    break;
+  }
+
+  Color textColor = (state == ScanState::SCANNING) ? BLACK : WHITE;
+
+  // Draw button
+  DrawRectangleRec(rect, buttonColor);
+  DrawRectangleLinesEx(rect, 2, BLACK);
+
+  // Draw button text with custom font
+  Font font = m_fontLoaded ? m_customFont : GetFontDefault();
+  int fontSize = 16;
+  Vector2 textSize = MeasureTextEx(font, text, fontSize, 2);
+  Vector2 textPos = {
+    rect.x + rect.width / 2 - textSize.x / 2,
+    rect.y + rect.height / 2 - textSize.y / 2
+  };
+
+  DrawTextEx(font, text, textPos, fontSize, 2, textColor);
+
+  // Return if button was clicked
+  return isHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+}
+
+void RealtimeChartPage::handleButtonClicks() {
+  int screenWidth = GetScreenWidth();
+  int screenHeight = GetScreenHeight();
+  int topSectionHeight = (int)(screenHeight * 0.6f);
+
+  // Button dimensions (same as in renderButtons)
+  int buttonWidth = 120;
+  int buttonHeight = 50;
+  int buttonSpacing = 20;
+
+  // Left side buttons
+  int leftX = 30;
+  int leftCoarseY = 150;
+  int leftFineY = leftCoarseY + buttonHeight + buttonSpacing;
+
+  Rectangle leftCoarseBtn = { (float)leftX, (float)leftCoarseY, (float)buttonWidth, (float)buttonHeight };
+  Rectangle leftFineBtn = { (float)leftX, (float)leftFineY, (float)buttonWidth, (float)buttonHeight };
+
+  // Right side buttons  
+  int rightX = screenWidth - buttonWidth - 30;
+  int rightCoarseY = 150;
+  int rightFineY = rightCoarseY + buttonHeight + buttonSpacing;
+
+  Rectangle rightCoarseBtn = { (float)rightX, (float)rightCoarseY, (float)buttonWidth, (float)buttonHeight };
+  Rectangle rightFineBtn = { (float)rightX, (float)rightFineY, (float)buttonWidth, (float)buttonHeight };
+
+  // Stop button
+  int stopWidth = 100;
+  int stopHeight = 40;
+  int stopX = screenWidth / 2 - stopWidth / 2;
+  int stopY = topSectionHeight - 80;
+
+  Rectangle stopBtn = { (float)stopX, (float)stopY, (float)stopWidth, (float)stopHeight };
+
+  // Check button clicks
+  if (drawButton(leftCoarseBtn, "Left Coarse", m_leftCoarseState)) {
+    if (m_leftCoarseState == ScanState::IDLE) {
+      startHexLeftCoarseScan();
+    }
+  }
+
+  if (drawButton(leftFineBtn, "Left Fine", m_leftFineState)) {
+    if (m_leftFineState == ScanState::IDLE) {
+      startHexLeftFineScan();
+    }
+  }
+
+  if (drawButton(rightCoarseBtn, "Right Coarse", m_rightCoarseState)) {
+    if (m_rightCoarseState == ScanState::IDLE) {
+      startHexRightCoarseScan();
+    }
+  }
+
+  if (drawButton(rightFineBtn, "Right Fine", m_rightFineState)) {
+    if (m_rightFineState == ScanState::IDLE) {
+      startHexRightFineScan();
+    }
+  }
+
+  // Stop button click
+  Vector2 mousePos = GetMousePosition();
+  bool stopHovered = CheckCollisionPointRec(mousePos, stopBtn);
+  if (stopHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    stopAllScanning();
+  }
+}
+
+
+
+void RealtimeChartPage::startHexLeftCoarseScan() {
+  if (m_logger) {
+    m_logger->LogInfo("Starting Hex-Left Coarse Scan");
+  }
+
+  // Execute RunScanOperation with coarse preset
+  executeRunScanOperation("hex-left", { 0.005, 0.001, 0.0005 });
+  m_leftCoarseState = ScanState::SCANNING;
+}
+
+void RealtimeChartPage::startHexLeftFineScan() {
+  if (m_logger) {
+    m_logger->LogInfo("Starting Hex-Left Fine Scan");
+  }
+
+  // Execute RunScanOperation with fine preset
+  executeRunScanOperation("hex-left", { 0.0005, 0.0002 });
+  m_leftFineState = ScanState::SCANNING;
+}
+
+void RealtimeChartPage::startHexRightCoarseScan() {
+  if (m_logger) {
+    m_logger->LogInfo("Starting Hex-Right Coarse Scan");
+  }
+
+  // Execute RunScanOperation with coarse preset
+  executeRunScanOperation("hex-right", { 0.005, 0.001, 0.0005 });
+  m_rightCoarseState = ScanState::SCANNING;
+}
+
+void RealtimeChartPage::startHexRightFineScan() {
+  if (m_logger) {
+    m_logger->LogInfo("Starting Hex-Right Fine Scan");
+  }
+
+  // Execute RunScanOperation with fine preset
+  executeRunScanOperation("hex-right", { 0.0005, 0.0002 });
+  m_rightFineState = ScanState::SCANNING;
+}
+
+void RealtimeChartPage::stopAllScanning() {
+  if (m_logger) {
+    m_logger->LogInfo("Stopping all scanning operations");
+  }
+
+  if (m_machineOperations) {
+    try {
+
+
+      std::string callerContext = "RealtimeChartPage_stop_all";
+
+      // Stop scans for both devices
+      bool leftStopped = MachineOperations_StopScan(m_machineOperations, "hex-left", callerContext.c_str());
+      bool rightStopped = MachineOperations_StopScan(m_machineOperations, "hex-right", callerContext.c_str());
+
+      if (m_logger) {
+        if (leftStopped && rightStopped) {
+          m_logger->LogInfo("RealtimeChart: Successfully stopped all scans");
+        }
+        else {
+          m_logger->LogWarning("RealtimeChart: Some scans may not have stopped properly");
+        }
+      }
+
+    }
+    catch (const std::exception& e) {
+      if (m_logger) {
+        m_logger->LogError("RealtimeChart: Exception stopping operations: " + std::string(e.what()));
+      }
+    }
+  }
+
+  // Reset all button states to idle
+  m_leftCoarseState = ScanState::IDLE;
+  m_leftFineState = ScanState::IDLE;
+  m_rightCoarseState = ScanState::IDLE;
+  m_rightFineState = ScanState::IDLE;
+}
+
+
+
+void RealtimeChartPage::updateButtonStatesFromScanning() {
+  if (!m_machineOperations) {
+    return;
+  }
+
+  // Update button states based on actual scanning status
+  // Check if hex-left is scanning and update left button states accordingly
+  bool hexLeftScanning = isDeviceScanning("hex-left");
+  bool hexRightScanning = isDeviceScanning("hex-right");
+
+  // If scanning stopped externally, update button states
+  if (!hexLeftScanning) {
+    if (m_leftCoarseState == ScanState::SCANNING) {
+      m_leftCoarseState = ScanState::IDLE;
+    }
+    if (m_leftFineState == ScanState::SCANNING) {
+      m_leftFineState = ScanState::IDLE;
+    }
+  }
+
+  if (!hexRightScanning) {
+    if (m_rightCoarseState == ScanState::SCANNING) {
+      m_rightCoarseState = ScanState::IDLE;
+    }
+    if (m_rightFineState == ScanState::SCANNING) {
+      m_rightFineState = ScanState::IDLE;
+    }
+  }
+}
+
 void RealtimeChartPage::renderChart() {
   if (m_dataBuffer.empty()) return;
 
@@ -280,4 +603,89 @@ void RealtimeChartPage::renderChart() {
 
   DrawText(maxLabel, 25, (int)chartArea.y + 5, 12, LIGHTGRAY);
   DrawText(minLabel, 25, (int)(chartArea.y + chartArea.height - 15), 12, LIGHTGRAY);
+}
+
+
+void RealtimeChartPage::executeRunScanOperation(const std::string& device,
+  const std::vector<double>& stepSizes) {
+  if (!m_machineOperations) {
+    if (m_logger) {
+      m_logger->LogError("RealtimeChart: MachineOperations not available");
+    }
+    return;
+  }
+
+  try {
+    if (m_logger) {
+      m_logger->LogInfo("RealtimeChart: Starting scan operation for " + device);
+      std::string stepStr;
+      for (size_t i = 0; i < stepSizes.size(); ++i) {
+        if (i > 0) stepStr += ", ";
+        stepStr += std::to_string(stepSizes[i]);
+      }
+      m_logger->LogInfo("  Step sizes: {" + stepStr + "}");
+      m_logger->LogInfo("  Data channel: GPIB-Current");
+      m_logger->LogInfo("  Settling time: 300ms");
+    }
+
+
+    // Prepare parameters for C wrapper
+    std::vector<std::string> axes = { "Z", "X", "Y" };
+    std::vector<const char*> axesCStr;
+    for (const auto& axis : axes) {
+      axesCStr.push_back(axis.c_str());
+    }
+
+    int settlingTimeMs = 300;
+    std::string callerContext = "RealtimeChartPage_" + device + "_scan";
+
+    // Call the C wrapper function for StartScan (non-blocking)
+    bool success = MachineOperations_StartScan(
+      m_machineOperations,
+      device.c_str(),
+      "GPIB-Current",
+      stepSizes.data(),
+      static_cast<int>(stepSizes.size()),
+      settlingTimeMs,
+      axesCStr.data(),
+      static_cast<int>(axesCStr.size()),
+      callerContext.c_str());
+
+    if (m_logger) {
+      if (success) {
+        m_logger->LogInfo("RealtimeChart: Scan started successfully for " + device);
+      }
+      else {
+        m_logger->LogError("RealtimeChart: Failed to start scan for " + device);
+      }
+    }
+
+  }
+  catch (const std::exception& e) {
+    if (m_logger) {
+      m_logger->LogError("RealtimeChart: Exception executing scan: " + std::string(e.what()));
+    }
+  }
+}
+
+
+bool RealtimeChartPage::isDeviceScanning(const std::string& deviceName) {
+  if (!m_machineOperations) {
+    return false;
+  }
+
+  try {
+
+
+    // Call the wrapper to check if scan is active
+    bool isActive = MachineOperations_IsScanActive(m_machineOperations, deviceName.c_str());
+
+    return isActive;
+  }
+  catch (const std::exception& e) {
+    if (m_logger) {
+      m_logger->LogError("RealtimeChart: Exception checking scan status: " + std::string(e.what()));
+    }
+    return false;
+  }
 }

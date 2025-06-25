@@ -3523,3 +3523,78 @@ bool MachineOperations::acsc_IsBufferRunning(const std::string& deviceName, int 
   // This is a query method, no need for operation tracking
   return m_motionLayer.acsc_IsBufferRunning(deviceName, bufferNumber);
 }
+
+
+// Add this at the end of machine_operations.cpp
+extern "C" {
+  bool MachineOperations_PerformScan(void* machineOpsPtr,
+    const char* deviceName,
+    const char* dataChannel,
+    const double* stepSizes,
+    int stepSizeCount,
+    int settlingTimeMs,
+    const char** axes,
+    int axesCount,
+    const char* callerContext) {
+    if (!machineOpsPtr) return false;
+
+    MachineOperations* machineOps = static_cast<MachineOperations*>(machineOpsPtr);
+
+    // Convert C arrays to C++ vectors
+    std::vector<double> stepSizesVec(stepSizes, stepSizes + stepSizeCount);
+    std::vector<std::string> axesVec;
+    for (int i = 0; i < axesCount; ++i) {
+      axesVec.push_back(std::string(axes[i]));
+    }
+
+    return machineOps->PerformScan(deviceName, dataChannel, stepSizesVec,
+      settlingTimeMs, axesVec, callerContext);
+  }
+
+  // ADD THIS NEW WRAPPER:
+  bool MachineOperations_StartScan(void* machineOpsPtr,
+    const char* deviceName,
+    const char* dataChannel,
+    const double* stepSizes,
+    int stepSizeCount,
+    int settlingTimeMs,
+    const char** axes,
+    int axesCount,
+    const char* callerContext) {
+    if (!machineOpsPtr) return false;
+
+    MachineOperations* machineOps = static_cast<MachineOperations*>(machineOpsPtr);
+
+    // Convert C arrays to C++ vectors
+    std::vector<double> stepSizesVec(stepSizes, stepSizes + stepSizeCount);
+    std::vector<std::string> axesVec;
+    for (int i = 0; i < axesCount; ++i) {
+      axesVec.push_back(std::string(axes[i]));
+    }
+
+    return machineOps->StartScan(deviceName, dataChannel, stepSizesVec,
+      settlingTimeMs, axesVec, callerContext);
+  }
+
+
+
+  // ADD THIS NEW WRAPPER:
+  bool MachineOperations_StopScan(void* machineOpsPtr,
+    const char* deviceName,
+    const char* callerContext) {
+    if (!machineOpsPtr) return false;
+
+    MachineOperations* machineOps = static_cast<MachineOperations*>(machineOpsPtr);
+    return machineOps->StopScan(deviceName, callerContext);
+  }
+
+  // ADD THIS NEW WRAPPER:
+  bool MachineOperations_IsScanActive(void* machineOpsPtr,
+    const char* deviceName) {
+    if (!machineOpsPtr) return false;
+
+    MachineOperations* machineOps = static_cast<MachineOperations*>(machineOpsPtr);
+    return machineOps->IsScanActive(deviceName);
+  }
+
+}

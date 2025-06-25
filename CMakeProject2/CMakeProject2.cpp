@@ -1737,6 +1737,13 @@ int main(int argc, char* argv[])
 		if (dataStore) {
 			raylibWindow->SetDataStore(dataStore);  // MOVE THIS HERE
 		}
+		// NEW:
+		if (machineOps) {
+			raylibWindow->SetMachineOperations(machineOps.get());
+			logger->LogInfo("Connected MachineOperations to raylib window");
+		}
+
+
 
 		// THEN initialize the thread
 		if (raylibWindow->Initialize()) {
