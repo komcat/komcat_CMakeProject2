@@ -193,7 +193,7 @@ std::pair<float, std::string> RealtimeChartPage::getScaledUnit(float absValue) {
     return { absValue * 1e9f, "nA" };
   }
   else if (absValue < 1e-3f) {
-    return { absValue * 1e6f, "μA" };
+    return { absValue * 1e6f, "uA" };
   }
   else if (absValue < 1.0f) {
     return { absValue * 1e3f, "mA" };
@@ -220,14 +220,32 @@ void RealtimeChartPage::renderDigitalDisplay() {
   int channelX = screenWidth / 2 - (int)channelTextSize.x / 2;
   DrawTextEx(font, m_dataChannel.c_str(), Vector2{ (float)channelX, 100 }, channelFontSize, 2, LIGHTGRAY);
 
-  // Digital value display
-  char valueText[64];
-  snprintf(valueText, sizeof(valueText), "%.3f %s", m_scaledValue, m_displayUnit.c_str());
-
-  int valueFontSize = 48;
-  Vector2 valueTextSize = MeasureTextEx(font, valueText, valueFontSize, 2);
-  int valueX = screenWidth / 2 - (int)valueTextSize.x / 2;
+  // Digital value display - FIXED DECIMAL POINT POSITION
+  int valueFontSize = 120;
   int valueY = topSectionHeight / 2 - valueFontSize / 2;
+
+  // Format with FIXED width: always ± + 3 characters before decimal (spaces instead of leading zeros)
+  char signChar = (m_scaledValue >= 0) ? '+' : '-';
+  float absScaledValue = std::abs(m_scaledValue);
+
+  // Format whole and fractional parts
+  int wholePart = (int)std::floor(absScaledValue);
+  int fracPart = (int)std::round((absScaledValue - std::floor(absScaledValue)) * 1000);
+
+  // Create fixed-width display: sign + 3 characters (right-aligned with spaces)
+  char valueText[64];
+  snprintf(valueText, sizeof(valueText), "%c%3d.%03d %s",
+    signChar, wholePart, fracPart, m_displayUnit.c_str());
+
+  // Calculate position to center the decimal point
+  // The decimal is always at position 4: ± + 3 chars + .
+  char beforeDecimal[8] = "+   ";  // Fixed width: sign + 3 spaces (worst case)
+  beforeDecimal[0] = signChar;
+  Vector2 beforeDecimalSize = MeasureTextEx(font, beforeDecimal, valueFontSize, 2);
+
+  // Position text so decimal point is at screen center
+  int decimalCenterX = screenWidth / 2;
+  int valueX = decimalCenterX - (int)beforeDecimalSize.x;
 
   // Value color based on magnitude
   Color valueColor = GREEN;
@@ -245,6 +263,8 @@ void RealtimeChartPage::renderDigitalDisplay() {
   snprintf(infoText, sizeof(infoText), "Points: %zu", m_dataBuffer.size());
   DrawText(infoText, 20, topSectionHeight - 30, 16, DARKGRAY);
 }
+
+
 
 void RealtimeChartPage::renderButtons() {
   int screenWidth = GetScreenWidth();
@@ -534,57 +554,49 @@ void RealtimeChartPage::updateButtonStatesFromScanning() {
 
 void RealtimeChartPage::renderChart() {
   if (m_dataBuffer.empty()) return;
-
   int screenWidth = GetScreenWidth();
   int screenHeight = GetScreenHeight();
   int topSectionHeight = (int)(screenHeight * 0.6f);
   int chartY = topSectionHeight;
   int chartHeight = screenHeight - topSectionHeight;
-
   // Chart area background
   Rectangle chartArea = { 20, (float)chartY + 20, (float)screenWidth - 40, (float)chartHeight - 40 };
   DrawRectangleRec(chartArea, Color{ 20, 20, 30, 255 });
   DrawRectangleLinesEx(chartArea, 2, DARKGRAY);
 
-  // Chart title
-  DrawText("10 Second History", 30, chartY + 5, 16, WHITE);
+  // Chart title with custom font
+  Font font = m_fontLoaded ? m_customFont : GetFontDefault();
+  const char* titleText = "10 Second History";
+  int titleFontSize = 16;
+  DrawTextEx(font, titleText, Vector2{ 30, (float)chartY + 5 }, titleFontSize, 2, WHITE);
 
   if (m_dataBuffer.size() < 2) return;
-
   // Find data range
   auto minMaxValue = std::minmax_element(m_dataBuffer.begin(), m_dataBuffer.end(),
     [](const DataPoint& a, const DataPoint& b) { return a.value < b.value; });
-
   float minValue = minMaxValue.first->value;
   float maxValue = minMaxValue.second->value;
-
   // Add some padding to the range
   float range = maxValue - minValue;
   if (range < 1e-12f) range = 1e-12f; // Prevent division by zero
   minValue -= range * 0.1f;
   maxValue += range * 0.1f;
-
   // Get time range
   double minTime = m_dataBuffer.front().timestamp;
   double maxTime = m_dataBuffer.back().timestamp;
   double timeRange = maxTime - minTime;
   if (timeRange < 0.1) timeRange = 0.1; // Minimum time range
-
   // Draw chart lines
   for (size_t i = 1; i < m_dataBuffer.size(); ++i) {
     const auto& prev = m_dataBuffer[i - 1];
     const auto& curr = m_dataBuffer[i];
-
     // Map to screen coordinates
     float x1 = chartArea.x + ((prev.timestamp - minTime) / timeRange) * chartArea.width;
     float y1 = chartArea.y + chartArea.height - ((prev.value - minValue) / (maxValue - minValue)) * chartArea.height;
-
     float x2 = chartArea.x + ((curr.timestamp - minTime) / timeRange) * chartArea.width;
     float y2 = chartArea.y + chartArea.height - ((curr.value - minValue) / (maxValue - minValue)) * chartArea.height;
-
     DrawLineEx(Vector2{ x1, y1 }, Vector2{ x2, y2 }, 2.0f, LIME);
   }
-
   // Draw current value point
   if (!m_dataBuffer.empty()) {
     const auto& last = m_dataBuffer.back();
@@ -593,18 +605,17 @@ void RealtimeChartPage::renderChart() {
     DrawCircle((int)x, (int)y, 4, RED);
   }
 
-  // Y-axis labels
+  // Y-axis labels with custom font
   auto [scaledMin, unitMin] = getScaledUnit(std::abs(minValue));
   auto [scaledMax, unitMax] = getScaledUnit(std::abs(maxValue));
-
   char minLabel[32], maxLabel[32];
   snprintf(minLabel, sizeof(minLabel), "%.2f%s", (minValue >= 0) ? scaledMin : -scaledMin, unitMin.c_str());
   snprintf(maxLabel, sizeof(maxLabel), "%.2f%s", (maxValue >= 0) ? scaledMax : -scaledMax, unitMax.c_str());
 
-  DrawText(maxLabel, 25, (int)chartArea.y + 5, 12, LIGHTGRAY);
-  DrawText(minLabel, 25, (int)(chartArea.y + chartArea.height - 15), 12, LIGHTGRAY);
+  int labelFontSize = 12;
+  DrawTextEx(font, maxLabel, Vector2{ 25, (float)chartArea.y + 5 }, labelFontSize, 2, LIGHTGRAY);
+  DrawTextEx(font, minLabel, Vector2{ 25, (float)(chartArea.y + chartArea.height - 15) }, labelFontSize, 2, LIGHTGRAY);
 }
-
 
 void RealtimeChartPage::executeRunScanOperation(const std::string& device,
   const std::vector<double>& stepSizes) {
