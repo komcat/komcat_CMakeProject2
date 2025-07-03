@@ -334,7 +334,7 @@ add_executable(CMakeProject2
  "StatusPage.cpp" 
  "VisualizePage.h"
  "VisualizePage.cpp"
- "RealtimeChartPage.h" "RealtimeChartPage.cpp")
+ "RealtimeChartPage.h" "RealtimeChartPage.cpp" "include/siphog/siphog_client.h" "include/siphog/siphog_client.cpp")
 
 
 

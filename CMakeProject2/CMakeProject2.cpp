@@ -98,7 +98,8 @@
 #include "include/ui/OperationsDisplayUI.h"
 
 #include "raylibclass.h"
-
+// Add this include at the top with other includes
+#include "include/siphog/siphog_client.h"
 #pragma region header functions
 
 
@@ -1527,6 +1528,15 @@ int main(int argc, char* argv[])
 		logger->LogInfo("MacroManager initialized with saved programs");
 	}
 
+	// SIPHOG Client (conditional)
+	std::unique_ptr<SIPHOGClient> siphogClient;
+	if (moduleConfig.isEnabled("SIPHOG_CLIENT")) {
+		siphogClient = std::make_unique<SIPHOGClient>();
+		logger->LogInfo("SIPHOGClient initialized");
+	}
+
+
+
 
 
 
@@ -1601,6 +1611,10 @@ int main(int argc, char* argv[])
 		if (keithleyManager) {
 			toolbarVertical->AddReferenceToCategory("Data",
 				CreateHierarchicalUI(*keithleyManager, "Keithley 2400"));
+		}
+		if (siphogClient) {
+			toolbarVertical->AddReferenceToCategory("Data",
+				CreateHierarchicalUI(*siphogClient, "SIPHOG Client"));
 		}
 
 		// Add components to Products category
@@ -1757,6 +1771,10 @@ int main(int argc, char* argv[])
 		pylonCameraTest->SetRaylibWindow(raylibWindow.get());
 		logger->LogInfo("Connected camera to raylib window for video feed");
 	}
+
+
+
+
 
 
 	// Main loop
@@ -2001,6 +2019,11 @@ int main(int argc, char* argv[])
 		// In main loop:
 		if (menuManager) {
 			menuManager->RenderMainMenuBar();
+		}
+
+		// Render SIPHOG Client UI
+		if (siphogClient) {
+			siphogClient->RenderUI();
 		}
 
 
