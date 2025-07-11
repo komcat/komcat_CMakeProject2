@@ -6,7 +6,7 @@
  * Description: implements a programming interface to Posix or DCE
  *              thread-packages for different operating systems.
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *               www.mvtec.com
  *
  *****************************************************************************/

@@ -200,5 +200,6 @@ private:
     return str.size() >= prefix.size() &&
       str.substr(0, prefix.size()) == prefix;
   }
-
+  // Add this method declaration:
+  void CreateTestPatternTexture();
 };

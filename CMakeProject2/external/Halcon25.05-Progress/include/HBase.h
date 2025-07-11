@@ -6,7 +6,7 @@
  * Description: Basic definitions for HALCON, HALCON/C, HALCON/C++
  *              and other language interfaces
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************/
@@ -186,22 +186,28 @@ typedef union
   Hphandle* h;
 } Hcelem; /* pure type array */
 
-/*
- * Do not access the members of Hctuple directly. Only use the supplied
- * macros and functions.
- */
 typedef struct
 {
-  Hcpar  val;
-  INT4_8 num;
-  INT4_8 capacity;
-  int    flags;
-  Hcelem elem;
+  Hpar val;
+  int  type;
+  /*
+   * Add manual padding here so that a Hcpar can be mapped to a Hctuple
+   * exactly, including the padding compilers insert at the end of data
+   * structures to align the entire structure to the largest alignment of any
+   * structure member. Note that on 32 bit Linux for Intel, Hcpar is aligned to
+   * 4 bytes, so no manual padding is necessary on that architecture (only).
+   */
+#if !(defined(__linux__) && defined(__i386__))
+  char pad[sizeof(Hcpar) - sizeof(Hpar) - sizeof(int)];
+#endif
+  INT4_8 num;      /* number of set array elements */
+  INT4_8 capacity; /* allocated array length */
+  int    free;     /* free array elem when destroying tuple? */
+  Hcelem elem;     /* the actual array */
 } Hctuple;
-
 #define HCTUPLE_INITIALIZER                                                   \
   {                                                                           \
-    {{0}, UNDEF_PAR}, 0, 0, 0,                                                \
+    {0}, UNDEF_PAR, {0}, 0, 0, 0,                                             \
     {                                                                         \
       NULL                                                                    \
     }                                                                         \

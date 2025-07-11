@@ -5,13 +5,13 @@
  * Project:     HALCON/libhalcon
  * Description: Current version of the HALCON library
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************/
 
 #ifndef HLIB_MAJOR_NUM
-#  define HLIB_MAJOR_NUM 25
+#  define HLIB_MAJOR_NUM 24
 #endif
 
 #ifndef HLIB_MINOR_NUM
@@ -43,7 +43,7 @@
 #  define HC_PROGRESS_EDITION
 #  define HALCON_PRODUCT_NAME "HALCON Progress Edition"
 #else
-#  define HALCON_PRODUCT_NAME "HALCON Progress-Steady Edition"
+#  define HALCON_PRODUCT_NAME "HALCON Steady Edition"
 #endif
 
 /* --- Derived version numbers (with according helper macros) --- */

@@ -6,19 +6,21 @@
  * Description: Tuple data used for control parameters of HALCON operators
  *              Generated via HTuple1.hop and HTuple2.hop
  *
- * (c) 2010-2025 by MVTec Software GmbH
+ * (c) 2010-2018 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************/
 
-#ifndef HCPP_TUPLE_H
-#define HCPP_TUPLE_H
 
-#include <new>
+#ifndef HCPP_TUPLE_H
+#  define HCPP_TUPLE_H
+
+
+#  include <new>
+
 
 namespace HalconCpp
 {
-
 enum HTupleType
 {
   // The empty tuple does not yet have a defined data type
@@ -43,7 +45,8 @@ enum HTupleType
 }
 
 
-#include "halconcpp/HTupleElement.h"
+#  include "halconcpp/HTupleElement.h"
+
 
 namespace HalconCpp
 {
@@ -163,14 +166,10 @@ public:
   // Direct array access will raise an exception if tuple type does not match!
   // Modifications to array will affect data in tuples as well.
 
-  Hlong const*       LArr() const;
-  Hlong*             LArr();
-  double const*      DArr() const;
-  double*            DArr();
-  char const* const* SArr() const;
-  char**             SArr();
-  Hcpar const*       PArr() const;
-  Hcpar*             PArr();
+  Hlong*  LArr();
+  double* DArr();
+  char**  SArr();
+  Hcpar*  PArr();
 
   // Safer but less efficient access is provided by copying the data.
   // Mismatched elements will be initialized with default values. Caller
@@ -206,13 +205,13 @@ public:
 
   // Convenience access for first element
 
-#if defined(HCPP_INT_OVERLOADS)
+#  if defined(HCPP_INT_OVERLOADS)
   // Access integer value in first tuple element
   int I() const
   {
     return (*this)[0].I();
   }
-#endif
+#  endif
 
   // Access integer value in first tuple element
   Hlong L() const
@@ -696,133 +695,130 @@ public:
   // Replace all occurrences of a substring within a string.
   HTuple TupleStrReplace(const HTuple& Before, const HTuple& After) const;
 
-  // Calculate the distance between strings.
-  HTuple TupleStrDistance(const HTuple& String2, const HTuple& Mode) const;
-
-  /***************************************************************************/
-  /* Compatibility Layer                                                     */
-  /***************************************************************************/
+/***************************************************************************/
+/* Compatibility Layer                                                     */
+/***************************************************************************/
 
 #if defined(HCPP_LEGACY_API)
+
 #  include "halconcpp/HTupleLegacy.h"
+
 #endif
 
 #if (!defined(HCPP_LEGACY_API) || defined(_LIntDLL))
+
 // Casts from a HTuple to element data types are disabled in legacy mode,
 // as they may lead to ambiguous operator calls in existing user code
+
 #  if defined(HCPP_INT_OVERLOADS)
-  // Access integer value in first tuple element
-  operator int() const
-  {
-    return I();
-  }
+// Access integer value in first tuple element
+operator int() const
+{
+  return I();
+}
 #  endif
 
-  // Access integer value in first tuple element
-  operator Hlong() const
-  {
-    return L();
-  }
+// Access integer value in first tuple element
+operator Hlong() const
+{
+  return L();
+}
 
-  // Access floating-point value in first tuple element
-  operator float() const
-  {
-    return (float)D();
-  }
+// Access floating-point value in first tuple element
+operator float() const
+{
+  return (float)D();
+}
 
-  // Access floating-point value in first tuple element
-  operator double() const
-  {
-    return D();
-  }
+// Access floating-point value in first tuple element
+operator double() const
+{
+  return D();
+}
 
-  // Access string value in first tuple element
-  operator HString() const
-  {
-    return S();
-  }
+// Access string value in first tuple element
+operator HString() const
+{
+  return S();
+}
 
 #  if (!defined(HCPP_LEGACY_HANDLE_API) || defined(_LIntDLL))
-  // Access handle value in first tuple element
-  operator HHandle() const
-  {
-    return H();
-  }
+// Access handle value in first tuple element
+operator HHandle() const
+{
+  return H();
+}
 #  endif
+
 #endif
 
 
-  /***************************************************************************/
-  /* Operator overloads                                                      */
-  /***************************************************************************/
+/***************************************************************************/
+/* Operator overloads                                                      */
+/***************************************************************************/
 
-  /* Unary operators */
+/* Unary operators */
 
-  bool    operator!(void) const;
-  HTuple  operator~(void) const;
-  HTuple  operator-(void) const;
-  HTuple& operator++(void);
+bool    operator!(void) const;
+HTuple  operator~(void) const;
+HTuple  operator-(void) const;
+HTuple& operator++(void);
 
-  /* Binary operators are declared below outside class HTuple */
+/* Binary operators are declared below outside class HTuple */
 
-  /* Selected compound operators */
-  HTuple& operator+=(const HTuple& val);
-  H_COMPOUND_OP_OVERLOAD_DECLARATION(HTuple, +=);
-  HTuple& operator-=(const HTuple& val);
-  H_COMPOUND_OP_OVERLOAD_DECLARATION(HTuple, -=);
-  HTuple& operator*=(const HTuple& val);
-  H_COMPOUND_OP_OVERLOAD_DECLARATION(HTuple, *=);
+/* Selected compound operators */
+HTuple& operator+=(const HTuple& val);
+H_COMPOUND_OP_OVERLOAD_DECLARATION(HTuple, +=);
+HTuple& operator-=(const HTuple& val);
+H_COMPOUND_OP_OVERLOAD_DECLARATION(HTuple, -=);
+HTuple& operator*=(const HTuple& val);
+H_COMPOUND_OP_OVERLOAD_DECLARATION(HTuple, *=);
 
 
-  /***************************************************************************/
-  /* Helpers for code export or extension packages, do not call in used code */
-  /***************************************************************************/
+/***************************************************************************/
+/* Helpers for code export or extension packages, do not call in used code */
+/***************************************************************************/
 
-  bool Continue(const HTuple& final_value, const HTuple& increment);
+bool Continue(const HTuple& final_value, const HTuple& increment);
 
-  // Internal use, exposed for extension packages / hdevengine / export only
+// Internal use, exposed for extension packages / hdevengine / export only
 
-  HTuple(const Hctuple& tuple, bool copy = true);
-  void           GetHctuple(Hctuple& tuple, bool copy) const;
-  const Hctuple& GetHctupleRef() const;
-  void           TranscodeFromUtf8ToInterfaceEncoding();
-  HTuple         TupleGetDictTuple(const HTuple& key);
-  HObject        TupleGetDictObject(const HTuple& key);
-  HTuple         TupleTestEqualDictItem(const HTuple& key1, const HTuple& key2);
-
-  protected:
-  // Create tuple wrapping internal representation
-  HTuple(HTupleData* data);
-
-  // Initialize during construction or from cleared tuple state
-  void InitFromTupleData(HTupleData* data);
-  void InitFromTuple(const HTuple& tuple);
-
-  // Internal use, exposed for C++ language interface only
-  void MoveFromHctuple(Hctuple& tuple);
-
-  // Internal use, exposed for extension packages and hdevengine only
-  void SetFromHctuple(const Hctuple& tuple, bool copy /*=true*/);
-
-  // Revert internal representation to mixed tuple
-  void ConvertToMixed();
-
-  // Resolve lazy copying on write access
-  bool AssertOwnership();
+HTuple(const Hctuple& tuple, bool copy = true);
+Hctuple        GetHctuple(bool copy) const;
+const Hctuple& GetHctupleRef() const;
+void           TranscodeFromUtf8ToInterfaceEncoding();
+HTuple         TupleGetDictTuple(const HTuple& key);
+HObject        TupleGetDictObject(const HTuple& key);
+HTuple         TupleTestEqualDictItem(const HTuple& key1, const HTuple& key2);
 
 protected:
-  HTupleData* mData;
+// Create tuple wrapping internal representation
+HTuple(HTupleData* data);
 
-  HTupleData const* GetMData() const
-  {
-    return mData;
-  }
+// Initialize during construction or from cleared tuple state
+void InitFromTupleData(HTupleData* data);
+void InitFromTuple(const HTuple& tuple);
 
-  HTupleData* GetMData()
-  {
-    return mData;
-  }
-};
+// Internal use, exposed for C++ language interface only
+void MoveFromHctuple(Hctuple& tuple);
+
+// Internal use, exposed for extension packages and hdevengine only
+void SetFromHctuple(const Hctuple& tuple, bool copy /*=true*/);
+
+// Revert internal representation to mixed tuple
+void ConvertToMixed();
+
+// Resolve lazy copying on write access
+bool AssertOwnership();
+
+protected:
+// Smart pointer to typed data container
+HTupleDataPtr* mData;
+
+// Direct pointer for small tuple optimizations
+HTupleData* mDataPtr;
+}
+;
 
 /***************************************************************************/
 /* Operator overloads                                                      */

@@ -5,7 +5,7 @@
  * Project:      HALCON/libhalcon
  * Description:  Definition of macros
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *               www.mvtec.com
  *
  *****************************************************************************/
@@ -557,11 +557,11 @@
 #define HRLNumMaxImage(W, H) (((size_t)(W) + 1) * (H) / 2)
 
 /* Binary image. */
-#define HTestBit(D, P) ((D)[(P) >> 3] & (1 << (7 - ((P) & 7))))
+#define HTestBit(D, P) ((D)[(P) >> 3] & (1 << (7 - ((P)&7))))
 
-#define HDelBit(D, P) (D)[(P) >> 3] &= (uint8_t)(~(1 << (7 - ((P) & 7))))
+#define HDelBit(D, P) (D)[(P) >> 3] &= (uint8_t)(~(1 << (7 - ((P)&7))))
 
-#define HSetBit(D, P) (D)[(P) >> 3] |= (uint8_t)(1 << (7 - ((P) & 7)))
+#define HSetBit(D, P) (D)[(P) >> 3] |= (uint8_t)(1 << (7 - ((P)&7)))
 
 /* Coordinates. */
 #define HLinCoor(L, C, W) (((INT4_8)(L) * (INT4_8)(W)) + (INT4_8)(C))
@@ -830,7 +830,7 @@
     HH[0]             = ((L) >> 24) & 255;                                    \
     HH[1]             = ((L) >> 16) & 255;                                    \
     HH[2]             = ((L) >> 8) & 255;                                     \
-    HH[3]             = (L) & 255;                                            \
+    HH[3]             = (L)&255;                                              \
   }
 
 #define NetToLong(N, L)                                                       \
@@ -844,7 +844,7 @@
   {                                                                           \
     unsigned char* HH = (unsigned char*)&(N);                                 \
     HH[0]             = ((S) >> 8) & 255;                                     \
-    HH[1]             = (S) & 255;                                            \
+    HH[1]             = (S)&255;                                              \
   }
 
 #define NetToShort(N, S)                                                      \
@@ -1268,7 +1268,7 @@
                              (INT4_8)(Max), ResNum);                          \
       if (HIsError(ERR))                                                      \
         return ERR;                                                           \
-      ERR = IOSpyCPar(PROC_HANDLE, Index, Val, (INT4_8) * ResNum, true);      \
+      ERR = IOSpyCPar(PROC_HANDLE, Index, Val, (INT4_8)*ResNum, true);        \
       if (HIsError(ERR))                                                      \
         return ERR;                                                           \
     }
@@ -1314,8 +1314,7 @@
                             (INT4_8)(Min), (INT4_8)(Max), Num);               \
       if (HIsError(ERR))                                                      \
         return ERR;                                                           \
-      ERR =                                                                   \
-          IOSpyPar(PROC_HANDLE, Index, *ResType, Val, (INT4_8) * Num, true);  \
+      ERR = IOSpyPar(PROC_HANDLE, Index, *ResType, Val, (INT4_8)*Num, true);  \
       if (HIsError(ERR))                                                      \
         return ERR;                                                           \
     }
@@ -1331,12 +1330,6 @@
 
 /* Macros for accessing ctrl output parameters.
  *===========================================================================*/
-
-#define HPutTuple(PROC_HANDLE, PAR, TUPLE)                                    \
-  do                                                                          \
-  {                                                                           \
-    HCkP(HPPutTuple(PROC_HANDLE, PAR, TUPLE));                                \
-  } while (0)
 
 #define HPutPElem(PROC_HANDLE, PAR, ELEM, NUM, TYPE)                          \
   do                                                                          \

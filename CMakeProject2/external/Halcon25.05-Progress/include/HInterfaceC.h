@@ -5,7 +5,7 @@
  * Project:      HALCON/HLib
  * Description:  Prototypes for HALCON/C interface
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************/

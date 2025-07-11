@@ -5,7 +5,7 @@
  * Project:     HALCON/C++
  * Description: Base class for wrapping all handle types
  *
- * (c) 2017-2025 by MVTec Software GmbH
+ * (c) 2017-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************

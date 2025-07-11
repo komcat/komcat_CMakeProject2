@@ -5,7 +5,7 @@
  * Project:     HALCON/C++
  * Description: Base class for all iconic objects
  *
- * (c) 2010-2025 by MVTec Software GmbH
+ * (c) 2010-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************
@@ -44,9 +44,6 @@ public:
 
   // Get data as tuple
   HTuple ConvertToTuple() const;
-
-  // Get reference to tuple
-  HTuple const& GetTupleRef() const;
 
   void Clear();
 

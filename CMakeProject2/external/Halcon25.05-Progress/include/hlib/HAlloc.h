@@ -5,7 +5,7 @@
  * Project:     HALCON/libhalcon
  * Description: Memory allocation
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************

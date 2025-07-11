@@ -5,7 +5,7 @@
  * Project:     HALCON/C++
  * Description: Defines / types / extern declarations for HALCON/C++ interface
  *
- * (c) 2010-2025 by MVTec Software GmbH
+ * (c) 2010-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************

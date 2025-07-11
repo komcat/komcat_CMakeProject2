@@ -5,7 +5,7 @@
  * Project:      Halcon/libhalcon
  * Description:  External Compute Device Interface
  *
- * (c) 2011-2025 by MVTec Software GmbH
+ * (c) 2011-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************/

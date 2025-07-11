@@ -5,7 +5,7 @@
  * Project:     HALCON/C++
  * Description: Vector class for engine and HDevelop export
  *
- * (c) 2014-2025 by MVTec Software GmbH
+ * (c) 2014-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************

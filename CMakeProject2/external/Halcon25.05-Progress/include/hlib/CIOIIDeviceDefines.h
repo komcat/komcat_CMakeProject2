@@ -5,7 +5,7 @@
  * Project:     HALCON/libhalcon
  * Description: Defines for the integration interface for IO Devices
  *
- * (c) 2013-2025 by MVTec Software GmbH
+ * (c) 2013-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************

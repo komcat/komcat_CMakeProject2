@@ -5,7 +5,7 @@
  * Project:     HALCON/libhalcon
  * Description: Definition of constants
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************/
@@ -125,7 +125,6 @@
 #define MEMORY_BLOCK_EXT "bin"        /* Extension binary data            */
 #define ENCRYPTED_ITEM_EXT "henc"     /* Extension encrypted item         */
 #define DEEP_COUNTING_EXT "hdc"       /* Extension Deep Counting networks */
-#define DEEP_MATCHING_EXT "dm3"       /* Extension Deep Matching networks */
 
 
 /*****************************************************************************/

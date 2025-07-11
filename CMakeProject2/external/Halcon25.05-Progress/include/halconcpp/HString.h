@@ -5,7 +5,7 @@
  * Project:     HALCON/C++
  * Description: String class for automatic memory management
  *
- * (c) 2010-2025 by MVTec Software GmbH
+ * (c) 2010-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************

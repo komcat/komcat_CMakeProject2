@@ -808,84 +808,240 @@ void CircleDetectionUI::cleanupTexture()
   }
 }
 
+// Replace your UpdateTextureFromHalconImage and UpdateTextureFromBuffer methods with these safer versions:
+
 void CircleDetectionUI::UpdateTextureFromHalconImage(const HObject& halconImage)
 {
   try {
     HTuple pointerR, pointerG, pointerB, type, widthTuple, heightTuple;
+
+    // Validate the HALCON image first
+    if (!halconImage.IsInitialized()) {
+      std::cout << "[CircleDetectionUI] HALCON image not initialized" << std::endl;
+      return;
+    }
+
     GetImagePointer3(halconImage, &pointerR, &pointerG, &pointerB, &type, &widthTuple, &heightTuple);
 
-    if (pointerR.Length() > 0 && pointerG.Length() > 0 && pointerB.Length() > 0) {
-      unsigned char* redPtr = (unsigned char*)pointerR[0].L();
-      unsigned char* greenPtr = (unsigned char*)pointerG[0].L();
-      unsigned char* bluePtr = (unsigned char*)pointerB[0].L();
+    // Validate all pointers and dimensions
+    if (pointerR.Length() == 0 || pointerG.Length() == 0 || pointerB.Length() == 0 ||
+      widthTuple.Length() == 0 || heightTuple.Length() == 0) {
+      std::cout << "[CircleDetectionUI] Invalid HALCON image pointers or dimensions" << std::endl;
+      return;
+    }
 
-      if (!redPtr || !greenPtr || !bluePtr) {
-        throw HException("Invalid channel pointers");
-      }
+    // Get image dimensions
+    uint32_t width = static_cast<uint32_t>(widthTuple[0].I());
+    uint32_t height = static_cast<uint32_t>(heightTuple[0].I());
 
-      uint32_t width = m_imageWidth;
-      uint32_t height = m_imageHeight;
-      std::vector<uint8_t> rgbBuffer(width * height * 3);
+    // Validate dimensions
+    if (width == 0 || height == 0 || width > 10000 || height > 10000) {
+      std::cout << "[CircleDetectionUI] Invalid image dimensions: " << width << "x" << height << std::endl;
+      return;
+    }
 
-      // Convert from HALCON's planar format to interleaved RGB
-      for (uint32_t y = 0; y < height; y++) {
-        for (uint32_t x = 0; x < width; x++) {
-          uint32_t srcIndex = y * width + x;
-          uint32_t dstIndex = (y * width + x) * 3;
+    // Validate image dimensions match our stored values
+    if (width != static_cast<uint32_t>(m_imageWidth) || height != static_cast<uint32_t>(m_imageHeight)) {
+      std::cout << "[CircleDetectionUI] Dimension mismatch: expected "
+        << m_imageWidth << "x" << m_imageHeight
+        << ", got " << width << "x" << height << std::endl;
+      return;
+    }
+
+    // Get pointers safely
+    unsigned char* redPtr = reinterpret_cast<unsigned char*>(pointerR[0].L());
+    unsigned char* greenPtr = reinterpret_cast<unsigned char*>(pointerG[0].L());
+    unsigned char* bluePtr = reinterpret_cast<unsigned char*>(pointerB[0].L());
+
+    // Validate pointers
+    if (!redPtr || !greenPtr || !bluePtr) {
+      std::cout << "[CircleDetectionUI] Null channel pointers from HALCON" << std::endl;
+      return;
+    }
+
+    // Calculate buffer size and validate
+    size_t totalPixels = static_cast<size_t>(width) * static_cast<size_t>(height);
+    size_t bufferSize = totalPixels * 3; // RGB
+
+    // Sanity check for buffer size (prevent excessive memory allocation)
+    if (bufferSize > 100 * 1024 * 1024) { // 100MB limit
+      std::cout << "[CircleDetectionUI] Image too large: " << bufferSize << " bytes" << std::endl;
+      return;
+    }
+
+    // Allocate RGB buffer safely
+    std::vector<uint8_t> rgbBuffer;
+    try {
+      rgbBuffer.resize(bufferSize);
+    }
+    catch (const std::bad_alloc& e) {
+      std::cout << "[CircleDetectionUI] Failed to allocate RGB buffer: " << e.what() << std::endl;
+      return;
+    }
+
+    // Convert from HALCON's planar format to interleaved RGB with bounds checking
+    for (uint32_t y = 0; y < height; y++) {
+      for (uint32_t x = 0; x < width; x++) {
+        size_t srcIndex = static_cast<size_t>(y) * width + x;
+        size_t dstIndex = srcIndex * 3;
+
+        // Additional bounds check
+        if (dstIndex + 2 < bufferSize && srcIndex < totalPixels) {
           rgbBuffer[dstIndex + 0] = redPtr[srcIndex];   // R
           rgbBuffer[dstIndex + 1] = greenPtr[srcIndex]; // G
           rgbBuffer[dstIndex + 2] = bluePtr[srcIndex];  // B
         }
       }
+    }
 
-      UpdateTextureFromBuffer(rgbBuffer.data(), width, height);
+    // Update OpenGL texture
+    UpdateTextureFromBuffer(rgbBuffer.data(), width, height);
+  }
+  catch (const HException& ex) {
+    std::cout << "[CircleDetectionUI] HALCON Error in UpdateTextureFromHalconImage: "
+      << ex.ErrorMessage().TextA() << std::endl;
+
+    // Create a simple test pattern as fallback
+    CreateTestPatternTexture();
+  }
+  catch (const std::exception& e) {
+    std::cout << "[CircleDetectionUI] Standard Error in UpdateTextureFromHalconImage: "
+      << e.what() << std::endl;
+    CreateTestPatternTexture();
+  }
+  catch (...) {
+    std::cout << "[CircleDetectionUI] Unknown error in UpdateTextureFromHalconImage" << std::endl;
+    CreateTestPatternTexture();
+  }
+}
+
+
+
+void CircleDetectionUI::UpdateTextureFromBuffer(const uint8_t* pImageBuffer, uint32_t width, uint32_t height)
+{
+  // Validate input parameters
+  if (!pImageBuffer) {
+    std::cout << "[CircleDetectionUI] Null image buffer" << std::endl;
+    return;
+  }
+
+  if (width == 0 || height == 0) {
+    std::cout << "[CircleDetectionUI] Invalid dimensions: " << width << "x" << height << std::endl;
+    return;
+  }
+
+  // Sanity check for reasonable dimensions
+  if (width > 10000 || height > 10000) {
+    std::cout << "[CircleDetectionUI] Dimensions too large: " << width << "x" << height << std::endl;
+    return;
+  }
+
+  try {
+    // Generate texture if needed
+    if (m_imageTexture == 0) {
+      glGenTextures(1, &m_imageTexture);
+      if (m_imageTexture == 0) {
+        std::cout << "[CircleDetectionUI] Failed to generate OpenGL texture" << std::endl;
+        return;
+      }
+    }
+
+    // Bind texture
+    glBindTexture(GL_TEXTURE_2D, m_imageTexture);
+
+    // Check for OpenGL errors after binding
+    GLenum error = glGetError();
+    if (error != GL_NO_ERROR) {
+      std::cout << "[CircleDetectionUI] OpenGL error after binding texture: " << error << std::endl;
+      return;
+    }
+
+    // Set texture parameters only if dimensions changed
+    if (width != m_lastTextureWidth || height != m_lastTextureHeight) {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+
+    // Set pixel store parameters
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+    // Check for OpenGL errors after setting parameters
+    error = glGetError();
+    if (error != GL_NO_ERROR) {
+      std::cout << "[CircleDetectionUI] OpenGL error after setting parameters: " << error << std::endl;
+      glBindTexture(GL_TEXTURE_2D, 0);
+      return;
+    }
+
+    // Upload texture data
+    if (width != m_lastTextureWidth || height != m_lastTextureHeight) {
+      // Create new texture
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
+      m_lastTextureWidth = width;
+      m_lastTextureHeight = height;
     }
     else {
-      throw HException("Failed to get valid image pointers from HALCON");
+      // Update existing texture (more efficient)
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
     }
-  }
-  catch (HException& ex) {
-    std::cout << "[CircleDetectionUI] Error processing HALCON image: " << ex.ErrorMessage().TextA() << std::endl;
 
-    // Create test pattern for debugging
-    std::vector<uint8_t> testPattern(m_imageWidth * m_imageHeight * 3);
+    // Check for OpenGL errors after uploading
+    error = glGetError();
+    if (error != GL_NO_ERROR) {
+      std::cout << "[CircleDetectionUI] OpenGL error after uploading texture: " << error << std::endl;
+      m_textureLoaded = false;
+    }
+    else {
+      m_textureLoaded = true;
+    }
+
+    // Unbind texture
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+  }
+  catch (const std::exception& e) {
+    std::cout << "[CircleDetectionUI] Exception in UpdateTextureFromBuffer: " << e.what() << std::endl;
+    glBindTexture(GL_TEXTURE_2D, 0);
+    m_textureLoaded = false;
+  }
+  catch (...) {
+    std::cout << "[CircleDetectionUI] Unknown exception in UpdateTextureFromBuffer" << std::endl;
+    glBindTexture(GL_TEXTURE_2D, 0);
+    m_textureLoaded = false;
+  }
+}
+
+
+
+// Add this helper method to create a test pattern when image loading fails
+void CircleDetectionUI::CreateTestPatternTexture()
+{
+  if (m_imageWidth <= 0 || m_imageHeight <= 0) {
+    return;
+  }
+
+  try {
+    size_t bufferSize = static_cast<size_t>(m_imageWidth) * m_imageHeight * 3;
+    std::vector<uint8_t> testPattern(bufferSize);
+
     for (int y = 0; y < m_imageHeight; y++) {
       for (int x = 0; x < m_imageWidth; x++) {
         int index = (y * m_imageWidth + x) * 3;
         bool checker = ((x / 50) + (y / 50)) % 2;
-        testPattern[index + 0] = checker ? 255 : 0;    // R
-        testPattern[index + 1] = checker ? 255 : 0;    // G  
-        testPattern[index + 2] = checker ? 255 : 0;    // B
+        testPattern[index + 0] = checker ? 255 : 64;    // R
+        testPattern[index + 1] = checker ? 255 : 64;    // G  
+        testPattern[index + 2] = checker ? 255 : 64;    // B
       }
     }
+
     UpdateTextureFromBuffer(testPattern.data(), m_imageWidth, m_imageHeight);
   }
-}
-
-void CircleDetectionUI::UpdateTextureFromBuffer(const uint8_t* pImageBuffer, uint32_t width, uint32_t height)
-{
-  if (!pImageBuffer || width == 0 || height == 0) return;
-
-  if (m_imageTexture == 0) {
-    glGenTextures(1, &m_imageTexture);
+  catch (...) {
+    std::cout << "[CircleDetectionUI] Failed to create test pattern" << std::endl;
   }
-
-  glBindTexture(GL_TEXTURE_2D, m_imageTexture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
-
-  m_lastTextureWidth = width;
-  m_lastTextureHeight = height;
-  m_textureLoaded = true;
-
-  glBindTexture(GL_TEXTURE_2D, 0);
 }
-
 
 
 bool CircleDetectionUI::SaveProfile(const std::string& profileName, const std::string& description)

@@ -5,7 +5,7 @@
  * Project:     HALCON/libhalcon
  * Description: Definitions of HALCON data types
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  * Most of the types in this file are legacy types defined for (source code)

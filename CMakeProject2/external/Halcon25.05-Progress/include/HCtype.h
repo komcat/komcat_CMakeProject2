@@ -6,7 +6,7 @@
  * Description:  (Global) data structures defining the processing context
  *               for HALCON operator instances and HALCON operator threads
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *               www.mvtec.com
  *
  *****************************************************************************/
@@ -84,7 +84,7 @@ typedef enum
 #define HOIID_aopCost 16
 #define HOIID_numCost 17
 #define HOIID_parallelMinCosts 18
-#define HOIID_parallelRegionsplit 19 /* Deprecated in Halcon-10 and not used. */
+#define HOIID_parallelRegionsplit 19
 #define HOIID_HelpIndex 20
 #define HOIID_InfoLength 21
 #define HOIID_Class 22     /*[MAX_CHAPTER]*/

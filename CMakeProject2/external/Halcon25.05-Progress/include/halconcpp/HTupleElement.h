@@ -5,7 +5,7 @@
  * Project:     HALCON/C++
  * Description: Element of tuple used for control parameters
  *
- * (c) 2010-2025 by MVTec Software GmbH
+ * (c) 2010-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************
@@ -95,11 +95,6 @@ class HTupleData;
 /* HTupleElementData                                                         */
 /*****************************************************************************/
 
-// HTupleElementData is internal to the C++ language interface and should not
-// be used by external code. However, the definition must be available for
-// msvc in order to be able to instantiate HSmartPtr<HTupleElementData>, so the
-// definition must be in a publicly available header file. Do not attempt to
-// instantiate this class in your code !
 class HTupleElementData : public HSmartPtrRef
 {
 public:
@@ -154,19 +149,11 @@ public:
 
   HTupleElementData& operator=(const HTupleElementData& element);
 
-  HTupleData const* GetSource() const
+  HTupleData* GetSource() const
   {
     return mSource;
   }
-  HTupleData* GetSource()
-  {
-    return mSource;
-  }
-  Hlong const* GetIndex() const
-  {
-    return mIndex;
-  }
-  Hlong* GetIndex()
+  Hlong* GetIndex() const
   {
     return mIndex;
   }
@@ -193,9 +180,8 @@ protected:
   virtual const char* getC(Hlong idx) const;
   virtual Hphandle    getH(Hlong idx) const;
 
-private:
-  // Make mSource, mIndex and mLength private so subclasses are forced to use
-  // the const correct GetXXX() accessor functions.
+protected:
+  // Refer back to source implementation
   HTupleData* mSource;
   Hlong*      mIndex;
   Hlong       mLength;

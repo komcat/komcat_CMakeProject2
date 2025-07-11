@@ -7,7 +7,7 @@
  *               parallelization of HALCON operators and
  *               programs (operator sequences)
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************/

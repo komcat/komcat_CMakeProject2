@@ -5,7 +5,7 @@
  * Project:     HALCON/libhalcon
  * Description: Defines, types, and declarations for HALCON/C
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  ****************************************************************************/
@@ -355,9 +355,9 @@ LIntExport Herror replace_elements(Htuple* htuple, Htuple* index,
 
 
 #  define C_TUPLE_IDX_TYPE(PCTUPLE, IDX)                                      \
-    ((MIXED_PAR != (PCTUPLE)->val.type) ? (PCTUPLE)->val.type                 \
-     : (IDX < (PCTUPLE)->num)           ? (PCTUPLE)->elem.cpar[IDX].type      \
-                                        : UNDEF_PAR)
+    ((MIXED_PAR != (PCTUPLE)->type) ? (PCTUPLE)->type                         \
+     : (IDX < (PCTUPLE)->num)       ? (PCTUPLE)->elem.cpar[IDX].type          \
+                                    : UNDEF_PAR)
 
 #  define length_tuple(TUP) ((TUP).num)
 #  define get_type(TUP, IDX) (C_TUPLE_IDX_TYPE(&(TUP), IDX))
@@ -404,6 +404,22 @@ LIntExport Herror replace_elements(Htuple* htuple, Htuple* index,
 #    define init_s_from_wcs(TUP, VAL, IDX) F_init_s_from_wcs(&(TUP), VAL, IDX)
 #  endif
 #  define init_h(TUP, VAL, IDX) F_init_h(&(TUP), VAL, IDX)
+
+#  define at_i(TUP, IDX)                                                      \
+    ((LONG_PAR == (TUP).type) ? (TUP).elem.l[IDX]                             \
+                              : (TUP).elem.cpar[IDX].par.l /*MIXED_PAR*/)
+#  define at_d(TUP, IDX)                                                      \
+    ((DOUBLE_PAR == (TUP).type) ? (TUP).elem.f[IDX]                           \
+                                : (TUP).elem.cpar[IDX].par.d /*MIXED_PAR*/)
+#  define at_s(TUP, IDX)                                                      \
+    ((char const*const)((STRING_PAR == (TUP).type)                            \
+                                ? (TUP).elem.s[IDX]                           \
+                                : (TUP).elem.cpar[IDX].par.s /*MIXED_PAR*/)
+#  define at_h(TUP, IDX)                                                      \
+    ((char const*const)((HANDLE_PAR == (TUP).type)                            \
+                                ? (TUP).elem.h[IDX]                           \
+                                : (TUP).elem.cpar[IDX].par.h /*MIXED_PAR*/)
+
 
 #  define set_i(TUP, VAL, IDX) F_set_i(&(TUP), VAL, IDX)
 #  define set_d(TUP, VAL, IDX) F_set_d(&(TUP), VAL, IDX)
@@ -486,6 +502,11 @@ LIntExport Herror replace_elements(Htuple* htuple, Htuple* index,
 #    define get_s_to_wcs(BUF, SIZE, TUP, IDX)                                 \
       Mget_s_to_wcs(BUF, SIZE, &(TUP), IDX, __FILE__, __LINE__)
 #  endif
+
+#  define at_i(TUP, IDX) Mget_i(&(TUP), IDX, __FILE__, __LINE__)
+#  define at_d(TUP, IDX) Mget_d(&(TUP), IDX, __FILE__, __LINE__)
+#  define at_s(TUP, IDX) Mget_s(&(TUP), IDX, __FILE__, __LINE__)
+#  define at_h(TUP, IDX) Mget_h(&(TUP), IDX, __FILE__, __LINE__)
 
 #  define create_tuple_i(TUP, VAL)                                            \
     Mcreate_tuple_i(TUP, VAL, __FILE__, __LINE__)

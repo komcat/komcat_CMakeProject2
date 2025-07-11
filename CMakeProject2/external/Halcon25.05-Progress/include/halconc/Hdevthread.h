@@ -7,7 +7,7 @@
  *              export (for internal use only, signatures and functionality
  *              may change )
  *
- * (c) 2014-2025 by MVTec Software GmbH
+ * (c) 2014-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  ****************************************************************************/

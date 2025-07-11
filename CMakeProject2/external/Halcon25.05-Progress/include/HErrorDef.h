@@ -5,7 +5,7 @@
  * Project:     HALCON/libhalcon
  * Description: Definition of error constants
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  ****************************************************************************/
@@ -453,7 +453,6 @@
 #define H_ERR_DICT_KEY     2894 /* Dict does not contain requested key */
 #define H_ERR_DICT_TUPLE_LENGTH 2895 /* Incorrect tuple length in dict */
 #define H_ERR_DICT_TUPLE_TYPE 2896 /* Incorrect tuple type in dict */
-#define H_ERR_DICT_INVALID_INDEX 2897 /* Invalid index for dict tuple */
 
 #define H_ERR_PTHRD_SCHED  2900 /* Error while forcing a context switch */
 #define H_ERR_SCHED_GAFF   2901 /* Error while accessing cpu affinity */
@@ -706,9 +705,6 @@
                                             add all training data again or
                                             disable normalization during
                                             training.*/
-
-#define H_ERR_ML_KMEAN_INITIALIZATION_ERROR       3325  /* Error in KMeans cluter initialization. */
-
 
 #define H_ERR_GMM_NOTRAINFILE      3330 /* Invalid file format for GMM
                                            training samples */
@@ -1595,7 +1591,6 @@
 #define H_ERR_JP2_PREC_TOO_HIGH  5591 /* Image precision too high */
 #define H_ERR_JP2_ENCODING_ERROR 5592 /* Error while encoding */
 #define H_ERR_JP2_SIZE_TOO_BIG   5593 /* Image size too big */
-#define H_ERR_JP2_INTERNAL_ERROR 5594 /* Unknown internal error from libjasper */
 
 /* HOBJ files */
 #define H_ERR_HOBJ_NOT_ONLY_IMAGES 5599 /* File does not contain only images */
@@ -1691,53 +1686,6 @@
                                               quaternion is not supported */
 #define H_ERR_DUAL_QUAT_NOSITEM       5764 /* Serialized item does not contain
                                               a valid dual quaternion*/
-
-/* ImageSource 5800 - 5899 */
-#define H_ERR_IMGSRC_FAIL                    5800 /* Image source operation
-                                                     failed - unknown
-                                                     reason */
-#define H_ERR_IMGSRC_LOGIC                   5801 /* Image source operation
-                                                     failed - wrong internal
-                                                     assumptions */
-#define H_ERR_IMGSRC_NOT_IMPLEMENTED         5802 /* Image source
-                                                     functionality is
-                                                     not implemented */
-#define H_ERR_IMGSRC_INCOMPATIBLE_VERSION    5803 /* Image source plugin
-                                                     version incompatible */
-#define H_ERR_IMGSRC_GENTL_ERROR             5804 /* Unhandled exception was
-                                                     triggered by a GenTL
-                                                     producer */
-#define H_ERR_IMGSRC_GENAPI_ERROR            5805 /* Unhandled exception was
-                                                     triggered by the GenICam
-                                                     GenAPI */
-#define H_ERR_IMGSRC_RES_INIT_FAIL           5806 /* Image source resource
-                                                     could not be initialized */
-#define H_ERR_IMGSRC_RES_NOT_INITIALIZED     5807 /* Image source resource not
-                                                     initialized */
-#define H_ERR_IMGSRC_MOD_REQUEST_AMBIGUOUS   5808 /* Image source module
-                                                     request is ambiguous */
-#define H_ERR_IMGSRC_MOD_NOT_FOUND           5809 /* Image source module not
-                                                     found */
-#define H_ERR_IMGSRC_PARAM_NOT_FOUND         5810 /* Image source parameter
-                                                     not found */
-#define H_ERR_IMGSRC_PARAM_WRONG_VALUE       5811 /* Image source parameter -
-                                                     wrong value provided */
-#define H_ERR_IMGSRC_PARAM_WRONG_VALUE_TYPE  5812 /* Image source parameter -
-                                                     wrong type provided */
-#define H_ERR_IMGSRC_PARAM_VAL_NOT_READABLE 5813 /* Image source parameter -
-                                                     value not readable */
-#define H_ERR_IMGSRC_PARAM_VAL_NOT_WRITABLE 5814 /* Image source parameter -
-                                                     value not writable */
-#define H_ERR_IMGSRC_PARAM_PROP_NOT_AVAILABLE 5815 /* Image source parameter -
-                                                      property not available */
-#define H_ERR_IMGSRC_COMMAND_TIMEOUT      5816 /* Image source parameter -
-                                                  command timeout */
-#define H_ERR_IMGSRC_WRONG_STATE   5817 /* Image source operation
-                                           failed - wrong internal state */
-#define H_ERR_IMGSRC_FETCH_TIMEOUT 5818 /* No images received within
-                                           the configured timeout */
-#define H_ERR_IMGSRC_FETCH_ABORT   5819 /* Waiting for images aborted */
-#define H_ERR_IMGSRC_CONVERSION_FAILED       5820 /* Pixel data conversion failed */
 
 /* Memory management */
 #define H_ERR_NP           6000 /* Access to undefined memory area */
@@ -2087,10 +2035,6 @@
 #define H_ERR_DL_MODEL_CONVERTED_PARAM 7916  /* DL: Parameter unsupported for converted model */
 #define H_ERR_DL_MODEL_CONVERTED_UNSUPPORTED 7917  /* DL: Unsupported operation on converted model */
 
-/* DL Dataset */
-#define H_ERR_DL_INVALID_DATASET 7925 /* DL: The given dataset is incorrect */
-#define H_ERR_DL_INVALID_SAMPLE_INDEX 7926 /* DL: Invalid sample index */
-
 /* Deep Counting */
 #define H_ERR_DEEP_COUNTING_NOT_PREPARED 7940 /* Deep Counting model is not prepared */
 #define H_ERR_DEEP_COUNTING_UNSUPPORTED_BACKBONE 7941 /* The chosen backbone is not settable */
@@ -2103,12 +2047,6 @@
 /* DL Pruning */
 #define H_ERR_DL_PRUNING_WRONG_DATA 7980 /* DL: Pruning data does not fit the given model */
 #define H_ERR_DL_PRUNING_UNSUPPORTED_BY_CNN 7981 /* DL: Model architecture does not support pruning */
-
-/* DL Out-of-distribution detection */
-#define H_ERR_DL_OOD_UNSUPPORTED_MODEL_TYPE 7985 /* DL: Invalid model type for out-of-distribution detection */
-#define H_ERR_DL_OOD_INSUFFICIENT_SAMPLE_DIVERSITY 7986 /* DL: Insufficient diverse samples for fitting out-of-distribution detection */
-#define H_ERR_DL_OOD_INTERNAL_ERROR 7987 /* DL: Internal error in the calculation of out-of-distribution detection. */
-#define H_ERR_DL_OOD_INVALID 7988 /* DL: Operation invalidates out-of-distribution detection. */
 
 /* DL Module */
 #define H_ERR_DL_MODULE_NOT_LOADED 7990 /* DLModule is not loaded */
@@ -2443,7 +2381,6 @@
 #define H_ERR_SM_SAME_CL    8517 /* Shape models are not of the same clutter type */
 #define H_ERR_SM_WRONG_CLCO 8518 /* Shape model has an invalid clutter
                                     contrast */
-#define H_ERR_SM_CL_NEG     8519 /* Clutter region contains negative coordinates */
 
 /* Surface-based matching */
 #define H_ERR_FIND_BOX_UNSUP_GENPARAM 8520 /* Box finder: Unsupported
@@ -2567,10 +2504,6 @@
 #define H_ERR_GSM_SAME_IDENTIFIER       8682 /* Shape models with the same
                                                 identifier cannot be searched
                                                 simultaneously */
-#define H_ERR_SM_INCONSISTENT_PER_LEVEL 8683 /* Set parameters inconsistent
-                                                with est. 'per_level' values */
-#define H_ERR_GSM_EXT_PAR_EST           8684 /* Extended parameter estimation
-                                                failed */
 
 /* Barcode */
 #define H_ERR_BAR_WNOM       8701 /* Wrong number of modules */
@@ -2694,7 +2627,6 @@
                                                'small_modules_robustness' */
 #define H_ERR_DC2D_WRONG_CONTRAST_TOL  8855 /* Invalid 'contrast_tolerance' */
 #define H_ERR_DC2D_WRONG_AP_TOLERANCE  8856 /* Invalid 'alternating_pattern_tolerance' */
-#define H_ERR_DC2D_WRONG_DEFORM_TOL    8857 /* Invalid 'deformation_tolerance' */
 #define H_ERR_DC2D_READ_HEAD_FORMAT    8860 /* Invalid header in 2d data code
                                                model file */
 #define H_ERR_DC2D_READ_HEAD_SIGN      8861 /* Invalid code signature in 2d
@@ -2757,9 +2689,6 @@
                                                  model */
 #define H_ERR_SM3D_WRONG_UNION_ADJACENT_CONTOURS 8946 /* Invalid
                                                  'union_adjacent_contours' */
-/* Deep 3D matching */
-#define H_ERR_DM3D_NO3DPOSEEST           8947 /* Pose estimation model contains
-                                                 insufficient information */
 
 /* Descriptor-based matching */
 #define H_ERR_DESCR_NODESCRFILE            8960 /* Invalid file format for

@@ -6,7 +6,7 @@
  * Description: External variables and some global procedures for
  *              language interfaces
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************/

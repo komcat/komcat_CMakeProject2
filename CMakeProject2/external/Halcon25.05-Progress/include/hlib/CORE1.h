@@ -5,7 +5,7 @@
  * Project:     HALCON/libhalcon
  * Description: Mid level procedure interface
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *               www.mvtec.com
  *
  *****************************************************************************
@@ -87,21 +87,17 @@ extern HLibExport Herror HPGetCParNum(Hproc_handle proc_handle, int par_num,
 
 /* HPGetPPar - get array of pointers to value structures of inp. ctrl. par.  */
 extern HLibExport Herror HPGetPPar(Hproc_handle proc_handle, int par_num,
-                                   Hcpar const* H_RESTRICT* val, INT4_8* num);
+                                   Hcpar* H_RESTRICT* val, INT4_8* num);
 
 /* HPGetPar - get values of input control parameter                          */
 extern HLibExport Herror HPGetPar(Hproc_handle proc_handle, int par_num,
-                                  int expected_type, int* type, Hpar Val[],
+                                  int kind_in, int* kind, Hpar Val[],
                                   INT4_8 min, INT4_8 max, INT4_8* num);
 
 /* HPGetCPar - get values of input control parameter                         */
 extern HLibExport Herror HPGetCPar(Hproc_handle proc_handle, int par_num,
-                                   int expected_type, Hcpar Val[], INT4_8 min,
+                                   int kind_in, Hcpar Val[], INT4_8 min,
                                    INT4_8 max, INT4_8* num);
-
-/* HPPutTuple - store output control parameter values from Hctuple           */
-extern HLibExport Herror HPPutTuple(Hproc_handle proc_handle, int parnr,
-                                    Hctuple* tuple);
 
 /* HPPutPElem - store output control parameter values by reference           */
 extern HLibExport Herror HPPutPElem(Hproc_handle proc_handle, int parnr,
@@ -113,7 +109,7 @@ extern HLibExport Herror HPPutElem(Hproc_handle proc_handle, int parnr,
 
 /* HPPutPar - store output control parameter values                          */
 extern HLibExport Herror HPPutPar(Hproc_handle proc_handle, int par_num,
-                                  int type, Hpar* Elem, INT4_8 num);
+                                  int kind, Hpar* Elem, INT4_8 num);
 
 /* HPPutPPar - store output control parameter values (by using pointers)     */
 extern HLibExport Herror HPPutPPar(Hproc_handle proc_handle, int par_num,
@@ -121,7 +117,7 @@ extern HLibExport Herror HPPutPPar(Hproc_handle proc_handle, int par_num,
 
 /* HPPutCPar - store output control parameter values                         */
 extern HLibExport Herror HPPutCPar(Hproc_handle proc_handle, int par_num,
-                                   Hcpar const* Val, INT4_8 num);
+                                   Hcpar* Val, INT4_8 num);
 
 /* HPFreeAllParStrings - free all strings in parameter array                 */
 extern HLibExport Herror HPFreeAllParStrings(Hproc_handle proc_handle,
@@ -284,12 +280,6 @@ extern HLibExport Herror HPAllocOutpCtrl(Hproc_handle ph, int par, int type,
                                          void* H_RESTRICT* elem);
 #define HAllocOutpCtrl(ph, par, type, length, elem)                           \
   HPAllocOutpCtrl(ph, par, type, length, (void* H_RESTRICT*)elem)
-
-extern HLibExport Herror HPReserveOutpCtrl(Hproc_handle ph, int par, int type,
-                                           INT4_8 capacity, Hctuple** tuple,
-                                           void* H_RESTRICT* elem);
-#define HReserveOutpCtrl(ph, par, type, length, tuple, elem)                  \
-  HPReserveOutpCtrl(ph, par, type, length, tuple, (void* H_RESTRICT*)elem)
 
 extern HLibExport Herror HFreeOutpCtrl(Hproc_handle ph, int par);
 

@@ -6,7 +6,7 @@
  * Description: Helper class for export of HDevelop's parallel
  *              language extensions.
  *
- * (c) 2014-2025 by MVTec Software GmbH
+ * (c) 2014-2024 by MVTec Software GmbH
  *               www.mvtec.com
  *
  *****************************************************************************

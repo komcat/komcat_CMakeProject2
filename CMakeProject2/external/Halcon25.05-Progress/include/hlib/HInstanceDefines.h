@@ -5,7 +5,7 @@
  * Project:      HALCON/HLib
  * Description:  defines for accessing to global context variables;
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************/
@@ -92,6 +92,7 @@
 #define HGZoomPixel 72
 #define HGPixelWidth 73
 #define HGPixelHeight 74
+#define HGGrStackSize 77
 #define HGTimeoutGroupAdd 170
 #define HGTimeoutGroupClear 171
 #define HGTimeoutOperatorBreak 172
@@ -155,7 +156,6 @@
 #define HGcudnn_prevent_fused_conv 179
 #define HGcudnn_tune_conv_algorithm 180
 #define HGonnx_reader_fuse_conv_relu 177
-#define HGenable_dl_model_min_version_check 181
 
 /*--- CPU features in HROInfo, for HGVGet_CPUFeature ---*/
 #define HCPU_FEATURE_MMX 1

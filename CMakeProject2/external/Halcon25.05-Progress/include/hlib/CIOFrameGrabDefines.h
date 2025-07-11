@@ -15,7 +15,7 @@
  *              is needed. I.e. appropriate wrapper have to be provided or
  *              the collaboration must be rejected in a defined manner.
  *
- * (c) 1996-2025 by MVTec Software GmbH
+ * (c) 1996-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************

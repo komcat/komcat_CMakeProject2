@@ -5,7 +5,7 @@
  * Project:     HALCON/C++
  * Description: Template class for smart pointers used by tools and tuples
  *
- * (c) 2010-2025 by MVTec Software GmbH
+ * (c) 2010-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************

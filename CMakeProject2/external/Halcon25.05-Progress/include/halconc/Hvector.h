@@ -5,7 +5,7 @@
  * Project:     HALCON/C
  * Description: HALCON/C implementation of HDevelop vectors
  *
- * (c) 2014-2025 by MVTec Software GmbH
+ * (c) 2014-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  ****************************************************************************/
@@ -59,7 +59,7 @@ LIntExport Herror V_copy_vector(Hvector const src, Hvector* H_RESTRICT dest);
  * initialized with empty elements) to fulfill index.(self modifying)
  * Precondition: type(subvec) == type(vec) && dim(vec) == dim(subvec)+|index|
  */
-LIntExport Herror V_set_vector_elem(Hvector vec, Htuple vec_idx,
+LIntExport Herror V_set_vector_elem(Hvector vec, Htuple const vec_idx,
                                     Hvector const subvec);
 
 /* set_vector_obj sets a iconic object obj in vector vec. Therefore,
@@ -70,7 +70,7 @@ LIntExport Herror V_set_vector_elem(Hvector vec, Htuple vec_idx,
  * Precondition: type(vec) == eObjectVector && dim(vec) == dim(subvec)+|index|
  */
 LIntExport Herror V_set_vector_obj(Hobject const obj, Hvector vec,
-                                   Htuple vec_idx);
+                                   Htuple const vec_idx);
 
 /* set_vector_tuple sets a tuple tpl in vector vec. Therefore,
  * vec_idx addresses a tuple in vec that gets replaced by obj. The old tuple
@@ -78,7 +78,7 @@ LIntExport Herror V_set_vector_obj(Hobject const obj, Hvector vec,
  * initialized with empty elements) to fulfill vec_idx.(self modifying)
  * Precondition: type(vec) == eTupleVector && dim(vec) == |index|
  */
-LIntExport Herror V_set_vector_tuple(Hvector vec, Htuple vec_idx,
+LIntExport Herror V_set_vector_tuple(Hvector vec, Htuple const vec_idx,
                                      Htuple const tpl);
 
 /* set_vector_tuple_elem executes a self modifying tuple_replace in the indexed
@@ -89,8 +89,9 @@ LIntExport Herror V_set_vector_tuple(Hvector vec, Htuple vec_idx,
  * set_vector_tuple_elem extends it automatically (initialized with empty
  * elements).
  * Precondition: type(vec) == eTupleVector && dim(vec) == |vec_idx|. */
-LIntExport Herror V_set_vector_tuple_elem(Hvector vec, Htuple vec_idx,
-                                          Htuple const tpl_idx, Htuple val);
+LIntExport Herror V_set_vector_tuple_elem(Hvector vec, Htuple const vec_idx,
+                                          Htuple const tpl_idx,
+                                          Htuple const val);
 
 
 /* get_vector_elem returns a copy of the sub vector of vec at index. The
@@ -98,7 +99,7 @@ LIntExport Herror V_set_vector_tuple_elem(Hvector vec, Htuple vec_idx,
  * of a sub vector of vec beyond its length.
  * Remark: dim(subvec) = dim(vec)-|index|
  *         type(subvec) = type(vec) */
-LIntExport Herror V_get_vector_elem(Hvector const vec, Htuple index,
+LIntExport Herror V_get_vector_elem(Hvector const vec, Htuple const index,
                                     Hvector* H_RESTRICT subvec);
 
 /* get_vector_obj returns a copy of an iconic object of vec at index. The
@@ -106,13 +107,13 @@ LIntExport Herror V_get_vector_elem(Hvector const vec, Htuple index,
  * sub vector of vec beyond its length.
  * Precondition: dim(vec) == |index| && type(vec) == eObjectVector */
 LIntExport Herror V_get_vector_obj(Hobject* H_RESTRICT obj, Hvector const vec,
-                                   Htuple index);
+                                   Htuple const index);
 
 /* get_vector_tuple returns a copy of a tuple of vector vec at index. The
  * error H_ERR_WIPV2 is returned if any value of index addresses an element of
  * a sub vector of vec beyond its length.
  * Precondition: dim(vec) == |index| && type(vec) == eTupleVector */
-LIntExport Herror V_get_vector_tuple(Hvector const vec, Htuple index,
+LIntExport Herror V_get_vector_tuple(Hvector const vec, Htuple const index,
                                      Htuple* H_RESTRICT tpl);
 
 
@@ -128,7 +129,7 @@ LIntExport Herror V_concat_vector(Hvector const vec1, Hvector const vec2,
  * Precondition: dim(vec) == dim(ins)+|vec_ins|
  *               type(ins) == type(vec)
  *               |ins_idx| == 1 */
-LIntExport Herror V_insert_vector_elem(Hvector vec, Htuple vec_idx,
+LIntExport Herror V_insert_vector_elem(Hvector vec, Htuple const vec_idx,
                                        Htuple const  ins_idx,
                                        Hvector const ins);
 
@@ -138,14 +139,14 @@ LIntExport Herror V_insert_vector_elem(Hvector vec, Htuple vec_idx,
  * The length of the sub vector indexed by vec_idx gets decreased by one,
  * when rmv_idx is smaller than the length of the sub vector. (self modifying)
  * Precondition: dim(vec)>=|vec_idx| */
-LIntExport Herror V_remove_vector_elem(Hvector vec, Htuple vec_idx,
+LIntExport Herror V_remove_vector_elem(Hvector vec, Htuple const vec_idx,
                                        Htuple const rmv_idx);
 
 /* clear_vector frees all contents of a sub vector of vec and makes it empty.
  * The sub vector is indexed by 'index'. Type and dimension of the sub
  * vector remain. (self modifying)
  * Precondition: dim(vec)>=|index| */
-LIntExport Herror V_clear_vector(Hvector vec, Htuple index);
+LIntExport Herror V_clear_vector(Hvector vec, Htuple const index);
 
 /* insert_vector_obj inserts an iconic object obj at position ins_idx into a
  * sub vector of vec, indexed by vec_idx.
@@ -155,7 +156,8 @@ LIntExport Herror V_clear_vector(Hvector vec, Htuple index);
  *               type(vec) == eObjectVector
  *               |ins_idx| == 1 */
 LIntExport Herror V_insert_vector_obj(Hobject const obj, Hvector vec,
-                                      Htuple vec_idx, Htuple const ins_idx);
+                                      Htuple const vec_idx,
+                                      Htuple const ins_idx);
 
 /* insert_vector_tupel inserts a tuple tpl at position ins_idx into a
  * sub vector of vec, indexed by vec_idx.
@@ -164,7 +166,7 @@ LIntExport Herror V_insert_vector_obj(Hobject const obj, Hvector vec,
  * Precondition: dim(vec) == |vec_ins|
  *               type(vec) == eTupleVector
  *               |ins_idx| == 1 */
-LIntExport Herror V_insert_vector_tuple(Hvector vec, Htuple vec_idx,
+LIntExport Herror V_insert_vector_tuple(Hvector vec, Htuple const vec_idx,
                                         Htuple const ins_idx,
                                         Htuple const tpl);
 
@@ -181,7 +183,7 @@ LIntExport Herror V_convert_vector_to_tuple(Hvector const      vec,
  * tuple containing the residuum).
  * Precondition: |lengths|==1 || sum(lengths)==|tpl|
  *   dim(vec)=1, type(vec)=eTupleVector */
-LIntExport Herror V_convert_tuple_to_vector_1d(Htuple              tpl,
+LIntExport Herror V_convert_tuple_to_vector_1d(Htuple const        tpl,
                                                Htuple const        lengths,
                                                Hvector* H_RESTRICT vec);
 
@@ -205,7 +207,7 @@ LIntExport Herror V_vector_length(Hvector const vec, Hlong* H_RESTRICT length);
 /* V_sub_vector_length returns the number of elements of a sub vector of vec,
  * indexed by vec_idx. Passing an empty tuple for vec_idx receives the same
  * result as V_vector_length. */
-LIntExport Herror V_sub_vector_length(Hvector const vec, Htuple vec_idx,
+LIntExport Herror V_sub_vector_length(Hvector const vec, Htuple const vec_idx,
                                       Hlong* H_RESTRICT length);
 
 /* Some printf auxiliary functions for debug support. They allow to transform
@@ -217,7 +219,8 @@ LIntExport Herror V_sub_vector_length(Hvector const vec, Htuple vec_idx,
  * encountered, these functions shall return a negative value.*/
 LIntExport int Hsnprintf_Hvector(char* H_RESTRICT str, Hlong size,
                                  Hvector const vec);
-LIntExport int Hsnprintf_Htuple(char* H_RESTRICT str, Hlong size, Htuple tpl);
+LIntExport int Hsnprintf_Htuple(char* H_RESTRICT str, Hlong size,
+                                Htuple const tpl);
 LIntExport int Hsnprintf_Hobject(char* H_RESTRICT str, Hlong size,
                                  Hobject const obj);
 

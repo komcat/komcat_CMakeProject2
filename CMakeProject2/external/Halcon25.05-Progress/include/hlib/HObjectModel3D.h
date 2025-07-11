@@ -5,7 +5,7 @@
  * Project:     HALCON/libhalcon
  * Description: Creation and management of 3D object models
  *
- * (c) 2016-2025 by MVTec Software GmbH
+ * (c) 2016-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************

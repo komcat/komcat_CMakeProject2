@@ -6,7 +6,7 @@
  * Description: Internal communication with HALCON library.
  *              Exposed for use by extension packages only.
  *
- * (c) 2010-2025 by MVTec Software GmbH
+ * (c) 2010-2024 by MVTec Software GmbH
  *                  www.mvtec.com
  *
  *****************************************************************************
@@ -66,8 +66,8 @@ public:
   static void StoreEnc(Hproc_handle proc, int par, const HTuple& tuple);
   static void Store(Hproc_handle proc, int par, const HHandle& handle);
   static void Store(Hproc_handle proc, int par, void* pointer);
-  static void Store(Hproc_handle proc, int par, HDataBase const& data);
 
+  static HTuple StoreKA(Hproc_handle proc, int par, const HDataBase& data);
   static HTuple StoreKA(Hproc_handle proc, int par,
                         const HHandleBaseArray& tools);
   static HTuple StoreKA(Hproc_handle proc, int par, const HDataArray& data);
