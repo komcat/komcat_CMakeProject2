@@ -100,6 +100,10 @@
 #include "raylibclass.h"
 // Add this include at the top with other includes
 #include "include/siphog/siphog_client.h"
+#include "include/halcon/CircleDetectionUI.h"
+
+
+
 #pragma region header functions
 
 
@@ -1693,7 +1697,14 @@ int main(int argc, char* argv[])
 	}
 
 
+	// Add the circle detection UI
+	CircleDetectionUI circleUI;
 
+	// Optional: Set up callback to get detection results
+	//circleUI.SetDetectionCallback([&](double x, double y, double radius) {
+	//	std::cout << "Circle detected callback: (" << x << ", " << y << ") r=" << radius << std::endl;
+	//	// You can trigger robot movement here or store coordinates
+	//});
 
 
 	// Create one display for current monitoring
@@ -1916,6 +1927,11 @@ int main(int argc, char* argv[])
 		//  }
 		//  mainIoUI->RenderUI();
 		//}
+
+			// Render circle detection UI
+		circleUI.RenderUI();
+
+
 
 		// Add this instead:
 		if (toolbarIoUI) {

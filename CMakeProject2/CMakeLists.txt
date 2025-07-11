@@ -65,6 +65,54 @@ set(EZIIO_DIR_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/external/eziio/include_x86_CP
 set(EZIIO_DIR_INCLUDE_x64 "${CMAKE_CURRENT_SOURCE_DIR}/external/eziio/include_x64_CPP")
 
 
+
+# Set HALCON paths based on your installation
+set(HALCON_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/Halcon25.05-Progress")
+set(HALCON_INCLUDE_DIR "${HALCON_ROOT}/include")
+
+
+
+# Handle different platforms for HALCON library files
+if(WIN32)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        # 64-bit build
+        set(HALCON_LIB_DIR "${HALCON_ROOT}/lib/x64-win64")
+        set(HALCON_BIN_DIR "${HALCON_ROOT}/bin/x64-win64")
+        set(HALCON_LIBRARIES
+            "${HALCON_LIB_DIR}/halcon.lib"
+            "${HALCON_LIB_DIR}/halconcpp.lib"
+        )
+    else()
+        # 32-bit build (if needed)
+        set(HALCON_LIB_DIR "${HALCON_ROOT}/lib/x86sse2-win32")
+        set(HALCON_BIN_DIR "${HALCON_ROOT}/bin/x86sse2-win32")
+        set(HALCON_LIBRARIES
+            "${HALCON_LIB_DIR}/halcon.lib"
+            "${HALCON_LIB_DIR}/halconcpp.lib"
+        )
+    endif()
+else()
+    # Linux configuration (if needed later)
+    set(HALCON_LIB_DIR "${HALCON_ROOT}/lib/x64-linux")
+    set(HALCON_LIBRARIES
+        "${HALCON_LIB_DIR}/libhalcon.so"
+        "${HALCON_LIB_DIR}/libhalconcpp.so"
+    )
+endif()
+
+# Check if HALCON installation exists
+if(NOT EXISTS ${HALCON_ROOT})
+    message(WARNING "HALCON not found at ${HALCON_ROOT}. HALCON features will be disabled.")
+    set(HALCON_FOUND FALSE)
+else()
+    message(STATUS "HALCON found at: ${HALCON_ROOT}")
+    set(HALCON_FOUND TRUE)
+endif()
+
+# Add stb_image path (adjust path as needed)
+set(STB_IMAGE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/stb")
+
+
 # Handle different platforms for library files
 if(WIN32)
     # For Windows, directly set library paths
@@ -334,7 +382,13 @@ add_executable(CMakeProject2
  "StatusPage.cpp" 
  "VisualizePage.h"
  "VisualizePage.cpp"
- "RealtimeChartPage.h" "RealtimeChartPage.cpp" "include/siphog/siphog_client.h" "include/siphog/siphog_client.cpp")
+ "RealtimeChartPage.h" 
+ "RealtimeChartPage.cpp"
+ "include/siphog/siphog_client.h"
+ "include/siphog/siphog_client.cpp"
+ "include/halcon/CircleDetectionUI.h" 
+ "include/halcon/CircleDetectionUI.cpp"
+)
 
 
 
@@ -369,6 +423,8 @@ target_include_directories(CMakeProject2 PRIVATE
     ${SDL2_TTF_INCLUDE_DIR}
     ${SQLITE_INCLUDE_DIR}  # Add SQLite include
     ${RAYLIB_INCLUDE_DIR}  # Add this line
+    ${HALCON_INCLUDE_DIR}  # Add this line for HALCON
+     ${STB_IMAGE_DIR}  # Add this line
 )
 
 # Link libraries - directly reference libraries
@@ -382,6 +438,7 @@ target_link_libraries(CMakeProject2 PRIVATE
     ${EZIIO_LIBRARY}  # Added EziMOTIONPlusE library
     ${SDL2_TTF_LIBRARY}  # Added SDL2_ttf library
     nlohmann_json::nlohmann_json
+    ${HALCON_LIBRARIES}  # Add this line for HALCON
     ${RAYLIB_LIBRARY}  # Add this line
         # Raylib Windows dependencies
     winmm     # For timeBeginPeriod/timeEndPeriod
