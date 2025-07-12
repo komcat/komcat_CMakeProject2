@@ -86,7 +86,7 @@
 
 // CMakeProject2.cpp - MachineBlockUI Integration Example
 
-// Add this include at the top with other UI includes
+// Add this include at the top with other UI includesc
 #include "Programming/MachineBlockUI.h"
 #include "Programming/virtual_machine_operations.h"
 #include "Programming/virtual_machine_operations_adapter.h"
