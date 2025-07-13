@@ -1,25 +1,28 @@
-﻿// UICameraPanel.cpp - FIXED VERSION with safer camera feed handling
+﻿// UICameraPanel.cpp - Updated with reorganized left panel layout
 #include "UICameraPanel.h"
+#include "UICameraPanelLiveVideo.h"
+#include "UICameraPanelSingleGrab.h"
+#include "UICameraPanelUtility.h"
 #include "include/camera/CameraManager.h"
 #include "include/camera/pylon_camera_test.h"
 #include "include/camera/pylon_camera.h"
-#include "CameraFeedDisplay.h"
 #include "imgui.h"
 #include <iostream>
-#include <iomanip>
-#include <sstream>
 
 UICameraPanel::UICameraPanel(CameraManager& cameraManager)
   : m_cameraManager(cameraManager) {
-  // Create camera feed display
-  m_feedDisplay = std::make_unique<CameraFeedDisplay>();
+
+  // Create sub-panels
+  m_liveVideoPanel = std::make_unique<UICameraPanelLiveVideo>(cameraManager);
+  m_singleGrabPanel = std::make_unique<UICameraPanelSingleGrab>(cameraManager);
+  m_utilityPanel = std::make_unique<UICameraPanelUtility>(cameraManager);
+
+  std::cout << "[INFO] UICameraPanel created with sub-panels" << std::endl;
 }
 
 UICameraPanel::~UICameraPanel() {
-  // Properly clear the feed display before destruction
-  if (m_feedDisplay) {
-    m_feedDisplay->ClearSource();
-  }
+  // Clear all panels before destruction
+  ClearAllPanels();
 }
 
 void UICameraPanel::RenderUI() {
@@ -33,31 +36,44 @@ void UICameraPanel::RenderUI() {
   float middlePanelWidth = contentSize.x * 0.50f;
   float rightPanelWidth = contentSize.x * 0.25f;
 
-  // Left Panel - Camera List (25% width)
+  // Left Panel - Camera List and Global Controls (25% width)
   ImGui::BeginChild("LeftCameraPanel", ImVec2(leftPanelWidth, contentSize.y), true);
   RenderLeftPanel();
   ImGui::EndChild();
 
   ImGui::SameLine();
 
-  // Middle Panel - Live Camera Feed (50% width)
+  // Middle Panel - Tabbed Camera Feed (50% width)
   ImGui::BeginChild("MiddleCameraPanel", ImVec2(middlePanelWidth, contentSize.y), true);
-  RenderMiddlePanel();
+  RenderMiddlePanelTabs();
   ImGui::EndChild();
 
   ImGui::SameLine();
 
-  // Right Panel - Camera Controls (25% width)
+  // Right Panel - Camera Utility Controls (25% width)
   ImGui::BeginChild("RightCameraPanel", ImVec2(rightPanelWidth, contentSize.y), true);
   RenderRightPanel();
   ImGui::EndChild();
 }
 
 void UICameraPanel::RenderLeftPanel() {
-  ImGui::Text("Camera Controls");
+  ImGui::Text("Camera System");
   ImGui::Separator();
 
-  // Global camera controls
+  // **REORGANIZED: Camera list first, at the top**
+  RenderCameraList();
+
+  // **REORGANIZED: Separator before global controls**
+  ImGui::Separator();
+
+  // **REORGANIZED: Global controls moved to bottom**
+  RenderGlobalControls();
+}
+
+void UICameraPanel::RenderGlobalControls() {
+  ImGui::Text("Global Controls");
+  ImGui::Spacing();
+
   if (ImGui::Button("Initialize All", ImVec2(-1, 30))) {
     m_cameraManager.InitializeAllCameras();
   }
@@ -74,142 +90,50 @@ void UICameraPanel::RenderLeftPanel() {
     m_cameraManager.CaptureImageAll();
   }
 
-  ImGui::Separator();
-
-  // Render camera list
-  RenderCameraList();
+  ImGui::Spacing();
+  ImGui::Text("Total Cameras: %zu", m_cameraManager.GetCameraCount());
 }
 
-void UICameraPanel::RenderMiddlePanel() {
-  ImGui::Text("Live Camera Feed");
-  ImGui::Separator();
-
+void UICameraPanel::RenderMiddlePanelTabs() {
   if (m_selectedCameraId.empty()) {
+    ImGui::Text("Camera Feed Viewer");
+    ImGui::Separator();
     ImGui::Spacing();
     ImGui::Text("No camera selected");
     ImGui::Spacing();
     ImGui::Text("Select a camera from the left panel");
-    ImGui::Text("to view live feed here");
+    ImGui::Text("to view feeds here");
     return;
   }
 
-  // **CRITICAL FIX: Validate camera exists before proceeding**
-  PylonCameraTest* camera = m_cameraManager.GetCamera(m_selectedCameraId);
+  // Get selected camera
+  PylonCameraTest* camera = GetSelectedCamera();
   if (!camera) {
     ImGui::Text("Selected camera not available");
-
-    // **SAFETY: Clear feed display if camera is no longer available**
-    if (m_feedDisplay) {
-      m_feedDisplay->ClearSource();
-    }
+    ClearAllPanels();
     return;
   }
 
-  auto& pylonCamera = camera->GetCamera();
-
-  if (!pylonCamera.IsConnected()) {
-    ImGui::Spacing();
-    ImGui::Text("Camera not connected");
-    ImGui::Spacing();
-    ImGui::Text("Connect the camera to view");
-    ImGui::Text("live video feed");
-
-    // **SAFETY: Clear feed when not connected**
-    if (m_feedDisplay) {
-      m_feedDisplay->ClearSource();
-    }
-    return;
-  }
-
-  // Live feed controls
+  // Camera info header
   ImGui::Text("Camera: %s", m_selectedCameraId.c_str());
-
-  // Toggle live video button - now controls grabbing directly
-  if (ImGui::Button("Toggle Live Video", ImVec2(150, 30))) {
-    if (pylonCamera.IsGrabbing()) {
-      m_cameraManager.StopGrabbing(m_selectedCameraId);
-      // **SAFETY: Clear feed when stopping**
-      if (m_feedDisplay) {
-        m_feedDisplay->ClearSource();
-      }
-    }
-    else {
-      m_cameraManager.StartGrabbing(m_selectedCameraId);
-    }
-  }
-
-  ImGui::SameLine();
-  ImGui::Text("Status: %s", pylonCamera.IsGrabbing() ? "Live" : "Off");
-
-  // Camera feed status
-  ImGui::Separator();
-  ImGui::Text("Feed Status:");
-  ImGui::Text("• Connected: %s", pylonCamera.IsConnected() ? "Yes" : "No");
-  ImGui::Text("• Grabbing: %s", pylonCamera.IsGrabbing() ? "Yes" : "No");
-
-  if (pylonCamera.IsConnected()) {
-    auto settings = pylonCamera.GetCurrentExposureSettings();
-    ImGui::Text("• Exposure: %.0f μs", settings.exposure_time);
-    ImGui::Text("• Gain: %.1f", settings.gain);
-  }
-
   ImGui::Separator();
 
-  // **SAFE CAMERA FEED HANDLING**
+  // **Tab Bar for Live Feed vs Single Frame**
+  if (ImGui::BeginTabBar("CameraFeedTabs", ImGuiTabBarFlags_None)) {
 
-  // Calculate canvas size (leave space for controls below)
-  ImVec2 canvasSize = ImGui::GetContentRegionAvail();
-  canvasSize.y = canvasSize.y - 50; // Leave space for controls below
-
-  // **CRITICAL: Only set camera source when actually grabbing and valid**
-  if (pylonCamera.IsGrabbing() && camera && m_feedDisplay) {
-    try {
-      // Set camera source only when safe to do so
-      m_feedDisplay->SetPylonCameraSource(camera);
-
-      // Render the camera feed
-      m_feedDisplay->RenderToCanvas(canvasSize.x, canvasSize.y);
+    // **TAB 1: Live Video Feed**
+    if (ImGui::BeginTabItem("Live Video")) {
+      m_liveVideoPanel->RenderTab(camera, m_selectedCameraId);
+      ImGui::EndTabItem();
     }
-    catch (const std::exception& e) {
-      // **SAFETY: Handle any exceptions during feed display**
-      std::cout << "[ERROR] Exception in camera feed display: " << e.what() << std::endl;
 
-      // Clear source and show error message
-      m_feedDisplay->ClearSource();
-
-      ImVec2 canvasPos = ImGui::GetCursorScreenPos();
-      ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-      // Error canvas
-      drawList->AddRectFilled(canvasPos,
-        ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
-        IM_COL32(80, 20, 20, 255));
-
-      // Error text
-      std::string errorText = "Camera Feed Error\nPlease restart grabbing";
-      ImVec2 textSize = ImGui::CalcTextSize(errorText.c_str());
-      ImVec2 textPos = ImVec2(canvasPos.x + (canvasSize.x - textSize.x) * 0.5f,
-        canvasPos.y + (canvasSize.y - textSize.y) * 0.5f);
-      drawList->AddText(textPos, IM_COL32(255, 255, 255, 255), errorText.c_str());
-
-      // Advance cursor
-      ImGui::SetCursorScreenPos(ImVec2(canvasPos.x, canvasPos.y + canvasSize.y));
+    // **TAB 2: Single Frame Capture**
+    if (ImGui::BeginTabItem("Single Frame")) {
+      m_singleGrabPanel->RenderTab(camera, m_selectedCameraId);
+      ImGui::EndTabItem();
     }
-  }
-  else {
-    // **SAFETY: Clear source when not grabbing**
-    if (m_feedDisplay) {
-      m_feedDisplay->ClearSource();
 
-      // Render placeholder
-      m_feedDisplay->RenderToCanvas(canvasSize.x, canvasSize.y);
-    }
-  }
-
-  // Quick capture button below canvas
-  ImGui::Spacing();
-  if (ImGui::Button("Capture Image", ImVec2(-1, 30))) {
-    m_cameraManager.CaptureImage(m_selectedCameraId);
+    ImGui::EndTabBar();
   }
 }
 
@@ -218,21 +142,51 @@ void UICameraPanel::RenderRightPanel() {
     RenderNoSelectionMessage();
   }
   else {
-    RenderSelectedCameraUI();
+    PylonCameraTest* camera = GetSelectedCamera();
+    if (camera) {
+      m_utilityPanel->RenderPanel(camera, m_selectedCameraId);
+    }
+    else {
+      ImGui::Text("Selected camera not found");
+    }
   }
 }
 
 void UICameraPanel::RenderCameraList() {
+  ImGui::Text("Camera Selection");
+  ImGui::Spacing();
+
   // Get all camera IDs from the camera manager
   std::vector<std::string> cameraIds = m_cameraManager.GetCameraIds();
 
   if (cameraIds.empty()) {
+    // **ENLARGED PLACEHOLDER for better visibility**
+    ImGui::BeginChild("CameraListPlaceholder", ImVec2(-1, 150), true, ImGuiWindowFlags_NoScrollbar);
+
+    ImGui::Spacing();
     ImGui::Text("No cameras available");
     ImGui::Spacing();
-    ImGui::Text("Use 'Add Camera' to add");
-    ImGui::Text("cameras to the system");
+    ImGui::TextWrapped("Use 'Add Camera' to add cameras to the system");
+    ImGui::Spacing();
+
+    // **Add helpful instructions**
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Steps to add cameras:");
+    ImGui::BulletText("Connect camera hardware");
+    ImGui::BulletText("Use Initialize All button");
+    ImGui::BulletText("Cameras will appear here");
+
+    ImGui::EndChild();
     return;
   }
+
+  // **ENLARGED CAMERA LIST - Calculate height for better visibility**
+  ImVec2 availableSize = ImGui::GetContentRegionAvail();
+  float listHeight = availableSize.y - 200.0f; // Reserve space for global controls
+  listHeight = (std::max)(listHeight, 200.0f);   // Minimum height
+  listHeight = (std::min)(listHeight, 400.0f);   // Maximum height
+
+  // **SCROLLABLE CAMERA LIST with increased height**
+  ImGui::BeginChild("CameraListChild", ImVec2(-1, listHeight), true);
 
   for (const std::string& cameraId : cameraIds) {
     ImGui::PushID(cameraId.c_str());
@@ -240,14 +194,25 @@ void UICameraPanel::RenderCameraList() {
     // Get camera status for display
     auto status = m_cameraManager.GetCameraStatus(cameraId);
 
-    // Connection status indicator
+    // **ENLARGED SELECTABLE ITEMS for easier selection**
+    bool isSelected = (m_selectedCameraId == cameraId);
+
+    // **LARGER SELECTABLE HEIGHT for easier clicking**
+    if (ImGui::Selectable(cameraId.c_str(), isSelected, ImGuiSelectableFlags_None, ImVec2(0, 25))) {
+      OnCameraSelectionChanged(cameraId);
+    }
+
+    // **STATUS INDICATOR on same line but more prominent**
+    ImGui::SameLine();
+
+    // Connection status indicator with better colors
     ImVec4 statusColor;
     std::string statusText;
 
     if (status.connected) {
       if (status.grabbing) {
-        statusColor = ImVec4(0, 1, 0, 1);     // Green - grabbing
-        statusText = "[GRAB]";
+        statusColor = ImVec4(0, 1, 0, 1);     // Bright green - grabbing
+        statusText = "[LIVE]";
       }
       else {
         statusColor = ImVec4(0, 0.8f, 0, 1);  // Light green - connected
@@ -255,265 +220,92 @@ void UICameraPanel::RenderCameraList() {
       }
     }
     else {
-      statusColor = ImVec4(0.8f, 0, 0, 1);    // Red - disconnected
+      statusColor = ImVec4(1, 0.3f, 0.3f, 1); // Bright red - disconnected
       statusText = "[DISC]";
     }
 
-    // Create selectable item for camera
-    bool isSelected = (m_selectedCameraId == cameraId);
-    if (ImGui::Selectable(cameraId.c_str(), isSelected)) {
-      // **SAFETY: Clear feed when switching cameras**
-      if (m_selectedCameraId != cameraId && m_feedDisplay) {
-        m_feedDisplay->ClearSource();
-      }
-      m_selectedCameraId = cameraId;
-    }
-
-    // Show status on same line
-    ImGui::SameLine();
     ImGui::TextColored(statusColor, "%s", statusText.c_str());
 
-    // Right-click context menu (simplified to avoid popup issues)
+    // **TOOLTIP with more information on hover**
+    if (ImGui::IsItemHovered()) {
+      ImGui::BeginTooltip();
+      ImGui::Text("Camera: %s", cameraId.c_str());
+      ImGui::Text("Connected: %s", status.connected ? "Yes" : "No");
+      ImGui::Text("Grabbing: %s", status.grabbing ? "Yes" : "No");
+      if (status.connected) {
+        ImGui::Text("Exposure: %.0f μs", status.currentExposure.exposure_time);
+        ImGui::Text("Gain: %.1f", status.currentExposure.gain);
+      }
+      ImGui::Separator();
+      ImGui::Text("Click to select camera");
+      ImGui::Text("Right-click for context menu");
+      ImGui::EndTooltip();
+    }
+
+    // **RIGHT-CLICK CONTEXT MENU**
     if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
       ImGui::OpenPopup(("context_" + cameraId).c_str());
     }
 
     if (ImGui::BeginPopup(("context_" + cameraId).c_str())) {
+      ImGui::Text("Camera: %s", cameraId.c_str());
+      ImGui::Separator();
+
       if (ImGui::MenuItem("Connect")) {
         m_cameraManager.ConnectCamera(cameraId);
       }
       if (ImGui::MenuItem("Disconnect")) {
         m_cameraManager.DisconnectCamera(cameraId);
-        // **SAFETY: Clear feed if disconnecting selected camera**
-        if (m_selectedCameraId == cameraId && m_feedDisplay) {
-          m_feedDisplay->ClearSource();
+        // Clear panels if disconnecting selected camera
+        if (m_selectedCameraId == cameraId) {
+          ClearAllPanels();
         }
       }
       ImGui::Separator();
+      if (ImGui::MenuItem("Start Grabbing")) {
+        m_cameraManager.StartGrabbing(cameraId);
+      }
+      if (ImGui::MenuItem("Stop Grabbing")) {
+        m_cameraManager.StopGrabbing(cameraId);
+      }
+      if (ImGui::MenuItem("Capture Image")) {
+        m_cameraManager.CaptureImage(cameraId);
+      }
+      ImGui::Separator();
       if (ImGui::MenuItem("Remove Camera")) {
-        // **SAFETY: Clear feed if removing selected camera**
-        if (m_selectedCameraId == cameraId && m_feedDisplay) {
-          m_feedDisplay->ClearSource();
-        }
-
-        m_cameraManager.RemoveCamera(cameraId);
-
+        // Clear panels if removing selected camera
         if (m_selectedCameraId == cameraId) {
+          ClearAllPanels();
           m_selectedCameraId = "";
         }
+        m_cameraManager.RemoveCamera(cameraId);
       }
       ImGui::EndPopup();
     }
 
+    // **ADD SPACING between camera entries for better readability**
+    ImGui::Spacing();
+
     ImGui::PopID();
   }
-}
 
-void UICameraPanel::RenderSelectedCameraUI() {
-  PylonCameraTest* camera = m_cameraManager.GetCamera(m_selectedCameraId);
-  if (!camera) {
-    ImGui::Text("Selected camera not found");
-    return;
-  }
+  ImGui::EndChild();
 
-  // Render all camera control sections
-  RenderCameraHeader(camera);
-  ImGui::Separator();
+  // **SHOW SELECTED CAMERA INFO below the list**
+  if (!m_selectedCameraId.empty()) {
+    ImGui::Separator();
+    ImGui::Text("Selected: %s", m_selectedCameraId.c_str());
 
-  RenderConnectionControls(camera);
-  ImGui::Separator();
-
-  RenderCameraStatus(camera);
-  ImGui::Separator();
-
-  RenderGrabbingControls(camera);
-  ImGui::Separator();
-
-  RenderExposureControls(camera);
-  ImGui::Separator();
-
-  RenderImageControls(camera);
-  ImGui::Separator();
-
-  RenderUtilityControls(camera);
-}
-
-void UICameraPanel::RenderCameraHeader(PylonCameraTest* camera) {
-  ImGui::SetWindowFontScale(1.2f);
-  ImGui::Text("Camera: %s", m_selectedCameraId.c_str());
-  ImGui::SetWindowFontScale(1.0f);
-
-  auto& pylonCamera = camera->GetCamera();
-  if (pylonCamera.IsConnected()) {
-    std::string deviceInfo = pylonCamera.GetDeviceInfo();
-    ImGui::Text("Device: %s", deviceInfo.c_str());
-  }
-  else {
-    ImGui::Text("Device: Not connected");
-  }
-}
-
-void UICameraPanel::RenderConnectionControls(PylonCameraTest* camera) {
-  ImGui::Text("Connection Controls");
-
-  auto& pylonCamera = camera->GetCamera();
-
-  if (!pylonCamera.IsConnected()) {
-    if (ImGui::Button("Connect Camera", ImVec2(150, 30))) {
-      m_cameraManager.ConnectCamera(m_selectedCameraId);
+    auto status = m_cameraManager.GetCameraStatus(m_selectedCameraId);
+    if (status.connected) {
+      ImGui::SameLine();
+      ImGui::TextColored(ImVec4(0, 1, 0, 1), status.grabbing ? "[LIVE]" : "[READY]");
+    }
+    else {
+      ImGui::SameLine();
+      ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "[DISCONNECTED]");
     }
   }
-  else {
-    if (ImGui::Button("Disconnect Camera", ImVec2(150, 30))) {
-      // **SAFETY: Clear feed before disconnecting**
-      if (m_feedDisplay) {
-        m_feedDisplay->ClearSource();
-      }
-      m_cameraManager.DisconnectCamera(m_selectedCameraId);
-    }
-
-    ImGui::SameLine();
-    if (ImGui::Button("Reconnect", ImVec2(150, 30))) {
-      // **SAFETY: Clear feed during reconnect**
-      if (m_feedDisplay) {
-        m_feedDisplay->ClearSource();
-      }
-      pylonCamera.TryReconnect();
-    }
-  }
-}
-
-void UICameraPanel::RenderCameraStatus(PylonCameraTest* camera) {
-  ImGui::Text("Camera Status");
-
-  auto& pylonCamera = camera->GetCamera();
-
-  // Status indicators
-  ImGui::Text("Connected: %s", pylonCamera.IsConnected() ? "Yes" : "No");
-  ImGui::Text("Grabbing: %s", pylonCamera.IsGrabbing() ? "Yes" : "No");
-  ImGui::Text("Device Removed: %s", pylonCamera.IsCameraDeviceRemoved() ? "Yes" : "No");
-
-  if (pylonCamera.IsConnected()) {
-    // Show current exposure settings
-    auto settings = pylonCamera.GetCurrentExposureSettings();
-    ImGui::Text("Current Exposure: %.0f μs", settings.exposure_time);
-    ImGui::Text("Current Gain: %.1f", settings.gain);
-    ImGui::Text("Auto Exposure: %s", settings.exposure_auto ? "On" : "Off");
-    ImGui::Text("Auto Gain: %s", settings.gain_auto ? "On" : "Off");
-  }
-}
-
-void UICameraPanel::RenderGrabbingControls(PylonCameraTest* camera) {
-  ImGui::Text("Image Acquisition");
-
-  auto& pylonCamera = camera->GetCamera();
-
-  if (!pylonCamera.IsConnected()) {
-    ImGui::Text("Camera not connected");
-    return;
-  }
-
-  if (!pylonCamera.IsGrabbing()) {
-    if (ImGui::Button("Start Grabbing", ImVec2(150, 30))) {
-      m_cameraManager.StartGrabbing(m_selectedCameraId);
-    }
-
-    ImGui::SameLine();
-    if (ImGui::Button("Grab Single Frame", ImVec2(150, 30))) {
-      camera->GrabSingleFrame();
-    }
-  }
-  else {
-    if (ImGui::Button("Stop Grabbing", ImVec2(150, 30))) {
-      // **SAFETY: Clear feed before stopping grabbing**
-      if (m_feedDisplay) {
-        m_feedDisplay->ClearSource();
-      }
-      m_cameraManager.StopGrabbing(m_selectedCameraId);
-    }
-  }
-}
-
-void UICameraPanel::RenderExposureControls(PylonCameraTest* camera) {
-  ImGui::Text("Exposure Controls");
-
-  auto& pylonCamera = camera->GetCamera();
-
-  if (!pylonCamera.IsConnected()) {
-    ImGui::Text("Camera not connected");
-    return;
-  }
-
-  ImGui::Spacing();
-  ImGui::Text("Manual Exposure Settings");
-
-  // Custom exposure controls
-  ImGui::SliderFloat("Exposure Time (μs)", &m_customExposureTime, 100.0f, 10000.0f, "%.0f");
-  ImGui::SliderFloat("Gain", &m_customGain, 0.0f, 10.0f, "%.1f");
-
-  ImGui::Checkbox("Auto Exposure", &m_exposureAuto);
-  ImGui::SameLine();
-  ImGui::Checkbox("Auto Gain", &m_gainAuto);
-
-  if (ImGui::Button("Apply Settings", ImVec2(150, 30))) {
-    PylonCamera::ExposureSettings settings;
-    settings.exposure_time = m_customExposureTime;
-    settings.gain = m_customGain;
-    settings.exposure_auto = m_exposureAuto;
-    settings.gain_auto = m_gainAuto;
-
-    m_cameraManager.ApplyExposureSettings(m_selectedCameraId, settings);
-  }
-
-  ImGui::SameLine();
-  if (ImGui::Button("Read Current", ImVec2(150, 30))) {
-    auto settings = pylonCamera.GetCurrentExposureSettings();
-    m_customExposureTime = settings.exposure_time;
-    m_customGain = settings.gain;
-    m_exposureAuto = settings.exposure_auto;
-    m_gainAuto = settings.gain_auto;
-  }
-}
-
-void UICameraPanel::RenderImageControls(PylonCameraTest* camera) {
-  ImGui::Text("Image Controls");
-
-  auto& pylonCamera = camera->GetCamera();
-
-  if (!pylonCamera.IsConnected()) {
-    ImGui::Text("Camera not connected");
-    return;
-  }
-
-  if (ImGui::Button("Capture Image", ImVec2(150, 30))) {
-    m_cameraManager.CaptureImage(m_selectedCameraId);
-  }
-
-  ImGui::SameLine();
-  if (ImGui::Button("Toggle View Window", ImVec2(150, 30))) {
-    camera->ToggleWindow();
-  }
-
-  // Show if camera window is visible
-  ImGui::Text("View Window: %s", camera->IsVisible() ? "Open" : "Closed");
-}
-
-void UICameraPanel::RenderUtilityControls(PylonCameraTest* camera) {
-  ImGui::Text("Utility Controls");
-
-  auto& pylonCamera = camera->GetCamera();
-
-  if (ImGui::Button("Debug Camera Settings", ImVec2(200, 30))) {
-    pylonCamera.DebugCameraSettings();
-  }
-
-  // Access to exposure manager
-  if (ImGui::Button("Open Exposure Manager", ImVec2(200, 30))) {
-    camera->GetExposureManager().ToggleWindow();
-  }
-
-  // Enable debug mode
-  ImGui::Checkbox("Enable Debug Mode", &camera->enableDebug);
 }
 
 void UICameraPanel::RenderNoSelectionMessage() {
@@ -536,29 +328,74 @@ void UICameraPanel::RenderNoSelectionMessage() {
   ImGui::BulletText("Exposure and gain control per camera");
   ImGui::BulletText("Quick exposure presets for different operations");
   ImGui::BulletText("Image capture and save functionality");
+  ImGui::BulletText("Separate live video and single frame views");
 
   ImGui::Spacing();
-  ImGui::Text("Supported Operations:");
-  ImGui::BulletText("Connect/Disconnect individual cameras");
-  ImGui::BulletText("Start/Stop continuous image grabbing");
-  ImGui::BulletText("Single frame capture");
-  ImGui::BulletText("Apply exposure settings by node position");
-  ImGui::BulletText("Manual exposure and gain adjustment");
-  ImGui::BulletText("Synchronized multi-camera capture");
+  ImGui::Text("Interface Layout:");
+  ImGui::BulletText("Left Panel - Camera list (top) and global controls (bottom)");
+  ImGui::BulletText("Middle Panel - Live video and single frame tabs");
+  ImGui::BulletText("Right Panel - Camera settings and utilities");
 
   ImGui::Spacing();
-  ImGui::Text("Use the buttons in the left panel to control all cameras");
-  ImGui::Text("at once, or select individual cameras for specific control.");
+  ImGui::Text("Tabbed Interface:");
+  ImGui::BulletText("Live Video - Real-time camera feed");
+  ImGui::BulletText("Single Frame - Captured still images");
+  ImGui::BulletText("Independent controls for each mode");
 
   ImGui::Spacing();
   ImGui::Text("Camera Count: %zu", m_cameraManager.GetCameraCount());
 }
 
+void UICameraPanel::OnCameraSelectionChanged(const std::string& newCameraId) {
+  if (m_selectedCameraId == newCameraId) {
+    return; // No change
+  }
+
+  // Clear previous selection
+  if (!m_selectedCameraId.empty()) {
+    ClearAllPanels();
+  }
+
+  // Set new selection
+  m_selectedCameraId = newCameraId;
+
+  // Update all panels with new camera
+  if (!m_selectedCameraId.empty()) {
+    PylonCameraTest* camera = GetSelectedCamera();
+    if (camera) {
+      m_liveVideoPanel->SetSelectedCamera(camera, m_selectedCameraId);
+      m_singleGrabPanel->SetSelectedCamera(camera, m_selectedCameraId);
+      m_utilityPanel->SetSelectedCamera(camera, m_selectedCameraId);
+
+      std::cout << "[INFO] Camera selection changed to: " << m_selectedCameraId << std::endl;
+    }
+  }
+}
+
+void UICameraPanel::ClearAllPanels() {
+  if (m_liveVideoPanel) {
+    m_liveVideoPanel->ClearCamera();
+  }
+  if (m_singleGrabPanel) {
+    m_singleGrabPanel->ClearCamera();
+  }
+  if (m_utilityPanel) {
+    m_utilityPanel->ClearCamera();
+  }
+}
+
+PylonCameraTest* UICameraPanel::GetSelectedCamera() const {
+  if (m_selectedCameraId.empty()) {
+    return nullptr;
+  }
+  return m_cameraManager.GetCamera(m_selectedCameraId);
+}
+
 void UICameraPanel::ToggleWindow() {
   m_showWindow = !m_showWindow;
 
-  // **SAFETY: Clear feed when hiding window**
-  if (!m_showWindow && m_feedDisplay) {
-    m_feedDisplay->ClearSource();
+  // Clear all panels when hiding window
+  if (!m_showWindow) {
+    ClearAllPanels();
   }
 }

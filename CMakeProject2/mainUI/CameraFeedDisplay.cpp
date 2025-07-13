@@ -1,4 +1,4 @@
-﻿// CameraFeedDisplay.cpp - SIMPLE SAFE VERSION without framebuffers
+﻿// CameraFeedDisplay.cpp - FIXED VERSION for proper texture initialization
 #include "CameraFeedDisplay.h"
 #include "include/camera/pylon_camera_test.h"
 #include "include/camera/pylon_camera.h"
@@ -20,11 +20,8 @@ CameraFeedDisplay::~CameraFeedDisplay() {
 }
 
 void CameraFeedDisplay::ClearSource() {
-  //std::cout << "[DEBUG] ClearSource called" << std::endl;
-
   // Only clear if we're actually changing sources
   if (m_sourceType != SourceType::NONE) {
-    //std::cout << "[DEBUG] Actually clearing source and texture" << std::endl;
     CleanupTexture();
   }
 
@@ -68,26 +65,16 @@ bool CameraFeedDisplay::UpdateFromPylonCamera() {
   auto& pylonCamera = m_pylonCamera->GetCamera();
 
   // Check if camera is in a state to provide frames
-  if (!pylonCamera.IsConnected() || !pylonCamera.IsGrabbing()) {
+  if (!pylonCamera.IsConnected()) {
     return false;
   }
 
-  // **RATE LIMITING: Only update every 50ms (20fps)**
-  static auto lastUpdate = std::chrono::steady_clock::now();
-  auto now = std::chrono::steady_clock::now();
-  auto timeSinceUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate);
-
-  if (timeSinceUpdate.count() < 50 && m_hasValidFrame) {
-    return true; // Skip this update, use cached frame
+  // **FIX 1: Force camera to update its texture if grabbing**
+  if (pylonCamera.IsGrabbing()) {
+    m_pylonCamera->UpdateTextureIfReady();
   }
 
-  lastUpdate = now;
-
-  // **SIMPLE APPROACH: Just use the camera's own texture directly**
-  // Force camera to update its internal texture first
-  m_pylonCamera->UpdateTextureIfReady();
-
-  // Check if camera has a valid texture
+  // **FIX 2: Check if camera has valid texture**
   if (!m_pylonCamera->HasValidTexture()) {
     return m_hasValidFrame; // Keep previous state
   }
@@ -101,24 +88,59 @@ bool CameraFeedDisplay::UpdateFromPylonCamera() {
     return m_hasValidFrame;
   }
 
-  // **ULTRA SIMPLE: Just use the camera's texture directly**
-  // No copying, no complex OpenGL operations
-  m_textureID = cameraTextureID;
-  m_frameWidth = width;
-  m_frameHeight = height;
-  m_textureInitialized = true;
-  m_hasValidFrame = true;
-  m_frameCount++;
-  m_lastFrameTime = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+  // **FIX 3: Rate limiting but allow initial setup**
+  static auto lastUpdate = std::chrono::steady_clock::now();
+  auto now = std::chrono::steady_clock::now();
+  auto timeSinceUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate);
 
-  //std::cout << "[DEBUG] Using camera texture directly ID=" << cameraTextureID    << " size=" << width << "x" << height << std::endl;
+  // Skip rate limiting if we don't have a valid frame yet (initial setup)
+  bool needsInitialSetup = !m_hasValidFrame || !m_textureInitialized;
+  bool rateLimitExceeded = (timeSinceUpdate.count() < 50) && !needsInitialSetup;
 
-  return true;
+  if (rateLimitExceeded) {
+    return true; // Skip this update, use cached frame
+  }
+
+  lastUpdate = now;
+
+  //std::cout << "[DEBUG] UpdateFromPylonCamera: Camera texture ID=" << cameraTextureID    << " size=" << width << "x" << height    << " needsSetup=" << (needsInitialSetup ? "true" : "false") << std::endl;
+
+  // **FIX 4: Create our own texture that references camera data properly**
+  if (!m_textureInitialized || m_textureID != cameraTextureID) {
+
+    // Clean up old texture if we had one
+    if (m_textureInitialized && m_textureID != 0 && m_textureID != cameraTextureID) {
+      glDeleteTextures(1, &m_textureID);
+      //std::cout << "[DEBUG] Deleted old display texture" << std::endl;
+    }
+
+    // **CRITICAL FIX: Use camera's texture directly**
+    m_textureID = cameraTextureID;
+    m_textureInitialized = true;
+    m_frameWidth = width;
+    m_frameHeight = height;
+    m_hasValidFrame = true;
+    m_frameCount++;
+    m_lastFrameTime = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+
+    //std::cout << "[DEBUG] Linked to camera texture - Display texture ID now: " << m_textureID << std::endl;
+    return true;
+  }
+
+  // **FIX 5: Update frame statistics even if texture ID hasn't changed**
+  if (m_textureID == cameraTextureID && width == m_frameWidth && height == m_frameHeight) {
+    m_hasValidFrame = true;
+    m_frameCount++;
+    m_lastFrameTime = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    return true;
+  }
+
+  return m_hasValidFrame;
 }
 
 void CameraFeedDisplay::RenderToCanvas(float canvasWidth, float canvasHeight) {
-  // **SIMPLE: Just try to update texture once per render**
-  UpdateTexture();
+  // **FIX 6: Always try to update texture, especially on first renders**
+  bool textureUpdated = UpdateTexture();
 
   if (HasValidTexture() && m_sourceType != SourceType::NONE) {
     // Calculate display dimensions
@@ -131,8 +153,20 @@ void CameraFeedDisplay::RenderToCanvas(float canvasWidth, float canvasHeight) {
     imagePos.y += offsetY;
     ImGui::SetCursorPos(imagePos);
 
-    // **SIMPLE: Display using the camera's texture directly**
-    ImGui::Image((ImTextureID)(intptr_t)m_textureID, ImVec2(displayWidth, displayHeight));
+    // **VERIFY TEXTURE IS STILL VALID BEFORE RENDERING**
+    GLboolean isTexture = glIsTexture(m_textureID);
+    if (isTexture) {
+      // Display using the camera's texture
+      ImGui::Image((ImTextureID)(intptr_t)m_textureID, ImVec2(displayWidth, displayHeight));
+    }
+    else {
+      std::cout << "[ERROR] Texture became invalid during render!" << std::endl;
+      // Reset texture state and show placeholder
+      m_textureInitialized = false;
+      m_hasValidFrame = false;
+      RenderPlaceholder(canvasWidth, canvasHeight, "Texture Error\nRetry camera operation", IM_COL32(255, 128, 0, 255));
+      return;
+    }
 
     // Reset cursor to bottom of canvas
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offsetY);
@@ -157,9 +191,13 @@ void CameraFeedDisplay::RenderToCanvas(float canvasWidth, float canvasHeight) {
           statusText = "Camera Connected\nStart grabbing to view feed";
           color = IM_COL32(0, 255, 255, 255);
         }
-        else {
-          statusText = "Waiting for frames...\nCamera is grabbing";
+        else if (!m_pylonCamera->HasValidTexture()) {
+          statusText = "Camera Grabbing\nWaiting for first frame...";
           color = IM_COL32(0, 255, 0, 255);
+        }
+        else {
+          statusText = "Initializing Display...\nPlease wait";
+          color = IM_COL32(255, 255, 0, 255);
         }
       }
     }
@@ -172,21 +210,19 @@ void CameraFeedDisplay::RenderToCanvas(float canvasWidth, float canvasHeight) {
 }
 
 bool CameraFeedDisplay::InitializeTexture() {
-  // **SIMPLE: We don't create our own texture anymore**
-  // We just use the camera's texture directly
+  // We use the camera's texture directly, so no initialization needed
   return true;
 }
 
 void CameraFeedDisplay::CleanupTexture() {
-  // **SIMPLE: We don't own the texture anymore, so don't delete it**
-  // Just reset our state
+  // **FIX 7: Don't delete camera's texture, just reset our references**
   m_textureID = 0;
   m_textureInitialized = false;
   m_hasValidFrame = false;
   m_frameWidth = 0;
   m_frameHeight = 0;
 
-  //std::cout << "[DEBUG] Cleaned up texture state (no deletion needed)" << std::endl;
+  //std::cout << "[DEBUG] Cleaned up texture state (no deletion of camera texture)" << std::endl;
 }
 
 void CameraFeedDisplay::RenderPlaceholder(float canvasWidth, float canvasHeight, const std::string& text, uint32_t color) {

@@ -733,6 +733,8 @@ bool PylonCameraTest::SaveImageToDisk(const std::string& filename)
   }
 }
 
+// Replace the GrabSingleFrame method in pylon_camera_test.cpp with this enhanced version:
+
 bool PylonCameraTest::GrabSingleFrame()
 {
   if (!m_camera.IsConnected()) {
@@ -780,32 +782,51 @@ bool PylonCameraTest::GrabSingleFrame()
     if (grabResult && grabResult->GrabSucceeded()) {
       std::cout << "Single frame grabbed successfully" << std::endl;
 
-      // Lock mutex while updating the image
-      std::lock_guard<std::mutex> lock(m_imageMutex);
+      // **ENHANCED: Process the frame immediately and create texture**
+      {
+        // Lock mutex while updating the image
+        std::lock_guard<std::mutex> lock(m_imageMutex);
 
-      // Store the grab result
-      m_ptrGrabResult = grabResult;
+        // Store the grab result
+        m_ptrGrabResult = grabResult;
 
-      // Update frame counter and dimensions
-      m_frameCounter++;
-      m_lastFrameWidth = grabResult->GetWidth();
-      m_lastFrameHeight = grabResult->GetHeight();
-      m_lastFrameTimestamp = grabResult->GetTimeStamp();
+        // Update frame counter and dimensions
+        m_frameCounter++;
+        m_lastFrameWidth = grabResult->GetWidth();
+        m_lastFrameHeight = grabResult->GetHeight();
+        m_lastFrameTimestamp = grabResult->GetTimeStamp();
 
-      // Convert the grabbed buffer to a pylon image
-      if (m_pylonImage.IsValid()) {
-        m_pylonImage.Release();
+        // Convert the grabbed buffer to a pylon image
+        if (m_pylonImage.IsValid()) {
+          m_pylonImage.Release();
+        }
+        m_pylonImage.AttachGrabResultBuffer(m_ptrGrabResult);
+
+        // Convert to a format suitable for display
+        if (m_formatConverterOutput.IsValid()) {
+          m_formatConverterOutput.Release();
+        }
+        m_formatConverter.Convert(m_formatConverterOutput, m_pylonImage);
+
+        // Signal that a new frame is ready
+        m_newFrameReady = true;
+        m_hasValidImage = true;
+
+        std::cout << "[DEBUG] Single frame processed: " << m_lastFrameWidth << "x" << m_lastFrameHeight << std::endl;
       }
-      m_pylonImage.AttachGrabResultBuffer(m_ptrGrabResult);
 
-      // Convert to a format suitable for display
-      if (m_formatConverterOutput.IsValid()) {
-        m_formatConverterOutput.Release();
+      // **CRITICAL: Force texture creation immediately**
+      std::cout << "[DEBUG] Creating texture for single frame..." << std::endl;
+
+      // Force texture update multiple times if needed
+      for (int attempt = 0; attempt < 5; attempt++) {
+        if (CreateTexture()) {
+          std::cout << "[DEBUG] Single frame texture created successfully on attempt " << (attempt + 1) << std::endl;
+          std::cout << "[DEBUG] Texture ID: " << m_textureID << ", Valid: " << (m_textureInitialized && m_hasValidImage) << std::endl;
+          break;
+        }
+        std::cout << "[DEBUG] Texture creation failed, attempt " << (attempt + 1) << std::endl;
       }
-      m_formatConverter.Convert(m_formatConverterOutput, m_pylonImage);
-
-      // Signal that a new frame is ready
-      m_newFrameReady = true;
 
       return true;
     }
@@ -823,6 +844,9 @@ bool PylonCameraTest::GrabSingleFrame()
     return false;
   }
 }
+
+
+
 
 bool PylonCameraTest::NeedsTextureCleanup() const {
   return m_needsTextureCleanup && m_textureInitialized;
@@ -934,71 +958,58 @@ bool PylonCameraTest::GetLatestFrameData(uint8_t*& imageData, uint32_t& width, u
 
 // Replace UpdateTextureIfReady() in pylon_camera_test.cpp with this version:
 
+// Replace UpdateTextureIfReady() in pylon_camera_test.cpp with this version:
+
 void PylonCameraTest::UpdateTextureIfReady() {
-  std::cout << "[DEBUG] UpdateTextureIfReady: m_newFrameReady = " << (m_newFrameReady ? "true" : "false") << std::endl;
+  // **FIX: Always try to update texture when grabbing, like the working camera_window.cpp**
 
-  // CRITICAL FIX: Always try to update texture when grabbing, like the working camera_window.cpp
-  // Don't just check m_newFrameReady once - the camera is continuously grabbing frames
+  if (!m_camera.IsGrabbing()) {
+    return; // Only update when actively grabbing
+  }
 
-  if (m_camera.IsGrabbing()) {
-    std::lock_guard<std::mutex> lock(m_imageMutex);
+  std::lock_guard<std::mutex> lock(m_imageMutex);
 
-    // Check if we have valid image data (similar to camera_window.cpp logic)
-    if (m_formatConverterOutput.IsValid()) {
-      uint32_t width = m_formatConverterOutput.GetWidth();
-      uint32_t height = m_formatConverterOutput.GetHeight();
-      const uint8_t* pImageBuffer = static_cast<uint8_t*>(m_formatConverterOutput.GetBuffer());
+  // Check if we have valid image data (similar to camera_window.cpp logic)
+  if (m_formatConverterOutput.IsValid()) {
+    uint32_t width = m_formatConverterOutput.GetWidth();
+    uint32_t height = m_formatConverterOutput.GetHeight();
+    const uint8_t* pImageBuffer = static_cast<uint8_t*>(m_formatConverterOutput.GetBuffer());
 
-      if (pImageBuffer && width > 0 && height > 0) {
-        std::cout << "[DEBUG] UpdateTextureIfReady: Updating texture with current frame data" << std::endl;
+    if (pImageBuffer && width > 0 && height > 0) {
+      // Update texture with current frame data (similar to camera_window UpdateTextureFromBuffer)
+      if (!m_textureInitialized) {
+        glGenTextures(1, &m_textureID);
+        glBindTexture(GL_TEXTURE_2D, m_textureID);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
+        m_textureInitialized = true;
+        m_lastTextureWidth = width;
+        m_lastTextureHeight = height;
 
-        // Update texture with current frame data (similar to camera_window UpdateTextureFromBuffer)
-        if (!m_textureInitialized) {
-          glGenTextures(1, &m_textureID);
-          glBindTexture(GL_TEXTURE_2D, m_textureID);
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-          glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-          glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
-          m_textureInitialized = true;
-          m_lastTextureWidth = width;
-          m_lastTextureHeight = height;
-          std::cout << "[DEBUG] UpdateTextureIfReady: Created new texture" << std::endl;
-        }
-        else {
-          glBindTexture(GL_TEXTURE_2D, m_textureID);
-          if (width != m_lastTextureWidth || height != m_lastTextureHeight) {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
-            m_lastTextureWidth = width;
-            m_lastTextureHeight = height;
-            std::cout << "[DEBUG] UpdateTextureIfReady: Reallocated texture" << std::endl;
-          }
-          else {
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
-            std::cout << "[DEBUG] UpdateTextureIfReady: Updated existing texture" << std::endl;
-          }
-        }
-
-        glBindTexture(GL_TEXTURE_2D, 0);
-        m_hasValidImage = true;
-
-        // Update frame dimensions for external access
-        m_lastFrameWidth = width;
-        m_lastFrameHeight = height;
-
-        std::cout << "[DEBUG] UpdateTextureIfReady: Texture updated successfully" << std::endl;
+        std::cout << "[DEBUG] UpdateTextureIfReady: Created new texture ID " << m_textureID << " for live video" << std::endl;
       }
       else {
-        std::cout << "[DEBUG] UpdateTextureIfReady: No valid image buffer" << std::endl;
+        glBindTexture(GL_TEXTURE_2D, m_textureID);
+        if (width != m_lastTextureWidth || height != m_lastTextureHeight) {
+          glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
+          m_lastTextureWidth = width;
+          m_lastTextureHeight = height;
+        }
+        else {
+          glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pImageBuffer);
+        }
       }
+
+      glBindTexture(GL_TEXTURE_2D, 0);
+      m_hasValidImage = true;
+
+      // Update frame dimensions for external access
+      m_lastFrameWidth = width;
+      m_lastFrameHeight = height;
     }
-    else {
-      std::cout << "[DEBUG] UpdateTextureIfReady: formatConverterOutput not valid" << std::endl;
-    }
-  }
-  else {
-    std::cout << "[DEBUG] UpdateTextureIfReady: Camera not grabbing" << std::endl;
   }
 }

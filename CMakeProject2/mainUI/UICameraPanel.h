@@ -1,4 +1,4 @@
-// UICameraPanel.h - UI panel for managing multiple cameras
+// UICameraPanel.h - Main Camera Panel coordinating sub-panels
 #pragma once
 
 #include <memory>
@@ -8,7 +8,9 @@
 // Forward declarations
 class CameraManager;
 class PylonCameraTest;
-class CameraFeedDisplay;
+class UICameraPanelLiveVideo;
+class UICameraPanelSingleGrab;
+class UICameraPanelUtility;
 
 class UICameraPanel {
 public:
@@ -27,6 +29,10 @@ public:
   bool IsVisible() const { return m_showWindow; }
   void SetVisible(bool visible) { m_showWindow = visible; }
 
+  // Camera selection management
+  const std::string& GetSelectedCameraId() const { return m_selectedCameraId; }
+  PylonCameraTest* GetSelectedCamera() const;
+
 private:
   // Reference to camera manager
   CameraManager& m_cameraManager;
@@ -35,31 +41,22 @@ private:
   bool m_showWindow = true;
   std::string m_selectedCameraId;
 
-  // Camera feed display
-  std::unique_ptr<CameraFeedDisplay> m_feedDisplay;
+  // **NEW: Sub-panel components**
+  std::unique_ptr<UICameraPanelLiveVideo> m_liveVideoPanel;
+  std::unique_ptr<UICameraPanelSingleGrab> m_singleGrabPanel;
+  std::unique_ptr<UICameraPanelUtility> m_utilityPanel;
 
   // Panel rendering methods
-  void RenderLeftPanel();   // List of cameras
-  void RenderMiddlePanel(); // Live camera feed
-  void RenderRightPanel();  // Selected camera interface
+  void RenderLeftPanel();         // Camera list and global controls
+  void RenderMiddlePanelTabs();   // Tabbed camera feed display
+  void RenderRightPanel();       // Selected camera interface
 
   // Helper methods
   void RenderCameraList();
-  void RenderSelectedCameraUI();
+  void RenderGlobalControls();
   void RenderNoSelectionMessage();
 
-  // Embedded UI rendering methods
-  void RenderCameraHeader(PylonCameraTest* camera);
-  void RenderConnectionControls(PylonCameraTest* camera);
-  void RenderCameraStatus(PylonCameraTest* camera);
-  void RenderGrabbingControls(PylonCameraTest* camera);
-  void RenderExposureControls(PylonCameraTest* camera);
-  void RenderImageControls(PylonCameraTest* camera);
-  void RenderUtilityControls(PylonCameraTest* camera);
-
-  // UI state for exposure controls
-  float m_customExposureTime = 1000.0f;  // microseconds
-  float m_customGain = 1.0f;              // 0-10 scale
-  bool m_exposureAuto = false;
-  bool m_gainAuto = false;
+  // Camera selection handling
+  void OnCameraSelectionChanged(const std::string& newCameraId);
+  void ClearAllPanels();
 };
