@@ -1,4 +1,4 @@
-﻿// UICameraPanelLiveVideo.cpp - Live Video Feed Panel Implementation
+﻿// UICameraPanelLiveVideo.cpp - Reorganized with right status column
 #include "UICameraPanelLiveVideo.h"
 #include "include/camera/CameraManager.h"
 #include "include/camera/pylon_camera_test.h"
@@ -36,18 +36,37 @@ void UICameraPanelLiveVideo::RenderTab(PylonCameraTest* camera, const std::strin
   // Update internal state
   UpdateGrabbingState();
 
-  // Render controls
+  // **NEW LAYOUT: Split the tab into two columns**
+  ImVec2 availableSize = ImGui::GetContentRegionAvail();
+  float leftColumnWidth = availableSize.x * 0.75f;  // 75% for video feed
+  float rightColumnWidth = availableSize.x * 0.25f; // 25% for status
+
+  // **LEFT COLUMN: Video Feed and Controls**
+  ImGui::BeginChild("VideoFeedColumn", ImVec2(leftColumnWidth, availableSize.y), false);
+
+  // Render controls at top of left column
   RenderControls();
 
   ImGui::Separator();
 
-  // Render status
-  RenderStatus();
+  // Render live feed display (takes remaining space)
+  RenderFeedDisplay();
 
+  ImGui::EndChild();
+
+  ImGui::SameLine();
+
+  // **RIGHT COLUMN: Status Information**
+  ImGui::BeginChild("StatusColumn", ImVec2(rightColumnWidth, availableSize.y), true);
+
+  // Status header
+  ImGui::Text("Live Feed Status");
   ImGui::Separator();
 
-  // Render live feed display
-  RenderFeedDisplay();
+  // Render detailed status
+  RenderDetailedStatus();
+
+  ImGui::EndChild();
 }
 
 void UICameraPanelLiveVideo::SetSelectedCamera(PylonCameraTest* camera, const std::string& cameraId) {
@@ -117,38 +136,153 @@ void UICameraPanelLiveVideo::RenderControls() {
   }
 }
 
-void UICameraPanelLiveVideo::RenderStatus() {
+// **NEW METHOD: Detailed status for right column**
+void UICameraPanelLiveVideo::RenderDetailedStatus() {
   if (!ValidateCamera()) {
+    ImGui::Text("No camera selected");
     return;
   }
 
   auto& pylonCamera = m_currentCamera->GetCamera();
 
-  ImGui::Text("Live Feed Status:");
-  ImGui::Text("• Connected: %s", pylonCamera.IsConnected() ? "Yes" : "No");
-  ImGui::Text("• Grabbing: %s", m_isGrabbing ? "Yes" : "No");
-  ImGui::Text("• Device OK: %s", pylonCamera.IsCameraDeviceRemoved() ? "No" : "Yes");
+  // Connection status with color coding
+  ImGui::Text("Connection:");
+  ImGui::SameLine();
+  if (pylonCamera.IsConnected()) {
+    ImGui::TextColored(ImVec4(0, 1, 0, 1), "Yes");
+  }
+  else {
+    ImGui::TextColored(ImVec4(1, 0, 0, 1), "No");
+  }
+
+  // Grabbing status with color coding
+  ImGui::Text("Grabbing:");
+  ImGui::SameLine();
+  if (m_isGrabbing) {
+    ImGui::TextColored(ImVec4(0, 1, 0, 1), "Yes");
+  }
+  else {
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "No");
+  }
+
+  // Device status with color coding
+  ImGui::Text("Device OK:");
+  ImGui::SameLine();
+  if (pylonCamera.IsCameraDeviceRemoved()) {
+    ImGui::TextColored(ImVec4(1, 0, 0, 1), "No");
+  }
+  else {
+    ImGui::TextColored(ImVec4(0, 1, 0, 1), "Yes");
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("Camera Settings:");
 
   if (pylonCamera.IsConnected()) {
     auto settings = pylonCamera.GetCurrentExposureSettings();
-    ImGui::Text("• Exposure: %.0f μs", settings.exposure_time);
-    ImGui::Text("• Gain: %.1f", settings.gain);
-    ImGui::Text("• Auto Exposure: %s", settings.exposure_auto ? "On" : "Off");
+
+    ImGui::Text("Exposure:");
+    ImGui::SameLine();
+    ImGui::Text("%.0f μs", settings.exposure_time);
+
+    ImGui::Text("Gain:");
+    ImGui::SameLine();
+    ImGui::Text("%.1f", settings.gain);
+
+    ImGui::Text("Auto Exposure:");
+    ImGui::SameLine();
+    if (settings.exposure_auto) {
+      ImGui::TextColored(ImVec4(0, 1, 0, 1), "On");
+    }
+    else {
+      ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "Off");
+    }
+
+    ImGui::Text("Auto Gain:");
+    ImGui::SameLine();
+    if (settings.gain_auto) {
+      ImGui::TextColored(ImVec4(0, 1, 0, 1), "On");
+    }
+    else {
+      ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "Off");
+    }
   }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("Feed Information:");
 
   // Feed display status
   if (m_feedDisplay) {
-    ImGui::Text("• Feed Active: %s", m_feedDisplay->HasValidTexture() ? "Yes" : "No");
+    ImGui::Text("Feed Active:");
+    ImGui::SameLine();
     if (m_feedDisplay->HasValidTexture()) {
-      ImGui::Text("• Resolution: %dx%d", m_feedDisplay->GetTextureWidth(), m_feedDisplay->GetTextureHeight());
+      ImGui::TextColored(ImVec4(0, 1, 0, 1), "Yes");
+
+      ImGui::Text("Resolution:");
+      ImGui::SameLine();
+      ImGui::Text("%dx%d", m_feedDisplay->GetTextureWidth(), m_feedDisplay->GetTextureHeight());
+
+      // Calculate aspect ratio
+      if (m_feedDisplay->GetTextureHeight() > 0) {
+        float aspectRatio = (float)m_feedDisplay->GetTextureWidth() / (float)m_feedDisplay->GetTextureHeight();
+        ImGui::Text("Aspect Ratio:");
+        ImGui::SameLine();
+        ImGui::Text("%.2f:1", aspectRatio);
+      }
     }
+    else {
+      ImGui::TextColored(ImVec4(1, 0, 0, 1), "No");
+    }
+  }
+
+  // Frame rate estimation (simple)
+  static int frameCounter = 0;
+  static auto lastTime = std::chrono::steady_clock::now();
+  static float estimatedFPS = 0.0f;
+
+  if (m_isGrabbing && m_feedDisplay && m_feedDisplay->HasValidTexture()) {
+    frameCounter++;
+    auto currentTime = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastTime);
+
+    if (elapsed.count() >= 1000) { // Update every second
+      estimatedFPS = frameCounter * 1000.0f / elapsed.count();
+      frameCounter = 0;
+      lastTime = currentTime;
+    }
+
+    ImGui::Text("Est. FPS:");
+    ImGui::SameLine();
+    ImGui::Text("%.1f", estimatedFPS);
+  }
+
+  // Add some spacing at the bottom
+  ImGui::Spacing();
+  ImGui::Spacing();
+
+  // Quick actions section
+  ImGui::Separator();
+  ImGui::Text("Quick Actions:");
+
+  if (ImGui::Button("Reconnect", ImVec2(-1, 25))) {
+    if (pylonCamera.IsConnected()) {
+      pylonCamera.TryReconnect();
+    }
+  }
+
+  if (ImGui::Button("Debug Settings", ImVec2(-1, 25))) {
+    pylonCamera.DebugCameraSettings();
   }
 }
 
+// **REMOVED: Old RenderStatus method since it's now RenderDetailedStatus**
+
 void UICameraPanelLiveVideo::RenderFeedDisplay() {
-  // Calculate canvas size (leave space for any controls below)
+  // Calculate canvas size (no need to reserve space for status now)
   ImVec2 canvasSize = ImGui::GetContentRegionAvail();
-  canvasSize.y = (std::max)(canvasSize.y - 10.0f, 200.0f); // Reserve some space, minimum height
+  canvasSize.y = (std::max)(canvasSize.y - 10.0f, 200.0f); // Small margin
 
   if (!ValidateCamera()) {
     RenderErrorCanvas(canvasSize.x, canvasSize.y, "Camera Not Available\nSelect a connected camera");

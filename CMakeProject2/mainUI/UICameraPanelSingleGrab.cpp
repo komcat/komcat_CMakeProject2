@@ -1,4 +1,4 @@
-﻿// UICameraPanelSingleGrab.cpp - CRITICAL FIX VERSION
+﻿// UICameraPanelSingleGrab.cpp - Reorganized with right status column
 #include "UICameraPanelSingleGrab.h"
 #include "include/camera/CameraManager.h"
 #include "include/camera/pylon_camera_test.h"
@@ -36,23 +36,42 @@ void UICameraPanelSingleGrab::RenderTab(PylonCameraTest* camera, const std::stri
     return;
   }
 
-  // Render controls
-  RenderControls();
+  // **NEW LAYOUT: Split the tab into two columns**
+  ImVec2 availableSize = ImGui::GetContentRegionAvail();
+  float leftColumnWidth = availableSize.x * 0.75f;  // 75% for frame display
+  float rightColumnWidth = availableSize.x * 0.25f; // 25% for status and controls
+
+  // **LEFT COLUMN: Frame Display and Main Controls**
+  ImGui::BeginChild("FrameDisplayColumn", ImVec2(leftColumnWidth, availableSize.y), false);
+
+  // Render main controls at top of left column
+  RenderMainControls();
 
   ImGui::Separator();
 
-  // Render status
-  RenderStatus();
+  // Render frame display (takes remaining space)
+  RenderFrameDisplay();
+
+  ImGui::EndChild();
+
+  ImGui::SameLine();
+
+  // **RIGHT COLUMN: Status and Settings**
+  ImGui::BeginChild("StatusControlColumn", ImVec2(rightColumnWidth, availableSize.y), true);
+
+  // Status header
+  ImGui::Text("Single Frame Status");
+  ImGui::Separator();
+
+  // Render detailed status
+  RenderDetailedStatus();
 
   ImGui::Separator();
 
   // Render capture settings
   RenderCaptureSettings();
 
-  ImGui::Separator();
-
-  // Render frame display
-  RenderFrameDisplay();
+  ImGui::EndChild();
 }
 
 void UICameraPanelSingleGrab::SetSelectedCamera(PylonCameraTest* camera, const std::string& cameraId) {
@@ -66,16 +85,11 @@ void UICameraPanelSingleGrab::SetSelectedCamera(PylonCameraTest* camera, const s
 
   if (camera) {
     std::cout << "[INFO] SingleGrab panel set to camera: " << cameraId << std::endl;
-
-    // **IMPORTANT: Don't automatically set camera source**
-    // Only set source when user actually captures a frame
-    // This prevents live video from bleeding into this tab
   }
 }
 
 void UICameraPanelSingleGrab::ClearCamera() {
   if (m_frameDisplay) {
-    // **IMPORTANT: Clear the display source to stop showing live video**
     m_frameDisplay->ClearSource();
   }
 
@@ -87,34 +101,12 @@ void UICameraPanelSingleGrab::ClearCamera() {
   std::cout << "[INFO] SingleGrab panel camera cleared" << std::endl;
 }
 
-void UICameraPanelSingleGrab::RenderControls() {
+// **NEW METHOD: Main controls for left column**
+void UICameraPanelSingleGrab::RenderMainControls() {
   if (!ValidateCamera()) {
     ImGui::Text("Camera not connected");
     return;
   }
-
-  // **DEBUG BUTTON FIRST**
-  //if (ImGui::Button("TEST - Debug Panel", ImVec2(150, 30))) {
-  //  std::cout << "\n=== SINGLE GRAB PANEL DEBUG ===" << std::endl;
-  //  std::cout << "Camera ID: " << m_currentCameraId << std::endl;
-  //  std::cout << "Camera valid: " << (m_currentCamera ? "true" : "false") << std::endl;
-  //  std::cout << "Has captured frame: " << (m_hasCapturedFrame ? "true" : "false") << std::endl;
-  //  std::cout << "Frame display valid: " << (m_frameDisplay ? "true" : "false") << std::endl;
-
-  //  if (m_currentCamera) {
-  //    auto& pylonCamera = m_currentCamera->GetCamera();
-  //    std::cout << "Camera connected: " << (pylonCamera.IsConnected() ? "true" : "false") << std::endl;
-  //    std::cout << "Camera grabbing: " << (pylonCamera.IsGrabbing() ? "true" : "false") << std::endl;
-  //    std::cout << "Camera has texture: " << (m_currentCamera->HasValidTexture() ? "true" : "false") << std::endl;
-  //    std::cout << "Camera texture ID: " << m_currentCamera->GetTextureID() << std::endl;
-  //  }
-
-  //  if (m_frameDisplay) {
-  //    std::cout << "Display has texture: " << (m_frameDisplay->HasValidTexture() ? "true" : "false") << std::endl;
-  //    std::cout << "Display texture ID: " << m_frameDisplay->GetTextureID() << std::endl;
-  //  }
-  //  std::cout << "================================\n" << std::endl;
-  //}
 
   // Main grab button
   ImVec4 grabButtonColor = ImVec4(0.3f, 0.7f, 0.3f, 1.0f); // Green
@@ -123,10 +115,8 @@ void UICameraPanelSingleGrab::RenderControls() {
 
   if (ImGui::Button("Grab Single Frame", ImVec2(150, 30))) {
     std::cout << "\n*** GRAB SINGLE FRAME BUTTON CLICKED ***" << std::endl;
-    std::cout << "Calling UICameraPanelSingleGrab::GrabSingleFrame()" << std::endl;
     bool result = GrabSingleFrame();
     std::cout << "GrabSingleFrame returned: " << (result ? "SUCCESS" : "FAILED") << std::endl;
-    std::cout << "*** END GRAB SINGLE FRAME ***\n" << std::endl;
   }
 
   ImGui::PopStyleColor(2);
@@ -162,70 +152,155 @@ void UICameraPanelSingleGrab::RenderControls() {
   }
 }
 
-void UICameraPanelSingleGrab::RenderStatus() {
+// **NEW METHOD: Detailed status for right column**
+void UICameraPanelSingleGrab::RenderDetailedStatus() {
   if (!ValidateCamera()) {
+    ImGui::Text("No camera selected");
     return;
   }
 
   auto& pylonCamera = m_currentCamera->GetCamera();
 
-  ImGui::Text("Single Frame Status:");
-  ImGui::Text("• Connected: %s", pylonCamera.IsConnected() ? "Yes" : "No");
-  ImGui::Text("• Frame Captured: %s", m_hasCapturedFrame ? "Yes" : "No");
+  // Connection status with color coding
+  ImGui::Text("Connected:");
+  ImGui::SameLine();
+  if (pylonCamera.IsConnected()) {
+    ImGui::TextColored(ImVec4(0, 1, 0, 1), "Yes");
+  }
+  else {
+    ImGui::TextColored(ImVec4(1, 0, 0, 1), "No");
+  }
+
+  // Frame captured status with color coding
+  ImGui::Text("Frame Captured:");
+  ImGui::SameLine();
+  if (m_hasCapturedFrame) {
+    ImGui::TextColored(ImVec4(0, 1, 0, 1), "Yes");
+  }
+  else {
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "No");
+  }
 
   if (m_hasCapturedFrame) {
     std::string captureTime = GetCaptureTimeText();
-    ImGui::Text("• Captured: %s", captureTime.c_str());
+    ImGui::Text("Captured:");
+    ImGui::SameLine();
+    ImGui::Text("%s", captureTime.c_str());
   }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("Camera Settings:");
 
   if (pylonCamera.IsConnected()) {
     auto settings = pylonCamera.GetCurrentExposureSettings();
-    ImGui::Text("• Exposure: %.0f μs", settings.exposure_time);
-    ImGui::Text("• Gain: %.1f", settings.gain);
+
+    ImGui::Text("Exposure:");
+    ImGui::SameLine();
+    ImGui::Text("%.0f μs", settings.exposure_time);
+
+    ImGui::Text("Gain:");
+    ImGui::SameLine();
+    ImGui::Text("%.1f", settings.gain);
+
+    ImGui::Text("Auto Exposure:");
+    ImGui::SameLine();
+    if (settings.exposure_auto) {
+      ImGui::TextColored(ImVec4(0, 1, 0, 1), "On");
+    }
+    else {
+      ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "Off");
+    }
+
+    ImGui::Text("Auto Gain:");
+    ImGui::SameLine();
+    if (settings.gain_auto) {
+      ImGui::TextColored(ImVec4(0, 1, 0, 1), "On");
+    }
+    else {
+      ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "Off");
+    }
   }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("Frame Information:");
 
   // Display info if frame is available
   if (m_frameDisplay && m_frameDisplay->HasValidTexture()) {
-    ImGui::Text("• Resolution: %dx%d", m_frameDisplay->GetTextureWidth(), m_frameDisplay->GetTextureHeight());
+    ImGui::Text("Resolution:");
+    ImGui::SameLine();
+    ImGui::Text("%dx%d", m_frameDisplay->GetTextureWidth(), m_frameDisplay->GetTextureHeight());
+
+    // Calculate aspect ratio
+    if (m_frameDisplay->GetTextureHeight() > 0) {
+      float aspectRatio = (float)m_frameDisplay->GetTextureWidth() / (float)m_frameDisplay->GetTextureHeight();
+      ImGui::Text("Aspect Ratio:");
+      ImGui::SameLine();
+      ImGui::Text("%.2f:1", aspectRatio);
+    }
+
+    // Calculate image size in MB (rough estimate)
+    uint32_t totalPixels = m_frameDisplay->GetTextureWidth() * m_frameDisplay->GetTextureHeight();
+    float imageSizeMB = (totalPixels * 3) / (1024.0f * 1024.0f); // RGB = 3 bytes per pixel
+    ImGui::Text("Size (est.):");
+    ImGui::SameLine();
+    ImGui::Text("%.2f MB", imageSizeMB);
+  }
+  else {
+    ImGui::Text("No frame data");
   }
 
   // Show last saved path if available
   if (!m_lastSavedPath.empty()) {
-    ImGui::Text("• Last Saved: %s", m_lastSavedPath.c_str());
+    ImGui::Spacing();
+    ImGui::Text("Last Saved:");
+    ImGui::TextWrapped("%s", m_lastSavedPath.c_str());
   }
 }
 
 void UICameraPanelSingleGrab::RenderCaptureSettings() {
   ImGui::Text("Capture Settings:");
+  ImGui::Spacing();
 
-  ImGui::Checkbox("Auto-save captured frames", &m_autoSave);
-  ImGui::SameLine();
+  ImGui::Checkbox("Auto-save frames", &m_autoSave);
   ImGui::Checkbox("Show capture info", &m_showCaptureInfo);
 
   if (m_autoSave) {
-    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "  Frames will be automatically saved to disk");
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Auto-save enabled");
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("Quick Actions:");
+
+  if (ImGui::Button("Reconnect", ImVec2(-1, 25))) {
+    auto& pylonCamera = m_currentCamera->GetCamera();
+    if (pylonCamera.IsConnected()) {
+      pylonCamera.TryReconnect();
+    }
+  }
+
+  if (ImGui::Button("Debug Camera", ImVec2(-1, 25))) {
+    auto& pylonCamera = m_currentCamera->GetCamera();
+    pylonCamera.DebugCameraSettings();
   }
 }
 
 void UICameraPanelSingleGrab::RenderFrameDisplay() {
-  // Calculate canvas size
+  // Calculate canvas size (no need to reserve space for status now)
   ImVec2 canvasSize = ImGui::GetContentRegionAvail();
-  canvasSize.y = (std::max)(canvasSize.y - 10.0f, 200.0f); // Reserve some space, minimum height
+  canvasSize.y = (std::max)(canvasSize.y - 10.0f, 200.0f); // Small margin
 
   if (!ValidateCamera()) {
     RenderPlaceholderCanvas(canvasSize.x, canvasSize.y, "Camera Not Available\nSelect a connected camera");
     return;
   }
 
-  // **CRITICAL FIX: Only show captured frames, NOT live video**
+  // **CRITICAL: Only show captured frames, NOT live video**
   if (m_hasCapturedFrame && m_frameDisplay) {
     try {
-      // **IMPORTANT: Only render if we actually have a captured frame**
-      // Don't show live video in this tab
-
       if (m_frameDisplay->HasValidTexture()) {
-        //std::cout << "[DEBUG] RenderFrameDisplay: Showing captured frame" << std::endl;
-
         // Render the captured single frame
         m_frameDisplay->RenderToCanvas(canvasSize.x, canvasSize.y);
 
@@ -235,20 +310,18 @@ void UICameraPanelSingleGrab::RenderFrameDisplay() {
         }
       }
       else {
-        std::cout << "[DEBUG] RenderFrameDisplay: Have captured frame but no valid texture" << std::endl;
         RenderPlaceholderCanvas(canvasSize.x, canvasSize.y,
           "Frame Captured\nBut display not ready\nTry 'Clear Frame' and capture again");
       }
     }
     catch (const std::exception& e) {
       std::cout << "[ERROR] Exception in single frame display: " << e.what() << std::endl;
-
       RenderPlaceholderCanvas(canvasSize.x, canvasSize.y, "Single Frame Error\nTry capturing again");
       m_hasCapturedFrame = false;
     }
   }
   else {
-    // **NO FRAME CAPTURED: Show placeholder, don't show live video**
+    // **NO FRAME CAPTURED: Show placeholder**
     std::string placeholderMsg;
 
     auto& pylonCamera = m_currentCamera->GetCamera();
@@ -315,14 +388,14 @@ void UICameraPanelSingleGrab::RenderPlaceholderCanvas(float width, float height,
   ImGui::SetCursorScreenPos(ImVec2(canvasPos.x, canvasPos.y + height));
 }
 
-// **CRITICAL FIX: ENHANCED GrabSingleFrame METHOD**
+// **ENHANCED GrabSingleFrame METHOD**
 bool UICameraPanelSingleGrab::GrabSingleFrame() {
   if (!ValidateCamera()) {
     std::cout << "[ERROR] Cannot grab frame: Camera not valid" << std::endl;
     return false;
   }
 
-  std::cout << "[DEBUG] *** CRITICAL FIX GrabSingleFrame called for: " << m_currentCameraId << " ***" << std::endl;
+  std::cout << "[DEBUG] *** GrabSingleFrame called for: " << m_currentCameraId << " ***" << std::endl;
 
   auto& pylonCamera = m_currentCamera->GetCamera();
   bool wasGrabbing = pylonCamera.IsGrabbing();
@@ -331,80 +404,57 @@ bool UICameraPanelSingleGrab::GrabSingleFrame() {
   if (wasGrabbing) {
     std::cout << "[DEBUG] Stopping continuous grabbing for single frame capture..." << std::endl;
     m_cameraManager.StopGrabbing(m_currentCameraId);
-
-    // Wait a moment for grabbing to stop
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
-  // **STEP 2: Grab the single frame (camera now creates texture automatically)**
+  // **STEP 2: Grab the single frame**
   if (!m_currentCamera->GrabSingleFrame()) {
     std::cout << "[ERROR] Failed to grab single frame" << std::endl;
 
-    // **STEP 2a: Restart continuous grabbing if it was running**
     if (wasGrabbing) {
       std::cout << "[DEBUG] Restarting continuous grabbing..." << std::endl;
       m_cameraManager.StartGrabbing(m_currentCameraId);
     }
-
     return false;
   }
 
   std::cout << "[DEBUG] Single frame captured by camera, now setting up display..." << std::endl;
 
-  // **STEP 3: Update capture state - CAMERA ALREADY HAS TEXTURE**
+  // **STEP 3: Update capture state**
   m_hasCapturedFrame = true;
   m_lastCaptureTime = std::chrono::steady_clock::now();
 
-  // **STEP 4: Set display to use camera's texture (camera already created it)**
+  // **STEP 4: Set display to use camera's texture**
   if (m_frameDisplay) {
     std::cout << "[DEBUG] Setting display source to camera..." << std::endl;
     m_frameDisplay->SetPylonCameraSource(m_currentCamera);
 
-    // **IMMEDIATE CHECK: Camera should already have valid texture**
     if (m_currentCamera->HasValidTexture()) {
       std::cout << "[DEBUG] Camera has valid texture ID: " << m_currentCamera->GetTextureID() << std::endl;
 
-      // Force display to use the camera's texture
       if (m_frameDisplay->UpdateTexture()) {
         std::cout << "[DEBUG] Display successfully linked to camera texture" << std::endl;
       }
-      else {
-        std::cout << "[DEBUG] Display failed to link to camera texture" << std::endl;
-      }
-    }
-    else {
-      std::cout << "[ERROR] Camera doesn't have valid texture after successful grab!" << std::endl;
     }
   }
 
-  // **STEP 5: Debug final state**
-  std::cout << "[DEBUG] Final state after capture:" << std::endl;
-  std::cout << "  m_hasCapturedFrame: " << (m_hasCapturedFrame ? "true" : "false") << std::endl;
-  std::cout << "  Camera HasValidTexture: " << (m_currentCamera->HasValidTexture() ? "true" : "false") << std::endl;
-  std::cout << "  Camera TextureID: " << m_currentCamera->GetTextureID() << std::endl;
-  if (m_frameDisplay) {
-    std::cout << "  Display HasValidTexture: " << (m_frameDisplay->HasValidTexture() ? "true" : "false") << std::endl;
-    std::cout << "  Display TextureID: " << m_frameDisplay->GetTextureID() << std::endl;
-  }
-
-  // **STEP 6: Restart continuous grabbing if it was running**
+  // **STEP 5: Restart continuous grabbing if it was running**
   if (wasGrabbing) {
     std::cout << "[DEBUG] Restarting continuous grabbing..." << std::endl;
     m_cameraManager.StartGrabbing(m_currentCameraId);
   }
 
-  // **STEP 7: Auto-save if enabled**
+  // **STEP 6: Auto-save if enabled**
   if (m_autoSave) {
     SaveFrameToDisk();
   }
 
-  std::cout << "[DEBUG] *** CRITICAL FIX GrabSingleFrame completed successfully ***" << std::endl;
+  std::cout << "[DEBUG] *** GrabSingleFrame completed successfully ***" << std::endl;
   return true;
 }
 
 void UICameraPanelSingleGrab::ClearCapturedFrame() {
   if (m_frameDisplay) {
-    // **IMPORTANT: Clear the display source to stop showing live video**
     m_frameDisplay->ClearSource();
   }
 
@@ -420,9 +470,7 @@ bool UICameraPanelSingleGrab::SaveFrameToDisk() {
     return false;
   }
 
-  // Use camera's capture method which saves the current frame
   if (m_currentCamera->CaptureImage()) {
-    // Generate our own filename for tracking
     m_lastSavedPath = GenerateFilename();
     std::cout << "[INFO] Single frame saved as: " << m_lastSavedPath << std::endl;
     return true;
@@ -458,31 +506,6 @@ std::string UICameraPanelSingleGrab::GetCaptureTimeText() const {
   }
   else {
     return std::to_string(elapsed.count() / 3600) + "h ago";
-  }
-}
-
-void UICameraPanelSingleGrab::UpdateCaptureDisplay() {
-  if (!m_hasCapturedFrame || !m_frameDisplay) {
-    return;
-  }
-
-  // **CRITICAL FIX: Force immediate update of the frame display**
-  try {
-    if (ValidateCamera()) {
-      std::cout << "[DEBUG] UpdateCaptureDisplay: Setting camera source and forcing update" << std::endl;
-
-      // Set the camera source
-      m_frameDisplay->SetPylonCameraSource(m_currentCamera);
-
-      // **FORCE UPDATE: Call UpdateTexture manually to ensure frame is processed**
-      m_frameDisplay->UpdateTexture();
-
-      std::cout << "[DEBUG] UpdateCaptureDisplay: HasValidTexture = "
-        << (m_frameDisplay->HasValidTexture() ? "true" : "false") << std::endl;
-    }
-  }
-  catch (const std::exception& e) {
-    std::cout << "[ERROR] Failed to update capture display: " << e.what() << std::endl;
   }
 }
 

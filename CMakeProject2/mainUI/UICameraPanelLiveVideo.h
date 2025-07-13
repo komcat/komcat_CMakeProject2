@@ -1,4 +1,4 @@
-// UICameraPanelLiveVideo.h - Live Video Feed Panel
+// UICameraPanelLiveVideo.h - Updated with new method declarations
 #pragma once
 
 #include <memory>
@@ -47,10 +47,10 @@ private:
   bool m_isGrabbing = false;
   std::chrono::steady_clock::time_point m_lastStatusUpdate;
 
-  // UI rendering helpers
-  void RenderControls();
-  void RenderStatus();
-  void RenderFeedDisplay();
+  // **NEW: UI rendering helpers for reorganized layout**
+  void RenderControls();               // Main controls for left column
+  void RenderDetailedStatus();         // Detailed status for right column
+  void RenderFeedDisplay();            // Feed display area
   void RenderErrorCanvas(float width, float height, const std::string& errorText);
 
   // Camera operations
