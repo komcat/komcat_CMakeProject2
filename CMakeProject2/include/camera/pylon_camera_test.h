@@ -92,6 +92,18 @@ public:
 	// NEW: Method to send frame to raylib window (add to private section)
 	void SendFrameToRaylib();
 
+	// Frame access for external display systems
+	bool GetLatestFrameData(uint8_t*& imageData, uint32_t& width, uint32_t& height, bool& newFrame);
+	bool HasNewFrameReady() const { return m_newFrameReady; }
+	// Texture access for external display
+	unsigned int GetTextureID() const { return m_textureID; }
+	bool HasValidTexture() const { return m_textureInitialized && m_hasValidImage; }
+	uint32_t GetImageWidth() const { return m_lastFrameWidth; }
+	uint32_t GetImageHeight() const { return m_lastFrameHeight; }
+
+	// Force texture update if new frame is ready
+	void UpdateTextureIfReady();
+
 private:
 	// Creates a new OpenGL texture from the current frame
 	// Must be called from the main thread (where OpenGL context is valid)

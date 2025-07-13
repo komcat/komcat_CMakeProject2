@@ -485,26 +485,31 @@ void MainUIManager::RenderIOPage() {
 
 
 
+// Update the existing RenderCameraPage() method:
 void MainUIManager::RenderCameraPage() {
-  ImGui::SetWindowFontScale(1.5f);
-  ImGui::Text("Camera Control");
-  ImGui::SetWindowFontScale(1.0f);
+  if (m_cameraPanelUI) {
+    // Render the new Camera panel UI
+    m_cameraPanelUI->RenderUI();
+  }
+  else {
+    // Fallback when camera manager is not available
+    ImGui::SetWindowFontScale(1.5f);
+    ImGui::Text("Camera Control");
+    ImGui::SetWindowFontScale(1.0f);
 
-  ImGui::Spacing();
-  ImGui::Text("Camera Control UI will be implemented here");
-
-  // Placeholder Camera controls
-  ImGui::Separator();
-  static float exposure = 1000.0f;
-  static float gain = 1.0f;
-
-  ImGui::SliderFloat("Exposure (us)", &exposure, 100.0f, 10000.0f);
-  ImGui::SliderFloat("Gain", &gain, 1.0f, 20.0f);
-
-  if (ImGui::Button("Capture Image")) {
-    std::cout << "Capturing image with exposure: " << exposure << "us, gain: " << gain << std::endl;
+    ImGui::Spacing();
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Camera Manager not available");
+    ImGui::Text("Camera system has not been initialized.");
+    ImGui::Spacing();
+    ImGui::Text("This typically means:");
+    ImGui::BulletText("Camera manager is still loading");
+    ImGui::BulletText("No cameras are configured in the system");
+    ImGui::BulletText("Camera hardware connection issues");
+    ImGui::BulletText("Pylon SDK initialization failed");
   }
 }
+
+
 
 void MainUIManager::RenderDataInstrumentPage() {
   ImGui::SetWindowFontScale(1.5f);
@@ -666,5 +671,16 @@ void MainUIManager::SetPneumaticManager(PneumaticManager* pneumaticManager) {
   if (m_pneumaticManager) {
     m_pneumaticPanelUI = std::make_unique<UIPneumaticPanel>(*m_pneumaticManager);
     std::cout << "MainUIManager: Pneumatic Panel UI created successfully" << std::endl;
+  }
+}
+
+// Add this method implementation:
+void MainUIManager::SetCameraManager(CameraManager* cameraManager) {
+  m_cameraManager = cameraManager;
+
+  // Create Camera Panel UI when camera manager is available
+  if (m_cameraManager) {
+    m_cameraPanelUI = std::make_unique<UICameraPanel>(*m_cameraManager);
+    std::cout << "MainUIManager: Camera Panel UI created successfully" << std::endl;
   }
 }

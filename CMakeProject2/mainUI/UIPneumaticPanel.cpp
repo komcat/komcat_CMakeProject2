@@ -48,14 +48,14 @@ void UIPneumaticPanel::RenderUI() {
       m_pneumaticManager.stopPolling();
     }
     ImGui::SameLine();
-    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "● Active");
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), ":) Active");
   }
   else {
     if (ImGui::Button("Start Updates", ImVec2(120, 30))) {
       m_pneumaticManager.startPolling(50);
     }
     ImGui::SameLine();
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "○ Stopped");
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), ";( Stopped");
   }
 
   ImGui::Separator();

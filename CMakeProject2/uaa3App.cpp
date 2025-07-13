@@ -18,6 +18,24 @@
 #include "include/eziio//EziIO_Manager.h"
 #include "include/eziio/PneumaticManager.h"
 #include "IOConfigManager.h"
+#include "include/camera/CameraManager.h"
+
+
+// Create a global camera manager instance
+CameraManager g_cameraManager;
+
+// Example: Check camera status
+void CheckCameraStatus() {
+	auto statusList = g_cameraManager.GetAllCameraStatus();
+
+	for (const auto& status : statusList) {
+		std::cout << "Camera " << status.id << ":" << std::endl;
+		std::cout << "  Connected: " << (status.connected ? "Yes" : "No") << std::endl;
+		std::cout << "  Grabbing: " << (status.grabbing ? "Yes" : "No") << std::endl;
+		std::cout << "  Exposure: " << status.currentExposure.exposure_time << "us" << std::endl;
+		std::cout << "  Gain: " << status.currentExposure.gain << std::endl;
+	}
+}
 
 int main(int argc, char* argv[])
 {
@@ -226,6 +244,20 @@ int main(int argc, char* argv[])
 		logger->LogInfo("Pneumatic system initialized");
 	}
 
+	//Camera initialization
+	// Camera 1 - Auto-connect to first available
+	CameraInfo camera1("main_camera", "Top view camera");
+	g_cameraManager.AddCamera(camera1);
+
+	// Initialize all cameras with auto-connect enabled
+	g_cameraManager.InitializeAllCameras();
+
+	CheckCameraStatus();
+	// Start grabbing on all connected cameras
+	//g_cameraManager.StartGrabbingAll();
+
+	
+
 
 	// ✅ Create the main UI manager with just the config manager
 	MainUIManager uiManager(*motionConfigManager);
@@ -252,6 +284,9 @@ int main(int argc, char* argv[])
 		uiManager.SetPneumaticManager(pneumaticManager.get());
 	}
 
+	if (g_cameraManager.GetCameraCount() > 0) {
+		uiManager.SetCameraManager(&g_cameraManager);
+	}
 
 
 	bool done = false;
@@ -290,7 +325,10 @@ int main(int argc, char* argv[])
 	// Cleanup
 	logger->LogInfo("Shutting down uaa3App...");
 
+	g_cameraManager.StopGrabbingAll();
+	std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
+	g_cameraManager.DisconnectCamera(camera1.id);
 
 	piControllerManager.get()->DisconnectAll();
 	std::this_thread::sleep_for(std::chrono::milliseconds(500));

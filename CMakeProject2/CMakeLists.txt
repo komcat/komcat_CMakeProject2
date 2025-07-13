@@ -391,7 +391,7 @@ add_executable(CMakeProject2
  "mainUI/MainUIManager.h" "mainUI/MainUIManager.cpp"
   
   
-   "mainUI/UIConfigEditor.h" "mainUI/UIConfigEditor.cpp" "mainUI/UIConfigEditor_Devices.cpp" "mainUI/UIConfigEditor_Positions.cpp" "mainUI/UIConfigEditor_Helpers.cpp" "mainUI/UIConfigEditor_Graphs.cpp" "mainUI/UIConfigEditor_Details.cpp" "mainUI/UIConfigVisualizer.h" "mainUI/UIConfigVisualizer.cpp" "mainUI/UIConfigVisualizer_Graph.cpp" "mainUI/UIConfigVisualizer_Input.cpp" "mainUI/UIConfigVisualizer_Helpers.cpp" "mainUI/NodePropertiesHandler.h" "mainUI/NodePropertiesHandler.cpp" "mainUI/UIJogWindow.h" "mainUI/UIJogWindow.cpp" "mainUI/PIPanelUI.h" "mainUI/PIPanelUI.cpp" "mainUI/ACSPanelUI.h" "mainUI/ACSPanelUI.cpp" "mainUI/IOPanelUI.h" "mainUI/IOPanelUI.cpp" "mainUI/UIPneumaticPanel.h" "mainUI/UIPneumaticPanel.cpp")
+   "mainUI/UIConfigEditor.h" "mainUI/UIConfigEditor.cpp" "mainUI/UIConfigEditor_Devices.cpp" "mainUI/UIConfigEditor_Positions.cpp" "mainUI/UIConfigEditor_Helpers.cpp" "mainUI/UIConfigEditor_Graphs.cpp" "mainUI/UIConfigEditor_Details.cpp" "mainUI/UIConfigVisualizer.h" "mainUI/UIConfigVisualizer.cpp" "mainUI/UIConfigVisualizer_Graph.cpp" "mainUI/UIConfigVisualizer_Input.cpp" "mainUI/UIConfigVisualizer_Helpers.cpp" "mainUI/NodePropertiesHandler.h" "mainUI/NodePropertiesHandler.cpp" "mainUI/UIJogWindow.h" "mainUI/UIJogWindow.cpp" "mainUI/PIPanelUI.h" "mainUI/PIPanelUI.cpp" "mainUI/ACSPanelUI.h" "mainUI/ACSPanelUI.cpp" "mainUI/IOPanelUI.h" "mainUI/IOPanelUI.cpp" "mainUI/UIPneumaticPanel.h" "mainUI/UIPneumaticPanel.cpp" "include/camera/CameraManager.h" "include/camera/CameraManager.cpp" "mainUI/UICameraPanel.h" "mainUI/UICameraPanel.cpp" "mainUI/CameraFeedDisplay.h" "mainUI/CameraFeedDisplay.cpp")
 
 
 
@@ -658,11 +658,12 @@ add_executable(uaa3App
   "mainUI/MainUIManager.cpp"
   
   
-  "mainUI/UIConfigEditor.h" "mainUI/UIConfigEditor.cpp" "mainUI/UIConfigEditor_Devices.cpp" "mainUI/UIConfigEditor_Positions.cpp" "mainUI/UIConfigEditor_Helpers.cpp" "mainUI/UIConfigEditor_Graphs.cpp" "mainUI/UIConfigEditor_Details.cpp" "mainUI/UIConfigVisualizer.h" "mainUI/UIConfigVisualizer.cpp" "mainUI/UIConfigVisualizer_Graph.cpp" "mainUI/UIConfigVisualizer_Input.cpp" "mainUI/UIConfigVisualizer_Helpers.cpp" "mainUI/NodePropertiesHandler.h" "mainUI/NodePropertiesHandler.cpp" "mainUI/UIJogWindow.h" "mainUI/UIJogWindow.cpp" "mainUI/PIPanelUI.h" "mainUI/PIPanelUI.cpp" "mainUI/ACSPanelUI.h" "mainUI/ACSPanelUI.cpp" "mainUI/IOPanelUI.h" "mainUI/IOPanelUI.cpp" "mainUI/UIPneumaticPanel.h" "mainUI/UIPneumaticPanel.cpp")
+  "mainUI/UIConfigEditor.h" "mainUI/UIConfigEditor.cpp" "mainUI/UIConfigEditor_Devices.cpp" "mainUI/UIConfigEditor_Positions.cpp" "mainUI/UIConfigEditor_Helpers.cpp" "mainUI/UIConfigEditor_Graphs.cpp" "mainUI/UIConfigEditor_Details.cpp" "mainUI/UIConfigVisualizer.h" "mainUI/UIConfigVisualizer.cpp" "mainUI/UIConfigVisualizer_Graph.cpp" "mainUI/UIConfigVisualizer_Input.cpp" "mainUI/UIConfigVisualizer_Helpers.cpp" "mainUI/NodePropertiesHandler.h" "mainUI/NodePropertiesHandler.cpp" "mainUI/UIJogWindow.h" "mainUI/UIJogWindow.cpp" "mainUI/PIPanelUI.h" "mainUI/PIPanelUI.cpp" "mainUI/ACSPanelUI.h" "mainUI/ACSPanelUI.cpp" "mainUI/IOPanelUI.h" "mainUI/IOPanelUI.cpp" "mainUI/UIPneumaticPanel.h" "mainUI/UIPneumaticPanel.cpp" "include/camera/CameraManager.h" "include/camera/CameraManager.cpp" "mainUI/UICameraPanel.h" "mainUI/UICameraPanel.cpp" "mainUI/CameraFeedDisplay.h" "mainUI/CameraFeedDisplay.cpp")
 
 
 # Set HALCON paths based on your installation
 set(MAINUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mainUI")
+set(INCL_CAMERA "${CMAKE_CURRENT_SOURCE_DIR}/include/camera")
 
 # Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
 target_include_directories(uaa3App PRIVATE
@@ -679,6 +680,7 @@ target_include_directories(uaa3App PRIVATE
     ${HALCON_INCLUDE_DIR}  # Add this line for HALCON
     ${STB_IMAGE_DIR}  # Add this line
     ${MAINUI_DIR}
+    ${INCL_CAMERA}
 )
 
 # Link libraries - directly reference libraries

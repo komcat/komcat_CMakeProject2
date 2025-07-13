@@ -4,8 +4,10 @@
 #include "ACSPanelUI.h"
 #include <memory>
 #include "IOPanelUI.h"
-// Add this include at the top (with other includes):
 #include "UIPneumaticPanel.h"
+#include "UICameraPanel.h"
+
+
 
 
 // Forward declarations
@@ -16,11 +18,12 @@ class UIJogWindow;
 class PIControllerManager;
 class ACSControllerManager;
 
-// Add forward declaration (with other forward declarations):
 class PneumaticManager;
-// Add forward declaration (with other forward declarations):
 class EziIOManager;
 class IOConfigManager;
+class CameraManager;
+
+
 
 class MainUIManager {
 public:
@@ -60,12 +63,9 @@ public:
   // Method to set motion managers separately for cleaner initialization
   void SetPIControllerManager(PIControllerManager* piManager);
   void SetACSControllerManager(ACSControllerManager* acsManager);
-  // Add this method declaration (with other SetManager methods):
   void SetIOManager(EziIOManager* ioManager, IOConfigManager* ioConfigManager = nullptr);
-
-  // Add this method declaration (with other SetManager methods):
   void SetPneumaticManager(PneumaticManager* pneumaticManager);
-
+  void SetCameraManager(CameraManager* cameraManager);
   
 private:
   MainPage currentMainPage = MainPage::MAIN;
@@ -101,7 +101,8 @@ private:
   // Add these member variables in the private section (with other panel UIs):
   std::unique_ptr<UIPneumaticPanel> m_pneumaticPanelUI;
   PneumaticManager* m_pneumaticManager = nullptr;
-
+  CameraManager* m_cameraManager = nullptr;
+  std::unique_ptr<UICameraPanel> m_cameraPanelUI;
 
   void RenderTopMenuBar();
   void RenderDateTime();
