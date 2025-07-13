@@ -1,6 +1,7 @@
 #pragma once
 // Add this include at the top:
 #include "PIPanelUI.h"
+#include "ACSPanelUI.h"
 #include <memory>
 
 // Forward declarations
@@ -41,10 +42,11 @@ public:
   MainUIManager(MotionConfigManager& configManager);
   ~MainUIManager();
 
-  // Method to set motion managers later when available
-  void SetMotionManagers(PIControllerManager* piManager, ACSControllerManager* acsManager);
 
   void RenderUI();
+  // Method to set motion managers separately for cleaner initialization
+  void SetPIControllerManager(PIControllerManager* piManager);
+  void SetACSControllerManager(ACSControllerManager* acsManager);
 
 private:
   MainPage currentMainPage = MainPage::MAIN;
@@ -70,6 +72,7 @@ private:
 
   // Add these member variables in the private section:
   std::unique_ptr<PIPanelUI> m_piPanelUI;
+  std::unique_ptr<ACSPanelUI> m_acsPanelUI;
 
   void RenderTopMenuBar();
   void RenderDateTime();

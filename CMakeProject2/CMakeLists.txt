@@ -391,7 +391,7 @@ add_executable(CMakeProject2
  "mainUI/MainUIManager.h" "mainUI/MainUIManager.cpp"
   
   
-   "mainUI/UIConfigEditor.h" "mainUI/UIConfigEditor.cpp" "mainUI/UIConfigEditor_Devices.cpp" "mainUI/UIConfigEditor_Positions.cpp" "mainUI/UIConfigEditor_Helpers.cpp" "mainUI/UIConfigEditor_Graphs.cpp" "mainUI/UIConfigEditor_Details.cpp" "mainUI/UIConfigVisualizer.h" "mainUI/UIConfigVisualizer.cpp" "mainUI/UIConfigVisualizer_Graph.cpp" "mainUI/UIConfigVisualizer_Input.cpp" "mainUI/UIConfigVisualizer_Helpers.cpp" "mainUI/NodePropertiesHandler.h" "mainUI/NodePropertiesHandler.cpp" "mainUI/UIJogWindow.h" "mainUI/UIJogWindow.cpp" "mainUI/PIPanelUI.h" "mainUI/PIPanelUI.cpp")
+   "mainUI/UIConfigEditor.h" "mainUI/UIConfigEditor.cpp" "mainUI/UIConfigEditor_Devices.cpp" "mainUI/UIConfigEditor_Positions.cpp" "mainUI/UIConfigEditor_Helpers.cpp" "mainUI/UIConfigEditor_Graphs.cpp" "mainUI/UIConfigEditor_Details.cpp" "mainUI/UIConfigVisualizer.h" "mainUI/UIConfigVisualizer.cpp" "mainUI/UIConfigVisualizer_Graph.cpp" "mainUI/UIConfigVisualizer_Input.cpp" "mainUI/UIConfigVisualizer_Helpers.cpp" "mainUI/NodePropertiesHandler.h" "mainUI/NodePropertiesHandler.cpp" "mainUI/UIJogWindow.h" "mainUI/UIJogWindow.cpp" "mainUI/PIPanelUI.h" "mainUI/PIPanelUI.cpp" "mainUI/ACSPanelUI.h" "mainUI/ACSPanelUI.cpp")
 
 
 
@@ -658,7 +658,7 @@ add_executable(uaa3App
   "mainUI/MainUIManager.cpp"
   
   
-  "mainUI/UIConfigEditor.h" "mainUI/UIConfigEditor.cpp" "mainUI/UIConfigEditor_Devices.cpp" "mainUI/UIConfigEditor_Positions.cpp" "mainUI/UIConfigEditor_Helpers.cpp" "mainUI/UIConfigEditor_Graphs.cpp" "mainUI/UIConfigEditor_Details.cpp" "mainUI/UIConfigVisualizer.h" "mainUI/UIConfigVisualizer.cpp" "mainUI/UIConfigVisualizer_Graph.cpp" "mainUI/UIConfigVisualizer_Input.cpp" "mainUI/UIConfigVisualizer_Helpers.cpp" "mainUI/NodePropertiesHandler.h" "mainUI/NodePropertiesHandler.cpp" "mainUI/UIJogWindow.h" "mainUI/UIJogWindow.cpp" "mainUI/PIPanelUI.h" "mainUI/PIPanelUI.cpp")
+  "mainUI/UIConfigEditor.h" "mainUI/UIConfigEditor.cpp" "mainUI/UIConfigEditor_Devices.cpp" "mainUI/UIConfigEditor_Positions.cpp" "mainUI/UIConfigEditor_Helpers.cpp" "mainUI/UIConfigEditor_Graphs.cpp" "mainUI/UIConfigEditor_Details.cpp" "mainUI/UIConfigVisualizer.h" "mainUI/UIConfigVisualizer.cpp" "mainUI/UIConfigVisualizer_Graph.cpp" "mainUI/UIConfigVisualizer_Input.cpp" "mainUI/UIConfigVisualizer_Helpers.cpp" "mainUI/NodePropertiesHandler.h" "mainUI/NodePropertiesHandler.cpp" "mainUI/UIJogWindow.h" "mainUI/UIJogWindow.cpp" "mainUI/PIPanelUI.h" "mainUI/PIPanelUI.cpp" "mainUI/ACSPanelUI.h" "mainUI/ACSPanelUI.cpp")
 
 
 # Set HALCON paths based on your installation

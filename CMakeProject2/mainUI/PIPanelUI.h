@@ -48,10 +48,12 @@ private:
   void RenderMotionStatus(PIController* controller);
   void RenderJogControls(PIController* controller);
   void RenderJogDistanceControl();
+  void RenderSystemVelocityControl(PIController* controller);
   void RenderPositionDisplay(PIController* controller);
   void RenderNamedPositions(PIController* controller);
   void RenderUtilityControls(PIController* controller);
 
   // UI state for jog controls
   double m_jogDistance;
+  double m_systemVelocity;
 };

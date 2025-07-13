@@ -1650,3 +1650,36 @@ bool PIController::CopyPositionToClipboard() {
 
 	return true;
 }
+
+bool PIController::SetSystemVelocity(double velocity) {
+	if (!m_isConnected) {
+		m_logger->LogError("PIController: Cannot set system velocity - not connected");
+		return false;
+	}
+
+	m_logger->LogInfo("PIController: Setting system velocity to " + std::to_string(velocity));
+
+	if (!PI_VLS(m_controllerId, velocity)) {
+		int error = 0;
+		PI_qERR(m_controllerId, &error);
+		m_logger->LogError("PIController: Failed to set system velocity. Error code: " + std::to_string(error));
+		return false;
+	}
+
+	return true;
+}
+
+bool PIController::GetSystemVelocity(double& velocity) {
+	if (!m_isConnected) {
+		return false;
+	}
+
+	if (!PI_qVLS(m_controllerId, &velocity)) {
+		int error = 0;
+		PI_qERR(m_controllerId, &error);
+		m_logger->LogError("PIController: Failed to get system velocity. Error code: " + std::to_string(error));
+		return false;
+	}
+
+	return true;
+}

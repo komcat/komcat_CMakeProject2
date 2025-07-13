@@ -9,8 +9,8 @@
 #include <sstream>
 
 PIPanelUI::PIPanelUI(PIControllerManager& piManager)
-  : m_piManager(piManager), m_jogDistance(1.0) {
-  // Constructor - initialize jog distance
+  : m_piManager(piManager), m_jogDistance(1.0), m_systemVelocity(10.0) {
+  // Constructor - initialize jog distance and system velocity
 }
 
 PIPanelUI::~PIPanelUI() {
@@ -226,6 +226,11 @@ void PIPanelUI::RenderMotionStatus(PIController* controller) {
 void PIPanelUI::RenderJogControls(PIController* controller) {
   ImGui::Text("Jog Controls");
 
+  // System velocity control
+  RenderSystemVelocityControl(controller);
+
+  ImGui::Spacing();
+
   // Jog distance selection
   RenderJogDistanceControl();
 
@@ -291,6 +296,94 @@ void PIPanelUI::RenderJogControls(PIController* controller) {
   }
 }
 
+void PIPanelUI::RenderSystemVelocityControl(PIController* controller) {
+  ImGui::Text("System Velocity Control");
+
+  // Get current system velocity from controller
+  double currentVelocity = 0.0;
+  bool velocityReadSuccess = controller->GetSystemVelocity(currentVelocity);
+
+  if (velocityReadSuccess) {
+    m_systemVelocity = currentVelocity;
+  }
+
+  // Velocity input field
+  ImGui::Text("Velocity:");
+  ImGui::SetNextItemWidth(120);
+
+  // Use a temporary variable for the input to handle formatting
+  float velocityInput = static_cast<float>(m_systemVelocity);
+
+  if (ImGui::InputFloat("##SystemVelocity", &velocityInput, 0.1f, 1.0f, "%.2f")) {
+    if (velocityInput > 0.0f && velocityInput <= 100.0f) {  // Reasonable velocity limits
+      m_systemVelocity = static_cast<double>(velocityInput);
+    }
+  }
+
+  ImGui::SameLine();
+  ImGui::Text("mm/s");
+
+  // Set velocity button
+  ImGui::SameLine();
+  if (ImGui::Button("Set Velocity", ImVec2(100, 0))) {
+    if (controller->SetSystemVelocity(m_systemVelocity)) {
+      // Success - velocity set
+      ImGui::SetTooltip("Velocity set successfully");
+    }
+    else {
+      // Failed to set velocity
+      ImGui::SetTooltip("Failed to set velocity");
+    }
+  }
+
+  // Show current velocity status
+  if (velocityReadSuccess) {
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "Current: %.2f mm/s", currentVelocity);
+  }
+  else {
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(0.8f, 0.2f, 0.2f, 1.0f), "Current: Unable to read");
+  }
+
+  // Velocity presets
+  ImGui::Spacing();
+  ImGui::Text("Quick Presets:");
+
+  // Preset buttons
+  std::vector<std::pair<double, std::string>> presets = {
+      {1.0, "Slow"},
+      {5.0, "Medium"},
+      {10.0, "Fast"},
+      {20.0, "Very Fast"}
+  };
+
+  for (size_t i = 0; i < presets.size(); i++) {
+    if (i > 0) ImGui::SameLine();
+
+    const auto& [velocity, label] = presets[i];
+
+    // Highlight current preset if it matches
+    bool isCurrentPreset = (std::abs(m_systemVelocity - velocity) < 0.01);
+    if (isCurrentPreset) {
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.6f, 0.8f, 1.0f));
+    }
+
+    if (ImGui::Button((label + "##" + std::to_string(i)).c_str(), ImVec2(60, 25))) {
+      m_systemVelocity = velocity;
+      controller->SetSystemVelocity(m_systemVelocity);
+    }
+
+    if (isCurrentPreset) {
+      ImGui::PopStyleColor();
+    }
+
+    // Tooltip showing velocity value
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("%.1f mm/s", velocity);
+    }
+  }
+}
 void PIPanelUI::RenderJogDistanceControl() {
   static const std::vector<double> jogDistanceValues = {
       0.0001, 0.0002, 0.0005,
@@ -343,6 +436,7 @@ void PIPanelUI::RenderJogDistanceControl() {
     ImGui::EndCombo();
   }
 }
+
 
 void PIPanelUI::RenderPositionDisplay(PIController* controller) {
   ImGui::Text("Current Positions");

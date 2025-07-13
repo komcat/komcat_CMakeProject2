@@ -52,6 +52,10 @@ public:
   bool SetVelocity(const std::string& axis, double velocity);
   bool GetVelocity(const std::string& axis, double& velocity);
 
+  // Hexapod system velocity control
+  bool SetSystemVelocity(double velocity);
+  bool GetSystemVelocity(double& velocity);
+
   // Configuration from MotionDevice
   bool ConfigureFromDevice(const MotionDevice& device);
 

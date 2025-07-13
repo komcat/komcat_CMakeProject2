@@ -7,6 +7,7 @@
 #include "include/motions/acs_controller_manager.h"
 // Add this include at the top:
 #include "PIPanelUI.h"
+#include "ACSPanelUI.h"
 #include "imgui.h"
 #include <iostream>
 #include <string>
@@ -29,24 +30,6 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 
 MainUIManager::~MainUIManager() = default;
 
-void MainUIManager::SetMotionManagers(PIControllerManager* piManager, ACSControllerManager* acsManager) {
-  m_piControllerManager = piManager;
-  m_acsControllerManager = acsManager;
-
-  // Create the PI Panel UI when PI manager is available
-  if (m_piControllerManager) {
-    m_piPanelUI = std::make_unique<PIPanelUI>(*m_piControllerManager);
-  }
-
-  // Now create the UIJogWindow
-  if (m_piControllerManager && m_acsControllerManager) {
-    m_uiJogWindow = std::make_unique<UIJogWindow>(
-      motionConfigManager, *m_piControllerManager, *m_acsControllerManager);
-  }
-
-
-
-}
 
 void MainUIManager::RenderUI() {
   // Main window that fills the entire screen
@@ -413,28 +396,31 @@ void MainUIManager::RenderPIPage() {
   }
 }
 
+// Replace the existing MainUIManager::RenderGantryPage() method with:
 void MainUIManager::RenderGantryPage() {
-  ImGui::SetWindowFontScale(1.5f);
-  ImGui::Text("Gantry Controller");
-  ImGui::SetWindowFontScale(1.0f);
-
-  ImGui::Spacing();
-  ImGui::Text("Gantry Controller UI will be implemented here");
-
-  // Placeholder Gantry controls
-  ImGui::Separator();
-  static bool homed = false;
-  if (ImGui::Button("Home Gantry")) {
-    homed = true;
-    std::cout << "Homing gantry..." << std::endl;
+  if (m_acsPanelUI) {
+    // Render the new ACS panel UI
+    m_acsPanelUI->RenderUI();
   }
+  else {
+    // Fallback when ACS controllers are not available
+    ImGui::SetWindowFontScale(1.5f);
+    ImGui::Text("ACS Gantry Controller");
+    ImGui::SetWindowFontScale(1.0f);
 
-  if (homed) {
-    ImGui::Text("Status: Homed");
-    static float gantryPos = 0.0f;
-    ImGui::SliderFloat("Gantry Position", &gantryPos, 0.0f, 1000.0f);
+    ImGui::Spacing();
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "ACS Controllers not available");
+    ImGui::Text("Motion controller managers have not been initialized.");
+    ImGui::Spacing();
+    ImGui::Text("This typically means:");
+    ImGui::BulletText("Motion configuration is still loading");
+    ImGui::BulletText("ACS controllers are not enabled in configuration");
+    ImGui::BulletText("Hardware connection issues");
+    ImGui::BulletText("Check that gantry-main is configured with port 701");
   }
 }
+
+
 
 void MainUIManager::RenderIOPage() {
   ImGui::SetWindowFontScale(1.5f);
@@ -585,5 +571,28 @@ void MainUIManager::RenderGlobalJogWindow() {
   // Let UIJogWindow handle its own rendering
   if (m_uiJogWindow) {
     m_uiJogWindow->RenderUI();
+  }
+}
+
+
+void MainUIManager::SetPIControllerManager(PIControllerManager* piManager) {
+  m_piControllerManager = piManager;
+
+  // Create PI Panel UI when PI manager is available
+  if (m_piControllerManager) {
+    m_piPanelUI = std::make_unique<PIPanelUI>(*m_piControllerManager);
+    std::cout << "MainUIManager: PI Panel UI created successfully" << std::endl;
+  }
+}
+
+void MainUIManager::SetACSControllerManager(ACSControllerManager* acsManager) {
+  m_acsControllerManager = acsManager;
+
+  // Create ACS-related UI components here when needed
+  if (m_acsControllerManager) {
+    std::cout << "MainUIManager: ACS Controller Manager set successfully" << std::endl;
+    // Future: Create ACS Panel UI similar to PI Panel UI
+    m_acsPanelUI = std::make_unique<ACSPanelUI>(*m_acsControllerManager);
+		std::cout << "MainUIManager: ACS Panel UI created successfully" << std::endl;
   }
 }
