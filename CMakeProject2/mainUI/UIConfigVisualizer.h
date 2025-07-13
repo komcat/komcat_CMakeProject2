@@ -10,6 +10,9 @@
 #include "include/logger.h"
 #include "imgui.h"
 
+// Forward declaration
+class NodePropertiesHandler;
+
 class UIConfigVisualizer {
 public:
   UIConfigVisualizer(MotionConfigManager& configManager);
@@ -33,6 +36,9 @@ private:
   // Reference to the config manager and logger
   MotionConfigManager& configManager;
   Logger* m_logger;
+
+  // Action handlers
+  std::unique_ptr<NodePropertiesHandler> m_propertiesHandler;
 
   // UI state
   bool showWindow = true;
@@ -69,10 +75,12 @@ private:
   // Main rendering methods - implemented in UIConfigVisualizer_Graph.cpp
   void RenderGraphControls();
   void RenderGraphCanvas();
+  void RenderLeftPanel();  // NEW: Render the permanent left panel
+  void RenderCameraCanvas(float height);  // NEW: Render the camera/image canvas section
   void RenderBackground(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize);
   void RenderNodes(ImDrawList* drawList, const ImVec2& canvasPos);
   void RenderEdges(ImDrawList* drawList, const ImVec2& canvasPos);
-  void RenderSelectedNodeActions();
+  // REMOVED: RenderSelectedNodeActions() - now handled in RenderLeftPanel()
 
   // Input handling methods - implemented in UIConfigVisualizer_Input.cpp
   void HandleInput(const ImVec2& canvasPos, const ImVec2& canvasSize);

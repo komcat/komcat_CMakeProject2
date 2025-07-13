@@ -54,13 +54,13 @@ int main(int argc, char* argv[])
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
   // Setup Dear ImGui style
-  ImGui::StyleColorsLight();
+  ImGui::StyleColorsDark();
 
   // Setup Platform/Renderer backends
   ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
   ImGui_ImplOpenGL3_Init("#version 130");
 
-  // ✅ SIMPLE DIRECT APPROACH - Create MotionConfigManager in main
+  // ✅ Create MotionConfigManager
   std::unique_ptr<MotionConfigManager> motionConfigManager;
 
   try {
@@ -74,9 +74,14 @@ int main(int argc, char* argv[])
     motionConfigManager = std::make_unique<MotionConfigManager>("default_config.json");
   }
 
-  // ✅ Create the main UI manager and pass the config manager reference
+  // ✅ Create the main UI manager with just the config manager
   MainUIManager uiManager(*motionConfigManager);
   std::cout << "✓ MainUIManager created with MotionConfigManager" << std::endl;
+
+  // TODO: Later, when you have motion managers, you can add them like this:
+  // std::unique_ptr<PIControllerManager> piManager = std::make_unique<PIControllerManager>(*motionConfigManager);
+  // std::unique_ptr<ACSControllerManager> acsManager = std::make_unique<ACSControllerManager>(*motionConfigManager);
+  // uiManager.SetMotionManagers(piManager.get(), acsManager.get());
 
   bool done = false;
   while (!done)
@@ -98,7 +103,7 @@ int main(int argc, char* argv[])
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
 
-    // ✅ Render the main UI - super simple!
+    // ✅ Render the main UI
     uiManager.RenderUI();
 
     // Rendering

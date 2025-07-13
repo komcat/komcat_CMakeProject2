@@ -1,4 +1,4 @@
-﻿// UIConfigVisualizer_Graph.cpp - Graph rendering functionality
+﻿// UIConfigVisualizer_Graph.cpp - Graph rendering functionality (updated to remove top panel)
 #include "UIConfigVisualizer.h"
 #include "imgui.h"
 #include <cmath>
@@ -256,94 +256,5 @@ void UIConfigVisualizer::RenderEdges(ImDrawList* drawList, const ImVec2& canvasP
   }
 }
 
-
-void UIConfigVisualizer::RenderSelectedNodeActions() {
-  // Only show actions if a node is selected
-  if (!m_showNodeActions || m_selectedNodeId.empty()) {
-    return;
-  }
-
-  // Get node information for display
-  auto graphOpt = configManager.GetGraph(m_activeGraph);
-  if (!graphOpt.has_value()) {
-    return;
-  }
-
-  const auto& graph = graphOpt.value().get();
-
-  // Find the selected node
-  const Node* selectedNode = nullptr;
-  for (const auto& node : graph.Nodes) {
-    if (node.Id == m_selectedNodeId) {
-      selectedNode = &node;
-      break;
-    }
-  }
-
-  if (!selectedNode) {
-    return;
-  }
-
-  // Create a panel at the top of the canvas area for node actions
-  ImGui::Separator();
-
-  // Style the action panel
-  ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.2f, 0.3f, 0.4f, 0.8f));
-  ImGui::BeginChild("NodeActionPanel", ImVec2(0, 100), true);
-
-  // Display selected node information
-  ImGui::Text("Selected Node:");
-  ImGui::SameLine();
-  ImGui::TextColored(ImVec4(0.8f, 1.0f, 0.8f, 1.0f), "%s",
-    selectedNode->Label.empty() ? selectedNode->Id.c_str() : selectedNode->Label.c_str());
-
-  ImGui::Text("Device: %s | Position: %s", selectedNode->Device.c_str(), selectedNode->Position.c_str());
-
-  ImGui::Separator();
-
-  // Action buttons
-  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.6f, 0.1f, 1.0f));
-
-  if (ImGui::Button("🎯 Move Device To Node", ImVec2(180, 30))) {
-    // Placeholder for machine operations integration
-    m_logger->LogInfo(">>> MoveDeviceToNode SELECTED for node: " + m_selectedNodeId +
-      " (Device: " + selectedNode->Device +
-      ", Position: " + selectedNode->Position + ")");
-
-    // TODO: Integrate with machine_operations class
-    // Example: machineOperations->MoveDeviceToPosition(selectedNode->Device, selectedNode->Position);
-  }
-
-  ImGui::PopStyleColor(3);
-
-  ImGui::SameLine();
-
-  // Additional action buttons
-  if (ImGui::Button("📋 Properties", ImVec2(100, 30))) {
-    m_logger->LogInfo(">>> Node Properties SELECTED for: " + m_selectedNodeId);
-    // TODO: Open node properties dialog
-  }
-
-  ImGui::SameLine();
-
-  if (ImGui::Button("📍 Set Target", ImVec2(100, 30))) {
-    m_logger->LogInfo(">>> Set as Target SELECTED for: " + m_selectedNodeId);
-    // TODO: Set this node as target for operations
-  }
-
-  ImGui::SameLine();
-
-  // Clear selection button
-  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.3f, 0.3f, 1.0f));
-  if (ImGui::Button("❌ Clear", ImVec2(80, 30))) {
-    m_selectedNodeId.clear();
-    m_showNodeActions = false;
-    m_logger->LogInfo("Cleared node selection");
-  }
-  ImGui::PopStyleColor();
-
-  ImGui::EndChild();
-  ImGui::PopStyleColor();
-}
+// REMOVED: RenderSelectedNodeActions() method
+// The node actions are now handled in the left panel via RenderLeftPanel() in UIConfigVisualizer.cpp

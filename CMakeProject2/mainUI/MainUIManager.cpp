@@ -1,23 +1,42 @@
 ﻿#include "MainUIManager.h"
 #include "UIConfigEditor.h"
-#include "UIConfigVisualizer.h"  // Add this include
+#include "UIConfigVisualizer.h"
+#include "UIJogWindow.h"
 #include "include/motions/MotionConfigManager.h"
+#include "include/motions/pi_controller_manager.h"
+#include "include/motions/acs_controller_manager.h"
 #include "imgui.h"
 #include <iostream>
 #include <string>
 #include <ctime>
 
 MainUIManager::MainUIManager(MotionConfigManager& configMgr)
-  : motionConfigManager(configMgr) {
+  : motionConfigManager(configMgr),
+  m_piControllerManager(nullptr),
+  m_acsControllerManager(nullptr) {
 
   // Create UIConfigEditor with the config manager reference
   uiConfigEditor = std::make_unique<UIConfigEditor>(motionConfigManager);
 
   // Create UIConfigVisualizer with the config manager reference
-  uiConfigVisualizer = std::make_unique<UIConfigVisualizer>(motionConfigManager);  // Add this
+  uiConfigVisualizer = std::make_unique<UIConfigVisualizer>(motionConfigManager);
+
+  // Create UIJogWindow using the single-parameter constructor for mock mode
+  m_uiJogWindow = std::make_unique<UIJogWindow>(motionConfigManager);
 }
 
 MainUIManager::~MainUIManager() = default;
+
+void MainUIManager::SetMotionManagers(PIControllerManager* piManager, ACSControllerManager* acsManager) {
+  m_piControllerManager = piManager;
+  m_acsControllerManager = acsManager;
+
+  // Now create the UIJogWindow
+  if (m_piControllerManager && m_acsControllerManager) {
+    m_uiJogWindow = std::make_unique<UIJogWindow>(
+      motionConfigManager, *m_piControllerManager, *m_acsControllerManager);
+  }
+}
 
 void MainUIManager::RenderUI() {
   // Main window that fills the entire screen
@@ -32,14 +51,51 @@ void MainUIManager::RenderUI() {
 
   ImGui::Begin("MainApplication", nullptr, window_flags);
 
-  RenderTopMenuBar();
+  // Only show top menu bar when on main page
+  if (currentMainPage == MainPage::MAIN) {
+    RenderTopMenuBar();
+  }
+  else {
+    // Show back button in top-left when not on main page
+    RenderBackButton();
+  }
+
   RenderDateTime();
   RenderBreadcrumbs();
   ImGui::Separator();
   RenderMainContent();
 
   ImGui::End();
+
+
+  // Always render jog window (it handles its own visibility internally)
+  RenderGlobalJogWindow();
 }
+
+void MainUIManager::RenderBackButton() {
+  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(15, 8));
+  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+
+  if (ImGui::Button("<< BACK")) {
+    if (currentManualSubPage != ManualSubPage::NONE) {
+      // Go back to Manual main page
+      currentManualSubPage = ManualSubPage::NONE;
+    }
+    else if (currentConfigSubPage != ConfigSubPage::NONE) {
+      // Go back to Config main page
+      currentConfigSubPage = ConfigSubPage::NONE;
+    }
+    else {
+      // Go back to main page
+      currentMainPage = MainPage::MAIN;
+    }
+  }
+
+  ImGui::PopStyleColor(2);
+  ImGui::PopStyleVar();
+}
+
 
 void MainUIManager::RenderTopMenuBar() {
   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(20, 10));
@@ -85,14 +141,13 @@ void MainUIManager::RenderTopMenuBar() {
 }
 
 void MainUIManager::RenderDateTime() {
-  // Position date/time in top right corner
+  // Get date/time strings
   time_t rawtime;
   struct tm timeinfo;
   char timeBuffer[80];
   char dateBuffer[80];
 
   time(&rawtime);
-
 #ifdef _WIN32
   localtime_s(&timeinfo, &rawtime);
 #else
@@ -104,7 +159,54 @@ void MainUIManager::RenderDateTime() {
 
   std::string datetime = std::string(dateBuffer) + "\n" + std::string(timeBuffer);
 
+  // Calculate positions
   ImVec2 textSize = ImGui::CalcTextSize(datetime.c_str());
+  float buttonWidth = 50.0f;
+  float buttonHeight = 30.0f;
+  float spacing = 10.0f;
+
+  // Position for JOG button (left of date/time)
+  ImGui::SameLine(ImGui::GetWindowWidth() - textSize.x - buttonWidth - spacing - 20);
+  ImGui::SetCursorPosY(10);
+
+  // Check if jog window is available
+  bool jogAvailable = (m_uiJogWindow != nullptr);
+
+
+
+  // Button styling - gray out if not available
+  if (jogAvailable && m_showGlobalJogWindow) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 1.0f)); // Active green
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
+  }
+  else if (jogAvailable) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.4f, 0.4f, 1.0f)); // Inactive gray
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+  }
+  else {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 1.0f)); // Disabled dark gray
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+  }
+
+  if (ImGui::Button("JOG", ImVec2(buttonWidth, buttonHeight))) {
+    if (m_uiJogWindow) {
+      m_uiJogWindow->ToggleWindow();
+    }
+  }
+
+  ImGui::PopStyleColor(2);
+
+  // Update tooltip based on availability
+  if (ImGui::IsItemHovered()) {
+    if (jogAvailable) {
+      ImGui::SetTooltip("Global Jog Control");
+    }
+    else {
+      ImGui::SetTooltip("Global Jog Control\n(Motion controllers not available)");
+    }
+  }
+
+  // Date/time display (existing position)
   ImGui::SameLine(ImGui::GetWindowWidth() - textSize.x - 20);
   ImGui::SetCursorPosY(10);
   ImGui::Text("%s", datetime.c_str());
@@ -151,23 +253,23 @@ void MainUIManager::RenderBreadcrumbs() {
   // Display breadcrumb text
   ImGui::Text("%s", breadcrumb.c_str());
 
-  // Show back button BELOW the breadcrumb if not on main page
-  if (currentMainPage != MainPage::MAIN) {
-    if (ImGui::Button("<< BACK")) {
-      if (currentManualSubPage != ManualSubPage::NONE) {
-        // Go back to Manual main page
-        currentManualSubPage = ManualSubPage::NONE;
-      }
-      else if (currentConfigSubPage != ConfigSubPage::NONE) {
-        // Go back to Config main page
-        currentConfigSubPage = ConfigSubPage::NONE;
-      }
-      else {
-        // Go back to main page
-        currentMainPage = MainPage::MAIN;
-      }
-    }
-  }
+  //// Show back button BELOW the breadcrumb if not on main page
+  //if (currentMainPage != MainPage::MAIN) {
+  //  if (ImGui::Button("<< BACK")) {
+  //    if (currentManualSubPage != ManualSubPage::NONE) {
+  //      // Go back to Manual main page
+  //      currentManualSubPage = ManualSubPage::NONE;
+  //    }
+  //    else if (currentConfigSubPage != ConfigSubPage::NONE) {
+  //      // Go back to Config main page
+  //      currentConfigSubPage = ConfigSubPage::NONE;
+  //    }
+  //    else {
+  //      // Go back to main page
+  //      currentMainPage = MainPage::MAIN;
+  //    }
+  //  }
+  //}
 }
 
 void MainUIManager::RenderMainContent() {
@@ -228,11 +330,19 @@ void MainUIManager::RenderMainPage() {
   ImGui::Spacing();
   ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Motion Config Manager: Ready");
   ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ UI Config Editor: Ready");
-  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ UI Config Visualizer: Ready");  // Add this line
+  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ UI Config Visualizer: Ready");
+
+  // Show jog status
+  if (m_uiJogWindow) {
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Global Jog Panel: Ready");
+  }
+  else {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "○ Global Jog Panel: Waiting for motion controllers");
+  }
 
   ImGui::Spacing();
   ImGui::Text("All systems operational. You can use the Config Editor to manage motion settings");
-  ImGui::Text("and the Node Visualizer to view and edit motion graphs interactively.");  // Update this line
+  ImGui::Text("and the Node Visualizer to view and edit motion graphs interactively.");
 }
 
 void MainUIManager::RenderManualPage() {
@@ -468,5 +578,12 @@ void MainUIManager::RenderNodeVisualizerPage() {
   }
   else {
     ImGui::Text("Node Visualizer not available");
+  }
+}
+
+void MainUIManager::RenderGlobalJogWindow() {
+  // Let UIJogWindow handle its own rendering
+  if (m_uiJogWindow) {
+    m_uiJogWindow->RenderUI();
   }
 }

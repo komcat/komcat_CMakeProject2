@@ -5,7 +5,10 @@
 // Forward declarations
 class MotionConfigManager;
 class UIConfigEditor;
-class UIConfigVisualizer;  // Add this forward declaration
+class UIConfigVisualizer;
+class UIJogWindow;
+class PIControllerManager;
+class ACSControllerManager;
 
 class MainUIManager {
 public:
@@ -32,6 +35,16 @@ public:
     NODE_VISUALIZER
   };
 
+public:
+  // Constructor takes MotionConfigManager reference only
+  MainUIManager(MotionConfigManager& configManager);
+  ~MainUIManager();
+
+  // Method to set motion managers later when available
+  void SetMotionManagers(PIControllerManager* piManager, ACSControllerManager* acsManager);
+
+  void RenderUI();
+
 private:
   MainPage currentMainPage = MainPage::MAIN;
   ManualSubPage currentManualSubPage = ManualSubPage::NONE;
@@ -42,21 +55,21 @@ private:
 
   // UI components we own
   std::unique_ptr<UIConfigEditor> uiConfigEditor;
-  std::unique_ptr<UIConfigVisualizer> uiConfigVisualizer;  // Add this
+  std::unique_ptr<UIConfigVisualizer> uiConfigVisualizer;
 
-public:
-  // Constructor takes MotionConfigManager reference
-  MainUIManager(MotionConfigManager& configManager);
-  ~MainUIManager();
+  // Motion managers (optional, set later)
+  PIControllerManager* m_piControllerManager = nullptr;
+  ACSControllerManager* m_acsControllerManager = nullptr;
 
-  void RenderUI();
+  // Jog window
+  bool m_showGlobalJogWindow = false;
+  std::unique_ptr<UIJogWindow> m_uiJogWindow;
 
-private:
   void RenderTopMenuBar();
   void RenderDateTime();
   void RenderBreadcrumbs();
   void RenderMainContent();
-
+  void RenderBackButton();
   // Main pages
   void RenderMainPage();
   void RenderManualPage();
@@ -76,4 +89,7 @@ private:
   void RenderConfigSubPage();
   void RenderConfigEditorPage();
   void RenderNodeVisualizerPage();
+
+  // Jog window
+  void RenderGlobalJogWindow();
 };
