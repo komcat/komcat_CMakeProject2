@@ -1,5 +1,6 @@
 #pragma once
-
+// Add this include at the top:
+#include "PIPanelUI.h"
 #include <memory>
 
 // Forward declarations
@@ -64,6 +65,11 @@ private:
   // Jog window
   bool m_showGlobalJogWindow = false;
   std::unique_ptr<UIJogWindow> m_uiJogWindow;
+
+
+
+  // Add these member variables in the private section:
+  std::unique_ptr<PIPanelUI> m_piPanelUI;
 
   void RenderTopMenuBar();
   void RenderDateTime();

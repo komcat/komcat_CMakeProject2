@@ -5,6 +5,8 @@
 #include "include/motions/MotionConfigManager.h"
 #include "include/motions/pi_controller_manager.h"
 #include "include/motions/acs_controller_manager.h"
+// Add this include at the top:
+#include "PIPanelUI.h"
 #include "imgui.h"
 #include <iostream>
 #include <string>
@@ -31,11 +33,19 @@ void MainUIManager::SetMotionManagers(PIControllerManager* piManager, ACSControl
   m_piControllerManager = piManager;
   m_acsControllerManager = acsManager;
 
+  // Create the PI Panel UI when PI manager is available
+  if (m_piControllerManager) {
+    m_piPanelUI = std::make_unique<PIPanelUI>(*m_piControllerManager);
+  }
+
   // Now create the UIJogWindow
   if (m_piControllerManager && m_acsControllerManager) {
     m_uiJogWindow = std::make_unique<UIJogWindow>(
       motionConfigManager, *m_piControllerManager, *m_acsControllerManager);
   }
+
+
+
 }
 
 void MainUIManager::RenderUI() {
@@ -391,25 +401,15 @@ void MainUIManager::RenderManualSubPage() {
   }
 }
 
+// Replace RenderPIPage() method with:
 void MainUIManager::RenderPIPage() {
-  ImGui::SetWindowFontScale(1.5f);
-  ImGui::Text("PI Controller");
-  ImGui::SetWindowFontScale(1.0f);
-
-  ImGui::Spacing();
-  ImGui::Text("PI Controller UI will be implemented here");
-
-  // Placeholder PI controls
-  ImGui::Separator();
-  ImGui::Text("Position Controls:");
-
-  static float position[3] = { 0.0f, 0.0f, 0.0f };
-  ImGui::SliderFloat("X Position", &position[0], -100.0f, 100.0f);
-  ImGui::SliderFloat("Y Position", &position[1], -100.0f, 100.0f);
-  ImGui::SliderFloat("Z Position", &position[2], -100.0f, 100.0f);
-
-  if (ImGui::Button("Move to Position")) {
-    std::cout << "Moving PI to position: " << position[0] << ", " << position[1] << ", " << position[2] << std::endl;
+  if (m_piPanelUI) {
+    m_piPanelUI->RenderUI();
+  }
+  else {
+    // Fallback message
+    ImGui::Text("PI Controllers not available");
+    ImGui::Text("Motion controller managers have not been initialized.");
   }
 }
 
