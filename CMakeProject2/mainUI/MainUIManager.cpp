@@ -8,6 +8,10 @@
 // Add this include at the top:
 #include "PIPanelUI.h"
 #include "ACSPanelUI.h"
+// Add this include at the top:
+#include "IOPanelUI.h"
+#include "UIPneumaticPanel.h"
+
 #include "imgui.h"
 #include <iostream>
 #include <string>
@@ -205,65 +209,63 @@ void MainUIManager::RenderDateTime() {
   ImGui::Text("%s", datetime.c_str());
 }
 
+
+// Update RenderBreadcrumbs() to include pneumatic breadcrumb:
 void MainUIManager::RenderBreadcrumbs() {
-  ImGui::SetCursorPosY(60);
+  std::string breadcrumb = "Home";
 
-  std::string breadcrumb = "Main Page";
-
-  if (currentMainPage != MainPage::MAIN) {
-    breadcrumb += " > ";
-    switch (currentMainPage) {
-    case MainPage::MANUAL: breadcrumb += "Manual"; break;
-    case MainPage::DATA_INSTRUMENT: breadcrumb += "Data & Instrument"; break;
-    case MainPage::RUN_PROGRAM: breadcrumb += "Run Program"; break;
-    case MainPage::CONFIG: breadcrumb += "Config"; break;
-    case MainPage::VISION: breadcrumb += "Vision"; break;
-    default: break;
+  switch (currentMainPage) {
+  case MainPage::MAIN:
+    break;
+  case MainPage::MANUAL:
+    breadcrumb += " > Manual";
+    switch (currentManualSubPage) {
+    case ManualSubPage::PI:
+      breadcrumb += " > PI Controllers";
+      break;
+    case ManualSubPage::GANTRY:
+      breadcrumb += " > Gantry (ACS)";
+      break;
+    case ManualSubPage::IO:
+      breadcrumb += " > IO Control";
+      break;
+    case ManualSubPage::PNEUMATIC:          // Add this case
+      breadcrumb += " > Pneumatic Slides";
+      break;
+    case ManualSubPage::CAMERA:
+      breadcrumb += " > Camera";
+      break;
+    default:
+      break;
     }
-
-    if (currentManualSubPage != ManualSubPage::NONE) {
-      breadcrumb += " > ";
-      switch (currentManualSubPage) {
-      case ManualSubPage::PI: breadcrumb += "PI"; break;
-      case ManualSubPage::GANTRY: breadcrumb += "Gantry"; break;
-      case ManualSubPage::IO: breadcrumb += "IO"; break;
-      case ManualSubPage::CAMERA: breadcrumb += "Camera"; break;
-      default: break;
-      }
+    break;
+  case MainPage::DATA_INSTRUMENT:
+    breadcrumb += " > Data & Instrument";
+    break;
+  case MainPage::RUN_PROGRAM:
+    breadcrumb += " > Run Program";
+    break;
+  case MainPage::CONFIG:
+    breadcrumb += " > Configuration";
+    switch (currentConfigSubPage) {
+    case ConfigSubPage::CONFIG_EDITOR:
+      breadcrumb += " > Config Editor";
+      break;
+    case ConfigSubPage::NODE_VISUALIZER:
+      breadcrumb += " > Node Visualizer";
+      break;
+    default:
+      break;
     }
-
-    // Add config sub-pages
-    if (currentConfigSubPage != ConfigSubPage::NONE) {
-      breadcrumb += " > ";
-      switch (currentConfigSubPage) {
-      case ConfigSubPage::CONFIG_EDITOR: breadcrumb += "Config Editor"; break;
-      case ConfigSubPage::NODE_VISUALIZER: breadcrumb += "Node Visualizer"; break;
-      default: break;
-      }
-    }
+    break;
+  case MainPage::VISION:
+    breadcrumb += " > Vision";
+    break;
   }
 
-  // Display breadcrumb text
   ImGui::Text("%s", breadcrumb.c_str());
-
-  //// Show back button BELOW the breadcrumb if not on main page
-  //if (currentMainPage != MainPage::MAIN) {
-  //  if (ImGui::Button("<< BACK")) {
-  //    if (currentManualSubPage != ManualSubPage::NONE) {
-  //      // Go back to Manual main page
-  //      currentManualSubPage = ManualSubPage::NONE;
-  //    }
-  //    else if (currentConfigSubPage != ConfigSubPage::NONE) {
-  //      // Go back to Config main page
-  //      currentConfigSubPage = ConfigSubPage::NONE;
-  //    }
-  //    else {
-  //      // Go back to main page
-  //      currentMainPage = MainPage::MAIN;
-  //    }
-  //  }
-  //}
 }
+
 
 void MainUIManager::RenderMainContent() {
   ImGui::SetCursorPosY(100);
@@ -338,16 +340,17 @@ void MainUIManager::RenderMainPage() {
   ImGui::Text("and the Node Visualizer to view and edit motion graphs interactively.");
 }
 
+
+// Update RenderManualPage() to include the pneumatic button:
 void MainUIManager::RenderManualPage() {
   ImGui::SetWindowFontScale(1.5f);
   ImGui::Text("Manual Control");
   ImGui::SetWindowFontScale(1.0f);
 
   ImGui::Spacing();
-  ImGui::Text("Select a hardware component to control:");
+  ImGui::Text("Select a manual control option:");
   ImGui::Spacing();
 
-  // Create buttons for manual sub-categories
   if (ImGui::Button("1. PI", ImVec2(200, 50))) {
     currentManualSubPage = ManualSubPage::PI;
   }
@@ -360,11 +363,18 @@ void MainUIManager::RenderManualPage() {
     currentManualSubPage = ManualSubPage::IO;
   }
 
-  if (ImGui::Button("4. Camera", ImVec2(200, 50))) {
+  if (ImGui::Button("4. Pneumatic", ImVec2(200, 50))) {    // Add this button
+    currentManualSubPage = ManualSubPage::PNEUMATIC;
+  }
+
+  if (ImGui::Button("5. Camera", ImVec2(200, 50))) {       // Update number
     currentManualSubPage = ManualSubPage::CAMERA;
   }
 }
 
+
+
+// Update RenderManualSubPage() to include pneumatic case:
 void MainUIManager::RenderManualSubPage() {
   switch (currentManualSubPage) {
   case ManualSubPage::PI:
@@ -376,6 +386,9 @@ void MainUIManager::RenderManualSubPage() {
   case ManualSubPage::IO:
     RenderIOPage();
     break;
+  case ManualSubPage::PNEUMATIC:        // Add this case
+    RenderPneumaticPage();
+    break;
   case ManualSubPage::CAMERA:
     RenderCameraPage();
     break;
@@ -383,6 +396,31 @@ void MainUIManager::RenderManualSubPage() {
     break;
   }
 }
+
+// Add this new method implementation:
+void MainUIManager::RenderPneumaticPage() {
+  if (m_pneumaticPanelUI) {
+    m_pneumaticPanelUI->RenderUI();
+  }
+  else {
+    // Fallback message when pneumatic system is not available
+    ImGui::SetWindowFontScale(1.5f);
+    ImGui::Text("Pneumatic Control");
+    ImGui::SetWindowFontScale(1.0f);
+
+    ImGui::Spacing();
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Pneumatic System not available");
+    ImGui::Text("Pneumatic Manager has not been initialized.");
+    ImGui::Spacing();
+    ImGui::Text("This typically means:");
+    ImGui::BulletText("Pneumatic configuration is still loading");
+    ImGui::BulletText("IO system is not connected");
+    ImGui::BulletText("No pneumatic slides are configured");
+    ImGui::BulletText("Check IOConfig.json for pneumatic slide definitions");
+  }
+}
+
+
 
 // Replace RenderPIPage() method with:
 void MainUIManager::RenderPIPage() {
@@ -422,27 +460,30 @@ void MainUIManager::RenderGantryPage() {
 
 
 
+// Replace the existing RenderIOPage() method with:
 void MainUIManager::RenderIOPage() {
-  ImGui::SetWindowFontScale(1.5f);
-  ImGui::Text("IO Control");
-  ImGui::SetWindowFontScale(1.0f);
+  if (m_ioPanelUI) {
+    m_ioPanelUI->RenderUI();
+  }
+  else {
+    // Fallback message when IO system is not available
+    ImGui::SetWindowFontScale(1.5f);
+    ImGui::Text("IO Control");
+    ImGui::SetWindowFontScale(1.0f);
 
-  ImGui::Spacing();
-  ImGui::Text("IO Control UI will be implemented here");
-
-  // Placeholder IO controls
-  ImGui::Separator();
-  static bool outputs[8] = { false };
-
-  for (int i = 0; i < 8; i++) {
-    char label[32];
-    sprintf(label, "Output %d", i + 1);
-    if (ImGui::Checkbox(label, &outputs[i])) {
-      std::cout << "Output " << i + 1 << " set to " << (outputs[i] ? "ON" : "OFF") << std::endl;
-    }
-    if (i % 2 == 1) ImGui::SameLine();
+    ImGui::Spacing();
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "IO System not available");
+    ImGui::Text("EziIO Manager has not been initialized.");
+    ImGui::Spacing();
+    ImGui::Text("This typically means:");
+    ImGui::BulletText("IO configuration is still loading");
+    ImGui::BulletText("EziIO devices are not enabled in configuration");
+    ImGui::BulletText("Hardware connection issues");
+    ImGui::BulletText("Check network connectivity to IO modules");
   }
 }
+
+
 
 void MainUIManager::RenderCameraPage() {
   ImGui::SetWindowFontScale(1.5f);
@@ -594,5 +635,36 @@ void MainUIManager::SetACSControllerManager(ACSControllerManager* acsManager) {
     // Future: Create ACS Panel UI similar to PI Panel UI
     m_acsPanelUI = std::make_unique<ACSPanelUI>(*m_acsControllerManager);
 		std::cout << "MainUIManager: ACS Panel UI created successfully" << std::endl;
+  }
+}
+
+
+// Add this method implementation:
+void MainUIManager::SetIOManager(EziIOManager* ioManager, IOConfigManager* ioConfigManager) {
+  m_ioManager = ioManager;
+  m_ioConfigManager = ioConfigManager;
+
+  // Create IO Panel UI when IO manager is available
+  if (m_ioManager) {
+    m_ioPanelUI = std::make_unique<IOPanelUI>(*m_ioManager);
+
+    // Set config manager if available (for pin naming)
+    if (m_ioConfigManager) {
+      m_ioPanelUI->SetConfigManager(m_ioConfigManager);
+    }
+
+    std::cout << "MainUIManager: IO Panel UI created successfully" << std::endl;
+  }
+}
+
+
+// Add this method implementation:
+void MainUIManager::SetPneumaticManager(PneumaticManager* pneumaticManager) {
+  m_pneumaticManager = pneumaticManager;
+
+  // Create Pneumatic Panel UI when pneumatic manager is available
+  if (m_pneumaticManager) {
+    m_pneumaticPanelUI = std::make_unique<UIPneumaticPanel>(*m_pneumaticManager);
+    std::cout << "MainUIManager: Pneumatic Panel UI created successfully" << std::endl;
   }
 }

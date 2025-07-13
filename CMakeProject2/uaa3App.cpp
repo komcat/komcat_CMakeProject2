@@ -15,6 +15,9 @@
 #include "include/motions/acs_controller_manager.h"
 #include "include/motions/acs_controller.h"
 #include "include/logger.h" // Include our new logger header
+#include "include/eziio//EziIO_Manager.h"
+#include "include/eziio/PneumaticManager.h"
+#include "IOConfigManager.h"
 
 int main(int argc, char* argv[])
 {
@@ -102,26 +105,6 @@ int main(int argc, char* argv[])
 		logger->LogWarning("Failed to connect to some ACS controllers");
 	}
 
-	// ✅ Create the main UI manager with just the config manager
-	MainUIManager uiManager(*motionConfigManager);
-	logger->LogInfo("MainUIManager created with MotionConfigManager");
-
-	// TODO: Later, when you have motion managers, you can add them like this:
-	// std::unique_ptr<PIControllerManager> piManager = std::make_unique<PIControllerManager>(*motionConfigManager);
-	// std::unique_ptr<ACSControllerManager> acsManager = std::make_unique<ACSControllerManager>(*motionConfigManager);
-	// uiManager.SetMotionManagers(piManager.get(), acsManager.get());
-
-	if (piControllerManager) {
-		uiManager.SetPIControllerManager(piControllerManager.get());
-
-		
-
-	}
-	if (acsControllerManager) {
-		uiManager.SetACSControllerManager(acsControllerManager.get());
-	}
-
-
 
 	// Read all velocity settings for PI controllers
 	if (piControllerManager) {
@@ -187,6 +170,90 @@ int main(int argc, char* argv[])
 		}
 	}
 
+
+	//initialize EziIO system
+	std::unique_ptr<EziIOManager> ioManager;
+	std::unique_ptr<IOConfigManager> ioconfigManager;
+	ioManager = std::make_unique<EziIOManager>();
+	ioconfigManager = std::make_unique<IOConfigManager>();
+
+
+	if (!ioManager->initialize()) {
+		logger->LogError("Failed to initialize EziIO manager");
+	}
+	else {
+		ioconfigManager = std::make_unique<IOConfigManager>();
+		if (!ioconfigManager->loadConfig("IOConfig.json")) {
+			logger->LogWarning("Failed to load IO configuration, using default settings");
+		}
+		ioconfigManager->initializeIOManager(*ioManager);
+
+		if (!ioManager->connectAll()) {
+			logger->LogWarning("Failed to connect to all IO devices");
+		}
+		ioManager->startPolling(100);
+		logger->LogInfo("EziIO system initialized");
+	}
+
+
+	//Initialize Pneumatic System if enabled
+	// Pneumatic System (conditional)
+	std::unique_ptr<PneumaticManager> pneumaticManager;
+	pneumaticManager = std::make_unique<PneumaticManager>(*ioManager);
+	if (!pneumaticManager->initialize()) {
+		logger->LogWarning("Failed to initialize Pneumatic Manager");
+	}
+	else {
+
+		if (!ioconfigManager->initializePneumaticManager(*pneumaticManager)) {
+			logger->LogWarning("Failed to initialize pneumatic manager");
+		}
+
+		pneumaticManager->startPolling(100);
+
+		pneumaticManager->setStateChangeCallback([&logger](const std::string& slideName, SlideState state) {
+			std::string stateStr;
+			switch (state) {
+			case SlideState::EXTENDED: stateStr = "Extended (Down)"; break;
+			case SlideState::RETRACTED: stateStr = "Retracted (Up)"; break;
+			case SlideState::MOVING: stateStr = "Moving"; break;
+			case SlideState::P_ERROR: stateStr = "ERROR"; break;
+			default: stateStr = "Unknown";
+			}
+			logger->LogInfo("Pneumatic slide '" + slideName + "' changed state to: " + stateStr);
+		});
+
+		logger->LogInfo("Pneumatic system initialized");
+	}
+
+
+	// ✅ Create the main UI manager with just the config manager
+	MainUIManager uiManager(*motionConfigManager);
+	logger->LogInfo("MainUIManager created with MotionConfigManager");
+
+	// TODO: Later, when you have motion managers, you can add them like this:
+	// std::unique_ptr<PIControllerManager> piManager = std::make_unique<PIControllerManager>(*motionConfigManager);
+	// std::unique_ptr<ACSControllerManager> acsManager = std::make_unique<ACSControllerManager>(*motionConfigManager);
+	// uiManager.SetMotionManagers(piManager.get(), acsManager.get());
+
+	if (piControllerManager) {
+		uiManager.SetPIControllerManager(piControllerManager.get());
+
+	}
+	if (acsControllerManager) {
+		uiManager.SetACSControllerManager(acsControllerManager.get());
+	}
+
+	if (ioManager) {
+		uiManager.SetIOManager(ioManager.get(), ioconfigManager.get());
+	}
+
+	if (pneumaticManager) {
+		uiManager.SetPneumaticManager(pneumaticManager.get());
+	}
+
+
+
 	bool done = false;
 	while (!done)
 	{
@@ -223,6 +290,20 @@ int main(int argc, char* argv[])
 	// Cleanup
 	logger->LogInfo("Shutting down uaa3App...");
 
+
+
+	piControllerManager.get()->DisconnectAll();
+	std::this_thread::sleep_for(std::chrono::milliseconds(500));
+	acsControllerManager.get()->DisconnectAll();
+	std::this_thread::sleep_for(std::chrono::milliseconds(500));
+	ioManager->stopPolling();
+	pneumaticManager->stopPolling();
+	ioManager->disconnectAll();
+	std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+
+
+
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplSDL2_Shutdown();
 	ImGui::DestroyContext();
@@ -234,3 +315,4 @@ int main(int argc, char* argv[])
 	logger->LogInfo("uaa3App finished!");
 	return 0;
 }
+
