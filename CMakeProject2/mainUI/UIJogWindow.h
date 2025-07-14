@@ -1,8 +1,8 @@
-// UIJogWindow.h
+// UIJogWindow.h - Updated to wrap GlobalJogPanel
 #pragma once
 
+#include "include/motions/global_jog_panel.h"
 #include <memory>
-#include <string>
 
 // Forward declarations
 class MotionConfigManager;
@@ -32,7 +32,7 @@ public:
   bool IsVisible() const;
   void SetVisible(bool visible);
 
-  // Render - just forwards to GlobalJogPanel but sets predetermined position
+  // Render - forwards to GlobalJogPanel but sets predetermined position
   void RenderUI();
 
   // Key input forwarding  
@@ -41,11 +41,26 @@ public:
   // Set predetermined position
   void SetPredeterminedPosition();
 
+  // Methods to set controller managers (called from MainUIManager)
+  void SetPIControllerManager(PIControllerManager* piManager);
+  void SetACSControllerManager(ACSControllerManager* acsManager);
+
 private:
-  // Remove GlobalJogPanel dependency for now - use only mock mode
+  // References to managers
+  MotionConfigManager& m_configManager;
+  PIControllerManager* m_piControllerManager = nullptr;
+  ACSControllerManager* m_acsControllerManager = nullptr;
+
+  // GlobalJogPanel instance (created when controllers are available)
+  std::unique_ptr<GlobalJogPanel> m_globalJogPanel;
+
+  // Window management
   bool m_firstRender = true;
 
   // Mock functionality for testing without controllers
   bool m_mockWindowVisible = false;
   void RenderMockJogWindow();
+
+  // Helper to create GlobalJogPanel when managers are available
+  void CreateGlobalJogPanel();
 };

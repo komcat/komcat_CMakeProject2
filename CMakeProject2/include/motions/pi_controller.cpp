@@ -1683,3 +1683,202 @@ bool PIController::GetSystemVelocity(double& velocity) {
 
 	return true;
 }
+// Add these to your pi_controller.cpp file:
+
+bool PIController::Home(const std::string& axis) {
+	if (!IsConnected()) {
+		std::cerr << "PIController::Home failed: Controller not connected" << std::endl;
+		return false;
+	}
+
+	if (axis.empty()) {
+		std::cerr << "PIController::Home failed: Empty axis name" << std::endl;
+		return false;
+	}
+
+	// Validate axis exists (if you have this method, otherwise remove this check)
+	// if (!IsAxisValid(axis)) {
+	//     std::cerr << "PIController::Home failed: Invalid axis " << axis << std::endl;
+	//     return false;
+	// }
+
+	std::cout << "PIController: Homing axis: " << axis << std::endl;
+
+	// Call PI_GOH with single axis
+	BOOL result = PI_GOH(m_controllerId, axis.c_str());
+
+	if (!result) {
+		int errorCode = PI_GetError(m_controllerId);
+		std::cerr << "PIController::Home failed for axis " << axis
+			<< " with PI error: " << errorCode << std::endl;
+		return false;
+	}
+
+	std::cout << "PIController: Successfully started homing for axis: " << axis << std::endl;
+	return true;
+}
+
+bool PIController::HomeAll() {
+	if (!IsConnected()) {
+		std::cerr << "PIController::HomeAll failed: Controller not connected" << std::endl;
+		return false;
+	}
+
+	std::cout << "PIController: Homing all axes" << std::endl;
+
+	// Call PI_GOH with empty string to home all axes
+	BOOL result = PI_GOH(m_controllerId, "");
+
+	if (!result) {
+		int errorCode = PI_GetError(m_controllerId);
+		std::cerr << "PIController::HomeAll failed with PI error: " << errorCode << std::endl;
+		return false;
+	}
+
+	std::cout << "PIController: Successfully started homing for all axes" << std::endl;
+	return true;
+}
+
+bool PIController::HomeAxes(const std::vector<std::string>& axes) {
+	if (!IsConnected()) {
+		std::cerr << "PIController::HomeAxes failed: Controller not connected" << std::endl;
+		return false;
+	}
+
+	if (axes.empty()) {
+		std::cerr << "PIController::HomeAxes failed: Empty axes list" << std::endl;
+		return false;
+	}
+
+	// Validate all axes first (if you have IsAxisValid method)
+	// for (const std::string& axis : axes) {
+	//     if (!IsAxisValid(axis)) {
+	//         std::cerr << "PIController::HomeAxes failed: Invalid axis " << axis << std::endl;
+	//         return false;
+	//     }
+	// }
+
+	// Convert axes vector to space-separated string
+	std::string axesString = AxesToString(axes);
+
+	std::cout << "PIController: Homing axes: " << axesString << std::endl;
+
+	// Call PI_GOH with axes string
+	BOOL result = PI_GOH(m_controllerId, axesString.c_str());
+
+	if (!result) {
+		int errorCode = PI_GetError(m_controllerId);
+		std::cerr << "PIController::HomeAxes failed for [" << axesString
+			<< "] with PI error: " << errorCode << std::endl;
+		return false;
+	}
+
+	std::cout << "PIController: Successfully started homing for axes: " << axesString << std::endl;
+	return true;
+}
+
+bool PIController::HomeAxes(const std::string& axesString) {
+	if (!IsConnected()) {
+		std::cerr << "PIController::HomeAxes failed: Controller not connected" << std::endl;
+		return false;
+	}
+
+	if (axesString.empty()) {
+		std::cerr << "PIController::HomeAxes failed: Empty axes string" << std::endl;
+		return false;
+	}
+
+	std::cout << "PIController: Homing axes: " << axesString << std::endl;
+
+	// Call PI_GOH with provided axes string
+	BOOL result = PI_GOH(m_controllerId, axesString.c_str());
+
+	if (!result) {
+		int errorCode = PI_GetError(m_controllerId);
+		std::cerr << "PIController::HomeAxes failed for [" << axesString
+			<< "] with PI error: " << errorCode << std::endl;
+		return false;
+	}
+
+	std::cout << "PIController: Successfully started homing for axes: " << axesString << std::endl;
+	return true;
+}
+
+bool PIController::DefineHome(const std::string& axis) {
+	if (!IsConnected()) {
+		std::cerr << "PIController::DefineHome failed: Controller not connected" << std::endl;
+		return false;
+	}
+
+	if (axis.empty()) {
+		std::cerr << "PIController::DefineHome failed: Empty axis name" << std::endl;
+		return false;
+	}
+
+	// Validate axis exists (if you have this method)
+	// if (!IsAxisValid(axis)) {
+	//     std::cerr << "PIController::DefineHome failed: Invalid axis " << axis << std::endl;
+	//     return false;
+	// }
+
+	std::cout << "PIController: Defining home position for axis " << axis 		<<  std::endl;
+
+	// Call PI_DFH to define home position
+	BOOL result = PI_DFH(m_controllerId, axis.c_str());
+
+	if (!result) {
+		int errorCode = PI_GetError(m_controllerId);
+		std::cerr << "PIController::DefineHome failed for axis " << axis
+			<< " with PI error: " << errorCode << std::endl;
+		return false;
+	}
+
+	std::cout << "PIController: Successfully defined home position for axis: " << axis << std::endl;
+	return true;
+}
+
+bool PIController::DefineHomeAll() {
+	if (!IsConnected()) {
+		std::cerr << "PIController::DefineHomeAll failed: Controller not connected" << std::endl;
+		return false;
+	}
+
+	std::cout << "PIController: Defining home position for all axes at position: " << std::endl;
+
+	// Get all available axes and define home for each
+	auto axes = GetAvailableAxes();
+	bool success = true;
+
+	for (const std::string& axis : axes) {
+		BOOL result = PI_DFH(m_controllerId, axis.c_str());
+		if (!result) {
+			int errorCode = PI_GetError(m_controllerId);
+			std::cerr << "PIController::DefineHomeAll failed for axis " << axis
+				<< " with PI error: " << errorCode << std::endl;
+			success = false;
+			// Continue with other axes even if one fails
+		}
+	}
+
+	if (success) {
+		std::cout << "PIController: Successfully defined home position for all axes" << std::endl;
+	}
+	else {
+		std::cerr << "PIController::DefineHomeAll partially failed - check output for details" << std::endl;
+	}
+
+	return success;
+}
+
+std::string PIController::AxesToString(const std::vector<std::string>& axes) const {
+	if (axes.empty()) {
+		return "";
+	}
+
+	std::string result = axes[0];
+	for (size_t i = 1; i < axes.size(); ++i) {
+		result += " " + axes[i];
+	}
+
+	return result;
+}

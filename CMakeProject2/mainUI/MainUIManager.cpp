@@ -137,6 +137,8 @@ void MainUIManager::RenderTopMenuBar() {
   ImGui::PopStyleVar();
 }
 
+
+// In RenderDateTime method - UPDATE the JOG button logic:
 void MainUIManager::RenderDateTime() {
   // Get date/time strings
   time_t rawtime;
@@ -169,12 +171,17 @@ void MainUIManager::RenderDateTime() {
   // Check if jog window is available
   bool jogAvailable = (m_uiJogWindow != nullptr);
 
+  // **UPDATED: Check if UIJogWindow is showing real GlobalJogPanel or mock mode**
+  bool isRealMode = jogAvailable && m_piControllerManager && m_acsControllerManager;
 
-
-  // Button styling - gray out if not available
-  if (jogAvailable && m_showGlobalJogWindow) {
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 1.0f)); // Active green
+  // Button styling - show different colors for real vs mock mode
+  if (isRealMode && m_uiJogWindow->IsVisible()) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 1.0f)); // Active green (real mode)
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
+  }
+  else if (jogAvailable && m_uiJogWindow->IsVisible()) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.2f, 1.0f)); // Active orange (mock mode)
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.6f, 0.3f, 1.0f));
   }
   else if (jogAvailable) {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.4f, 0.4f, 1.0f)); // Inactive gray
@@ -193,13 +200,16 @@ void MainUIManager::RenderDateTime() {
 
   ImGui::PopStyleColor(2);
 
-  // Update tooltip based on availability
+  // **UPDATED: Update tooltip to show real vs mock mode**
   if (ImGui::IsItemHovered()) {
-    if (jogAvailable) {
-      ImGui::SetTooltip("Global Jog Control");
+    if (isRealMode) {
+      ImGui::SetTooltip("Global Jog Control\n(Real mode - Controllers available)");
+    }
+    else if (jogAvailable) {
+      ImGui::SetTooltip("Global Jog Control\n(Mock mode - Controllers not available)");
     }
     else {
-      ImGui::SetTooltip("Global Jog Control\n(Motion controllers not available)");
+      ImGui::SetTooltip("Global Jog Control\n(Not available)");
     }
   }
 
@@ -208,7 +218,6 @@ void MainUIManager::RenderDateTime() {
   ImGui::SetCursorPosY(10);
   ImGui::Text("%s", datetime.c_str());
 }
-
 
 // Update RenderBreadcrumbs() to include pneumatic breadcrumb:
 void MainUIManager::RenderBreadcrumbs() {
@@ -629,6 +638,12 @@ void MainUIManager::SetPIControllerManager(PIControllerManager* piManager) {
     m_piPanelUI = std::make_unique<PIPanelUI>(*m_piControllerManager);
     std::cout << "MainUIManager: PI Panel UI created successfully" << std::endl;
   }
+
+  // **UPDATED: Update UIJogWindow with PI controller manager**
+  if (m_uiJogWindow) {
+    m_uiJogWindow->SetPIControllerManager(piManager);
+    std::cout << "MainUIManager: UIJogWindow updated with PI Controller Manager" << std::endl;
+  }
 }
 
 void MainUIManager::SetACSControllerManager(ACSControllerManager* acsManager) {
@@ -641,6 +656,12 @@ void MainUIManager::SetACSControllerManager(ACSControllerManager* acsManager) {
     m_acsPanelUI = std::make_unique<ACSPanelUI>(*m_acsControllerManager);
 		std::cout << "MainUIManager: ACS Panel UI created successfully" << std::endl;
   }
+  // **UPDATED: Update UIJogWindow with ACS controller manager**
+  if (m_uiJogWindow) {
+    m_uiJogWindow->SetACSControllerManager(acsManager);
+    std::cout << "MainUIManager: UIJogWindow updated with ACS Controller Manager" << std::endl;
+  }
+
 }
 
 

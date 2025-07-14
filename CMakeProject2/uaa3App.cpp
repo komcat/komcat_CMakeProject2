@@ -81,12 +81,79 @@ int main(int argc, char* argv[])
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
+	// ADD THIS FONT LOADING CODE RIGHT HERE:
+// ========================================
+// Load font with Greek support for μ symbol
+	// Greek character range
+	// Greek character range including μ symbol
+	static const ImWchar ranges[] = {
+		0x0020, 0x00FF, // Basic Latin + Latin Supplement  
+		0x0370, 0x03FF, // Greek and Coptic (includes μ at 0x03BC)
+		0x2200, 0x22FF, // Mathematical Operators (JuliaMono has lots of math symbols)
+		0,
+	};
+
+
+	bool fontLoaded = false;
+
+	// Try bundled font first (put in your project directory)
+	ImFont* font = io.Fonts->AddFontFromFileTTF("assets/fonts/JuliaMono-Regular.ttf", 16.0f, NULL, ranges);
+	if (font != NULL) {
+		logger->LogInfo("Loaded bundled Noto Sans font with Greek support");
+		fontLoaded = true;
+	}
+	else {
+		// Fallback to system fonts
+		const char* systemFonts[] = {
+			"C:/Windows/Fonts/times.ttf",
+			"C:/Windows/Fonts/calibri.ttf",
+			"C:/Windows/Fonts/segoeui.ttf",
+		};
+
+		for (const char* fontPath : systemFonts) {
+			font = io.Fonts->AddFontFromFileTTF(fontPath, 16.0f, NULL, ranges);
+			if (font != NULL) {
+				logger->LogInfo("Loaded system font: " + std::string(fontPath));
+				fontLoaded = true;
+				break;
+			}
+		}
+	}
+
+	if (!fontLoaded) {
+		// Final fallback
+		io.Fonts->AddFontDefault();
+		logger->LogWarning("No Greek font support available, using 'um' instead of 'μm'");
+	}
+
+
+
+	// IMPORTANT: Build font atlas BEFORE checking glyphs
+	bool buildSuccess = io.Fonts->Build();
+	if (!buildSuccess) {
+		logger->LogError("Failed to build font atlas");
+	}
+
+
+	// ========================================
+
 	// Setup Dear ImGui style
 	ImGui::StyleColorsDark();
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
 	ImGui_ImplOpenGL3_Init("#version 130");
+
+
+	// SAFE: Check glyph AFTER everything is initialized
+	bool hasMusymbol = false;
+	if (io.FontDefault != nullptr) {
+		// Wait one frame before checking glyphs
+		// We'll check this in the main loop instead
+		logger->LogInfo("Font system initialized, will verify μ symbol after first frame");
+	}
+
+
 
 	// ✅ Create MotionConfigManager
 	std::unique_ptr<MotionConfigManager> motionConfigManager;
@@ -289,7 +356,9 @@ int main(int argc, char* argv[])
 	}
 
 
+
 	bool done = false;
+	bool glyphChecked = false; // Flag to check glyph only once
 	while (!done)
 	{
 		// Poll and handle events
@@ -308,6 +377,47 @@ int main(int argc, char* argv[])
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL2_NewFrame();
 		ImGui::NewFrame();
+
+
+
+		// SAFE: Check glyph after first frame when everything is ready
+		if (!glyphChecked && io.FontDefault != nullptr) {
+			try {
+				const ImFontGlyph* muGlyph = io.FontDefault->FindGlyph(0x03BC);
+				hasMusymbol = (muGlyph != nullptr && muGlyph->Visible);
+
+				if (hasMusymbol) {
+					logger->LogInfo("✓ μ symbol verified and ready to use");
+				}
+				else {
+					logger->LogInfo("μ symbol not available, will use 'um' notation");
+				}
+			}
+			catch (...) {
+				logger->LogWarning("Could not verify μ symbol, using fallback");
+				hasMusymbol = false;
+			}
+			glyphChecked = true;
+		}
+
+		// SIMPLE TEST: Add this temporarily to verify visually
+		static bool showTest = false;
+		if (showTest) {
+			ImGui::Begin("Font Test", &showTest);
+			ImGui::Text("Font test: μ α β γ");
+
+			if (ImGui::Button("0.5μm")) {
+				logger->LogInfo("μ button works!");
+			}
+
+			ImGui::Text("If you see μ above, Unicode works!");
+			ImGui::Text("If you see ?, Unicode failed");
+			ImGui::End();
+		}
+
+
+
+
 
 		// ✅ Render the main UI
 		uiManager.RenderUI();

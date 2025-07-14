@@ -268,7 +268,7 @@ add_executable(CMakeProject2
      "include/cld101x_manager.cpp"
      "include/python_process_managaer.h"
      "include/motions/global_jog_panel.h"
-     "include/motions/global_jog_panel.cpp"
+     
      "include/data/global_data_store.h"
      "include/data/global_data_store.cpp"
      "implot/implot.h"
@@ -391,7 +391,7 @@ add_executable(CMakeProject2
  "mainUI/MainUIManager.h" "mainUI/MainUIManager.cpp"
   
   
-   "mainUI/UIConfigEditor.h" "mainUI/UIConfigEditor.cpp" "mainUI/UIConfigEditor_Devices.cpp" "mainUI/UIConfigEditor_Positions.cpp" "mainUI/UIConfigEditor_Helpers.cpp" "mainUI/UIConfigEditor_Graphs.cpp" "mainUI/UIConfigEditor_Details.cpp" "mainUI/UIConfigVisualizer.h" "mainUI/UIConfigVisualizer.cpp" "mainUI/UIConfigVisualizer_Graph.cpp" "mainUI/UIConfigVisualizer_Input.cpp" "mainUI/UIConfigVisualizer_Helpers.cpp" "mainUI/NodePropertiesHandler.h" "mainUI/NodePropertiesHandler.cpp" "mainUI/UIJogWindow.h" "mainUI/UIJogWindow.cpp" "mainUI/PIPanelUI.h" "mainUI/PIPanelUI.cpp" "mainUI/ACSPanelUI.h" "mainUI/ACSPanelUI.cpp" "mainUI/IOPanelUI.h" "mainUI/IOPanelUI.cpp" "mainUI/UIPneumaticPanel.h" "mainUI/UIPneumaticPanel.cpp" "include/camera/CameraManager.h" "include/camera/CameraManager.cpp" "mainUI/UICameraPanel.h" "mainUI/UICameraPanel.cpp" "mainUI/CameraFeedDisplay.h" "mainUI/CameraFeedDisplay.cpp" "mainUI/UICameraPanelLiveVideo.h" "mainUI/UICameraPanelSingleGrab.h" "mainUI/UICameraPanelUtility.h" "mainUI/UICameraPanelLiveVideo.cpp" "mainUI/UICameraPanelSingleGrab.cpp" "mainUI/UICameraPanelUtility.cpp")
+   "mainUI/UIConfigEditor.h" "mainUI/UIConfigEditor.cpp" "mainUI/UIConfigEditor_Devices.cpp" "mainUI/UIConfigEditor_Positions.cpp" "mainUI/UIConfigEditor_Helpers.cpp" "mainUI/UIConfigEditor_Graphs.cpp" "mainUI/UIConfigEditor_Details.cpp" "mainUI/UIConfigVisualizer.h" "mainUI/UIConfigVisualizer.cpp" "mainUI/UIConfigVisualizer_Graph.cpp" "mainUI/UIConfigVisualizer_Input.cpp" "mainUI/UIConfigVisualizer_Helpers.cpp" "mainUI/NodePropertiesHandler.h" "mainUI/NodePropertiesHandler.cpp" "mainUI/UIJogWindow.h" "mainUI/UIJogWindow.cpp" "mainUI/PIPanelUI.h" "mainUI/PIPanelUI.cpp" "mainUI/ACSPanelUI.h" "mainUI/ACSPanelUI.cpp" "mainUI/IOPanelUI.h" "mainUI/IOPanelUI.cpp" "mainUI/UIPneumaticPanel.h" "mainUI/UIPneumaticPanel.cpp" "include/camera/CameraManager.h" "include/camera/CameraManager.cpp" "mainUI/UICameraPanel.h" "mainUI/UICameraPanel.cpp" "mainUI/CameraFeedDisplay.h" "mainUI/CameraFeedDisplay.cpp" "mainUI/UICameraPanelLiveVideo.h" "mainUI/UICameraPanelSingleGrab.h" "mainUI/UICameraPanelUtility.h" "mainUI/UICameraPanelLiveVideo.cpp" "mainUI/UICameraPanelSingleGrab.cpp" "mainUI/UICameraPanelUtility.cpp" "include/motions/global_jog_panel_core.cpp" "include/motions/global_jog_panel_movement.cpp" "include/motions/global_jog_panel_device.cpp" "include/motions/global_jog_panel_ui.cpp" "include/motions/global_jog_panel_ui_positions.cpp")
 
 
 
@@ -534,7 +534,7 @@ add_executable(uaa3App
   "include/cld101x_manager.cpp"
   "include/python_process_managaer.h"
   "include/motions/global_jog_panel.h"
-  "include/motions/global_jog_panel.cpp"
+  
   "include/data/global_data_store.h"
   "include/data/global_data_store.cpp"
   "implot/implot.h"
@@ -658,7 +658,7 @@ add_executable(uaa3App
   "mainUI/MainUIManager.cpp"
   
   
-  "mainUI/UIConfigEditor.h" "mainUI/UIConfigEditor.cpp" "mainUI/UIConfigEditor_Devices.cpp" "mainUI/UIConfigEditor_Positions.cpp" "mainUI/UIConfigEditor_Helpers.cpp" "mainUI/UIConfigEditor_Graphs.cpp" "mainUI/UIConfigEditor_Details.cpp" "mainUI/UIConfigVisualizer.h" "mainUI/UIConfigVisualizer.cpp" "mainUI/UIConfigVisualizer_Graph.cpp" "mainUI/UIConfigVisualizer_Input.cpp" "mainUI/UIConfigVisualizer_Helpers.cpp" "mainUI/NodePropertiesHandler.h" "mainUI/NodePropertiesHandler.cpp" "mainUI/UIJogWindow.h" "mainUI/UIJogWindow.cpp" "mainUI/PIPanelUI.h" "mainUI/PIPanelUI.cpp" "mainUI/ACSPanelUI.h" "mainUI/ACSPanelUI.cpp" "mainUI/IOPanelUI.h" "mainUI/IOPanelUI.cpp" "mainUI/UIPneumaticPanel.h" "mainUI/UIPneumaticPanel.cpp" "include/camera/CameraManager.h" "include/camera/CameraManager.cpp" "mainUI/UICameraPanel.h" "mainUI/UICameraPanel.cpp" "mainUI/CameraFeedDisplay.h" "mainUI/CameraFeedDisplay.cpp" "mainUI/UICameraPanelLiveVideo.h" "mainUI/UICameraPanelSingleGrab.h" "mainUI/UICameraPanelUtility.h" "mainUI/UICameraPanelLiveVideo.cpp" "mainUI/UICameraPanelSingleGrab.cpp" "mainUI/UICameraPanelUtility.cpp")
+  "mainUI/UIConfigEditor.h" "mainUI/UIConfigEditor.cpp" "mainUI/UIConfigEditor_Devices.cpp" "mainUI/UIConfigEditor_Positions.cpp" "mainUI/UIConfigEditor_Helpers.cpp" "mainUI/UIConfigEditor_Graphs.cpp" "mainUI/UIConfigEditor_Details.cpp" "mainUI/UIConfigVisualizer.h" "mainUI/UIConfigVisualizer.cpp" "mainUI/UIConfigVisualizer_Graph.cpp" "mainUI/UIConfigVisualizer_Input.cpp" "mainUI/UIConfigVisualizer_Helpers.cpp" "mainUI/NodePropertiesHandler.h" "mainUI/NodePropertiesHandler.cpp" "mainUI/UIJogWindow.h" "mainUI/UIJogWindow.cpp" "mainUI/PIPanelUI.h" "mainUI/PIPanelUI.cpp" "mainUI/ACSPanelUI.h" "mainUI/ACSPanelUI.cpp" "mainUI/IOPanelUI.h" "mainUI/IOPanelUI.cpp" "mainUI/UIPneumaticPanel.h" "mainUI/UIPneumaticPanel.cpp" "include/camera/CameraManager.h" "include/camera/CameraManager.cpp" "mainUI/UICameraPanel.h" "mainUI/UICameraPanel.cpp" "mainUI/CameraFeedDisplay.h" "mainUI/CameraFeedDisplay.cpp" "mainUI/UICameraPanelLiveVideo.h" "mainUI/UICameraPanelSingleGrab.h" "mainUI/UICameraPanelUtility.h" "mainUI/UICameraPanelLiveVideo.cpp" "mainUI/UICameraPanelSingleGrab.cpp" "mainUI/UICameraPanelUtility.cpp" "include/motions/global_jog_panel_core.cpp" "include/motions/global_jog_panel_movement.cpp" "include/motions/global_jog_panel_device.cpp" "include/motions/global_jog_panel_ui.cpp" "include/motions/global_jog_panel_ui_positions.cpp")
 
 
 # Set HALCON paths based on your installation
@@ -891,3 +891,15 @@ endif()
 #     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 #     COMMENT "Auto-incrementing build number before build"
 # )
+
+# Copy fonts directory to build output
+add_custom_command(TARGET CMakeProject2 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory 
+    $<TARGET_FILE_DIR:CMakeProject2>/assets/fonts
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/CascadiaCode-Regular.ttf"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/JuliaMono-Regular.ttf"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/NotoSans-Regular.ttf"
+    $<TARGET_FILE_DIR:CMakeProject2>/assets/fonts/
+    COMMENT "Copying font files to build directory"
+)

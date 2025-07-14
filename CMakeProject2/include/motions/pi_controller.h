@@ -71,6 +71,16 @@ public:
     const std::vector<double>& positions,
     bool blocking = true);
 
+  // Home axis functions
+  bool Home(const std::string& axis);
+  bool HomeAll();
+  bool HomeAxes(const std::vector<std::string>& axes);
+  bool HomeAxes(const std::string& axesString);  // Space-separated axes like "X Y Z"
+
+  // Set home position definition (if controller supports PI_DFH)
+  bool DefineHome(const std::string& axis);
+  bool DefineHomeAll();
+
   // UI rendering
   void RenderUI();
   void RenderJogDistanceControl();
@@ -160,4 +170,7 @@ private:
   const int m_statusUpdateInterval = 200;  // 5Hz updates
 
   bool m_enableDebug = false;  // Add this line
+
+  // Helper method to convert vector of axes to space-separated string
+  std::string AxesToString(const std::vector<std::string>& axes) const;
 };
