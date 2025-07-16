@@ -5,6 +5,7 @@
 #include <string>
 #include <map>
 #include <vector>
+#include "CameraFeedDisplay.h"
 #include "include/motions/MotionConfigManager.h"
 #include "include/motions/MotionTypes.h"
 #include "include/logger.h"
@@ -31,11 +32,16 @@ public:
 
   // Set the active graph to visualize
   void SetActiveGraph(const std::string& graphName);
-
+  void InitializeCameraFeed();
 private:
   // Reference to the config manager and logger
   MotionConfigManager& configManager;
   Logger* m_logger;
+
+  //camera
+  std::unique_ptr<CameraFeedDisplay> m_cameraFeedDisplay;
+  std::string m_selectedCameraId;
+  bool m_cameraInitialized = false;
 
   // Action handlers
   std::unique_ptr<NodePropertiesHandler> m_propertiesHandler;

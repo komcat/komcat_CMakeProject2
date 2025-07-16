@@ -28,8 +28,10 @@
 // ADD THESE TWO LINES:
 #include "include/cld101x_manager.h"  
 #include "include/cld101x_client.h"
+#include "include/machine_operations.h"
 // Create a global camera manager instance
 CameraManager g_cameraManager;
+MachineOperations g_machineOperations; // Global machine operations instance
 
 // Example: Check camera status
 void CheckCameraStatus() {
@@ -450,6 +452,8 @@ int main(int argc, char* argv[])
 		uiManager.SetKeithley2400Manager(keithleyManager.get());
 	}
 
+
+
 	bool done = false;
 	bool glyphChecked = false; // Flag to check glyph only once
 	while (!done)
@@ -471,7 +475,7 @@ int main(int argc, char* argv[])
 		ImGui_ImplSDL2_NewFrame();
 		ImGui::NewFrame();
 
-
+		
 
 		// SAFE: Check glyph after first frame when everything is ready
 		if (!glyphChecked && io.FontDefault != nullptr) {
