@@ -23,7 +23,7 @@ CLD101xManager::~CLD101xManager() {
 bool CLD101xManager::Initialize(const std::string& configFile) {
   if (configFile.empty()) {
     // No config file provided, use default settings
-    AddClient("CLD101x", "127.0.0.88", 65432);
+    AddClient("CLD101x", "127.0.0.11", 65432);
     m_logger->LogInfo("CLD101xManager: Using default settings (no config file)");
     return true;
   }

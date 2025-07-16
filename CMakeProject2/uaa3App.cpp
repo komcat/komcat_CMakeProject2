@@ -6,7 +6,7 @@
 #include "imgui.h"
 #include "backends/imgui_impl_sdl2.h"
 #include "backends/imgui_impl_opengl3.h"
-
+#include "implot/implot.h"
 // Include our UI manager and config manager
 #include "MainUIManager.h"
 #include "include/motions/MotionConfigManager.h"
@@ -19,8 +19,12 @@
 #include "include/eziio/PneumaticManager.h"
 #include "IOConfigManager.h"
 #include "include/camera/CameraManager.h"
+#include "include/data/global_data_store.h"
+#include "include/data/data_client_manager.h"  // Add this line
 
-
+// ADD THESE TWO LINES:
+#include "include/cld101x_manager.h"  
+#include "include/cld101x_client.h"
 // Create a global camera manager instance
 CameraManager g_cameraManager;
 
@@ -39,9 +43,16 @@ void CheckCameraStatus() {
 
 int main(int argc, char* argv[])
 {
+
+
 	// Get the logger instance
 	Logger* logger = Logger::GetInstance();
 	logger->LogInfo("Hello World from uaa3App!");
+
+	GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+
+
+
 
 	// Initialize SDL
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
@@ -80,6 +91,11 @@ int main(int argc, char* argv[])
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+	//im plot create context
+		// ADD THIS: Initialize ImPlot context
+	ImPlot::CreateContext();
+
 
 	// ADD THIS FONT LOADING CODE RIGHT HERE:
 // ========================================
@@ -323,7 +339,38 @@ int main(int argc, char* argv[])
 	// Start grabbing on all connected cameras
 	//g_cameraManager.StartGrabbingAll();
 
-	
+	// ✅ Initialize TCP Data Client Manager
+	std::unique_ptr<DataClientManager> dataClientManager;
+	try {
+		dataClientManager = std::make_unique<DataClientManager>("DataServerConfig.json");
+
+		// Connect to auto-connect servers
+		dataClientManager->ConnectAutoClients();
+
+		logger->LogInfo("DataClientManager initialized successfully");
+	}
+	catch (const std::exception& e) {
+		logger->LogError("Failed to initialize DataClientManager: " + std::string(e.what()));
+		logger->LogWarning("TCP Data Manager will not be available");
+		// Continue without TCP data manager - the UI will handle this gracefully
+	}
+
+
+	// ADD THIS SECTION:
+	// ✅ Initialize CLD101x Manager
+	std::unique_ptr<CLD101xManager> cld101xManager;
+	//std::unique_ptr<CLD101xOperations> laserOps;
+
+	cld101xManager = std::make_unique<CLD101xManager>();
+	cld101xManager->Initialize();
+	//automatically connected to
+	//     AddClient("CLD101x", "127.0.0.11", 65432);
+	//laserOps = std::make_unique<CLD101xOperations>(*cld101xManager);
+	cld101xManager->ConnectAll();
+	logger->LogInfo("CLD101x system initialized");
+
+
+
 
 
 	// ✅ Create the main UI manager with just the config manager
@@ -355,6 +402,15 @@ int main(int argc, char* argv[])
 		uiManager.SetCameraManager(&g_cameraManager);
 	}
 
+	// ✅ Set the TCP Data Manager
+	if (dataClientManager) {
+		uiManager.SetDataClientManager(dataClientManager.get());
+	}
+
+	// ✅ Set the CLD101x Manager
+	if (cld101xManager) {
+		uiManager.SetCLD101xManager(cld101xManager.get());
+	}
 
 
 	bool done = false;
@@ -416,6 +472,10 @@ int main(int argc, char* argv[])
 		}
 
 
+		// ✅ ADD THIS: Update DataClientManager continuously in background
+		if (dataClientManager) {
+			dataClientManager->UpdateClients();
+		}
 
 
 
@@ -449,8 +509,15 @@ int main(int argc, char* argv[])
 	ioManager->disconnectAll();
 	std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
+	// Cleanup CLD101x
+	if (cld101xManager) {
+		cld101xManager->DisconnectAll();
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
 
 
+	// Cleanup - ADD THIS before ImGui cleanup
+	ImPlot::DestroyContext();
 
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplSDL2_Shutdown();

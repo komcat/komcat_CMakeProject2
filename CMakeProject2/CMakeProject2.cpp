@@ -1156,6 +1156,79 @@ int main(int argc, char* argv[])
 	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
 	ImGui_ImplOpenGL3_Init("#version 130");
 
+
+	// ADD THIS FONT LOADING CODE RIGHT HERE:
+// ========================================
+// Load font with Greek support for μ symbol
+	// Greek character range
+	// Greek character range including μ symbol
+	static const ImWchar ranges[] = {
+		0x0020, 0x00FF, // Basic Latin + Latin Supplement  
+		0x0370, 0x03FF, // Greek and Coptic (includes μ at 0x03BC)
+		0x2200, 0x22FF, // Mathematical Operators (JuliaMono has lots of math symbols)
+		0,
+	};
+
+
+	bool fontLoaded = false;
+
+	// Try bundled font first (put in your project directory)
+	ImFont* font = io.Fonts->AddFontFromFileTTF("assets/fonts/JuliaMono-Regular.ttf", 16.0f, NULL, ranges);
+	if (font != NULL) {
+		logger->LogInfo("Loaded bundled Noto Sans font with Greek support");
+		fontLoaded = true;
+	}
+	else {
+		// Fallback to system fonts
+		const char* systemFonts[] = {
+			"C:/Windows/Fonts/times.ttf",
+			"C:/Windows/Fonts/calibri.ttf",
+			"C:/Windows/Fonts/segoeui.ttf",
+		};
+
+		for (const char* fontPath : systemFonts) {
+			font = io.Fonts->AddFontFromFileTTF(fontPath, 16.0f, NULL, ranges);
+			if (font != NULL) {
+				logger->LogInfo("Loaded system font: " + std::string(fontPath));
+				fontLoaded = true;
+				break;
+			}
+		}
+	}
+
+	if (!fontLoaded) {
+		// Final fallback
+		io.Fonts->AddFontDefault();
+		logger->LogWarning("No Greek font support available, using 'um' instead of 'μm'");
+	}
+
+
+
+	// IMPORTANT: Build font atlas BEFORE checking glyphs
+	bool buildSuccess = io.Fonts->Build();
+	if (!buildSuccess) {
+		logger->LogError("Failed to build font atlas");
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 	ImGuiStyle& style = ImGui::GetStyle();
 	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
 	{

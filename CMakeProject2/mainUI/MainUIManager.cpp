@@ -5,12 +5,19 @@
 #include "include/motions/MotionConfigManager.h"
 #include "include/motions/pi_controller_manager.h"
 #include "include/motions/acs_controller_manager.h"
+#include "include/cld101x_manager.h"
+#include "CLD101xEquipmentUI.h"
 // Add this include at the top:
 #include "PIPanelUI.h"
 #include "ACSPanelUI.h"
 // Add this include at the top:
 #include "IOPanelUI.h"
 #include "UIPneumaticPanel.h"
+#include "include/data/global_data_store.h" // Add this with your other includes
+ #include "implot/implot.h"
+ #include <deque>
+ #include <map>
+ #include <chrono>
 
 #include "imgui.h"
 #include <iostream>
@@ -30,6 +37,25 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 
   // Create UIJogWindow using the single-parameter constructor for mock mode
   m_uiJogWindow = std::make_unique<UIJogWindow>(motionConfigManager);
+
+  // Initialize TCP Data Manager UI
+  m_tcpDataManagerUI = std::make_unique<TCPDataManagerUI>();
+  if (!m_tcpDataManagerUI->Initialize()) {
+    // Log error but continue - the UI will show the error state
+    std::cout << "Warning: TCP Data Manager failed to initialize" << std::endl;
+  }
+  // Initialize Global Data Store Viewer UI
+  m_globalDataStoreViewerUI = std::make_unique<GlobalDataStoreViewerUI>();
+
+  try {
+    m_cld101xEquipmentUI = std::make_unique<CLD101xEquipmentUI>();
+  }
+  catch (const std::exception& e) {
+    // Handle initialization error if needed
+    m_cld101xEquipmentUI = nullptr;
+  }
+
+
 }
 
 MainUIManager::~MainUIManager() = default;
@@ -69,6 +95,9 @@ void MainUIManager::RenderUI() {
   RenderGlobalJogWindow();
 }
 
+// Update RenderBackButton() to handle Data Instrument sub-pages
+
+// 4. UPDATE RenderBackButton() - Change enum reference:
 void MainUIManager::RenderBackButton() {
   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(15, 8));
   ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
@@ -76,15 +105,16 @@ void MainUIManager::RenderBackButton() {
 
   if (ImGui::Button("<< BACK")) {
     if (currentManualSubPage != ManualSubPage::NONE) {
-      // Go back to Manual main page
       currentManualSubPage = ManualSubPage::NONE;
     }
+    else if (currentDataInstrumentSubPage != DataInstrumentSubPage::NONE) {
+      // This line already works correctly - no change needed
+      currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
+    }
     else if (currentConfigSubPage != ConfigSubPage::NONE) {
-      // Go back to Config main page
       currentConfigSubPage = ConfigSubPage::NONE;
     }
     else {
-      // Go back to main page
       currentMainPage = MainPage::MAIN;
     }
   }
@@ -93,7 +123,7 @@ void MainUIManager::RenderBackButton() {
   ImGui::PopStyleVar();
 }
 
-
+// Update RenderTopMenuBar() to reset Data Instrument sub-page when switching
 void MainUIManager::RenderTopMenuBar() {
   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(20, 10));
   ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.3f, 0.8f, 1.0f));
@@ -102,13 +132,14 @@ void MainUIManager::RenderTopMenuBar() {
   if (ImGui::Button("Manual", ImVec2(120, 40))) {
     currentMainPage = MainPage::MANUAL;
     currentManualSubPage = ManualSubPage::NONE;
+    currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
     currentConfigSubPage = ConfigSubPage::NONE;
   }
 
-  ImGui::SameLine();
   if (ImGui::Button("Data & Instrument", ImVec2(150, 40))) {
     currentMainPage = MainPage::DATA_INSTRUMENT;
     currentManualSubPage = ManualSubPage::NONE;
+    currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;  // This line is correct
     currentConfigSubPage = ConfigSubPage::NONE;
   }
 
@@ -116,6 +147,7 @@ void MainUIManager::RenderTopMenuBar() {
   if (ImGui::Button("Run Program", ImVec2(120, 40))) {
     currentMainPage = MainPage::RUN_PROGRAM;
     currentManualSubPage = ManualSubPage::NONE;
+    currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
     currentConfigSubPage = ConfigSubPage::NONE;
   }
 
@@ -123,6 +155,7 @@ void MainUIManager::RenderTopMenuBar() {
   if (ImGui::Button("Config", ImVec2(120, 40))) {
     currentMainPage = MainPage::CONFIG;
     currentManualSubPage = ManualSubPage::NONE;
+    currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
     currentConfigSubPage = ConfigSubPage::NONE;
   }
 
@@ -130,13 +163,13 @@ void MainUIManager::RenderTopMenuBar() {
   if (ImGui::Button("Vision", ImVec2(120, 40))) {
     currentMainPage = MainPage::VISION;
     currentManualSubPage = ManualSubPage::NONE;
+    currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
     currentConfigSubPage = ConfigSubPage::NONE;
   }
 
   ImGui::PopStyleColor(2);
   ImGui::PopStyleVar();
 }
-
 
 // In RenderDateTime method - UPDATE the JOG button logic:
 void MainUIManager::RenderDateTime() {
@@ -220,6 +253,8 @@ void MainUIManager::RenderDateTime() {
 }
 
 // Update RenderBreadcrumbs() to include pneumatic breadcrumb:
+
+// Update RenderBreadcrumbs() to include Data Instrument breadcrumbs
 void MainUIManager::RenderBreadcrumbs() {
   std::string breadcrumb = "Home";
 
@@ -238,7 +273,7 @@ void MainUIManager::RenderBreadcrumbs() {
     case ManualSubPage::IO:
       breadcrumb += " > IO Control";
       break;
-    case ManualSubPage::PNEUMATIC:          // Add this case
+    case ManualSubPage::PNEUMATIC:
       breadcrumb += " > Pneumatic Slides";
       break;
     case ManualSubPage::CAMERA:
@@ -248,9 +283,29 @@ void MainUIManager::RenderBreadcrumbs() {
       break;
     }
     break;
+
+    // 3. UPDATE RenderBreadcrumbs() - Change enum and breadcrumb text:
   case MainPage::DATA_INSTRUMENT:
     breadcrumb += " > Data & Instrument";
+    switch (currentDataInstrumentSubPage) {
+    case DataInstrumentSubPage::GLOBAL_DATA_STORE:
+      breadcrumb += " > Global Data Store Viewer";
+      break;
+    case DataInstrumentSubPage::TCP_DATA_MANAGER:
+      breadcrumb += " > TCP Data Manager";
+      break;
+    case DataInstrumentSubPage::CLD101X_EQUIPMENT:  // RENAMED enum
+      breadcrumb += " > CLD101x Equipment";  // UPDATED breadcrumb text
+      break;
+    case DataInstrumentSubPage::SMU_MANAGER:
+      breadcrumb += " > SMU Manager";
+      break;
+    default:
+      break;
+    }
     break;
+
+
   case MainPage::RUN_PROGRAM:
     breadcrumb += " > Run Program";
     break;
@@ -276,6 +331,7 @@ void MainUIManager::RenderBreadcrumbs() {
 }
 
 
+// Update RenderMainContent() to handle Data Instrument sub-pages
 void MainUIManager::RenderMainContent() {
   ImGui::SetCursorPosY(100);
 
@@ -291,7 +347,12 @@ void MainUIManager::RenderMainContent() {
     }
   }
   else if (currentMainPage == MainPage::DATA_INSTRUMENT) {
-    RenderDataInstrumentPage();
+    if (currentDataInstrumentSubPage == DataInstrumentSubPage::NONE) {
+      RenderDataInstrumentPage();
+    }
+    else {
+      RenderDataInstrumentSubPage();
+    }
   }
   else if (currentMainPage == MainPage::RUN_PROGRAM) {
     RenderRunProgramPage();
@@ -307,7 +368,17 @@ void MainUIManager::RenderMainContent() {
   else if (currentMainPage == MainPage::VISION) {
     RenderVisionPage();
   }
+  // Update TCP Data Manager if on that page
+  if (currentMainPage == MainPage::DATA_INSTRUMENT &&
+    currentDataInstrumentSubPage == DataInstrumentSubPage::TCP_DATA_MANAGER) {
+    if (m_tcpDataManagerUI) {
+      m_tcpDataManagerUI->Update();
+    }
+  }
 }
+
+
+
 
 void MainUIManager::RenderMainPage() {
   ImGui::SetWindowFontScale(2.0f);
@@ -520,14 +591,192 @@ void MainUIManager::RenderCameraPage() {
 
 
 
+
+// Update RenderDataInstrumentPage() to show the 4 buttons
+
+// 1. UPDATE RenderDataInstrumentPage() - Change button text and enum:
 void MainUIManager::RenderDataInstrumentPage() {
   ImGui::SetWindowFontScale(1.5f);
   ImGui::Text("Data & Instrument");
   ImGui::SetWindowFontScale(1.0f);
 
   ImGui::Spacing();
-  ImGui::Text("Data monitoring and instrument control will be implemented here");
+  ImGui::Text("Select a data monitoring and instrument control option:");
+  ImGui::Spacing();
+
+  if (ImGui::Button("1. Global Data Store Viewer", ImVec2(250, 50))) {
+    currentDataInstrumentSubPage = DataInstrumentSubPage::GLOBAL_DATA_STORE;
+  }
+
+  if (ImGui::Button("2. TCP Data Manager", ImVec2(250, 50))) {
+    currentDataInstrumentSubPage = DataInstrumentSubPage::TCP_DATA_MANAGER;
+  }
+
+  // UPDATED BUTTON TEXT AND ENUM:
+  if (ImGui::Button("3. CLD101x Equipment", ImVec2(250, 50))) {
+    currentDataInstrumentSubPage = DataInstrumentSubPage::CLD101X_EQUIPMENT;
+  }
+
+  if (ImGui::Button("4. SMU Manager", ImVec2(250, 50))) {
+    currentDataInstrumentSubPage = DataInstrumentSubPage::SMU_MANAGER;
+  }
 }
+
+
+// Add new method to handle Data Instrument sub-pages
+
+// ==============================================================================
+// HEADER FILE CHANGES (MainUIManager.h)
+// ==============================================================================
+
+// 1. UPDATE the DataInstrumentSubPage enum - RENAME CLD101X_TEC to CLD101X_EQUIPMENT:
+enum class DataInstrumentSubPage {
+  NONE,
+  GLOBAL_DATA_STORE,
+  TCP_DATA_MANAGER,
+  CLD101X_EQUIPMENT,    // RENAMED from CLD101X_TEC
+  SMU_MANAGER
+};
+
+// 2. UPDATE method declaration in private section:
+// CHANGE: void RenderCld101xTecPage();
+// TO:
+void RenderCld101xEquipmentPage();
+
+
+// ==============================================================================
+// IMPLEMENTATION FILE CHANGES (MainUIManager.cpp)
+// ==============================================================================
+
+
+// 2. UPDATE RenderDataInstrumentSubPage() - Change enum and method call:
+void MainUIManager::RenderDataInstrumentSubPage() {
+  switch (currentDataInstrumentSubPage) {
+  case DataInstrumentSubPage::GLOBAL_DATA_STORE:
+    RenderGlobalDataStorePage();
+    break;
+  case DataInstrumentSubPage::TCP_DATA_MANAGER:
+    RenderTcpDataManagerPage();
+    break;
+  case DataInstrumentSubPage::CLD101X_EQUIPMENT:  // RENAMED enum
+    RenderCld101xEquipmentPage();  // RENAMED method call
+    break;
+  case DataInstrumentSubPage::SMU_MANAGER:
+    RenderSmuManagerPage();
+    break;
+  default:
+    break;
+  }
+}
+
+
+
+
+
+// Replace the old RenderGlobalDataStorePage() method with:
+void MainUIManager::RenderGlobalDataStorePage() {
+  if (m_globalDataStoreViewerUI) {
+    m_globalDataStoreViewerUI->Render();
+  }
+  else {
+    ImGui::SetWindowFontScale(1.5f);
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Global Data Store Viewer");
+    ImGui::SetWindowFontScale(1.0f);
+
+    ImGui::Spacing();
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create Global Data Store Viewer UI");
+    ImGui::Text("Check console for error messages");
+  }
+}
+
+
+// Replace the placeholder RenderTcpDataManagerPage() method:
+void MainUIManager::RenderTcpDataManagerPage() {
+  if (m_tcpDataManagerUI) {
+    m_tcpDataManagerUI->Render();
+  }
+  else {
+    ImGui::SetWindowFontScale(1.5f);
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "TCP Data Manager");
+    ImGui::SetWindowFontScale(1.0f);
+
+    ImGui::Spacing();
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create TCP Data Manager UI");
+    ImGui::Text("Check console for error messages");
+  }
+}
+
+
+
+
+// ==============================================================================
+// HEADER FILE CHANGES (MainUIManager.h)
+// ==============================================================================
+
+// 1. ADD FORWARD DECLARATION at the top with other forward declarations:
+class CLD101xManager;
+
+// 2. ADD METHOD DECLARATION in public section with other SetXXXManager methods:
+void SetCLD101xManager(CLD101xManager* cld101xManager);
+
+// 3. ADD MEMBER VARIABLE in private section with other manager pointers:
+CLD101xManager* m_cld101xManager = nullptr;
+
+
+// ==============================================================================
+// IMPLEMENTATION FILE CHANGES (MainUIManager.cpp)
+// ==============================================================================
+
+void MainUIManager::SetCLD101xManager(CLD101xManager* cld101xManager) {
+  m_cld101xManager = cld101xManager;
+
+  // Pass the manager to the UI component
+  if (m_cld101xEquipmentUI) {
+    m_cld101xEquipmentUI->SetCLD101xManager(cld101xManager);
+  }
+}
+
+
+// 2. UPDATE RenderCld101xEquipmentPage() to use the manager:
+void MainUIManager::RenderCld101xEquipmentPage() {
+  if (m_cld101xEquipmentUI) {
+    m_cld101xEquipmentUI->Render();
+  }
+  else {
+    // Fallback error display
+    ImGui::SetWindowFontScale(1.5f);
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "CLD101x Equipment Control");
+    ImGui::SetWindowFontScale(1.0f);
+
+    ImGui::Spacing();
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create CLD101x Equipment UI");
+    ImGui::Text("Check console for error messages");
+  }
+}
+
+
+void MainUIManager::RenderSmuManagerPage() {
+  ImGui::SetWindowFontScale(1.5f);
+  ImGui::Text("SMU Manager");
+  ImGui::SetWindowFontScale(1.0f);
+
+  ImGui::Spacing();
+  ImGui::Text("Source Measure Unit (Keithley 2400) control");
+  ImGui::Separator();
+
+  ImGui::Text("This will provide control for:");
+  ImGui::BulletText("Voltage/Current sourcing");
+  ImGui::BulletText("Measurement and monitoring");
+  ImGui::BulletText("I-V curve generation");
+  ImGui::BulletText("Data logging and export");
+
+  ImGui::Spacing();
+  ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Implementation pending...");
+  ImGui::Text("To be integrated from cmakeproject2's Keithley2400Manager");
+}
+
+
+
 
 void MainUIManager::RenderRunProgramPage() {
   ImGui::SetWindowFontScale(1.5f);
@@ -705,3 +954,18 @@ void MainUIManager::SetCameraManager(CameraManager* cameraManager) {
     std::cout << "MainUIManager: Camera Panel UI created successfully" << std::endl;
   }
 }
+
+
+void MainUIManager::SetDataClientManager(DataClientManager* dataClientManager) {
+  m_dataClientManager = dataClientManager;
+
+  if (m_dataClientManager) {
+    std::cout << "MainUIManager: DataClientManager set successfully" << std::endl;
+
+    // Pass the data client manager to the Global Data Store Viewer
+    if (m_globalDataStoreViewerUI) {
+      m_globalDataStoreViewerUI->SetDataClientManager(m_dataClientManager);
+    }
+  }
+}
+

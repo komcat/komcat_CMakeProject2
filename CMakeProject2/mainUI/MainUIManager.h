@@ -6,8 +6,10 @@
 #include "IOPanelUI.h"
 #include "UIPneumaticPanel.h"
 #include "UICameraPanel.h"
-
-
+#include "TCPDataManagerUI.h"
+#include "include/data/data_client_manager.h"
+#include "GlobalDataStoreViewerUI.h"
+#include "CLD101xEquipmentUI.h"
 
 
 // Forward declarations
@@ -22,7 +24,7 @@ class PneumaticManager;
 class EziIOManager;
 class IOConfigManager;
 class CameraManager;
-
+class CLD101xManager;
 
 
 class MainUIManager {
@@ -53,6 +55,14 @@ public:
     NODE_VISUALIZER
   };
 
+  enum class DataInstrumentSubPage {
+    NONE,
+    GLOBAL_DATA_STORE,
+    TCP_DATA_MANAGER,
+    CLD101X_EQUIPMENT,    // RENAMED from CLD101X_TEC
+    SMU_MANAGER
+  };
+
 public:
   // Constructor takes MotionConfigManager reference only
   MainUIManager(MotionConfigManager& configManager);
@@ -66,11 +76,14 @@ public:
   void SetIOManager(EziIOManager* ioManager, IOConfigManager* ioConfigManager = nullptr);
   void SetPneumaticManager(PneumaticManager* pneumaticManager);
   void SetCameraManager(CameraManager* cameraManager);
-  
+  void SetDataClientManager(DataClientManager* dataClientManager);
+  void SetCLD101xManager(CLD101xManager* cld101xManager);
 private:
   MainPage currentMainPage = MainPage::MAIN;
   ManualSubPage currentManualSubPage = ManualSubPage::NONE;
   ConfigSubPage currentConfigSubPage = ConfigSubPage::NONE;
+  DataInstrumentSubPage currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
+
 
   // Reference to the config manager (owned by main)
   MotionConfigManager& motionConfigManager;
@@ -78,31 +91,40 @@ private:
   // UI components we own
   std::unique_ptr<UIConfigEditor> uiConfigEditor;
   std::unique_ptr<UIConfigVisualizer> uiConfigVisualizer;
+  std::unique_ptr<TCPDataManagerUI> m_tcpDataManagerUI;
+  std::unique_ptr<PIPanelUI> m_piPanelUI;
+  std::unique_ptr<ACSPanelUI> m_acsPanelUI;
+  std::unique_ptr<IOPanelUI> m_ioPanelUI;
+  std::unique_ptr<UIJogWindow> m_uiJogWindow;
+  std::unique_ptr<UIPneumaticPanel> m_pneumaticPanelUI;
+  std::unique_ptr<UICameraPanel> m_cameraPanelUI;
+  std::unique_ptr<GlobalDataStoreViewerUI> m_globalDataStoreViewerUI;
+  std::unique_ptr<CLD101xEquipmentUI> m_cld101xEquipmentUI;
+  CLD101xManager* m_cld101xManager = nullptr;
 
   // Motion managers (optional, set later)
   PIControllerManager* m_piControllerManager = nullptr;
   ACSControllerManager* m_acsControllerManager = nullptr;
-
+  DataClientManager* m_dataClientManager = nullptr;
   // Jog window
   bool m_showGlobalJogWindow = false;
-  std::unique_ptr<UIJogWindow> m_uiJogWindow;
 
 
 
-  // Add these member variables in the private section:
-  std::unique_ptr<PIPanelUI> m_piPanelUI;
-  std::unique_ptr<ACSPanelUI> m_acsPanelUI;
 
-  std::unique_ptr<IOPanelUI> m_ioPanelUI;
+
+
   EziIOManager* m_ioManager = nullptr;
   IOConfigManager* m_ioConfigManager = nullptr;
 
 
   // Add these member variables in the private section (with other panel UIs):
-  std::unique_ptr<UIPneumaticPanel> m_pneumaticPanelUI;
+
   PneumaticManager* m_pneumaticManager = nullptr;
   CameraManager* m_cameraManager = nullptr;
-  std::unique_ptr<UICameraPanel> m_cameraPanelUI;
+
+
+
 
   void RenderTopMenuBar();
   void RenderDateTime();
@@ -135,4 +157,11 @@ private:
   // Add this method declaration (with other render methods):
   void RenderPneumaticPage();
 
+
+  // Data Instrument sub-pages
+  void RenderDataInstrumentSubPage();
+  void RenderGlobalDataStorePage();
+  void RenderTcpDataManagerPage();
+  void RenderCld101xEquipmentPage();
+  void RenderSmuManagerPage();
 };
