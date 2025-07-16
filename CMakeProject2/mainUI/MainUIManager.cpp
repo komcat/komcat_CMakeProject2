@@ -13,6 +13,10 @@
 // Add this include at the top:
 #include "IOPanelUI.h"
 #include "UIPneumaticPanel.h"
+// Add this include at the top with other includes:
+#include "UISMUPanel.h"
+
+
 #include "include/data/global_data_store.h" // Add this with your other includes
  #include "implot/implot.h"
  #include <deque>
@@ -755,26 +759,22 @@ void MainUIManager::RenderCld101xEquipmentPage() {
 }
 
 
+// Update RenderSmuManagerPage() method to use the dedicated UI:
 void MainUIManager::RenderSmuManagerPage() {
-  ImGui::SetWindowFontScale(1.5f);
-  ImGui::Text("SMU Manager");
-  ImGui::SetWindowFontScale(1.0f);
+  if (m_smuPanelUI) {
+    m_smuPanelUI->RenderUI();
+  }
+  else {
+    ImGui::SetWindowFontScale(1.5f);
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "SMU Manager");
+    ImGui::SetWindowFontScale(1.0f);
 
-  ImGui::Spacing();
-  ImGui::Text("Source Measure Unit (Keithley 2400) control");
-  ImGui::Separator();
-
-  ImGui::Text("This will provide control for:");
-  ImGui::BulletText("Voltage/Current sourcing");
-  ImGui::BulletText("Measurement and monitoring");
-  ImGui::BulletText("I-V curve generation");
-  ImGui::BulletText("Data logging and export");
-
-  ImGui::Spacing();
-  ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Implementation pending...");
-  ImGui::Text("To be integrated from cmakeproject2's Keithley2400Manager");
+    ImGui::Spacing();
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create SMU Panel UI");
+    ImGui::Text("Check console for error messages");
+    ImGui::Text("Ensure Keithley2400Manager is properly initialized");
+  }
 }
-
 
 
 
@@ -966,6 +966,17 @@ void MainUIManager::SetDataClientManager(DataClientManager* dataClientManager) {
     if (m_globalDataStoreViewerUI) {
       m_globalDataStoreViewerUI->SetDataClientManager(m_dataClientManager);
     }
+  }
+}
+
+// Add this method implementation with other setter methods:
+void MainUIManager::SetKeithley2400Manager(Keithley2400Manager* keithleyManager) {
+  m_keithleyManager = keithleyManager;
+
+  // Create SMU Panel UI when SMU manager is available
+  if (m_keithleyManager) {
+    m_smuPanelUI = std::make_unique<UISMUPanel>(*m_keithleyManager);
+    std::cout << "MainUIManager: SMU Panel UI created successfully" << std::endl;
   }
 }
 

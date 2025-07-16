@@ -10,7 +10,7 @@
 #include "include/data/data_client_manager.h"
 #include "GlobalDataStoreViewerUI.h"
 #include "CLD101xEquipmentUI.h"
-
+#include "UISMUPanel.h"
 
 // Forward declarations
 class MotionConfigManager;
@@ -25,7 +25,7 @@ class EziIOManager;
 class IOConfigManager;
 class CameraManager;
 class CLD101xManager;
-
+class Keithley2400Manager;
 
 class MainUIManager {
 public:
@@ -78,6 +78,14 @@ public:
   void SetCameraManager(CameraManager* cameraManager);
   void SetDataClientManager(DataClientManager* dataClientManager);
   void SetCLD101xManager(CLD101xManager* cld101xManager);
+  // Add this method in the public section with other setter methods:
+  void SetKeithley2400Manager(Keithley2400Manager* keithleyManager);
+
+
+
+
+
+
 private:
   MainPage currentMainPage = MainPage::MAIN;
   ManualSubPage currentManualSubPage = ManualSubPage::NONE;
@@ -106,10 +114,13 @@ private:
   PIControllerManager* m_piControllerManager = nullptr;
   ACSControllerManager* m_acsControllerManager = nullptr;
   DataClientManager* m_dataClientManager = nullptr;
+  Keithley2400Manager* m_keithleyManager = nullptr;
   // Jog window
   bool m_showGlobalJogWindow = false;
 
 
+  // Add this member variable in the private section with other UI components:
+  std::unique_ptr<UISMUPanel> m_smuPanelUI;
 
 
 

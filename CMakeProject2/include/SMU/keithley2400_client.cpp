@@ -537,6 +537,11 @@ void Keithley2400Client::StopPolling() {
   Logger::GetInstance()->LogInfo("Keithley2400Client: Stopped polling thread");
 }
 
+bool Keithley2400Client::IsPolling() const {
+  return m_isPolling;
+}  // <-- ADD THIS METHOD
+
+
 void Keithley2400Client::PollingThread() {
   Logger* logger = Logger::GetInstance();
   logger->LogInfo("Keithley2400Client: Polling thread started");

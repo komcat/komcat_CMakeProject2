@@ -89,8 +89,9 @@ public:
   void SetName(const std::string& name);
 
   // Start/stop background polling
-  void StartPolling(int intervalMs = 1000);
+  void StartPolling(int intervalMs = 100);
   void StopPolling();
+  bool IsPolling() const;  // <-- ADD THIS LINE
 
   // Get last error message
   const std::string& GetLastError() const;

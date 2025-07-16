@@ -21,7 +21,10 @@
 #include "include/camera/CameraManager.h"
 #include "include/data/global_data_store.h"
 #include "include/data/data_client_manager.h"  // Add this line
-
+// ADD THESE THREE LINES after the CLD101x includes:
+#include "include/SMU/keithley2400_client.h"
+#include "include/SMU/keithley2400_manager.h"
+#include "include/SMU/keithley2400_operations.h"
 // ADD THESE TWO LINES:
 #include "include/cld101x_manager.h"  
 #include "include/cld101x_client.h"
@@ -369,7 +372,38 @@ int main(int argc, char* argv[])
 	cld101xManager->ConnectAll();
 	logger->LogInfo("CLD101x system initialized");
 
+	// ✅ Initialize Keithley 2400 Manager  
+	std::unique_ptr<Keithley2400Manager> keithleyManager;
+	std::unique_ptr<Keithley2400Operations> smuOps;
 
+	keithleyManager = std::make_unique<Keithley2400Manager>();
+
+	// Initialize from config file
+	if (keithleyManager->Initialize("smu_config.json")) {
+		logger->LogInfo("Keithley2400Manager initialized from config file");
+
+		smuOps = std::make_unique<Keithley2400Operations>(*keithleyManager);
+
+		// Try to connect based on config
+		if (keithleyManager->ConnectAll()) {
+			logger->LogInfo("Successfully connected to Keithley 2400 servers");
+			// Optional: Auto-start polling
+			// keithleyManager->StartAllPolling(1000); // Poll every 1 second
+		}
+		else {
+			logger->LogWarning("Failed to connect to some Keithley 2400 servers");
+		}
+	}
+	else {
+		logger->LogWarning("Failed to load Keithley config, using defaults");
+		// Fallback to manual setup if config fails
+		keithleyManager->AddClient("Keithley-Main", "127.0.0.101", 8888);
+		if (keithleyManager->ConnectAll()) {
+			logger->LogInfo("Successfully connected to Keithley 2400 servers (fallback)");
+			// Optional: Auto-start polling
+			// keithleyManager->StartAllPolling(1000);
+		}
+	}
 
 
 
@@ -411,7 +445,10 @@ int main(int argc, char* argv[])
 	if (cld101xManager) {
 		uiManager.SetCLD101xManager(cld101xManager.get());
 	}
-
+	// ✅ Set the Keithley2400 Manager
+	if (keithleyManager) {
+		uiManager.SetKeithley2400Manager(keithleyManager.get());
+	}
 
 	bool done = false;
 	bool glyphChecked = false; // Flag to check glyph only once
@@ -515,6 +552,12 @@ int main(int argc, char* argv[])
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
 
+
+	// Cleanup Keithley2400
+	if (keithleyManager) {
+		keithleyManager->DisconnectAll();
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
 
 	// Cleanup - ADD THIS before ImGui cleanup
 	ImPlot::DestroyContext();
