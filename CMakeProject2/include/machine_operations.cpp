@@ -2391,12 +2391,12 @@ bool MachineOperations::IntegrateCameraWithMotion(PylonCameraTest* cameraTest) {
 
 // Get the current node for a device in a motion graph
 std::string MachineOperations::GetDeviceCurrentNode(const std::string& deviceName, const std::string& graphName) {
-  m_logger->LogInfo("MachineOperations: Getting current node for device " + deviceName +
+ if(m_enableDebug) m_logger->LogInfo("MachineOperations: Getting current node for device " + deviceName +
     " in graph " + graphName);
 
   std::string currentNodeId;
   if (!m_motionLayer.GetDeviceCurrentNode(graphName, deviceName, currentNodeId)) {
-    m_logger->LogError("MachineOperations: Failed to get current node for device " + deviceName);
+    if (m_enableDebug) m_logger->LogError("MachineOperations: Failed to get current node for device " + deviceName);
     return "";
   }
 
@@ -2404,12 +2404,12 @@ std::string MachineOperations::GetDeviceCurrentNode(const std::string& deviceNam
 }
 
 std::string MachineOperations::GetDeviceCurrentPositionName(const std::string& deviceName) {
-  m_logger->LogInfo("MachineOperations: Getting current named position for device " + deviceName);
+ if(m_enableDebug) m_logger->LogInfo("MachineOperations: Getting current named position for device " + deviceName);
 
   // Get current position
   PositionStruct currentPosition;
   if (!GetDeviceCurrentPosition(deviceName, currentPosition)) {
-    m_logger->LogError("MachineOperations: Failed to get current position for device " + deviceName);
+    if (m_enableDebug) m_logger->LogError("MachineOperations: Failed to get current position for device " + deviceName);
     return "";
   }
 
@@ -2445,7 +2445,7 @@ std::string MachineOperations::GetDeviceCurrentPositionName(const std::string& d
 
   // If we're very close to a named position (within 0.1mm), consider we're at that position
   if (minDistance <= 0.1) {
-    m_logger->LogInfo("MachineOperations: Device " + deviceName +
+    if (m_enableDebug) m_logger->LogInfo("MachineOperations: Device " + deviceName +
       " is at named position " + closestPosName);
     return closestPosName;
   }
@@ -2458,7 +2458,7 @@ std::string MachineOperations::GetDeviceCurrentPositionName(const std::string& d
 }
 // Get the current position for a device
 bool MachineOperations::GetDeviceCurrentPosition(const std::string& deviceName, PositionStruct& position) {
-  m_logger->LogInfo("MachineOperations: Getting current position for device " + deviceName);
+  if(m_enableDebug) m_logger->LogInfo("MachineOperations: Getting current position for device " + deviceName);
 
   // Use the motion layer to get the current position
   if (!m_motionLayer.GetCurrentPosition(deviceName, position)) {
@@ -2479,7 +2479,7 @@ bool MachineOperations::GetDeviceCurrentPosition(const std::string& deviceName, 
       << " W:" << std::setprecision(6) << position.w;
   }
 
-  m_logger->LogInfo("MachineOperations: " + posStr.str());
+  if (m_enableDebug) m_logger->LogInfo("MachineOperations: " + posStr.str());
   return true;
 }
 
@@ -2949,14 +2949,14 @@ bool MachineOperations::RestoreMotionConfigFromBackup(const std::string& backupS
 
 // Get current positions of all controllers and store in variable for other classes to use
 std::map<std::string, PositionStruct> MachineOperations::GetCurrentPositions() {
-  m_logger->LogInfo("MachineOperations: Getting current positions for all controllers");
+  if(m_enableDebug) m_logger->LogInfo("MachineOperations: Getting current positions for all controllers");
 
   std::lock_guard<std::mutex> lock(m_currentPositionsMutex);
 
   // Check if cache is still valid (within timeout)
   auto now = std::chrono::steady_clock::now();
   if (now - m_lastPositionUpdate < POSITION_CACHE_TIMEOUT && !m_currentPositions.empty()) {
-    m_logger->LogInfo("MachineOperations: Returning cached positions (" +
+    if (m_enableDebug) m_logger->LogInfo("MachineOperations: Returning cached positions (" +
       std::to_string(m_currentPositions.size()) + " devices)");
     return m_currentPositions;
   }
@@ -2977,7 +2977,7 @@ std::map<std::string, PositionStruct> MachineOperations::GetCurrentPositions() {
   for (const auto& deviceName : deviceList) {
     // Check if device is connected before trying to get position
     if (!IsDeviceConnected(deviceName)) {
-      m_logger->LogWarning("MachineOperations: Device " + deviceName + " is not connected, skipping");
+      if (m_enableDebug) m_logger->LogWarning("MachineOperations: Device " + deviceName + " is not connected, skipping");
       continue;
     }
 
@@ -2986,7 +2986,7 @@ std::map<std::string, PositionStruct> MachineOperations::GetCurrentPositions() {
       m_currentPositions[deviceName] = currentPosition;
       successCount++;
 
-      m_logger->LogInfo("MachineOperations: Got position for " + deviceName +
+      if (m_enableDebug) m_logger->LogInfo("MachineOperations: Got position for " + deviceName +
         " - X:" + std::to_string(currentPosition.x) +
         " Y:" + std::to_string(currentPosition.y) +
         " Z:" + std::to_string(currentPosition.z));
@@ -2999,7 +2999,7 @@ std::map<std::string, PositionStruct> MachineOperations::GetCurrentPositions() {
   // Update cache timestamp
   m_lastPositionUpdate = now;
 
-  m_logger->LogInfo("MachineOperations: Successfully retrieved positions for " +
+  if (m_enableDebug) m_logger->LogInfo("MachineOperations: Successfully retrieved positions for " +
     std::to_string(successCount) + " out of " +
     std::to_string(deviceList.size()) + " devices");
 
@@ -3008,7 +3008,7 @@ std::map<std::string, PositionStruct> MachineOperations::GetCurrentPositions() {
 
 // Update all current positions (refresh cache)
 bool MachineOperations::UpdateAllCurrentPositions() {
-  m_logger->LogInfo("MachineOperations: Updating all current positions (forced refresh)");
+  if (m_enableDebug) m_logger->LogInfo("MachineOperations: Updating all current positions (forced refresh)");
 
   std::lock_guard<std::mutex> lock(m_currentPositionsMutex);
 
@@ -3045,7 +3045,7 @@ bool MachineOperations::UpdateAllCurrentPositions() {
 
   bool allSuccess = (successCount == static_cast<int>(deviceList.size()));
   if (allSuccess) {
-    m_logger->LogInfo("MachineOperations: Successfully updated all " +
+    if (m_enableDebug) m_logger->LogInfo("MachineOperations: Successfully updated all " +
       std::to_string(successCount) + " device positions");
   }
   else {

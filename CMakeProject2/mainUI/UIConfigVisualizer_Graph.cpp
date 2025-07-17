@@ -43,6 +43,24 @@ void UIConfigVisualizer::RenderNodes(ImDrawList* drawList, const ImVec2& canvasP
 
   const auto& graph = graphOpt.value().get();
 
+  // First, get current device positions if MachineOperations is available
+  std::map<std::string, std::string> deviceCurrentNodes;
+  if (m_machineOperations) {
+    // Get all devices from current positions
+    auto currentPositions = m_machineOperations->GetCurrentPositions();
+    for (const auto& [deviceName, position] : currentPositions) {
+      try {
+        std::string currentNodeId = m_machineOperations->GetDeviceCurrentNode(deviceName, m_activeGraph);
+        if (!currentNodeId.empty()) {
+          deviceCurrentNodes[currentNodeId] = deviceName;
+        }
+      }
+      catch (...) {
+        // Ignore errors for individual devices
+      }
+    }
+  }
+
   // Render each node as a rectangle
   for (const auto& node : graph.Nodes) {
     // Get node center position
@@ -105,9 +123,52 @@ void UIConfigVisualizer::RenderNodes(ImDrawList* drawList, const ImVec2& canvasP
       IM_COL32(200, 200, 200, 255),
       posInfo.c_str()
     );
+
+    // NEW: Draw device crosshair if a device is currently at this node
+    auto deviceIt = deviceCurrentNodes.find(node.Id);
+    if (deviceIt != deviceCurrentNodes.end()) {
+      const std::string& deviceName = deviceIt->second;
+
+      // Draw crosshair
+      const float crosshairSize = 20.0f;
+      const float crosshairThickness = 3.0f;
+      const ImU32 crosshairColor = IM_COL32(255, 255, 0, 255); // Bright yellow
+
+      // Horizontal line
+      drawList->AddLine(
+        ImVec2(canvasNodePos.x - crosshairSize, canvasNodePos.y),
+        ImVec2(canvasNodePos.x + crosshairSize, canvasNodePos.y),
+        crosshairColor, crosshairThickness
+      );
+
+      // Vertical line
+      drawList->AddLine(
+        ImVec2(canvasNodePos.x, canvasNodePos.y - crosshairSize),
+        ImVec2(canvasNodePos.x, canvasNodePos.y + crosshairSize),
+        crosshairColor, crosshairThickness
+      );
+
+      // Center dot
+      drawList->AddCircleFilled(canvasNodePos, 4.0f, crosshairColor);
+
+      // Device name label above the node
+      ImVec2 deviceNameSize = ImGui::CalcTextSize(deviceName.c_str());
+      ImVec2 deviceNamePos = ImVec2(
+        canvasNodePos.x - deviceNameSize.x / 2,
+        nodeMin.y - deviceNameSize.y - 10.0f // 10 pixels above node
+      );
+
+      // Draw background for device name
+      ImVec2 bgMin = ImVec2(deviceNamePos.x - 4, deviceNamePos.y - 2);
+      ImVec2 bgMax = ImVec2(deviceNamePos.x + deviceNameSize.x + 4, deviceNamePos.y + deviceNameSize.y + 2);
+      drawList->AddRectFilled(bgMin, bgMax, IM_COL32(0, 0, 0, 180), 3.0f);
+      drawList->AddRect(bgMin, bgMax, crosshairColor, 3.0f, 0, 1.5f);
+
+      // Draw device name text
+      drawList->AddText(deviceNamePos, IM_COL32(255, 255, 255, 255), deviceName.c_str());
+    }
   }
 }
-
 void UIConfigVisualizer::RenderEdges(ImDrawList* drawList, const ImVec2& canvasPos) {
   auto graphOpt = configManager.GetGraph(m_activeGraph);
   if (!graphOpt.has_value()) return;

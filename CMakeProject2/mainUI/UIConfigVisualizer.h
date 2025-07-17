@@ -97,6 +97,7 @@ private:
 	void RenderLeftPanel();  // NEW: Render the permanent left panel
 	void RenderCameraCanvas(float height);  // NEW: Render the camera/image canvas section
 	void RenderBackground(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& canvasSize);
+	void RenderDevicePositionsPanel();
 	void RenderNodes(ImDrawList* drawList, const ImVec2& canvasPos);
 	void RenderEdges(ImDrawList* drawList, const ImVec2& canvasPos);
 	// REMOVED: RenderSelectedNodeActions() - now handled in RenderLeftPanel()
@@ -115,4 +116,15 @@ private:
 	void SaveNodePosition(const std::string& nodeId, const ImVec2& newPos);
 	void DrawArrow(ImDrawList* drawList, const ImVec2& start, const ImVec2& end, ImU32 color, float thickness, bool isBidirectional = false);
 	std::string GetNodeAtPosition(const ImVec2& pos, const ImVec2& canvasPos);
+	std::string GetDeviceCurrentNodeName(const std::string& deviceName);  // NEW: Get current node name for device
+
+	
+	// Position caching for performance optimization
+	std::map<std::string, std::string> m_cachedPositionNames;
+	std::chrono::steady_clock::time_point m_lastPositionNameUpdate;
+	static constexpr std::chrono::milliseconds POSITION_NAME_CACHE_TIMEOUT{ 500 }; // 500ms cache
+
+	// Helper method declaration
+	void RefreshPositionNames();
+
 };

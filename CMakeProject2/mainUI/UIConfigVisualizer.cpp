@@ -61,27 +61,213 @@ void UIConfigVisualizer::RenderUI() {
 
 	ImGui::Separator();
 
-	// NEW LAYOUT: Left panel (25%) + Right canvas (75%)
+	// NEW LAYOUT: Left panel (20%) + Middle canvas (55%) + Right panel (25%)
 	ImVec2 contentSize = ImGui::GetContentRegionAvail();
-	float leftPanelWidth = contentSize.x * 0.25f;
-	float canvasWidth = contentSize.x * 0.75f;
+	float leftPanelWidth = contentSize.x * 0.20f;
+	float canvasWidth = contentSize.x * 0.55f;
+	float rightPanelWidth = contentSize.x * 0.25f;
 
-	// Left Panel - Node Actions and Information (25% width)
+	// Left Panel - Node Actions and Information (20% width)
 	ImGui::BeginChild("LeftPanel", ImVec2(leftPanelWidth, contentSize.y), true);
 	RenderLeftPanel();
 	ImGui::EndChild();
 
 	ImGui::SameLine();
 
-	// Right Panel - Graph Canvas (75% width)
-	ImGui::BeginChild("RightPanel", ImVec2(canvasWidth, contentSize.y), false);
+	// Middle Panel - Graph Canvas (55% width)
+	ImGui::BeginChild("MiddlePanel", ImVec2(canvasWidth, contentSize.y), false);
 	RenderGraphCanvas();
+	ImGui::EndChild();
+
+	ImGui::SameLine();
+
+	// Right Panel - Device Position Information (25% width)
+	ImGui::BeginChild("RightPanel", ImVec2(rightPanelWidth, contentSize.y), true);
+	RenderDevicePositionsPanel();
 	ImGui::EndChild();
 
 	// Render properties dialog (this renders on top of everything)
 	if (m_propertiesHandler) {
 		m_propertiesHandler->RenderPropertiesDialog();
 	}
+}
+
+
+// Optimized RenderDevicePositionsPanel()
+// Updated RenderDevicePositionsPanel() with node names - single column style
+void UIConfigVisualizer::RenderDevicePositionsPanel() {
+	ImGui::Text("Device Positions");
+	ImGui::Separator();
+
+	if (!m_machineOperations) {
+		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "MachineOperations not available");
+		ImGui::TextWrapped("Device position information requires MachineOperations to be initialized.");
+		return;
+	}
+
+	// Get current positions from MachineOperations
+	auto currentPositions = m_machineOperations->GetCurrentPositions();
+
+	if (currentPositions.empty()) {
+		ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "No device positions available");
+		if (ImGui::Button("Refresh Positions", ImVec2(-1, 25))) {
+			m_machineOperations->UpdateAllCurrentPositions();
+			RefreshPositionNames();
+		}
+		return;
+	}
+
+	// Add refresh button
+	if (ImGui::Button("Refresh", ImVec2(-1, 25))) {
+		m_machineOperations->UpdateAllCurrentPositions();
+		RefreshPositionNames();
+	}
+
+	ImGui::Separator();
+
+	// Update position names cache if needed
+	auto now = std::chrono::steady_clock::now();
+	if (now - m_lastPositionNameUpdate > POSITION_NAME_CACHE_TIMEOUT) {
+		RefreshPositionNames();
+	}
+
+	// Create table for device positions
+	if (ImGui::BeginTable("DevicePositionsTable", 1, ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders)) {
+
+		size_t deviceIndex = 0;
+		size_t totalDevices = currentPositions.size();
+
+		for (const auto& [deviceName, position] : currentPositions) {
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+
+			// Device header
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 1.0f, 0.8f, 1.0f));
+			ImGui::Text("%s", deviceName.c_str());
+			ImGui::PopStyleColor();
+
+			// Get current position name from cache
+			std::string currentPosName;
+			auto it = m_cachedPositionNames.find(deviceName);
+			if (it != m_cachedPositionNames.end()) {
+				currentPosName = it->second;
+			}
+
+			// Position name
+			if (!currentPosName.empty()) {
+				ImGui::Text("Position: %s", currentPosName.c_str());
+			}
+			else {
+				ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Position: Not at named position");
+			}
+
+			// Node name - simple implementation
+			std::string currentNodeName = GetDeviceCurrentNodeName(deviceName);
+			if (!currentNodeName.empty()) {
+				ImGui::TextColored(ImVec4(0.8f, 0.8f, 1.0f, 1.0f), "Node: %s", currentNodeName.c_str());
+			}
+			else {
+				ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Node: Not at any node");
+			}
+
+			// Coordinates
+			ImGui::Text("X: %.3f", position.x);
+			ImGui::Text("Y: %.3f", position.y);
+			ImGui::Text("Z: %.3f", position.z);
+
+			// Show rotation for hex devices
+			if (deviceName.find("hex") != std::string::npos) {
+				ImGui::Text("U: %.3f", position.u);
+				ImGui::Text("V: %.3f", position.v);
+				ImGui::Text("W: %.3f", position.w);
+			}
+
+			// Add some spacing between devices
+			ImGui::Spacing();
+			deviceIndex++;
+			if (deviceIndex < totalDevices) {
+				ImGui::Separator();
+			}
+		}
+
+		ImGui::EndTable();
+	}
+
+	// Auto-refresh checkbox with configurable rate
+	ImGui::Separator();
+	static bool autoRefresh = false;
+	static int refreshRateMs = 1000; // Default 1 second
+
+	ImGui::Checkbox("Auto-refresh", &autoRefresh);
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(80);
+	ImGui::InputInt("ms", &refreshRateMs, 100, 500);
+	refreshRateMs = (std::max)(100, (std::min)(refreshRateMs, 5000)); // Clamp between 100ms and 5s
+
+	// Handle auto-refresh with configurable rate
+	if (autoRefresh) {
+		static auto lastRefresh = std::chrono::steady_clock::now();
+		auto now = std::chrono::steady_clock::now();
+		auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastRefresh).count();
+
+		if (elapsed >= refreshRateMs) {
+			m_machineOperations->UpdateAllCurrentPositions();
+			RefreshPositionNames();
+			lastRefresh = now;
+		}
+
+		// Show next refresh countdown
+		auto remaining = refreshRateMs - elapsed;
+		ImGui::Text("Next refresh: %dms", (int)remaining);
+	}
+}
+
+// Simple GetDeviceCurrentNodeName implementation
+std::string UIConfigVisualizer::GetDeviceCurrentNodeName(const std::string& deviceName) {
+	if (!m_machineOperations || m_activeGraph.empty()) {
+		return "";
+	}
+
+	try {
+		// Get current node from active graph
+		std::string nodeId = m_machineOperations->GetDeviceCurrentNode(deviceName, m_activeGraph);
+		if (nodeId.empty()) {
+			return "";
+		}
+
+		// Get node label from graph if available
+		auto graphOpt = configManager.GetGraph(m_activeGraph);
+		if (graphOpt.has_value()) {
+			const auto& graph = graphOpt.value().get();
+			for (const auto& node : graph.Nodes) {
+				if (node.Id == nodeId && node.Device == deviceName) {
+					// Return label if available, otherwise return node ID
+					return node.Label.empty() ? nodeId : node.Label;
+				}
+			}
+		}
+
+		// Fallback to just node ID
+		return nodeId;
+	}
+	catch (...) {
+		// Return empty string if any error occurs
+		return "";
+	}
+}
+// Add this helper method
+void UIConfigVisualizer::RefreshPositionNames() {
+	if (!m_machineOperations) return;
+
+	auto currentPositions = m_machineOperations->GetCurrentPositions();
+	m_cachedPositionNames.clear();
+
+	for (const auto& [deviceName, position] : currentPositions) {
+		std::string posName = m_machineOperations->GetDeviceCurrentPositionName(deviceName);
+		m_cachedPositionNames[deviceName] = posName;
+	}
+
+	m_lastPositionNameUpdate = std::chrono::steady_clock::now();
 }
 
 void UIConfigVisualizer::RenderLeftPanel() {
