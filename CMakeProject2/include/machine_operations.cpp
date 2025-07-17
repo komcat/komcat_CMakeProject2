@@ -69,6 +69,61 @@ m_autoExposureEnabled(true)
 }
 
 
+
+// New constructor overload with CameraManager
+MachineOperations::MachineOperations(
+  MotionControlLayer& motionLayer,
+  PIControllerManager& piControllerManager,
+  EziIOManager& ioManager,
+  PneumaticManager& pneumaticManager,
+  CLD101xOperations* laserOps,
+  CameraManager* cameraManager,
+  Keithley2400Operations* smuOps
+) : m_motionLayer(motionLayer),
+m_piControllerManager(piControllerManager),
+m_ioManager(ioManager),
+m_pneumaticManager(pneumaticManager),
+m_laserOps(laserOps),
+m_smuOps(smuOps),
+m_cameraTest(nullptr),  // Set to nullptr when using CameraManager
+m_cameraManager(cameraManager),  // Store CameraManager
+m_autoExposureEnabled(true)
+{
+  m_logger = Logger::GetInstance();
+
+  // Initialize database and results managers
+  try {
+    m_dbManager = std::make_shared<DatabaseManager>();
+    if (!m_dbManager->Initialize()) {
+      m_logger->LogError("MachineOperations: Failed to initialize database: " + m_dbManager->GetLastError());
+      m_dbManager.reset();
+    }
+
+    if (m_dbManager) {
+      m_resultsManager = std::make_shared<OperationResultsManager>(m_dbManager);
+      m_logger->LogInfo("MachineOperations: Initialized with result tracking");
+    }
+    else {
+      m_logger->LogWarning("MachineOperations: Operating without result tracking due to database error");
+    }
+  }
+  catch (const std::exception& e) {
+    m_logger->LogError("MachineOperations: Exception initializing result managers: " + std::string(e.what()));
+    m_dbManager.reset();
+    m_resultsManager.reset();
+  }
+
+  // Initialize camera exposure manager with CameraManager
+  if (m_cameraManager) {
+    m_cameraExposureManager = std::make_unique<CameraExposureManager>("camera_exposure_config.json");
+    m_logger->LogInfo("MachineOperations: Camera exposure manager initialized with CameraManager");
+  }
+
+  m_logger->LogInfo("MachineOperations: Initialized with CameraManager" +
+    std::string(m_smuOps ? " and SMU support" : ""));
+}
+
+
 MachineOperations::~MachineOperations() {
   m_logger->LogInfo("MachineOperations: Shutting down");
 }

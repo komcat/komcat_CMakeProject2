@@ -18,6 +18,9 @@
 
 
 #include "include/data/global_data_store.h" // Add this with your other includes
+#include "include/machine_operations.h"  // Add this include at the top
+
+
  #include "implot/implot.h"
  #include <deque>
  #include <map>
@@ -984,4 +987,51 @@ void MainUIManager::SetCameraManager(CameraManager* cameraManager) {
         uiConfigVisualizer = std::make_unique<UIConfigVisualizer>(motionConfigManager, m_cameraManager);
         std::cout << "MainUIManager: UIConfigVisualizer updated with Camera Manager" << std::endl;
     }
+}
+
+
+void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
+  m_machineOperations = machineOps;
+
+  if (m_machineOperations) {
+    std::cout << "MainUIManager: MachineOperations set successfully" << std::endl;
+
+		uiConfigVisualizer->SetMachineOperations(m_machineOperations);
+
+
+    // Optionally, you can create any UI components that depend on MachineOperations here
+    // For example, if you had a MachineOperationsUI panel:
+    // m_machineOpsPanelUI = std::make_unique<MachineOperationsPanelUI>(*m_machineOperations);
+
+    // You could also pass the MachineOperations to existing UI components that need it
+    // For example, if UIJogWindow needs MachineOperations:
+    if (m_uiJogWindow) {
+      // m_uiJogWindow->SetMachineOperations(m_machineOperations);
+    }
+
+    // Or pass it to other panel UIs that might need access to high-level operations
+    if (m_piPanelUI) {
+      // m_piPanelUI->SetMachineOperations(m_machineOperations);
+    }
+
+    if (m_acsPanelUI) {
+      // m_acsPanelUI->SetMachineOperations(m_machineOperations);
+    }
+
+    if (m_pneumaticPanelUI) {
+      // m_pneumaticPanelUI->SetMachineOperations(m_machineOperations);
+    }
+
+    if (m_cameraPanelUI) {
+      // m_cameraPanelUI->SetMachineOperations(m_machineOperations);
+    }
+  }
+  else {
+    std::cout << "MainUIManager: MachineOperations cleared" << std::endl;
+  }
+}
+
+// Optionally, add a getter method as well
+MachineOperations* MainUIManager::GetMachineOperations() {
+  return m_machineOperations;
 }

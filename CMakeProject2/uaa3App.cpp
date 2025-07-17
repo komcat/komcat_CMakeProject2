@@ -29,7 +29,8 @@
 #include "include/cld101x_manager.h"  
 #include "include/cld101x_client.h"
 #include "include/machine_operations.h"
-
+#include "include/motions/motion_control_layer.h"
+#include "include/cld101x_operations.h"
 // Example: Check camera status
 void CheckCameraStatus(CameraManager& cameraManager) {
 	auto statusList = cameraManager.GetAllCameraStatus();
@@ -355,6 +356,9 @@ int main(int argc, char* argv[])
 	cld101xManager->ConnectAll();
 	logger->LogInfo("CLD101x system initialized");
 
+	std::unique_ptr<CLD101xOperations> laserOps;
+	laserOps = std::make_unique<CLD101xOperations>(*cld101xManager);
+
 	// ✅ Initialize Keithley 2400 Manager  
 	std::unique_ptr<Keithley2400Manager> keithleyManager;
 	std::unique_ptr<Keithley2400Operations> smuOps;
@@ -387,6 +391,53 @@ int main(int argc, char* argv[])
 			// keithleyManager->StartAllPolling(1000);
 		}
 	}
+
+
+	// ✅ Create Motion Control Layer
+	std::unique_ptr<MotionControlLayer> motionControlLayer;
+	if (piControllerManager && acsControllerManager) {
+		motionControlLayer = std::make_unique<MotionControlLayer>(
+			*motionConfigManager, *piControllerManager, *acsControllerManager);
+
+		motionControlLayer->SetPathCompletionCallback([&logger](bool success) {
+			if (success) {
+				logger->LogInfo("Path execution completed successfully");
+			}
+			else {
+				logger->LogWarning("Path execution failed or was cancelled");
+			}
+		});
+		logger->LogInfo("MotionControlLayer initialized");
+	}
+
+
+
+	// ✅ Machine Operations - Real Hardware
+	std::unique_ptr<MachineOperations> machineOps;
+
+	if (motionControlLayer && piControllerManager &&
+		ioManager && pneumaticManager) {
+
+		// Use real machine operations
+		machineOps = std::make_unique<MachineOperations>(
+			*motionControlLayer,
+			*piControllerManager,
+			*ioManager,
+			*pneumaticManager,
+			laserOps.get(),
+			cameraManager.get(),  // Using the camera manager instead of pylonCameraTest
+			smuOps.get()          // Pass SMU operations
+		);
+		logger->LogInfo("Real MachineOperations initialized");
+	}
+	else {
+		logger->LogWarning("MachineOperations not initialized - missing required components");
+		logger->LogInfo("Required: motionControlLayer=" + std::string(motionControlLayer ? "YES" : "NO"));
+		logger->LogInfo("Required: piControllerManager=" + std::string(piControllerManager ? "YES" : "NO"));
+		logger->LogInfo("Required: ioManager=" + std::string(ioManager ? "YES" : "NO"));
+		logger->LogInfo("Required: pneumaticManager=" + std::string(pneumaticManager ? "YES" : "NO"));
+	}
+
 
 	// ✅ Create the main UI manager with just the config manager
 	MainUIManager uiManager(*motionConfigManager);
@@ -429,6 +480,16 @@ int main(int argc, char* argv[])
 	if (keithleyManager) {
 		uiManager.SetKeithley2400Manager(keithleyManager.get());
 	}
+
+
+
+
+	// ✅ Set MachineOperations in MainUIManager
+	if (machineOps) {
+		uiManager.SetMachineOperations(machineOps.get());
+		logger->LogInfo("MachineOperations set in MainUIManager");
+	}
+
 
 	bool done = false;
 	bool glyphChecked = false; // Flag to check glyph only once

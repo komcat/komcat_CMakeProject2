@@ -34,7 +34,7 @@ void UIConfigVisualizer::HandleZooming() {
   ImVec2 mousePos = ImGui::GetIO().MousePos;
   float zoomDelta = ImGui::GetIO().MouseWheel * 0.1f;
   float prevZoom = m_zoomLevel;
-  m_zoomLevel = std::max(0.3f, std::min(m_zoomLevel + zoomDelta, 3.0f));
+  m_zoomLevel = (std::max)(0.3f, (std::min)(m_zoomLevel + zoomDelta, 3.0f));
 
   // Adjust pan to zoom toward mouse position
   if (m_zoomLevel != prevZoom) {

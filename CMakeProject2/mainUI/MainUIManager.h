@@ -8,6 +8,7 @@
 #include "UICameraPanel.h"
 #include "TCPDataManagerUI.h"
 #include "include/data/data_client_manager.h"
+#include "include/machine_operations.h"
 #include "GlobalDataStoreViewerUI.h"
 #include "CLD101xEquipmentUI.h"
 #include "UISMUPanel.h"
@@ -81,8 +82,9 @@ public:
   // Add this method in the public section with other setter methods:
   void SetKeithley2400Manager(Keithley2400Manager* keithleyManager);
 
-
-
+  // Add this method declaration
+  void SetMachineOperations(MachineOperations* machineOps);
+  MachineOperations* GetMachineOperations();
 
 
 
@@ -133,7 +135,7 @@ private:
 
   PneumaticManager* m_pneumaticManager = nullptr;
   CameraManager* m_cameraManager = nullptr;
-
+  MachineOperations* m_machineOperations = nullptr;
 
 
 

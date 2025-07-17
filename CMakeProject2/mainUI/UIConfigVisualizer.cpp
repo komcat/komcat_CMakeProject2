@@ -8,7 +8,7 @@
 #include "include/camera/CameraManager.h"  // Add this include for camera manager
 
 UIConfigVisualizer::UIConfigVisualizer(MotionConfigManager& configManager, CameraManager* cameraManager)
-	: configManager(configManager), m_cameraManager(cameraManager)
+	: configManager(configManager), m_cameraManager(cameraManager), m_machineOperations(nullptr)
 {
 	m_logger = Logger::GetInstance();
 
@@ -175,12 +175,40 @@ void UIConfigVisualizer::RenderLeftPanel() {
 				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.6f, 0.1f, 1.0f));
 
 				if (ImGui::Button("-> Move Device To Node", ImVec2(-1, 30))) {
-					m_logger->LogInfo(">>> MoveDeviceToNode SELECTED for node: " + m_selectedNodeId +
-						" (Device: " + selectedNode->Device +
-						", Position: " + selectedNode->Position + ")");
+					if (m_machineOperations && !selectedNode->Device.empty() && !selectedNode->Position.empty()) {
+						// Execute actual movement using MachineOperations
+						m_logger->LogInfo(">>> Executing MoveDeviceToPosition for node: " + m_selectedNodeId +
+							" (Device: " + selectedNode->Device +
+							", Position: " + selectedNode->Position + ")");
+
+						// Call the machine operations method
+						m_machineOperations->MoveToPointName(selectedNode->Device, selectedNode->Position,false,"UIConfigVisualizer");
+
+					}
+					else if (!selectedNode->Device.empty() && !selectedNode->Position.empty()) {
+						// MachineOperations not available - log only
+						m_logger->LogInfo(">>> MoveDeviceToNode SELECTED for node: " + m_selectedNodeId +
+							" (Device: " + selectedNode->Device +
+							", Position: " + selectedNode->Position + ") - MachineOperations not available");
+					}
+					else {
+						// No device/position assigned
+						m_logger->LogWarning("Cannot move device: Node " + m_selectedNodeId +
+							" has no device or position assigned");
+					}
 				}
 
 				ImGui::PopStyleColor(3);
+
+				// Show tooltip to indicate functionality status
+				if (ImGui::IsItemHovered()) {
+					if (m_machineOperations) {
+						ImGui::SetTooltip("Execute movement to this node position\n(MachineOperations available)");
+					}
+					else {
+						ImGui::SetTooltip("Movement functionality not available\n(MachineOperations not set)");
+					}
+				}
 			}
 		}
 	}
@@ -497,3 +525,15 @@ void UIConfigVisualizer::ToggleWindow() {
 // - Graph rendering methods in UIConfigVisualizer_Graph.cpp
 // - Input handling methods in UIConfigVisualizer_Input.cpp  
 // - Helper methods in UIConfigVisualizer_Helpers.cpp
+
+
+void UIConfigVisualizer::SetMachineOperations(MachineOperations* machineOps) {
+	m_machineOperations = machineOps;
+
+	if (m_machineOperations) {
+		m_logger->LogInfo("UIConfigVisualizer: MachineOperations set successfully");
+	}
+	else {
+		m_logger->LogInfo("UIConfigVisualizer: MachineOperations cleared");
+	}
+}

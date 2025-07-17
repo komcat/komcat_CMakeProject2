@@ -227,7 +227,7 @@ void UIConfigVisualizer::RenderEdges(ImDrawList* drawList, const ImVec2& canvasP
     float maxWidth = 0;
     for (const auto& line : lines) {
       ImVec2 lineSize = ImGui::CalcTextSize(line.c_str());
-      maxWidth = std::max(maxWidth, lineSize.x);
+      maxWidth = (std::max)(maxWidth, lineSize.x);
     }
 
     float lineHeight = ImGui::GetTextLineHeight();

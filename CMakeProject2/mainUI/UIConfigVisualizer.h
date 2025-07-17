@@ -6,6 +6,7 @@
 #include <map>
 #include <vector>
 #include "CameraFeedDisplay.h"
+#include "include/machine_operations.h"
 #include "include/motions/MotionConfigManager.h"
 #include "include/motions/MotionTypes.h"
 #include "include/logger.h"
@@ -14,6 +15,7 @@
 // Forward declarations
 class NodePropertiesHandler;
 class CameraManager;
+class MachineOperations;
 
 class UIConfigVisualizer {
 public:
@@ -35,6 +37,9 @@ public:
 	void SetActiveGraph(const std::string& graphName);
 	void InitializeCameraFeed();
 
+	// Set machine operations for movement functionality
+	void SetMachineOperations(MachineOperations* machineOps);
+
 private:
 	// Reference to the config manager and logger
 	MotionConfigManager& configManager;
@@ -42,6 +47,9 @@ private:
 
 	// Camera manager (optional)
 	CameraManager* m_cameraManager;
+
+	// Machine operations (optional)
+	MachineOperations* m_machineOperations;
 
 	//camera
 	std::unique_ptr<CameraFeedDisplay> m_cameraFeedDisplay;

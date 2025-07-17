@@ -14,6 +14,7 @@
 #include "include/ui/GraphVisualizer.h"
 #include "include/data/DatabaseManager.h"
 #include "include/data/OperationResultsManager.h"
+#include "include/camera/CameraManager.h"
 #include <string>
 #include <vector>
 #include <chrono>
@@ -72,6 +73,17 @@ public:
 		Keithley2400Operations* smuOps = nullptr  // Added Keithley parameter
 	);
 
+
+	// New constructor overload with CameraManager
+	MachineOperations(
+		MotionControlLayer& motionLayer,
+		PIControllerManager& piControllerManager,
+		EziIOManager& ioManager,
+		PneumaticManager& pneumaticManager,
+		CLD101xOperations* laserOps,
+		CameraManager* cameraManager,
+		Keithley2400Operations* smuOps = nullptr
+	);
 
 	~MachineOperations();
 
@@ -430,7 +442,7 @@ private:
 	CLD101xOperations* m_laserOps;
 	Keithley2400Operations* m_smuOps;  // Added SMU operations
 	PylonCameraTest* m_cameraTest;
-
+	CameraManager* m_cameraManager;  // Optional camera manager
 
 
 
