@@ -29,13 +29,10 @@
 #include "include/cld101x_manager.h"  
 #include "include/cld101x_client.h"
 #include "include/machine_operations.h"
-// Create a global camera manager instance
-CameraManager g_cameraManager;
-MachineOperations g_machineOperations; // Global machine operations instance
 
 // Example: Check camera status
-void CheckCameraStatus() {
-	auto statusList = g_cameraManager.GetAllCameraStatus();
+void CheckCameraStatus(CameraManager& cameraManager) {
+	auto statusList = cameraManager.GetAllCameraStatus();
 
 	for (const auto& status : statusList) {
 		std::cout << "Camera " << status.id << ":" << std::endl;
@@ -48,16 +45,11 @@ void CheckCameraStatus() {
 
 int main(int argc, char* argv[])
 {
-
-
 	// Get the logger instance
 	Logger* logger = Logger::GetInstance();
 	logger->LogInfo("Hello World from uaa3App!");
 
 	GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
-
-
-
 
 	// Initialize SDL
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
@@ -101,7 +93,6 @@ int main(int argc, char* argv[])
 		// ADD THIS: Initialize ImPlot context
 	ImPlot::CreateContext();
 
-
 	// ADD THIS FONT LOADING CODE RIGHT HERE:
 // ========================================
 // Load font with Greek support for μ symbol
@@ -113,7 +104,6 @@ int main(int argc, char* argv[])
 		0x2200, 0x22FF, // Mathematical Operators (JuliaMono has lots of math symbols)
 		0,
 	};
-
 
 	bool fontLoaded = false;
 
@@ -147,14 +137,11 @@ int main(int argc, char* argv[])
 		logger->LogWarning("No Greek font support available, using 'um' instead of 'μm'");
 	}
 
-
-
 	// IMPORTANT: Build font atlas BEFORE checking glyphs
 	bool buildSuccess = io.Fonts->Build();
 	if (!buildSuccess) {
 		logger->LogError("Failed to build font atlas");
 	}
-
 
 	// ========================================
 
@@ -165,7 +152,6 @@ int main(int argc, char* argv[])
 	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
 	ImGui_ImplOpenGL3_Init("#version 130");
 
-
 	// SAFE: Check glyph AFTER everything is initialized
 	bool hasMusymbol = false;
 	if (io.FontDefault != nullptr) {
@@ -173,8 +159,6 @@ int main(int argc, char* argv[])
 		// We'll check this in the main loop instead
 		logger->LogInfo("Font system initialized, will verify μ symbol after first frame");
 	}
-
-
 
 	// ✅ Create MotionConfigManager
 	std::unique_ptr<MotionConfigManager> motionConfigManager;
@@ -210,7 +194,6 @@ int main(int argc, char* argv[])
 	else {
 		logger->LogWarning("Failed to connect to some ACS controllers");
 	}
-
 
 	// Read all velocity settings for PI controllers
 	if (piControllerManager) {
@@ -276,13 +259,11 @@ int main(int argc, char* argv[])
 		}
 	}
 
-
 	//initialize EziIO system
 	std::unique_ptr<EziIOManager> ioManager;
 	std::unique_ptr<IOConfigManager> ioconfigManager;
 	ioManager = std::make_unique<EziIOManager>();
 	ioconfigManager = std::make_unique<IOConfigManager>();
-
 
 	if (!ioManager->initialize()) {
 		logger->LogError("Failed to initialize EziIO manager");
@@ -300,7 +281,6 @@ int main(int argc, char* argv[])
 		ioManager->startPolling(100);
 		logger->LogInfo("EziIO system initialized");
 	}
-
 
 	//Initialize Pneumatic System if enabled
 	// Pneumatic System (conditional)
@@ -327,22 +307,24 @@ int main(int argc, char* argv[])
 			default: stateStr = "Unknown";
 			}
 			logger->LogInfo("Pneumatic slide '" + slideName + "' changed state to: " + stateStr);
-		});
+			});
 
 		logger->LogInfo("Pneumatic system initialized");
 	}
 
-	//Camera initialization
+	//Camera initialization - Create local instance instead of global
+	std::unique_ptr<CameraManager> cameraManager = std::make_unique<CameraManager>();
+
 	// Camera 1 - Auto-connect to first available
 	CameraInfo camera1("main_camera", "Top view camera");
-	g_cameraManager.AddCamera(camera1);
+	cameraManager->AddCamera(camera1);
 
 	// Initialize all cameras with auto-connect enabled
-	g_cameraManager.InitializeAllCameras();
+	cameraManager->InitializeAllCameras();
 
-	CheckCameraStatus();
+	CheckCameraStatus(*cameraManager);
 	// Start grabbing on all connected cameras
-	//g_cameraManager.StartGrabbingAll();
+	//cameraManager->StartGrabbingAll();
 
 	// ✅ Initialize TCP Data Client Manager
 	std::unique_ptr<DataClientManager> dataClientManager;
@@ -359,7 +341,6 @@ int main(int argc, char* argv[])
 		logger->LogWarning("TCP Data Manager will not be available");
 		// Continue without TCP data manager - the UI will handle this gracefully
 	}
-
 
 	// ADD THIS SECTION:
 	// ✅ Initialize CLD101x Manager
@@ -407,8 +388,6 @@ int main(int argc, char* argv[])
 		}
 	}
 
-
-
 	// ✅ Create the main UI manager with just the config manager
 	MainUIManager uiManager(*motionConfigManager);
 	logger->LogInfo("MainUIManager created with MotionConfigManager");
@@ -420,7 +399,6 @@ int main(int argc, char* argv[])
 
 	if (piControllerManager) {
 		uiManager.SetPIControllerManager(piControllerManager.get());
-
 	}
 	if (acsControllerManager) {
 		uiManager.SetACSControllerManager(acsControllerManager.get());
@@ -434,8 +412,8 @@ int main(int argc, char* argv[])
 		uiManager.SetPneumaticManager(pneumaticManager.get());
 	}
 
-	if (g_cameraManager.GetCameraCount() > 0) {
-		uiManager.SetCameraManager(&g_cameraManager);
+	if (cameraManager && cameraManager->GetCameraCount() > 0) {
+		uiManager.SetCameraManager(cameraManager.get());
 	}
 
 	// ✅ Set the TCP Data Manager
@@ -451,8 +429,6 @@ int main(int argc, char* argv[])
 	if (keithleyManager) {
 		uiManager.SetKeithley2400Manager(keithleyManager.get());
 	}
-
-
 
 	bool done = false;
 	bool glyphChecked = false; // Flag to check glyph only once
@@ -474,8 +450,6 @@ int main(int argc, char* argv[])
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL2_NewFrame();
 		ImGui::NewFrame();
-
-		
 
 		// SAFE: Check glyph after first frame when everything is ready
 		if (!glyphChecked && io.FontDefault != nullptr) {
@@ -512,13 +486,10 @@ int main(int argc, char* argv[])
 			ImGui::End();
 		}
 
-
 		// ✅ ADD THIS: Update DataClientManager continuously in background
 		if (dataClientManager) {
 			dataClientManager->UpdateClients();
 		}
-
-
 
 		// ✅ Render the main UI
 		uiManager.RenderUI();
@@ -536,10 +507,10 @@ int main(int argc, char* argv[])
 	// Cleanup
 	logger->LogInfo("Shutting down uaa3App...");
 
-	g_cameraManager.StopGrabbingAll();
+	cameraManager->StopGrabbingAll();
 	std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-	g_cameraManager.DisconnectCamera(camera1.id);
+	cameraManager->DisconnectCamera(camera1.id);
 
 	piControllerManager.get()->DisconnectAll();
 	std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -555,7 +526,6 @@ int main(int argc, char* argv[])
 		cld101xManager->DisconnectAll();
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
-
 
 	// Cleanup Keithley2400
 	if (keithleyManager) {
@@ -577,4 +547,3 @@ int main(int argc, char* argv[])
 	logger->LogInfo("uaa3App finished!");
 	return 0;
 }
-

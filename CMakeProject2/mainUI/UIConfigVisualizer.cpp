@@ -7,12 +7,8 @@
 #include <algorithm>
 #include "include/camera/CameraManager.h"  // Add this include for camera manager
 
-// Add to top of UIConfigVisualizer.cpp (after includes):
-extern CameraManager g_cameraManager;
-
-
-UIConfigVisualizer::UIConfigVisualizer(MotionConfigManager& configManager)
-	: configManager(configManager)
+UIConfigVisualizer::UIConfigVisualizer(MotionConfigManager& configManager, CameraManager* cameraManager)
+	: configManager(configManager), m_cameraManager(cameraManager)
 {
 	m_logger = Logger::GetInstance();
 
@@ -22,31 +18,30 @@ UIConfigVisualizer::UIConfigVisualizer(MotionConfigManager& configManager)
 	// Initialize camera feed display
 	m_cameraFeedDisplay = std::make_unique<CameraFeedDisplay>();
 
-	// Try to get first available camera from global manager
-	auto cameraIds = g_cameraManager.GetCameraIds();
-	if (!cameraIds.empty()) {
-		m_selectedCameraId = cameraIds[0];
-		InitializeCameraFeed();
+	// Try to get first available camera from camera manager if available
+	if (m_cameraManager) {
+		auto cameraIds = m_cameraManager->GetCameraIds();
+		if (!cameraIds.empty()) {
+			m_selectedCameraId = cameraIds[0];
+			InitializeCameraFeed();
+		}
 	}
 }
-
-
 
 // UIConfigVisualizer.cpp - Add new method:
 
 void UIConfigVisualizer::InitializeCameraFeed() {
-	if (m_selectedCameraId.empty()) {
+	if (m_selectedCameraId.empty() || !m_cameraManager) {
 		return;
 	}
 
-	PylonCameraTest* camera = g_cameraManager.GetCamera(m_selectedCameraId);
+	PylonCameraTest* camera = m_cameraManager->GetCamera(m_selectedCameraId);
 	if (camera) {
 		m_cameraFeedDisplay->SetPylonCameraSource(camera);
 		m_cameraInitialized = true;
 		m_logger->LogInfo("Camera feed initialized for: " + m_selectedCameraId);
 	}
 }
-
 
 UIConfigVisualizer::~UIConfigVisualizer() {
 	m_logger->LogInfo("UIConfigVisualizer destroyed");
@@ -215,10 +210,6 @@ void UIConfigVisualizer::RenderLeftPanel() {
 	RenderCameraCanvas(cameraCanvasHeight);
 }
 
-
-
-
-
 // UIConfigVisualizer.cpp - Replace RenderCameraCanvas method:
 
 void UIConfigVisualizer::RenderCameraCanvas(float height) {
@@ -247,76 +238,81 @@ void UIConfigVisualizer::RenderCameraCanvas(float height) {
 			ImGui::Spacing();
 			ImGui::Text("Camera:");
 
-			auto cameraIds = g_cameraManager.GetCameraIds();
-			if (!cameraIds.empty()) {
-				// Find current selection index
-				int currentCameraIndex = 0;
-				for (size_t i = 0; i < cameraIds.size(); i++) {
-					if (cameraIds[i] == m_selectedCameraId) {
-						currentCameraIndex = (int)i;
-						break;
+			if (m_cameraManager) {
+				auto cameraIds = m_cameraManager->GetCameraIds();
+				if (!cameraIds.empty()) {
+					// Find current selection index
+					int currentCameraIndex = 0;
+					for (size_t i = 0; i < cameraIds.size(); i++) {
+						if (cameraIds[i] == m_selectedCameraId) {
+							currentCameraIndex = (int)i;
+							break;
+						}
+					}
+
+					// Create camera selection array
+					std::vector<const char*> cameraNames;
+					for (const auto& id : cameraIds) {
+						cameraNames.push_back(id.c_str());
+					}
+
+					ImGui::SetNextItemWidth(-1);
+					if (ImGui::Combo("##CameraSelection", &currentCameraIndex, cameraNames.data(), (int)cameraNames.size())) {
+						m_selectedCameraId = cameraIds[currentCameraIndex];
+						InitializeCameraFeed();
+						m_logger->LogInfo("Camera selection changed to: " + m_selectedCameraId);
 					}
 				}
-
-				// Create camera selection array
-				std::vector<const char*> cameraNames;
-				for (const auto& id : cameraIds) {
-					cameraNames.push_back(id.c_str());
+				else {
+					ImGui::Text("No cameras available");
 				}
 
-				ImGui::SetNextItemWidth(-1);
-				if (ImGui::Combo("##CameraSelection", &currentCameraIndex, cameraNames.data(), (int)cameraNames.size())) {
-					m_selectedCameraId = cameraIds[currentCameraIndex];
-					InitializeCameraFeed();
-					m_logger->LogInfo("Camera selection changed to: " + m_selectedCameraId);
-				}
-			}
-			else {
-				ImGui::Text("No cameras available");
-			}
+				// Camera controls
+				if (!m_selectedCameraId.empty()) {
+					ImGui::Spacing();
+					PylonCameraTest* camera = m_cameraManager->GetCamera(m_selectedCameraId);
+					if (camera) {
+						auto& pylonCamera = camera->GetCamera();
 
-			// Camera controls
-			if (!m_selectedCameraId.empty()) {
-				ImGui::Spacing();
-				PylonCameraTest* camera = g_cameraManager.GetCamera(m_selectedCameraId);
-				if (camera) {
-					auto& pylonCamera = camera->GetCamera();
+						// Connection status
+						ImGui::Text("Status: %s", pylonCamera.IsConnected() ? "Connected" : "Disconnected");
 
-					// Connection status
-					ImGui::Text("Status: %s", pylonCamera.IsConnected() ? "Connected" : "Disconnected");
+						if (pylonCamera.IsConnected()) {
+							ImGui::SameLine();
+							ImGui::Text("| Grabbing: %s", pylonCamera.IsGrabbing() ? "Yes" : "No");
 
-					if (pylonCamera.IsConnected()) {
-						ImGui::SameLine();
-						ImGui::Text("| Grabbing: %s", pylonCamera.IsGrabbing() ? "Yes" : "No");
+							// Start/Stop grabbing controls
+							if (!pylonCamera.IsGrabbing()) {
+								if (ImGui::Button("Start Live Feed", ImVec2(120, 25))) {
+									m_cameraManager->StartGrabbing(m_selectedCameraId);
+									m_logger->LogInfo("Started grabbing for camera: " + m_selectedCameraId);
+								}
+							}
+							else {
+								if (ImGui::Button("Stop Live Feed", ImVec2(120, 25))) {
+									m_cameraManager->StopGrabbing(m_selectedCameraId);
+									m_logger->LogInfo("Stopped grabbing for camera: " + m_selectedCameraId);
+								}
+							}
 
-						// Start/Stop grabbing controls
-						if (!pylonCamera.IsGrabbing()) {
-							if (ImGui::Button("Start Live Feed", ImVec2(120, 25))) {
-								g_cameraManager.StartGrabbing(m_selectedCameraId);
-								m_logger->LogInfo("Started grabbing for camera: " + m_selectedCameraId);
+							ImGui::SameLine();
+							if (ImGui::Button("Connect/Reconnect", ImVec2(120, 25))) {
+								m_cameraManager->ConnectCamera(m_selectedCameraId);
+								m_logger->LogInfo("Reconnect camera: " + m_selectedCameraId);
 							}
 						}
 						else {
-							if (ImGui::Button("Stop Live Feed", ImVec2(120, 25))) {
-								g_cameraManager.StopGrabbing(m_selectedCameraId);
-								m_logger->LogInfo("Stopped grabbing for camera: " + m_selectedCameraId);
+							if (ImGui::Button("Connect Camera", ImVec2(120, 25))) {
+								m_cameraManager->ConnectCamera(m_selectedCameraId);
+								InitializeCameraFeed();
+								m_logger->LogInfo("Connecting camera: " + m_selectedCameraId);
 							}
-						}
-
-						ImGui::SameLine();
-						if (ImGui::Button("Connect/Reconnect", ImVec2(120, 25))) {
-							g_cameraManager.ConnectCamera(m_selectedCameraId);
-							m_logger->LogInfo("Reconnect camera: " + m_selectedCameraId);
-						}
-					}
-					else {
-						if (ImGui::Button("Connect Camera", ImVec2(120, 25))) {
-							g_cameraManager.ConnectCamera(m_selectedCameraId);
-							InitializeCameraFeed();
-							m_logger->LogInfo("Connecting camera: " + m_selectedCameraId);
 						}
 					}
 				}
+			}
+			else {
+				ImGui::Text("Camera Manager not available");
 			}
 		}
 

@@ -29,37 +29,35 @@
 #include <ctime>
 
 MainUIManager::MainUIManager(MotionConfigManager& configMgr)
-  : motionConfigManager(configMgr),
-  m_piControllerManager(nullptr),
-  m_acsControllerManager(nullptr) {
+    : motionConfigManager(configMgr),
+    m_piControllerManager(nullptr),
+    m_acsControllerManager(nullptr) {
 
-  // Create UIConfigEditor with the config manager reference
-  uiConfigEditor = std::make_unique<UIConfigEditor>(motionConfigManager);
+    // Create UIConfigEditor with the config manager reference
+    uiConfigEditor = std::make_unique<UIConfigEditor>(motionConfigManager);
 
-  // Create UIConfigVisualizer with the config manager reference
-  uiConfigVisualizer = std::make_unique<UIConfigVisualizer>(motionConfigManager);
+    // Create UIConfigVisualizer with the config manager reference (camera manager will be set later)
+    uiConfigVisualizer = std::make_unique<UIConfigVisualizer>(motionConfigManager, nullptr);
 
-  // Create UIJogWindow using the single-parameter constructor for mock mode
-  m_uiJogWindow = std::make_unique<UIJogWindow>(motionConfigManager);
+    // Create UIJogWindow using the single-parameter constructor for mock mode
+    m_uiJogWindow = std::make_unique<UIJogWindow>(motionConfigManager);
 
-  // Initialize TCP Data Manager UI
-  m_tcpDataManagerUI = std::make_unique<TCPDataManagerUI>();
-  if (!m_tcpDataManagerUI->Initialize()) {
-    // Log error but continue - the UI will show the error state
-    std::cout << "Warning: TCP Data Manager failed to initialize" << std::endl;
-  }
-  // Initialize Global Data Store Viewer UI
-  m_globalDataStoreViewerUI = std::make_unique<GlobalDataStoreViewerUI>();
+    // Initialize TCP Data Manager UI
+    m_tcpDataManagerUI = std::make_unique<TCPDataManagerUI>();
+    if (!m_tcpDataManagerUI->Initialize()) {
+        // Log error but continue - the UI will show the error state
+        std::cout << "Warning: TCP Data Manager failed to initialize" << std::endl;
+    }
+    // Initialize Global Data Store Viewer UI
+    m_globalDataStoreViewerUI = std::make_unique<GlobalDataStoreViewerUI>();
 
-  try {
-    m_cld101xEquipmentUI = std::make_unique<CLD101xEquipmentUI>();
-  }
-  catch (const std::exception& e) {
-    // Handle initialization error if needed
-    m_cld101xEquipmentUI = nullptr;
-  }
-
-
+    try {
+        m_cld101xEquipmentUI = std::make_unique<CLD101xEquipmentUI>();
+    }
+    catch (const std::exception& e) {
+        // Handle initialization error if needed
+        m_cld101xEquipmentUI = nullptr;
+    }
 }
 
 MainUIManager::~MainUIManager() = default;
@@ -944,16 +942,6 @@ void MainUIManager::SetPneumaticManager(PneumaticManager* pneumaticManager) {
   }
 }
 
-// Add this method implementation:
-void MainUIManager::SetCameraManager(CameraManager* cameraManager) {
-  m_cameraManager = cameraManager;
-
-  // Create Camera Panel UI when camera manager is available
-  if (m_cameraManager) {
-    m_cameraPanelUI = std::make_unique<UICameraPanel>(*m_cameraManager);
-    std::cout << "MainUIManager: Camera Panel UI created successfully" << std::endl;
-  }
-}
 
 
 void MainUIManager::SetDataClientManager(DataClientManager* dataClientManager) {
@@ -980,3 +968,20 @@ void MainUIManager::SetKeithley2400Manager(Keithley2400Manager* keithleyManager)
   }
 }
 
+// Add this method implementation:
+void MainUIManager::SetCameraManager(CameraManager* cameraManager) {
+    m_cameraManager = cameraManager;
+
+    // Create Camera Panel UI when camera manager is available
+    if (m_cameraManager) {
+        m_cameraPanelUI = std::make_unique<UICameraPanel>(*m_cameraManager);
+        std::cout << "MainUIManager: Camera Panel UI created successfully" << std::endl;
+    }
+
+    // Update UIConfigVisualizer with camera manager
+    if (uiConfigVisualizer && m_cameraManager) {
+        // Need to recreate UIConfigVisualizer with camera manager
+        uiConfigVisualizer = std::make_unique<UIConfigVisualizer>(motionConfigManager, m_cameraManager);
+        std::cout << "MainUIManager: UIConfigVisualizer updated with Camera Manager" << std::endl;
+    }
+}
