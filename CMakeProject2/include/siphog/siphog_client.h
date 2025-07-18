@@ -28,92 +28,95 @@
 
 // Data structure to hold SIPHOG measurement data
 struct SIPHOGData {
-  float sledCurrent;      // SLED_Current (mA)
-  float photoCurrent;     // Photo Current (uA)  
-  float sledTemp;         // SLED_Temp (C)
-  float targetSagPwr;     // Target SAG_PWR (V)
-  float sagPwr;           // SAG_PWR (V)
-  float tecCurrent;       // TEC_Current (mA)
-  std::chrono::steady_clock::time_point timestamp;
+    float sledCurrent;      // SLED_Current (mA)
+    float photoCurrent;     // Photo Current (uA)  
+    float sledTemp;         // SLED_Temp (C)
+    float targetSagPwr;     // Target SAG_PWR (V)
+    float sagPwr;           // SAG_PWR (V)
+    float tecCurrent;       // TEC_Current (mA)
+    std::chrono::steady_clock::time_point timestamp;
 
-  // Default constructor
-  SIPHOGData() : sledCurrent(0.0f), photoCurrent(0.0f), sledTemp(0.0f),
-    targetSagPwr(0.0f), sagPwr(0.0f), tecCurrent(0.0f),
-    timestamp(std::chrono::steady_clock::now()) {
-  }
+    // Default constructor
+    SIPHOGData() : sledCurrent(0.0f), photoCurrent(0.0f), sledTemp(0.0f),
+        targetSagPwr(0.0f), sagPwr(0.0f), tecCurrent(0.0f),
+        timestamp(std::chrono::steady_clock::now()) {
+    }
 };
 
 class SIPHOGClient {
 public:
-  SIPHOGClient();
-  ~SIPHOGClient();
+    SIPHOGClient();
+    ~SIPHOGClient();
 
-  // Connection management
-  bool Connect(const std::string& ip = "127.0.0.1", int port = 65432);
-  void Disconnect();
-  bool IsConnected() const;
+    // Connection management
+    bool Connect(const std::string& ip = "127.0.0.22", int port = 22222);
+    void Disconnect();
+    bool IsConnected() const;
 
-  // Data collection
-  void StartPolling();
-  void StopPolling();
-  bool IsPolling() const;
+    // Data collection
+    void StartPolling();
+    void StopPolling();
+    bool IsPolling() const;
 
-  // Data access
-  SIPHOGData GetLatestData() const;
-  std::vector<SIPHOGData> GetDataBuffer() const;
-  void ClearDataBuffer();
+    // Data access
+    SIPHOGData GetLatestData() const;
+    std::vector<SIPHOGData> GetDataBuffer() const;
+    void ClearDataBuffer();
 
-  // Configuration
-  void SetPollingInterval(int intervalMs);
-  int GetPollingInterval() const;
-  void SetMaxBufferSize(size_t maxSize);
+    // Configuration
+    void SetPollingInterval(int intervalMs);
+    int GetPollingInterval() const;
+    void SetMaxBufferSize(size_t maxSize);
 
-  // UI
-  void RenderUI();
-  void SetShowWindow(bool show);
-  bool GetShowWindow() const;
-  void ToggleWindow(); // Required for VerticalToolbarMenu integration
-  bool IsVisible() const; // Required for VerticalToolbarMenu integration
+    // UI
+    void RenderUI();
+    void SetShowWindow(bool show);
+    bool GetShowWindow() const;
+    void ToggleWindow(); // Required for VerticalToolbarMenu integration
+    bool IsVisible() const; // Required for VerticalToolbarMenu integration
 
-  // Statistics
-  struct DataStats {
-    float min, max, avg;
-  };
-  std::map<std::string, DataStats> GetStatistics() const;
+    // Main loop update method (for when UI is hidden)
+    void Update();
 
-  // Error handling
-  std::string GetLastError() const;
+    // Statistics
+    struct DataStats {
+        float min, max, avg;
+    };
+    std::map<std::string, DataStats> GetStatistics() const;
+
+    // Error handling
+    std::string GetLastError() const;
 
 private:
-  // Network members
-  SOCKET_TYPE m_socket;
-  std::string m_serverIp;
-  int m_serverPort;
-  std::atomic<bool> m_isConnected;
-  std::string m_lastError;
+    // Network members
+    SOCKET_TYPE m_socket;
+    std::string m_serverIp;
+    int m_serverPort;
+    std::atomic<bool> m_isConnected;
+    std::string m_lastError;
 
-  // Data collection members
-  std::atomic<bool> m_isPolling;
-  std::thread m_pollingThread;
-  int m_pollingIntervalMs;
+    // Data collection members
+    std::atomic<bool> m_isPolling;
+    std::thread m_pollingThread;
+    int m_pollingIntervalMs;
 
-  // Data storage
-  SIPHOGData m_latestData;
-  std::vector<SIPHOGData> m_dataBuffer;
-  size_t m_maxBufferSize;
-  mutable std::mutex m_dataMutex;
+    // Data storage
+    SIPHOGData m_latestData;
+    std::vector<SIPHOGData> m_dataBuffer;
+    size_t m_maxBufferSize;
+    mutable std::mutex m_dataMutex;
 
-  // UI members
-  bool m_showWindow;
-  std::string m_name;
+    // UI members
+    bool m_showWindow;
+    std::string m_name;
 
-  // Private methods for new polling implementation
-  void PollingThreadFunction();
-  bool FetchLatestData();
-  bool ParseAndStoreMessage(const std::string& message);
-  void StoreDataInGlobalStore(const SIPHOGData& data);
-  void AddToBuffer(const SIPHOGData& data);
+    // Private methods for new polling implementation
+    void PollingThreadFunction();
+    bool FetchLatestData();
+    bool ParseAndStoreMessage(const std::string& message);
+    void StoreDataInGlobalStore(const SIPHOGData& data);
+    void AddToBuffer(const SIPHOGData& data);
 
-  // Data keys (same as Python client)
-  static const std::vector<std::string> DATA_KEYS;
+    // Data keys (same as Python client)
+    static const std::vector<std::string> DATA_KEYS;
 };

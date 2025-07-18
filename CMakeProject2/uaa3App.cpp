@@ -20,17 +20,20 @@
 #include "IOConfigManager.h"
 #include "include/camera/CameraManager.h"
 #include "include/data/global_data_store.h"
-#include "include/data/data_client_manager.h"  // Add this line
-// ADD THESE THREE LINES after the CLD101x includes:
-#include "include/SMU/keithley2400_client.h"
-#include "include/SMU/keithley2400_manager.h"
-#include "include/SMU/keithley2400_operations.h"
-// ADD THESE TWO LINES:
-#include "include/cld101x_manager.h"  
-#include "include/cld101x_client.h"
 #include "include/machine_operations.h"
 #include "include/motions/motion_control_layer.h"
-#include "include/cld101x_operations.h"
+#include "DataInstrumentModuleManager.h"  // ADD THIS - needed for DataInstrumentModuleManager type
+
+// REMOVED: Individual Data & Instrument includes (handled by DataInstrumentUI now)
+// #include "include/data/data_client_manager.h"
+// #include "include/SMU/keithley2400_client.h"
+// #include "include/SMU/keithley2400_manager.h"
+// #include "include/SMU/keithley2400_operations.h"
+// #include "include/cld101x_manager.h"
+// #include "include/cld101x_client.h"
+// #include "include/cld101x_operations.h"
+#include "include/siphog/siphog_client.h"  // KEEP THIS - needed for SIPHOGClient type
+
 // Example: Check camera status
 void CheckCameraStatus(CameraManager& cameraManager) {
 	auto statusList = cameraManager.GetAllCameraStatus();
@@ -327,55 +330,39 @@ int main(int argc, char* argv[])
 	// Start grabbing on all connected cameras
 	//cameraManager->StartGrabbingAll();
 
+	// REMOVED: Data & Instrument module initialization
+	// These are now handled on-demand through the DataInstrumentUI
+	/*
 	// ✅ Initialize TCP Data Client Manager
 	std::unique_ptr<DataClientManager> dataClientManager;
 	try {
 		dataClientManager = std::make_unique<DataClientManager>("DataServerConfig.json");
-
-		// Connect to auto-connect servers
 		dataClientManager->ConnectAutoClients();
-
 		logger->LogInfo("DataClientManager initialized successfully");
 	}
 	catch (const std::exception& e) {
 		logger->LogError("Failed to initialize DataClientManager: " + std::string(e.what()));
 		logger->LogWarning("TCP Data Manager will not be available");
-		// Continue without TCP data manager - the UI will handle this gracefully
 	}
 
-	// ADD THIS SECTION:
 	// ✅ Initialize CLD101x Manager
 	std::unique_ptr<CLD101xManager> cld101xManager;
-	//std::unique_ptr<CLD101xOperations> laserOps;
-
+	std::unique_ptr<CLD101xOperations> laserOps;
 	cld101xManager = std::make_unique<CLD101xManager>();
 	cld101xManager->Initialize();
-	//automatically connected to
-	//     AddClient("CLD101x", "127.0.0.11", 65432);
-	//laserOps = std::make_unique<CLD101xOperations>(*cld101xManager);
 	cld101xManager->ConnectAll();
 	logger->LogInfo("CLD101x system initialized");
-
-	std::unique_ptr<CLD101xOperations> laserOps;
 	laserOps = std::make_unique<CLD101xOperations>(*cld101xManager);
 
-	// ✅ Initialize Keithley 2400 Manager  
+	// ✅ Initialize Keithley 2400 Manager
 	std::unique_ptr<Keithley2400Manager> keithleyManager;
 	std::unique_ptr<Keithley2400Operations> smuOps;
-
 	keithleyManager = std::make_unique<Keithley2400Manager>();
-
-	// Initialize from config file
 	if (keithleyManager->Initialize("smu_config.json")) {
 		logger->LogInfo("Keithley2400Manager initialized from config file");
-
 		smuOps = std::make_unique<Keithley2400Operations>(*keithleyManager);
-
-		// Try to connect based on config
 		if (keithleyManager->ConnectAll()) {
 			logger->LogInfo("Successfully connected to Keithley 2400 servers");
-			// Optional: Auto-start polling
-			// keithleyManager->StartAllPolling(1000); // Poll every 1 second
 		}
 		else {
 			logger->LogWarning("Failed to connect to some Keithley 2400 servers");
@@ -383,15 +370,12 @@ int main(int argc, char* argv[])
 	}
 	else {
 		logger->LogWarning("Failed to load Keithley config, using defaults");
-		// Fallback to manual setup if config fails
 		keithleyManager->AddClient("Keithley-Main", "127.0.0.101", 8888);
 		if (keithleyManager->ConnectAll()) {
 			logger->LogInfo("Successfully connected to Keithley 2400 servers (fallback)");
-			// Optional: Auto-start polling
-			// keithleyManager->StartAllPolling(1000);
 		}
 	}
-
+	*/
 
 	// ✅ Create Motion Control Layer
 	std::unique_ptr<MotionControlLayer> motionControlLayer;
@@ -406,48 +390,15 @@ int main(int argc, char* argv[])
 			else {
 				logger->LogWarning("Path execution failed or was cancelled");
 			}
-		});
+			});
 		logger->LogInfo("MotionControlLayer initialized");
 	}
-
-
-
-	// ✅ Machine Operations - Real Hardware
-	std::unique_ptr<MachineOperations> machineOps;
-
-	if (motionControlLayer && piControllerManager &&
-		ioManager && pneumaticManager) {
-
-		// Use real machine operations
-		machineOps = std::make_unique<MachineOperations>(
-			*motionControlLayer,
-			*piControllerManager,
-			*ioManager,
-			*pneumaticManager,
-			laserOps.get(),
-			cameraManager.get(),  // Using the camera manager instead of pylonCameraTest
-			smuOps.get()          // Pass SMU operations
-		);
-		logger->LogInfo("Real MachineOperations initialized");
-	}
-	else {
-		logger->LogWarning("MachineOperations not initialized - missing required components");
-		logger->LogInfo("Required: motionControlLayer=" + std::string(motionControlLayer ? "YES" : "NO"));
-		logger->LogInfo("Required: piControllerManager=" + std::string(piControllerManager ? "YES" : "NO"));
-		logger->LogInfo("Required: ioManager=" + std::string(ioManager ? "YES" : "NO"));
-		logger->LogInfo("Required: pneumaticManager=" + std::string(pneumaticManager ? "YES" : "NO"));
-	}
-
 
 	// ✅ Create the main UI manager with just the config manager
 	MainUIManager uiManager(*motionConfigManager);
 	logger->LogInfo("MainUIManager created with MotionConfigManager");
 
-	// TODO: Later, when you have motion managers, you can add them like this:
-	// std::unique_ptr<PIControllerManager> piManager = std::make_unique<PIControllerManager>(*motionConfigManager);
-	// std::unique_ptr<ACSControllerManager> acsManager = std::make_unique<ACSControllerManager>(*motionConfigManager);
-	// uiManager.SetMotionManagers(piManager.get(), acsManager.get());
-
+	// Set motion and hardware managers
 	if (piControllerManager) {
 		uiManager.SetPIControllerManager(piControllerManager.get());
 	}
@@ -467,6 +418,9 @@ int main(int argc, char* argv[])
 		uiManager.SetCameraManager(cameraManager.get());
 	}
 
+	// REMOVED: Individual Data & Instrument manager setters
+	// These are now handled internally by DataInstrumentUI
+	/*
 	// ✅ Set the TCP Data Manager
 	if (dataClientManager) {
 		uiManager.SetDataClientManager(dataClientManager.get());
@@ -476,20 +430,56 @@ int main(int argc, char* argv[])
 	if (cld101xManager) {
 		uiManager.SetCLD101xManager(cld101xManager.get());
 	}
+
 	// ✅ Set the Keithley2400 Manager
 	if (keithleyManager) {
 		uiManager.SetKeithley2400Manager(keithleyManager.get());
 	}
+	*/
 
+	// ✅ NEW APPROACH: Create MachineOperations with DataInstrumentModuleManager
+	std::unique_ptr<MachineOperations> machineOps;
+	DataInstrumentModuleManager* moduleManager = uiManager.GetDataInstrumentModuleManager();
 
+	if (motionControlLayer && piControllerManager && ioManager && pneumaticManager && moduleManager) {
+		// Use new constructor with DataInstrumentModuleManager
+		machineOps = std::make_unique<MachineOperations>(
+			*motionControlLayer,
+			*piControllerManager,
+			*ioManager,
+			*pneumaticManager,
+			cameraManager.get(),
+			*moduleManager
+		);
+		logger->LogInfo("MachineOperations initialized with DataInstrumentModuleManager");
 
+		// The laser and SMU operations will be set automatically when modules are initialized
+		// through the DataInstrumentModuleManager or can be set manually when they become available
+	}
+	else {
+		logger->LogWarning("MachineOperations not initialized - missing required components");
+		if (!motionControlLayer) logger->LogWarning("  - Missing MotionControlLayer");
+		if (!piControllerManager) logger->LogWarning("  - Missing PIControllerManager");
+		if (!ioManager) logger->LogWarning("  - Missing EziIOManager");
+		if (!pneumaticManager) logger->LogWarning("  - Missing PneumaticManager");
+		if (!moduleManager) logger->LogWarning("  - Missing DataInstrumentModuleManager");
+	}
 
-	// ✅ Set MachineOperations in MainUIManager
+	// ✅ Set MachineOperations in MainUIManager (when available)
 	if (machineOps) {
 		uiManager.SetMachineOperations(machineOps.get());
 		logger->LogInfo("MachineOperations set in MainUIManager");
 	}
 
+	// ✅ Optional: Set up callback to update MachineOperations when laser/SMU become available
+	if (machineOps && moduleManager) {
+		// This could be implemented as a callback in DataInstrumentModuleManager
+		// For now, the operations will be retrieved on-demand through the DataInstrumentModuleManager
+		logger->LogInfo("MachineOperations will get laser/SMU operations on-demand from DataInstrumentModuleManager");
+	}
+
+	// REMOVED: SIPHOG Client initialization (now handled by DataInstrumentModuleManager)
+	// SIPHOGClient siphogClient;
 
 	bool done = false;
 	bool glyphChecked = false; // Flag to check glyph only once
@@ -547,13 +537,21 @@ int main(int argc, char* argv[])
 			ImGui::End();
 		}
 
-		// ✅ ADD THIS: Update DataClientManager continuously in background
-		if (dataClientManager) {
-			dataClientManager->UpdateClients();
-		}
+		// UPDATED: DataClientManager updates are now handled within MainUIManager::RenderMainContent()
+		// No need for manual updating here - the UI handles it when on the Data & Instrument page
 
 		// ✅ Render the main UI
 		uiManager.RenderUI();
+
+		// UPDATED: SIPHOG Client handling - check if it's initialized through DataInstrumentModuleManager
+		DataInstrumentModuleManager* moduleManager = uiManager.GetDataInstrumentModuleManager();
+		if (moduleManager && moduleManager->GetSIPHOGClient()) {
+			SIPHOGClient* siphogClient = moduleManager->GetSIPHOGClient();
+			if (siphogClient->GetShowWindow()) {
+				siphogClient->RenderUI();
+			}
+			siphogClient->Update();
+		}
 
 		// Rendering
 		ImGui::Render();
@@ -582,6 +580,10 @@ int main(int argc, char* argv[])
 	ioManager->disconnectAll();
 	std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
+	// REMOVED: Individual Data & Instrument cleanup
+	// Data Instrument modules cleanup is handled automatically by DataInstrumentModuleManager destructor
+	// The DataInstrumentModuleManager destructor will properly shutdown all initialized modules
+	/*
 	// Cleanup CLD101x
 	if (cld101xManager) {
 		cld101xManager->DisconnectAll();
@@ -593,8 +595,9 @@ int main(int argc, char* argv[])
 		keithleyManager->DisconnectAll();
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
+	*/
 
-	// Cleanup - ADD THIS before ImGui cleanup
+	// Cleanup - ImPlot before ImGui cleanup
 	ImPlot::DestroyContext();
 
 	ImGui_ImplOpenGL3_Shutdown();
