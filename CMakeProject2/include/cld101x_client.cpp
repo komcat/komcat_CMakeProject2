@@ -108,11 +108,15 @@ bool CLD101xClient::IsConnected() const {
   return m_isConnected;
 }
 
+// Primary SendCommand method with pointer parameter (existing)
 bool CLD101xClient::SendCommand(const std::string& command, std::string* response) {
   if (!m_isConnected) {
     m_lastError = "Not connected to server";
     return false;
   }
+
+  // Clear any previous error
+  m_lastError.clear();
 
   // Send the command
   if (send(m_socket, command.c_str(), command.length(), 0) == SOCKET_ERROR) {
@@ -135,6 +139,11 @@ bool CLD101xClient::SendCommand(const std::string& command, std::string* respons
   }
 
   return true;
+}
+
+// Overloaded SendCommand method with reference parameter (new for UI compatibility)
+bool CLD101xClient::SendCommand(const std::string& command, std::string& response) {
+  return SendCommand(command, &response);
 }
 
 bool CLD101xClient::SetLaserCurrent(float current) {
@@ -363,8 +372,8 @@ void CLD101xClient::RenderUI() {
     // Connection status and controls
     if (!m_isConnected) {
       // IP and port input fields
-      static char ipBuffer[64] = "127.0.0.88"; // Default from your server
-      static int port = 65432; // Default from your server
+      static char ipBuffer[64] = "127.0.0.11"; // Updated to match server IP
+      static int port = 65432;
 
       ImGui::Text("Status: Disconnected");
       ImGui::InputText("IP Address", ipBuffer, sizeof(ipBuffer));
@@ -471,6 +480,25 @@ void CLD101xClient::RenderUI() {
 
       if (ImGui::Button("Set Temperature")) {
         SetTECTemperature(tempSetpoint);
+      }
+
+      ImGui::Separator();
+
+      // Manual command interface for debugging
+      ImGui::Text("Manual Command Interface:");
+      static char commandBuffer[256] = "";
+      ImGui::InputText("SCPI Command", commandBuffer, sizeof(commandBuffer));
+
+      if (ImGui::Button("Send Command")) {
+        if (strlen(commandBuffer) > 0) {
+          std::string response;
+          if (SendCommand(commandBuffer, &response)) {
+            Logger::GetInstance()->LogInfo("Manual command response: " + response);
+          }
+          else {
+            Logger::GetInstance()->LogError("Manual command failed: " + m_lastError);
+          }
+        }
       }
 
       ImGui::Separator();

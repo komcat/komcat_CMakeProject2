@@ -51,6 +51,13 @@ public:
   float GetTemperature() const; // Get the latest temperature reading (C)
   float GetLaserCurrent() const; // Get the latest laser current reading (A)
 
+  // Enhanced command interface for UI integration
+  bool SendCommand(const std::string& command, std::string* response = nullptr);
+  bool SendCommand(const std::string& command, std::string& response); // Overload for reference
+
+  // Get last error message
+  std::string GetLastError() const { return m_lastError; }
+
   // UI rendering
   void RenderUI();
   void ToggleWindow(); // Toggle UI visibility
@@ -60,11 +67,9 @@ public:
   // Start/stop background polling
   void StartPolling(int intervalMs = 500); // Default to 500ms as per requirements
   void StopPolling();
+  bool IsPolling() const { return m_isPolling; }
 
 private:
-  // Send command to the server
-  bool SendCommand(const std::string& command, std::string* response = nullptr);
-
   // Background polling thread
   void PollingThread();
 
