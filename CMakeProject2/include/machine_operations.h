@@ -15,7 +15,6 @@
 #include "include/data/DatabaseManager.h"
 #include "include/data/OperationResultsManager.h"
 #include "include/camera/CameraManager.h"
-#include "mainUI/DataInstrumentModuleManager.h"
 #include <string>
 #include <vector>
 #include <chrono>
@@ -86,32 +85,7 @@ public:
 		Keithley2400Operations* smuOps = nullptr
 	);
 
-	// NEW OVERLOADED CONSTRUCTOR - with DataInstrumentModuleManager
-	MachineOperations(
-		MotionControlLayer& motionControlLayer,
-		PIControllerManager& piControllerManager,
-		EziIOManager& ioManager,
-		PneumaticManager& pneumaticManager,
-		CameraManager* cameraManager,
-		DataInstrumentModuleManager& dataInstrumentManager
-	);
-
 	~MachineOperations();
-
-
-
-	// NEW SETTER METHODS for laser and SMU operations
-	void SetLaserOperations(CLD101xOperations* laserOps);
-	void SetSMUOperations(Keithley2400Operations* smuOps);
-
-	// NEW GETTERS to check availability
-	bool HasLaserOperations() const;
-	bool HasSMUOperations() const;
-	CLD101xOperations* GetLaserOperations() const;
-	Keithley2400Operations* GetSMUOperations() const;
-
-	// NEW METHOD to get DataInstrumentModuleManager reference
-	DataInstrumentModuleManager* GetDataInstrumentModuleManager() const;
 
 	// Add these public methods for result access
 	std::shared_ptr<OperationResultsManager> GetResultsManager() { return m_resultsManager; }
@@ -470,9 +444,6 @@ private:
 	PylonCameraTest* m_cameraTest;
 	CameraManager* m_cameraManager;  // Optional camera manager
 
-
-	// NEW MEMBER for DataInstrumentModuleManager
-	DataInstrumentModuleManager* m_dataInstrumentManager;
 
 
 	// Helper methods

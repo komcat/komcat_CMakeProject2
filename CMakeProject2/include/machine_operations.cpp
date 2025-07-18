@@ -10,8 +10,8 @@
 // Add these includes at the top:
 #include "include/data/DatabaseManager.h"
 #include "include/data/OperationResultsManager.h"
-#include "mainUI/DataInstrumentModuleManager.h"
-//#include "include/motions/motion_control_layer.h"
+
+
 
 
 // Updated constructor
@@ -122,74 +122,6 @@ m_autoExposureEnabled(true)
   m_logger->LogInfo("MachineOperations: Initialized with CameraManager" +
     std::string(m_smuOps ? " and SMU support" : ""));
 }
-
-
-
-// NEW OVERLOADED CONSTRUCTOR with DataInstrumentModuleManager
-MachineOperations::MachineOperations(
-    MotionControlLayer& motionControlLayer,
-    PIControllerManager& piControllerManager,
-    EziIOManager& ioManager,
-    PneumaticManager& pneumaticManager,
-    CameraManager* cameraManager,
-    DataInstrumentModuleManager& dataInstrumentManager)
-    : m_motionLayer(motionControlLayer),
-    m_piControllerManager(piControllerManager),
-    m_ioManager(ioManager),
-    m_pneumaticManager(pneumaticManager),
-    m_cameraManager(cameraManager),
-    m_dataInstrumentManager(&dataInstrumentManager),
-    m_laserOps(nullptr),
-    m_smuOps(nullptr),
-    m_cameraTest(nullptr),
-    m_autoExposureEnabled(true),
-    m_logger(Logger::GetInstance())
-{
-    m_logger->LogInfo("MachineOperations initialized with DataInstrumentModuleManager");
-
-    // Initialize database and results managers
-    try {
-        m_dbManager = std::make_shared<DatabaseManager>();
-        if (!m_dbManager->Initialize()) {
-            m_logger->LogError("MachineOperations: Failed to initialize database: " + m_dbManager->GetLastError());
-            m_dbManager.reset();
-        }
-
-        if (m_dbManager) {
-            m_resultsManager = std::make_shared<OperationResultsManager>(m_dbManager);
-            m_logger->LogInfo("MachineOperations: Initialized with result tracking");
-        }
-        else {
-            m_logger->LogWarning("MachineOperations: Operating without result tracking due to database error");
-        }
-    }
-    catch (const std::exception& e) {
-        m_logger->LogError("MachineOperations: Exception initializing result managers: " + std::string(e.what()));
-        m_dbManager.reset();
-        m_resultsManager.reset();
-    }
-
-    // Initialize camera exposure manager with CameraManager
-    if (m_cameraManager) {
-        m_cameraExposureManager = std::make_unique<CameraExposureManager>("camera_exposure_config.json");
-        m_logger->LogInfo("MachineOperations: Camera exposure manager initialized with CameraManager");
-    }
-
-    // Try to get laser and SMU operations if they're already available
-    if (m_dataInstrumentManager) {
-        m_laserOps = m_dataInstrumentManager->GetCLD101xOperations();
-        m_smuOps = m_dataInstrumentManager->GetKeithleyOperations();
-
-        if (m_laserOps) {
-            m_logger->LogInfo("Laser operations available at construction");
-        }
-        if (m_smuOps) {
-            m_logger->LogInfo("SMU operations available at construction");
-        }
-    }
-}
-
-
 
 
 MachineOperations::~MachineOperations() {
@@ -1447,15 +1379,13 @@ bool MachineOperations::ConvertPinStateToBoolean(uint32_t inputs, int pin) {
   return (inputs & (1 << pin)) != 0;
 }
 
-// Also update existing laser/SMU methods to provide better feedback
+// Add implementations for the new methods:
 bool MachineOperations::LaserOn(const std::string& laserName) {
-    if (!m_laserOps) {
-        m_logger->LogWarning("MachineOperations: LaserOn() called but laser operations not available - initialize CLD101x module first");
-        return false;
-    }
-
-    m_logger->LogInfo("MachineOperations: Turning on laser" + (laserName.empty() ? "" : " (" + laserName + ")"));
-    return m_laserOps->LaserOn(laserName);
+  if (!m_laserOps) {
+    m_logger->LogError("MachineOperations: No laser operations module available");
+    return false;
+  }
+  return m_laserOps->LaserOn(laserName);
 }
 
 bool MachineOperations::LaserOff(const std::string& laserName) {
@@ -3246,14 +3176,15 @@ bool MachineOperations::SMU_ResetInstrument(const std::string& clientName) {
 }
 
 bool MachineOperations::SMU_SetOutput(bool enable, const std::string& clientName) {
-    if (!m_smuOps) {
-        m_logger->LogWarning("MachineOperations: SMU_SetOutput() called but SMU operations not available - initialize Keithley module first");
-        return false;
-    }
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
 
-    m_logger->LogInfo("MachineOperations: " + std::string(enable ? "Enabling" : "Disabling") +
-        " SMU output" + (clientName.empty() ? "" : " (" + clientName + ")"));
-    return m_smuOps->SetOutput(enable, clientName);
+  m_logger->LogInfo("MachineOperations: " + std::string(enable ? "Enabling" : "Disabling") +
+    " SMU output" + (clientName.empty() ? "" : " (" + clientName + ")"));
+
+  return m_smuOps->SetOutput(enable, clientName);
 }
 
 bool MachineOperations::SMU_SetupVoltageSource(double voltage, double compliance,
@@ -3722,70 +3653,3 @@ extern "C" {
   }
 
 }
-
-
-// NEW SETTER METHODS
-
-void MachineOperations::SetLaserOperations(CLD101xOperations* laserOps) {
-    m_laserOps = laserOps;
-    if (m_laserOps) {
-        m_logger->LogInfo("MachineOperations: Laser operations set successfully - laser functions now available");
-    }
-    else {
-        m_logger->LogInfo("MachineOperations: Laser operations cleared - laser functions disabled");
-    }
-}
-
-void MachineOperations::SetSMUOperations(Keithley2400Operations* smuOps) {
-    m_smuOps = smuOps;
-    if (m_smuOps) {
-        m_logger->LogInfo("MachineOperations: SMU operations set successfully - SMU functions now available");
-    }
-    else {
-        m_logger->LogInfo("MachineOperations: SMU operations cleared - SMU functions disabled");
-    }
-}
-
-// NEW GETTER METHODS
-bool MachineOperations::HasLaserOperations() const {
-    return m_laserOps != nullptr;
-}
-
-bool MachineOperations::HasSMUOperations() const {
-    return m_smuOps != nullptr;
-}
-
-CLD101xOperations* MachineOperations::GetLaserOperations() const {
-    return m_laserOps;
-}
-
-Keithley2400Operations* MachineOperations::GetSMUOperations() const {
-    return m_smuOps;
-}
-
-DataInstrumentModuleManager* MachineOperations::GetDataInstrumentModuleManager() const {
-    return m_dataInstrumentManager;
-}
-//
-//// UPDATE ANY EXISTING METHODS that use m_laserOps or m_smuOps to check for nullptr
-//// For example, in laser-related operations:
-//bool MachineOperations::SomeMethodThatUsesLaser() {
-//    if (!m_laserOps) {
-//        m_logger->LogWarning("Laser operations not available");
-//        return false;
-//    }
-//
-//    // Use m_laserOps as normal
-//    return m_laserOps->SomeMethod();
-//}
-//
-//// For SMU-related operations:
-//bool MachineOperations::SomeMethodThatUsesSMU() {
-//    if (!m_smuOps) {
-//        m_logger->LogWarning("SMU operations not available");
-//        return false;
-//    }
-//
-//    // Use m_smuOps as normal
-//    return m_smuOps->SomeMethod();
-//}
