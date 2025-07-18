@@ -127,13 +127,4 @@ private:
 	// Helper method declaration
 	void RefreshPositionNames();
 
-	// NEW: Crosshair and closest node helper methods
-	void RenderDeviceCrosshairsWithClosestNode(ImDrawList* drawList, const ImVec2& canvasPos, const Graph& graph);
-	const Node* FindNodeById(const Graph& graph, const std::string& nodeId, const std::string& deviceName);
-	const Node* FindClosestNodeForDevice(const Graph& graph, const std::string& deviceName, const PositionStruct& currentPos);
-	void DrawExactNodeCrosshair(ImDrawList* drawList, const ImVec2& canvasPos, const std::string& deviceName);
-	void DrawOffsetCrosshairWithGuideLine(ImDrawList* drawList, const ImVec2& canvasPos, const Node& closestNode,
-		const std::string& deviceName, const PositionStruct& currentPos);
-	void DrawDeviceNameLabel(ImDrawList* drawList, const ImVec2& pos, const std::string& deviceName, ImU32 borderColor);
-	bool DeviceHasZAxis(const std::string& deviceName);  // NEW: Check if device uses Z-axis
 };
