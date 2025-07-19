@@ -6,9 +6,11 @@ from tkinter import ttk, scrolledtext
 import time
 import queue
 from datetime import datetime
+import argparse
+import sys
 
 class CLD101xServerGUI:
-    def __init__(self):
+    def __init__(self, auto_start=False):
         self.root = tk.Tk()
         self.root.title("CLD101x Server Control Panel")
         self.root.geometry("800x600")
@@ -19,6 +21,7 @@ class CLD101xServerGUI:
         self.server_socket = None
         self.client_count = 0
         self.total_commands = 0
+        self.auto_start = auto_start
         
         # VISA instrument
         self.instr = None
@@ -42,6 +45,27 @@ class CLD101xServerGUI:
         self.setup_ui()
         self.start_log_updater()
         
+        # Auto-start functionality
+        if self.auto_start:
+            self.root.after(1000, self.auto_start_sequence)  # Wait 1 second then auto-start
+        
+    def auto_start_sequence(self):
+        """Automatically start the server after GUI initialization"""
+        self.log_message("Auto-start sequence initiated...")
+        
+        # First, test VISA connection
+        try:
+            self.test_visa()
+            if self.instr is not None:
+                # If VISA connection successful, start server
+                self.log_message("VISA connection successful, starting server...")
+                self.start_server()
+                self.log_message("Server auto-started successfully!")
+            else:
+                self.log_message("Auto-start failed: Could not establish VISA connection", "ERROR")
+        except Exception as e:
+            self.log_message(f"Auto-start failed: {e}", "ERROR")
+    
     def setup_ui(self):
         # Main notebook for tabs
         notebook = ttk.Notebook(self.root)
@@ -63,6 +87,13 @@ class CLD101xServerGUI:
         self.setup_log_tab(log_frame)
         
     def setup_server_tab(self, parent):
+        # Auto-start indicator (NEW)
+        if self.auto_start:
+            auto_frame = ttk.Frame(parent)
+            auto_frame.pack(fill='x', padx=5, pady=5)
+            ttk.Label(auto_frame, text="⚡ AUTO-START MODE ENABLED", 
+                     foreground="green", font=('Arial', 10, 'bold')).pack()
+        
         # Connection Settings
         settings_frame = ttk.LabelFrame(parent, text="Connection Settings")
         settings_frame.pack(fill='x', padx=5, pady=5)
@@ -87,6 +118,9 @@ class CLD101xServerGUI:
         self.stop_btn.pack(side='left', padx=5, pady=5)
         
         ttk.Button(control_frame, text="Test VISA Connection", command=self.test_visa).pack(side='left', padx=5, pady=5)
+        
+        # Restart button (NEW)
+        ttk.Button(control_frame, text="Restart Server", command=self.restart_server).pack(side='left', padx=5, pady=5)
         
         # Server Status
         status_frame = ttk.LabelFrame(parent, text="Server Status")
@@ -149,10 +183,23 @@ class CLD101xServerGUI:
         self.auto_scroll = tk.BooleanVar(value=True)
         ttk.Checkbutton(control_frame, text="Auto-scroll", variable=self.auto_scroll).pack(side='left', padx=5)
         
+    def restart_server(self):
+        """Restart the server (NEW METHOD)"""
+        self.log_message("Restarting server...")
+        if self.server_running:
+            self.stop_server()
+            # Wait a moment for clean shutdown
+            self.root.after(1000, self.start_server)
+        else:
+            self.start_server()
+        
     def log_message(self, message, level="INFO"):
         timestamp = datetime.now().strftime("%H:%M:%S")
         log_entry = f"[{timestamp}] {level}: {message}\n"
         self.log_queue.put(log_entry)
+        
+        # Also print to console for debugging
+        print(f"[{timestamp}] {level}: {message}")
         
     def start_log_updater(self):
         """Update logs from queue in main thread"""
@@ -293,6 +340,7 @@ class CLD101xServerGUI:
             self.root.after(0, lambda: self.client_label.config(text=f"Active Clients: {self.client_count}"))
             self.log_message(f"Client disconnected: {addr}")
             
+    
     def process_command(self, data):
         """Process incoming command and return response"""
         self.log_message(f"Command: {data}")
@@ -302,6 +350,7 @@ class CLD101xServerGUI:
         value = parts[1] if len(parts) > 1 else None
         
         try:
+            # **EXISTING COMMANDS**
             if command == "SET_LASER_CURRENT" and value is not None:
                 self.instr.write(f"source1:current:level:amplitude {value}")
                 response = f"Set LD current [A]: {self.instr.query('source1:current:level:amplitude?')}"
@@ -349,6 +398,91 @@ class CLD101xServerGUI:
                         response = f"ERROR: VISA error - {str(e)}"
                 finally:
                     self.instr.timeout = original_timeout
+            
+            # **NEW: STATUS QUERY COMMANDS**
+            elif command in ["OUTPUT1:STATE?", "OUTPut1:STATe?", "output1:state?"]:
+                # Query laser output state
+                try:
+                    state = self.instr.query("output1:state?")
+                    # Clean up response and ensure consistent format
+                    state_clean = state.strip().upper()
+                    self.log_message(f"Raw laser state from hardware: '{state}' -> '{state_clean}'")
+                    
+                    if state_clean in ['1', 'ON']:
+                        response = "ON"
+                        self.root.after(0, lambda: self.laser_state.set("ON"))
+                    else:
+                        response = "OFF"
+                        self.root.after(0, lambda: self.laser_state.set("OFF"))
+                        
+                except Exception as e:
+                    self.log_message(f"Failed to query laser state: {e}", "ERROR")
+                    # Fallback - try to infer from current reading
+                    try:
+                        current = float(self.instr.query("sense3:current:dc:data?").strip())
+                        if current > 0.001:  # If current > 1mA, laser is probably on
+                            response = "ON"
+                            self.log_message(f"Inferred laser ON from current: {current}A")
+                        else:
+                            response = "OFF"
+                            self.log_message(f"Inferred laser OFF from current: {current}A")
+                    except:
+                        response = "OFF"  # Default to OFF if all else fails
+                        
+            elif command in ["OUTPUT2:STATE?", "OUTPut2:STATe?", "output2:state?"]:
+                # Query TEC output state
+                try:
+                    state = self.instr.query("output2:state?")
+                    # Clean up response and ensure consistent format
+                    state_clean = state.strip().upper()
+                    self.log_message(f"Raw TEC state from hardware: '{state}' -> '{state_clean}'")
+                    
+                    if state_clean in ['1', 'ON']:
+                        response = "ON"
+                        self.root.after(0, lambda: self.tec_state.set("ON"))
+                    else:
+                        response = "OFF"
+                        self.root.after(0, lambda: self.tec_state.set("OFF"))
+                        
+                except Exception as e:
+                    self.log_message(f"Failed to query TEC state: {e}", "ERROR")
+                    # Fallback - try to infer from temperature stability
+                    try:
+                        temp = float(self.instr.query("SENSe2:temperature:data?").strip())
+                        setpoint = float(self.instr.query("source2:temperature:spoint?").strip())
+                        temp_diff = abs(temp - setpoint)
+                        
+                        if temp_diff < 2.0:  # If within 2°C of setpoint, TEC is probably on
+                            response = "ON"
+                            self.log_message(f"Inferred TEC ON - Temp: {temp}°C, Setpoint: {setpoint}°C")
+                        else:
+                            response = "OFF"
+                            self.log_message(f"Inferred TEC OFF - Temp: {temp}°C, Setpoint: {setpoint}°C")
+                    except:
+                        response = "OFF"  # Default to OFF if all else fails
+            
+            # **NEW: INSTRUMENT IDENTIFICATION**
+            elif command in ["*IDN?", "IDN?"]:
+                try:
+                    response = self.instr.query("*IDN?")
+                except Exception as e:
+                    response = f"ERROR: Failed to query instrument ID - {str(e)}"
+            
+            # **NEW: ERROR QUEUE QUERY**
+            elif command in ["SYST:ERR?", "SYSTEM:ERROR?"]:
+                try:
+                    response = self.instr.query("system:error?")
+                except Exception as e:
+                    response = f"ERROR: Failed to query error queue - {str(e)}"
+            
+            # **NEW: GENERIC SCPI QUERY PASSTHROUGH**
+            elif command.endswith('?'):
+                # Any query command - pass through directly to instrument
+                try:
+                    response = self.instr.query(command)
+                    self.log_message(f"Generic SCPI query: {command} -> {response}")
+                except Exception as e:
+                    response = f"ERROR: Query failed - {str(e)}"
                     
             else:
                 response = "Unknown command or missing value"
@@ -363,6 +497,8 @@ class CLD101xServerGUI:
             
         self.log_message(f"Response: {response}")
         return response
+        
+
         
     def read_temperature(self):
         """Manual temperature reading"""
@@ -435,6 +571,273 @@ class CLD101xServerGUI:
                 
         self.root.destroy()
 
+def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='CLD101x Server Control Panel')
+    parser.add_argument('--auto-start', '-a', action='store_true', 
+                       help='Automatically start the server when the application launches')
+    parser.add_argument('--headless', action='store_true',
+                       help='Run without GUI (headless mode)')
+    parser.add_argument('--host', default='127.0.0.11',
+                       help='Server host address (default: 127.0.0.11)')
+    parser.add_argument('--port', type=int, default=65432,
+                       help='Server port (default: 65432)')
+    parser.add_argument('--visa-resource', default='USB0::0x1313::0x804F::M00930341::INSTR',
+                       help='VISA resource string')
+    
+    args = parser.parse_args()
+    
+    if args.headless:
+        # Headless mode - run server without GUI
+        print("Starting CLD101x server in headless mode...")
+        run_headless_server(args.host, args.port, args.visa_resource)
+    else:
+        # GUI mode
+        app = CLD101xServerGUI(auto_start=args.auto_start)
+        
+        # Override default settings if provided via command line
+        if args.host != '127.0.0.11':
+            app.host.set(args.host)
+        if args.port != 65432:
+            app.port.set(args.port)
+        if args.visa_resource != 'USB0::0x1313::0x804F::M00930341::INSTR':
+            app.visa_resource.set(args.visa_resource)
+            
+        app.run()
+
+def run_headless_server(host, port, visa_resource):
+    """Run server without GUI (headless mode)"""
+    import signal
+    
+    print(f"Initializing VISA connection to {visa_resource}...")
+    try:
+        rm = pyvisa.ResourceManager()
+        instr = rm.open_resource(visa_resource)
+        instr.timeout = 1000
+        
+        idn = instr.query("*IDN?")
+        print(f"Connected to: {idn.strip()}")
+        
+    except Exception as e:
+        print(f"VISA connection failed: {e}")
+        return
+    
+    print(f"Starting server on {host}:{port}...")
+    
+    # Server implementation for headless mode
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    
+    def signal_handler(sig, frame):
+        print("\nShutting down server...")
+        server_socket.close()
+        instr.close()
+        rm.close()
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    try:
+        server_socket.bind((host, port))
+        server_socket.listen()
+        print(f"Server listening on {host}:{port}")
+        print("Press Ctrl+C to stop the server")
+        
+        while True:
+            conn, addr = server_socket.accept()
+            print(f"Client connected: {addr}")
+            
+            # Handle client in separate thread (similar to GUI version)
+            client_thread = threading.Thread(
+                target=lambda: handle_headless_client(conn, addr, instr), 
+                daemon=True
+            )
+            client_thread.start()
+            
+    except Exception as e:
+        print(f"Server error: {e}")
+    finally:
+        server_socket.close()
+        instr.close()
+        rm.close()
+
+
+# ALSO UPDATE the handle_headless_client function for headless mode:
+def handle_headless_client(conn, addr, instr):
+    """Handle client in headless mode"""
+    try:
+        while True:
+            data = conn.recv(1024).decode()
+            if not data:
+                break
+                
+            print(f"Command from {addr}: {data.strip()}")
+            
+            # Process command (same logic as GUI version)
+            parts = data.split()
+            command = parts[0] if parts else ""
+            value = parts[1] if len(parts) > 1 else None
+            
+            try:
+                # **EXISTING COMMANDS**
+                if command == "SET_LASER_CURRENT" and value is not None:
+                    instr.write(f"source1:current:level:amplitude {value}")
+                    response = f"Set LD current [A]: {instr.query('source1:current:level:amplitude?')}"
+                elif command == "SET_TEC_TEMPERATURE" and value is not None:
+                    instr.write(f"source2:temperature:spoint {value}")
+                    response = f"Set TEC temperature [C]: {instr.query('source2:temperature:spoint?')}"
+                elif command == "LASER_ON":
+                    instr.write("output1:state on")
+                    response = f"Laser state: {instr.query('output1:state?')}"
+                elif command == "LASER_OFF":
+                    instr.write("output1:state off")
+                    response = f"Laser state: {instr.query('output1:state?')}"
+                elif command == "TEC_ON":
+                    instr.write("output2:state on")
+                    response = f"TEC state: {instr.query('output2:state?')}"
+                elif command == "TEC_OFF":
+                    instr.write("output2:state off")
+                    response = f"TEC state: {instr.query('output2:state?')}"
+                elif command == "READ_LASER_CURRENT":
+                    current = instr.query("sense3:current:dc:data?")
+                    response = f"Current laser current [A]: {current}"
+                elif command == "READ_TEC_TEMPERATURE":
+                    try:
+                        original_timeout = instr.timeout
+                        instr.timeout = 200
+                        temp = instr.query("SENSe2:temperature:data?")
+                        response = f"Current TEC temperature [C]: {temp}"
+                    except pyvisa.errors.VisaIOError as e:
+                        if "timeout" in str(e).lower():
+                            response = "ERROR: Temperature reading timeout"
+                        else:
+                            response = f"ERROR: VISA error - {str(e)}"
+                    finally:
+                        instr.timeout = original_timeout
+                
+                # **NEW: STATUS QUERY COMMANDS FOR HEADLESS MODE**
+                elif command in ["OUTPUT1:STATE?", "OUTPut1:STATe?", "output1:state?"]:
+                    try:
+                        state = instr.query("output1:state?")
+                        state_clean = state.strip().upper()
+                        if state_clean in ['1', 'ON']:
+                            response = "ON"
+                        else:
+                            response = "OFF"
+                    except Exception as e:
+                        print(f"Failed to query laser state: {e}")
+                        # Fallback inference
+                        try:
+                            current = float(instr.query("sense3:current:dc:data?").strip())
+                            response = "ON" if current > 0.001 else "OFF"
+                        except:
+                            response = "OFF"
+                            
+                elif command in ["OUTPUT2:STATE?", "OUTPut2:STATe?", "output2:state?"]:
+                    try:
+                        state = instr.query("output2:state?")
+                        state_clean = state.strip().upper()
+                        if state_clean in ['1', 'ON']:
+                            response = "ON"
+                        else:
+                            response = "OFF"
+                    except Exception as e:
+                        print(f"Failed to query TEC state: {e}")
+                        # Fallback inference
+                        try:
+                            temp = float(instr.query("SENSe2:temperature:data?").strip())
+                            setpoint = float(instr.query("source2:temperature:spoint?").strip())
+                            response = "ON" if abs(temp - setpoint) < 2.0 else "OFF"
+                        except:
+                            response = "OFF"
+                
+                elif command in ["*IDN?", "IDN?"]:
+                    response = instr.query("*IDN?")
+                elif command in ["SYST:ERR?", "SYSTEM:ERROR?"]:
+                    response = instr.query("system:error?")
+                elif command.endswith('?'):
+                    response = instr.query(command)
+                else:
+                    response = "Unknown command or missing value"
+                    
+            except pyvisa.errors.VisaIOError as e:
+                response = f"ERROR: VISA communication error - {str(e)}"
+            except Exception as e:
+                response = f"ERROR: {str(e)}"
+                
+            print(f"Response to {addr}: {response}")
+            conn.sendall(response.encode())
+            
+    except Exception as e:
+        print(f"Client {addr} error: {e}")
+    finally:
+        conn.close()
+        print(f"Client {addr} disconnected")
+        """Handle client in headless mode"""
+    try:
+        while True:
+            data = conn.recv(1024).decode()
+            if not data:
+                break
+                
+            print(f"Command from {addr}: {data.strip()}")
+            
+            # Process command (same logic as GUI version)
+            parts = data.split()
+            command = parts[0] if parts else ""
+            value = parts[1] if len(parts) > 1 else None
+            
+            try:
+                if command == "SET_LASER_CURRENT" and value is not None:
+                    instr.write(f"source1:current:level:amplitude {value}")
+                    response = f"Set LD current [A]: {instr.query('source1:current:level:amplitude?')}"
+                elif command == "SET_TEC_TEMPERATURE" and value is not None:
+                    instr.write(f"source2:temperature:spoint {value}")
+                    response = f"Set TEC temperature [C]: {instr.query('source2:temperature:spoint?')}"
+                elif command == "LASER_ON":
+                    instr.write("output1:state on")
+                    response = f"Laser state: {instr.query('output1:state?')}"
+                elif command == "LASER_OFF":
+                    instr.write("output1:state off")
+                    response = f"Laser state: {instr.query('output1:state?')}"
+                elif command == "TEC_ON":
+                    instr.write("output2:state on")
+                    response = f"TEC state: {instr.query('output2:state?')}"
+                elif command == "TEC_OFF":
+                    instr.write("output2:state off")
+                    response = f"TEC state: {instr.query('output2:state?')}"
+                elif command == "READ_LASER_CURRENT":
+                    current = instr.query("sense3:current:dc:data?")
+                    response = f"Current laser current [A]: {current}"
+                elif command == "READ_TEC_TEMPERATURE":
+                    try:
+                        original_timeout = instr.timeout
+                        instr.timeout = 200
+                        temp = instr.query("SENSe2:temperature:data?")
+                        response = f"Current TEC temperature [C]: {temp}"
+                    except pyvisa.errors.VisaIOError as e:
+                        if "timeout" in str(e).lower():
+                            response = "ERROR: Temperature reading timeout"
+                        else:
+                            response = f"ERROR: VISA error - {str(e)}"
+                    finally:
+                        instr.timeout = original_timeout
+                else:
+                    response = "Unknown command or missing value"
+                    
+            except pyvisa.errors.VisaIOError as e:
+                response = f"ERROR: VISA communication error - {str(e)}"
+            except Exception as e:
+                response = f"ERROR: {str(e)}"
+                
+            print(f"Response to {addr}: {response}")
+            conn.sendall(response.encode())
+            
+    except Exception as e:
+        print(f"Client {addr} error: {e}")
+    finally:
+        conn.close()
+        print(f"Client {addr} disconnected")
+
 if __name__ == "__main__":
-    app = CLD101xServerGUI()
-    app.run()
+    main()

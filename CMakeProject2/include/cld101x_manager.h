@@ -59,6 +59,11 @@ public:
   bool IsVisible() const;
   const std::string& GetName() const;
 
+  // Global Data Store integration
+  void EnableGlobalDataStoreForAll(bool enable = true);
+  void EnableGlobalDataStoreForClient(const std::string& clientName, bool enable = true, const std::string& prefix = "");
+
+
 private:
   Logger* m_logger;
   std::map<std::string, std::unique_ptr<CLD101xClient>> m_clients;

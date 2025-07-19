@@ -1,5 +1,5 @@
 // ==============================================================================
-// HEADER FILE: CLD101xEquipmentUI.h - Enhanced with Polling Support
+// HEADER FILE: CLD101xEquipmentUI.h - Redesigned with 3-Column Layout
 // ==============================================================================
 #pragma once
 
@@ -64,19 +64,30 @@ private:
   std::string m_debugOutput = "";
   bool m_autoRefresh = false;
   float m_lastStatusUpdate = 0.0f;
-
-  // NEW: Enhanced auto-refresh controls
   float m_refreshRate = 2.0f; // Configurable refresh rate in seconds
 
   // Manager integration
   CLD101xManager* m_cld101xManager = nullptr;
 
-  // Private render methods
+  // === NEW: 3-Panel Layout Rendering Methods ===
+  void RenderLeftPanel();     // Connection & Status (30%)
+  void RenderMiddlePanel();   // Laser Controls (35%)
+  void RenderRightPanel();    // TEC & Debug (35%)
+
+  // === NEW: Section Rendering Methods ===
   void RenderConnectionSection();
+  void RenderCurrentReadingsSection();
+  void RenderPollingControlsSection();
   void RenderLaserControlSection();
+  void RenderCurrentControlSection();
   void RenderTECControlSection();
-  void RenderStatusSection();
-  void RenderDebugSection();
+  void RenderCompactDebugSection();
+
+  // === LEGACY: Keep existing methods for backward compatibility ===
+  void RenderLaserControlSection_Legacy();  // Original laser control section
+  void RenderTECControlSection_Legacy();    // Original TEC control section
+  void RenderStatusSection();               // Original status section
+  void RenderDebugSection();                // Original debug section
 
   // Helper methods
   void UpdateCurrentFromMA();
@@ -97,7 +108,17 @@ private:
   void OnSendDebugCommand(const std::string& command);
   void OnGetStatus();
   void OnCheckErrors();
-  // Add this method to CLD101xEquipmentUI.h (private section):
   void ForceImmediateRefresh();
   void UpdateUIFromPollingCache();
+
+  void SyncUIWithHardware();
+
+
+  // NEW: Status synchronization methods
+  void OnSyncHardwareStatus();
+  void OnForceStatusQuery();
+  void RenderStatusValidationControls();  // Enhanced status section with validation
+
+  void OnAnalyzeTECBehavior();
+
 };

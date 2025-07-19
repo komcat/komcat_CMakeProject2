@@ -732,12 +732,21 @@ CLD101xManager* m_cld101xManager = nullptr;
 // IMPLEMENTATION FILE CHANGES (MainUIManager.cpp)
 // ==============================================================================
 
+
+// In MainUIManager::SetCLD101xManager method, add:
 void MainUIManager::SetCLD101xManager(CLD101xManager* cld101xManager) {
   m_cld101xManager = cld101xManager;
 
   // Pass the manager to the UI component
   if (m_cld101xEquipmentUI) {
     m_cld101xEquipmentUI->SetCLD101xManager(cld101xManager);
+  }
+
+  // ENABLE GLOBAL DATA STORE INTEGRATION
+  if (cld101xManager) {
+    // Enable for all clients with appropriate prefixes
+    cld101xManager->EnableGlobalDataStoreForAll(true);
+    Logger::GetInstance()->LogInfo("MainUIManager: Enabled Global Data Store for CLD101x equipment");
   }
 }
 

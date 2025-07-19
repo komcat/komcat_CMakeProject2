@@ -447,3 +447,44 @@ bool CLD101xManager::ConnectClient(const std::string& clientName) {
 
   return success;
 }
+// ==============================================================================
+// Fixed CLD101xManager Global Data Store Methods
+// ==============================================================================
+
+void CLD101xManager::EnableGlobalDataStoreForAll(bool enable) {
+  for (auto& [clientName, client] : m_clients) {
+    if (client) {
+      // Use client name as prefix, or customize as needed
+      client->EnableGlobalDataStore(enable, clientName);
+    }
+  }
+
+  if (enable) {
+    Logger::GetInstance()->LogInfo("CLD101xManager: Enabled Global Data Store for all clients");
+  }
+  else {
+    Logger::GetInstance()->LogInfo("CLD101xManager: Disabled Global Data Store for all clients");
+  }
+}
+
+void CLD101xManager::EnableGlobalDataStoreForClient(const std::string& clientName, bool enable, const std::string& prefix) {
+  auto it = m_clients.find(clientName);
+  if (it != m_clients.end() && it->second) {
+    std::string devicePrefix = prefix.empty() ? clientName : prefix;
+    it->second->EnableGlobalDataStore(enable, devicePrefix);
+
+    // Fixed: Use separate if/else for cleaner string building
+    std::string logMessage = "CLD101xManager: ";
+    if (enable) {
+      logMessage += "Enabled Global Data Store for client: " + clientName + " with prefix: " + devicePrefix;
+    }
+    else {
+      logMessage += "Disabled Global Data Store for client: " + clientName;
+    }
+
+    Logger::GetInstance()->LogInfo(logMessage);
+  }
+  else {
+    Logger::GetInstance()->LogWarning("CLD101xManager: Client not found: " + clientName);
+  }
+}

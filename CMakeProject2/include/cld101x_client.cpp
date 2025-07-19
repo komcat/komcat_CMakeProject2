@@ -17,7 +17,14 @@ CLD101xClient::CLD101xClient()
   , m_pollingIntervalMs(500)  // Default to 500ms
   , m_showWindow(true)
   , m_name("CLD101x Controller")
+
+  , m_globalDataStore(nullptr)          // ADD THIS
+  , m_enableGlobalDataStore(false)      // ADD THIS
+  , m_devicePrefix("CLD101x")           // ADD THIS
 {
+  // Initialize Global Data Store
+  m_globalDataStore = GlobalDataStore::GetInstance();
+
 #ifdef _WIN32
   // Initialize Winsock for Windows
   WSADATA wsaData;
@@ -39,6 +46,7 @@ CLD101xClient::~CLD101xClient() {
   Logger::GetInstance()->LogInfo("CLD101xClient: Destroyed");
 }
 
+// ENHANCED Connect method in cld101x_client.cpp
 bool CLD101xClient::Connect(const std::string& ip, int port) {
   Logger* logger = Logger::GetInstance();
 
@@ -81,12 +89,26 @@ bool CLD101xClient::Connect(const std::string& ip, int port) {
   m_isConnected = true;
   logger->LogInfo("CLD101xClient: Connected to " + ip + ":" + std::to_string(port));
 
+  // **NEW: Sync hardware status immediately after connection**
+  try {
+    // Clear status cache to force fresh reads
+    m_lastStatusQuery = std::chrono::steady_clock::time_point{};
+
+    // Sync hardware status before starting polling
+    SyncHardwareStatus();
+    logger->LogInfo("CLD101xClient: Initial hardware status - Laser: " +
+      std::string(m_cachedLaserStatus ? "ON" : "OFF") +
+      ", TEC: " + std::string(m_cachedTECStatus ? "ON" : "OFF"));
+  }
+  catch (const std::exception& e) {
+    logger->LogWarning("CLD101xClient: Failed to sync initial hardware status: " + std::string(e.what()));
+  }
+
   // Start polling automatically with default interval
   StartPolling(m_pollingIntervalMs);
 
   return true;
 }
-
 void CLD101xClient::Disconnect() {
   if (!m_isConnected) {
     return;
@@ -305,35 +327,40 @@ void CLD101xClient::StopPolling() {
   Logger::GetInstance()->LogInfo("CLD101xClient: Stopped polling thread");
 }
 
+
+// UPDATE the PollingThread method to publish to Global Data Store:
 void CLD101xClient::PollingThread() {
   Logger* logger = Logger::GetInstance();
   logger->LogInfo("CLD101xClient: Polling thread started with " + std::to_string(m_pollingIntervalMs) + "ms interval");
 
   while (m_isPolling && m_isConnected) {
-    // Get current time for history
     auto now = std::chrono::steady_clock::now();
 
     // Read temperature
     std::string tempResponse;
     if (SendCommand("READ_TEC_TEMPERATURE", &tempResponse)) {
-      // Parse temperature value - format: "Current TEC temperature [C]: XX.XX"
       size_t pos = tempResponse.find(": ");
       if (pos != std::string::npos) {
         try {
           float temp = std::stof(tempResponse.substr(pos + 2));
 
-          // Update temperature
+          // Update local cache
           {
             std::lock_guard<std::mutex> lock(m_dataMutex);
             m_currentTemperature = temp;
             m_lastUpdateTime = now;
             m_temperatureHistory.push_back({ now, temp });
 
-            // Limit history size
             if (m_temperatureHistory.size() > MAX_HISTORY_SIZE) {
               m_temperatureHistory.pop_front();
             }
           }
+
+          // PUBLISH TO GLOBAL DATA STORE
+          if (m_enableGlobalDataStore && m_globalDataStore) {
+            m_globalDataStore->SetValue(m_devicePrefix + "-Temperature", temp);
+          }
+
         }
         catch (const std::exception& e) {
           logger->LogWarning("CLD101xClient: Failed to parse temperature - " +
@@ -351,23 +378,27 @@ void CLD101xClient::PollingThread() {
     // Read laser current
     std::string currentResponse;
     if (SendCommand("READ_LASER_CURRENT", &currentResponse)) {
-      // Parse current value - format: "Current laser current [A]: X.XXX"
       size_t pos = currentResponse.find(": ");
       if (pos != std::string::npos) {
         try {
           float current = std::stof(currentResponse.substr(pos + 2));
 
-          // Update current
+          // Update local cache
           {
             std::lock_guard<std::mutex> lock(m_dataMutex);
             m_currentLaserCurrent = current;
             m_currentHistory.push_back({ now, current });
 
-            // Limit history size
             if (m_currentHistory.size() > MAX_HISTORY_SIZE) {
               m_currentHistory.pop_front();
             }
           }
+
+          // PUBLISH TO GLOBAL DATA STORE
+          if (m_enableGlobalDataStore && m_globalDataStore) {
+            m_globalDataStore->SetValue(m_devicePrefix + "-LaserCurrent", current);
+          }
+
         }
         catch (const std::exception& e) {
           logger->LogWarning("CLD101xClient: Failed to parse current - " +
@@ -385,6 +416,7 @@ void CLD101xClient::PollingThread() {
 
   logger->LogInfo("CLD101xClient: Polling thread stopped");
 }
+
 
 // Existing UI code stays the same...
 void CLD101xClient::RenderUI() {
@@ -615,4 +647,380 @@ bool CLD101xClient::IsVisible() const {
 
 const std::string& CLD101xClient::GetName() const {
   return m_name;
+}
+
+
+// Add these new methods to cld101x_client.cpp:
+
+void CLD101xClient::EnableGlobalDataStore(bool enable, const std::string& devicePrefix) {
+  m_enableGlobalDataStore = enable;
+  m_devicePrefix = devicePrefix;
+
+  if (enable && m_globalDataStore) {
+    Logger::GetInstance()->LogInfo("CLD101xClient: Enabled Global Data Store with prefix: " + devicePrefix);
+
+    // Immediately publish current values if connected
+    if (m_isConnected) {
+      std::lock_guard<std::mutex> lock(m_dataMutex);
+      m_globalDataStore->SetValue(m_devicePrefix + "-Temperature", m_currentTemperature);
+      m_globalDataStore->SetValue(m_devicePrefix + "-LaserCurrent", m_currentLaserCurrent);
+      Logger::GetInstance()->LogInfo("CLD101xClient: Published initial values to Global Data Store");
+    }
+  }
+  else {
+    Logger::GetInstance()->LogInfo("CLD101xClient: Disabled Global Data Store");
+  }
+}
+
+void CLD101xClient::DisableGlobalDataStore() {
+  m_enableGlobalDataStore = false;
+  Logger::GetInstance()->LogInfo("CLD101xClient: Global Data Store disabled");
+}
+
+
+// ============================================================================
+// COMPREHENSIVE FIX for CLD101x Status Synchronization Issues
+// ============================================================================
+
+// 1. ENHANCED cld101x_client.cpp - Fix status query methods with better error handling
+
+bool CLD101xClient::GetLaserStatus() {
+  if (!m_isConnected) {
+    return false;
+  }
+
+  // Check if cache is still valid
+  auto now = std::chrono::steady_clock::now();
+  if (now - m_lastStatusQuery < STATUS_CACHE_TIMEOUT) {
+    return m_cachedLaserStatus;
+  }
+
+  std::string response;
+  bool success = false;
+
+  // Try multiple command variations for better compatibility
+  std::vector<std::string> commands = {
+    "OUTPUT1:STATE?",      // Standard SCPI
+    "OUTPut1:STATe?",      // Alternative case
+    "output1:state?"       // Lowercase version
+  };
+
+  for (const auto& cmd : commands) {
+    if (SendCommand(cmd, &response)) {
+      success = true;
+      break;
+    }
+    // Short delay between attempts
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+
+  if (success) {
+    // Parse response with robust handling
+    std::string trimmedResponse = response;
+
+    // Remove all whitespace and control characters
+    trimmedResponse.erase(
+      std::remove_if(trimmedResponse.begin(), trimmedResponse.end(),
+        [](unsigned char c) { return std::isspace(c) || std::iscntrl(c); }),
+      trimmedResponse.end()
+    );
+
+    // Convert to uppercase for consistent comparison
+    std::transform(trimmedResponse.begin(), trimmedResponse.end(),
+      trimmedResponse.begin(), ::toupper);
+
+    // Check for various possible responses
+    bool isOn = (trimmedResponse == "ON" ||
+      trimmedResponse == "1" ||
+      trimmedResponse == "TRUE" ||
+      trimmedResponse.find("ON") != std::string::npos);
+
+    m_cachedLaserStatus = isOn;
+    m_lastStatusQuery = now;
+
+    //Logger::GetInstance()->LogInfo("CLD101xClient: Laser status query successful: '" +
+    //  response + "' (cleaned: '" + trimmedResponse + "') -> " +
+    //  (m_cachedLaserStatus ? "ON" : "OFF"));
+
+    return m_cachedLaserStatus;
+  }
+  else {
+    Logger::GetInstance()->LogWarning("CLD101xClient: Failed to query laser status with all commands: " + m_lastError);
+
+    // SMART FALLBACK: Infer status from current reading
+    if (m_isPolling) {
+      float current = GetLatestLaserCurrent();
+      bool inferredStatus = (current > 0.001f); // If current > 1mA, laser is probably on
+
+      Logger::GetInstance()->LogInfo("CLD101xClient: Inferring laser status from current: " +
+        std::to_string(current) + "A -> " +
+        (inferredStatus ? "ON" : "OFF"));
+
+      m_cachedLaserStatus = inferredStatus;
+      m_lastStatusQuery = now;
+      return m_cachedLaserStatus;
+    }
+
+    return false; // Default to OFF if we can't determine
+  }
+}
+
+
+bool CLD101xClient::GetTECStatus() {
+  if (!m_isConnected) {
+    return false;
+  }
+
+  // Check if cache is still valid
+  auto now = std::chrono::steady_clock::now();
+  if (now - m_lastStatusQuery < STATUS_CACHE_TIMEOUT) {
+    return m_cachedTECStatus;
+  }
+
+  std::string response;
+  bool success = false;
+
+  // Try multiple command variations for TEC
+  std::vector<std::string> commands = {
+    "OUTPUT2:STATE?",      // Standard SCPI
+    "OUTPut2:STATe?",      // Alternative case
+    "output2:state?"       // Lowercase version
+  };
+
+  for (const auto& cmd : commands) {
+    if (SendCommand(cmd, &response)) {
+      success = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+
+  if (success) {
+    // Parse response with robust handling
+    std::string trimmedResponse = response;
+
+    // Remove all whitespace and control characters
+    trimmedResponse.erase(
+      std::remove_if(trimmedResponse.begin(), trimmedResponse.end(),
+        [](unsigned char c) { return std::isspace(c) || std::iscntrl(c); }),
+      trimmedResponse.end()
+    );
+
+    // Convert to uppercase
+    std::transform(trimmedResponse.begin(), trimmedResponse.end(),
+      trimmedResponse.begin(), ::toupper);
+
+    bool isOn = (trimmedResponse == "ON" ||
+      trimmedResponse == "1" ||
+      trimmedResponse == "TRUE" ||
+      trimmedResponse.find("ON") != std::string::npos);
+
+    m_cachedTECStatus = isOn;
+    m_lastStatusQuery = now;
+
+    Logger::GetInstance()->LogInfo("CLD101xClient: TEC status query successful: '" +
+      response + "' (cleaned: '" + trimmedResponse + "') -> " +
+      (m_cachedTECStatus ? "ON" : "OFF"));
+
+    return m_cachedTECStatus;
+  }
+  else {
+    Logger::GetInstance()->LogWarning("CLD101xClient: Failed to query TEC status with all commands: " + m_lastError);
+
+    // **UPDATED: More conservative TEC inference**
+    // Based on your log, it seems the hardware status query is actually working correctly
+    // The issue might be that we're over-correcting with temperature inference
+
+    Logger::GetInstance()->LogInfo("CLD101xClient: Using fallback TEC status inference");
+
+    // For now, default to OFF if hardware query fails
+    // We'll rely on the cross-validation in SyncHardwareStatus to catch real mismatches
+    m_cachedTECStatus = false;
+    m_lastStatusQuery = now;
+
+    Logger::GetInstance()->LogInfo("CLD101xClient: TEC status defaulted to OFF (hardware query failed)");
+    return false;
+  }
+}
+
+// ============================================================================
+// UPDATED SyncHardwareStatus with improved TEC validation logic
+// Replace your existing SyncHardwareStatus() method:
+// ============================================================================
+
+// ============================================================================
+// FIXED SyncHardwareStatus - Use fresh polling data, not stale cache
+// Replace your SyncHardwareStatus method in cld101x_client.cpp:
+// ============================================================================
+
+void CLD101xClient::SyncHardwareStatus() {
+  if (!m_isConnected) {
+    return;
+  }
+
+  Logger::GetInstance()->LogInfo("CLD101xClient: Syncing hardware status with cross-validation...");
+
+  // Force cache refresh
+  m_lastStatusQuery = std::chrono::steady_clock::time_point{};
+
+  try {
+    // **FIX 1: Get FRESH measurements for validation**
+    float currentReading = 0.0f;
+    float tempReading = 0.0f;
+    float setpointReading = 25.0f;
+
+    // Force fresh readings instead of using potentially stale cache
+    if (m_isPolling) {
+      // Get fresh readings from polling (these should be most recent)
+      currentReading = GetLatestLaserCurrent();
+      tempReading = GetLatestTemperature();
+
+      Logger::GetInstance()->LogInfo("CLD101xClient: Using polling data - Current: " +
+        std::to_string(currentReading) + "A, Temp: " +
+        std::to_string(tempReading) + "°C");
+    }
+    else {
+      // If not polling, get direct readings
+      std::string currentResponse, tempResponse;
+      if (SendCommand("READ_LASER_CURRENT", &currentResponse)) {
+        size_t pos = currentResponse.find(": ");
+        if (pos != std::string::npos) {
+          try {
+            currentReading = std::stof(currentResponse.substr(pos + 2));
+          }
+          catch (...) {}
+        }
+      }
+
+      if (SendCommand("READ_TEC_TEMPERATURE", &tempResponse)) {
+        size_t pos = tempResponse.find(": ");
+        if (pos != std::string::npos) {
+          try {
+            tempReading = std::stof(tempResponse.substr(pos + 2));
+          }
+          catch (...) {}
+        }
+      }
+
+      Logger::GetInstance()->LogInfo("CLD101xClient: Using direct readings - Current: " +
+        std::to_string(currentReading) + "A, Temp: " +
+        std::to_string(tempReading) + "°C");
+    }
+
+    // Try to get TEC setpoint for better validation
+    std::string setpointResponse;
+    if (SendCommand("source2:temperature:spoint?", &setpointResponse)) {
+      try {
+        size_t pos = setpointResponse.find(": ");
+        if (pos != std::string::npos) {
+          setpointReading = std::stof(setpointResponse.substr(pos + 2));
+        }
+        else {
+          setpointReading = std::stof(setpointResponse);
+        }
+      }
+      catch (const std::exception& e) {
+        Logger::GetInstance()->LogWarning("CLD101xClient: Failed to parse setpoint during sync - using 25°C");
+        setpointReading = 25.0f;
+      }
+    }
+
+    // Query hardware status
+    bool laserStatusQuery = GetLaserStatus();
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    bool tecStatusQuery = GetTECStatus();
+
+    // **FIX 2: More conservative cross-validation - don't auto-correct immediately**
+    bool laserCrossCheck = true;
+    bool tecCrossCheck = true;
+
+    // **LASER VALIDATION: Only correct if measurement is very clear**
+    if (laserStatusQuery && currentReading < 0.001f) {
+      Logger::GetInstance()->LogWarning("CLD101xClient: Laser status mismatch - Shows ON but current is " +
+        std::to_string(currentReading) + "A");
+      laserCrossCheck = false;
+
+      // **CONSERVATIVE: Only auto-correct if current is really zero**
+      if (currentReading < 0.0001f) {
+        m_cachedLaserStatus = false;
+        Logger::GetInstance()->LogInfo("CLD101xClient: Correcting laser status to OFF (current is zero)");
+      }
+    }
+    else if (!laserStatusQuery && currentReading > 0.01f) {
+      Logger::GetInstance()->LogWarning("CLD101xClient: Laser status mismatch - Shows OFF but current is " +
+        std::to_string(currentReading) + "A");
+      laserCrossCheck = false;
+
+      // **CONSERVATIVE: Only auto-correct if current is significantly high**
+      if (currentReading > 0.05f) {
+        m_cachedLaserStatus = true;
+        Logger::GetInstance()->LogInfo("CLD101xClient: Correcting laser status to ON (high current detected)");
+      }
+    }
+
+    // **TEC VALIDATION: Just log, don't auto-correct**
+    float tempDifference = std::abs(tempReading - setpointReading);
+
+    Logger::GetInstance()->LogInfo("CLD101xClient: TEC analysis - Status: " +
+      std::string(tecStatusQuery ? "ON" : "OFF") +
+      ", Temp: " + std::to_string(tempReading) + "°C" +
+      ", Setpoint: " + std::to_string(setpointReading) + "°C" +
+      ", Diff: " + std::to_string(tempDifference) + "°C");
+
+    // **NO AUTO-CORRECTION for TEC - trust hardware status**
+    // The TEC behavior seems complex, so let's not second-guess the hardware
+
+    Logger::GetInstance()->LogInfo("CLD101xClient: Hardware status sync complete:");
+    Logger::GetInstance()->LogInfo("  Laser: " + std::string(m_cachedLaserStatus ? "ON" : "OFF") +
+      " (Current: " + std::to_string(currentReading) + "A)" +
+      (laserCrossCheck ? "" : " [MISMATCH DETECTED]"));
+    Logger::GetInstance()->LogInfo("  TEC: " + std::string(m_cachedTECStatus ? "ON" : "OFF") +
+      " (Temp: " + std::to_string(tempReading) + "°C, Setpoint: " +
+      std::to_string(setpointReading) + "°C, Diff: " +
+      std::to_string(tempDifference) + "°C)");
+  }
+  catch (const std::exception& e) {
+    Logger::GetInstance()->LogError("CLD101xClient: Hardware status sync failed: " + std::string(e.what()));
+  }
+}
+
+void CLD101xClient::AnalyzeTECBehavior() {
+  if (!m_isConnected || !m_isPolling) {
+    return;
+  }
+
+  Logger::GetInstance()->LogInfo("CLD101xClient: === TEC BEHAVIOR ANALYSIS ===");
+
+  // Get current readings
+  float currentTemp = GetLatestTemperature();
+  bool currentTECStatus = GetTECStatus();
+
+  // Try to get setpoint
+  std::string setpointResponse;
+  float setpoint = 25.0f;
+  if (SendCommand("source2:temperature:spoint?", &setpointResponse)) {
+    try {
+      size_t pos = setpointResponse.find(": ");
+      if (pos != std::string::npos) {
+        setpoint = std::stof(setpointResponse.substr(pos + 2));
+      }
+      else {
+        setpoint = std::stof(setpointResponse);
+      }
+    }
+    catch (...) {
+      setpoint = 25.0f;
+    }
+  }
+
+  float tempDiff = currentTemp - setpoint;
+
+  Logger::GetInstance()->LogInfo("  Current Status: " + std::string(currentTECStatus ? "ON" : "OFF"));
+  Logger::GetInstance()->LogInfo("  Current Temp: " + std::to_string(currentTemp) + "°C");
+  Logger::GetInstance()->LogInfo("  Setpoint: " + std::to_string(setpoint) + "°C");
+  Logger::GetInstance()->LogInfo("  Difference: " + std::to_string(tempDiff) + "°C " +
+    (tempDiff > 0 ? "(ABOVE setpoint)" : "(BELOW setpoint)"));
+  Logger::GetInstance()->LogInfo("================================");
 }

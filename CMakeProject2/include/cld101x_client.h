@@ -1,5 +1,5 @@
 #pragma once
-
+#include "include/data/global_data_store.h"
 #include <string>
 #include <thread>
 #include <mutex>
@@ -74,11 +74,25 @@ public:
   void StopPolling();
   bool IsPolling() const { return m_isPolling; }
   int GetPollingInterval() const { return m_pollingIntervalMs; }
+  // Global Data Store configuration
+  void EnableGlobalDataStore(bool enable = true, const std::string& devicePrefix = "CLD101x");
+  void DisableGlobalDataStore();
+  bool IsGlobalDataStoreEnabled() const { return m_enableGlobalDataStore; }
+  std::string GetDevicePrefix() const { return m_devicePrefix; }
+
+  // NEW: Hardware status query methods
+  bool GetLaserStatus();        // Query actual laser on/off state
+  bool GetTECStatus();          // Query actual TEC on/off state
+  void SyncHardwareStatus();    // Sync all hardware status at once
+  void AnalyzeTECBehavior();
 
 private:
   // Background polling thread
   void PollingThread();
-
+  // Global Data Store integration
+  GlobalDataStore* m_globalDataStore;
+  bool m_enableGlobalDataStore;
+  std::string m_devicePrefix; // e.g., "CLD101x" or "Laser1"
   // Socket variables
   SOCKET m_socket;
   std::string m_serverIp;
@@ -105,4 +119,11 @@ private:
   std::deque<std::pair<std::chrono::steady_clock::time_point, float>> m_temperatureHistory;
   std::deque<std::pair<std::chrono::steady_clock::time_point, float>> m_currentHistory;
   static constexpr size_t MAX_HISTORY_SIZE = 300; // ~5 minutes at 1Hz polling
+
+
+  // NEW: Cache hardware status
+  bool m_cachedLaserStatus = false;
+  bool m_cachedTECStatus = false;
+  std::chrono::steady_clock::time_point m_lastStatusQuery;
+  static constexpr std::chrono::milliseconds STATUS_CACHE_TIMEOUT{ 2000 }; // 2 second cache
 };
