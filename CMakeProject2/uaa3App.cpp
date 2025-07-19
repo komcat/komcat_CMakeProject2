@@ -7,6 +7,7 @@
 #include "backends/imgui_impl_sdl2.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "implot/implot.h"
+
 // Include our UI manager and config manager
 #include "MainUIManager.h"
 #include "include/motions/MotionConfigManager.h"
@@ -14,23 +15,33 @@
 #include "include/motions/pi_controller.h"
 #include "include/motions/acs_controller_manager.h"
 #include "include/motions/acs_controller.h"
-#include "include/logger.h" // Include our new logger header
-#include "include/eziio//EziIO_Manager.h"
+#include "include/logger.h"
+#include "include/eziio/EziIO_Manager.h"
 #include "include/eziio/PneumaticManager.h"
 #include "IOConfigManager.h"
 #include "include/camera/CameraManager.h"
 #include "include/data/global_data_store.h"
-#include "include/data/data_client_manager.h"  // Add this line
-// ADD THESE THREE LINES after the CLD101x includes:
+#include "include/data/data_client_manager.h"
+
+// SMU includes
 #include "include/SMU/keithley2400_client.h"
 #include "include/SMU/keithley2400_manager.h"
 #include "include/SMU/keithley2400_operations.h"
-// ADD THESE TWO LINES:
+
+// Laser includes
 #include "include/cld101x_manager.h"  
 #include "include/cld101x_client.h"
+#include "include/cld101x_operations.h"
+
+// Motion and machine operations
 #include "include/machine_operations.h"
 #include "include/motions/motion_control_layer.h"
-#include "include/cld101x_operations.h"
+
+// NEW: Add the split operation classes
+#include "motion_ops.h"
+#include "io_ops.h"
+#include "vision_ops.h"
+
 // Example: Check camera status
 void CheckCameraStatus(CameraManager& cameraManager) {
 	auto statusList = cameraManager.GetAllCameraStatus();
@@ -90,15 +101,15 @@ int main(int argc, char* argv[])
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-	//im plot create context
-		// ADD THIS: Initialize ImPlot context
+	// Initialize ImPlot context
 	ImPlot::CreateContext();
 
-	// ADD THIS FONT LOADING CODE RIGHT HERE:
-// ========================================
-// Load font with Greek support for μ symbol
-	// Greek character range
-	// Greek character range including μ symbol
+
+#pragma region Font Loading
+
+
+
+	// Font loading code with Greek support for μ symbol
 	static const ImWchar ranges[] = {
 		0x0020, 0x00FF, // Basic Latin + Latin Supplement  
 		0x0370, 0x03FF, // Greek and Coptic (includes μ at 0x03BC)
@@ -138,13 +149,13 @@ int main(int argc, char* argv[])
 		logger->LogWarning("No Greek font support available, using 'um' instead of 'μm'");
 	}
 
-	// IMPORTANT: Build font atlas BEFORE checking glyphs
+	// Build font atlas BEFORE checking glyphs
 	bool buildSuccess = io.Fonts->Build();
 	if (!buildSuccess) {
 		logger->LogError("Failed to build font atlas");
 	}
 
-	// ========================================
+#pragma endregion
 
 	// Setup Dear ImGui style
 	ImGui::StyleColorsDark();
@@ -153,13 +164,7 @@ int main(int argc, char* argv[])
 	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
 	ImGui_ImplOpenGL3_Init("#version 130");
 
-	// SAFE: Check glyph AFTER everything is initialized
-	bool hasMusymbol = false;
-	if (io.FontDefault != nullptr) {
-		// Wait one frame before checking glyphs
-		// We'll check this in the main loop instead
-		logger->LogInfo("Font system initialized, will verify μ symbol after first frame");
-	}
+
 
 	// ✅ Create MotionConfigManager
 	std::unique_ptr<MotionConfigManager> motionConfigManager;
@@ -171,14 +176,11 @@ int main(int argc, char* argv[])
 	catch (const std::exception& e) {
 		logger->LogError("Failed to create MotionConfigManager: " + std::string(e.what()));
 		logger->LogWarning("Will use default configuration");
-		// Create with a default path or handle gracefully
 		motionConfigManager = std::make_unique<MotionConfigManager>("default_config.json");
 	}
 
-	// PI Controller Manager (conditional)
+	// PI Controller Manager
 	std::unique_ptr<PIControllerManager> piControllerManager;
-	//if (moduleConfig.isEnabled("PI_CONTROLLERS")) {
-
 	piControllerManager = std::make_unique<PIControllerManager>(*motionConfigManager);
 	if (piControllerManager->ConnectAll()) {
 		logger->LogInfo("Successfully connected to all enabled PI controllers");
@@ -187,6 +189,7 @@ int main(int argc, char* argv[])
 		logger->LogWarning("Failed to connect to some PI controllers");
 	}
 
+	// ACS Controller Manager
 	std::unique_ptr<ACSControllerManager> acsControllerManager;
 	acsControllerManager = std::make_unique<ACSControllerManager>(*motionConfigManager);
 	if (acsControllerManager->ConnectAll()) {
@@ -196,11 +199,9 @@ int main(int argc, char* argv[])
 		logger->LogWarning("Failed to connect to some ACS controllers");
 	}
 
-	// Read all velocity settings for PI controllers
+	// Read velocity settings for PI controllers
 	if (piControllerManager) {
 		logger->LogInfo("Reading current velocity settings for PI controllers...");
-
-		// Get all PI controller names from config
 		std::vector<std::string> piControllerNames = { "hex-left", "hex-right", "hex-bottom" };
 
 		for (const std::string& controllerName : piControllerNames) {
@@ -208,10 +209,6 @@ int main(int argc, char* argv[])
 
 			if (controller && controller->IsConnected()) {
 				logger->LogInfo("Reading velocities for controller: " + controllerName);
-
-				// Get available axes for this controller
-				const auto& axes = controller->GetAvailableAxes();
-
 				double velocity = 0.0;
 				if (controller->GetSystemVelocity(velocity)) {
 					logger->LogInfo("  " + controllerName + "  velocity: " +
@@ -227,11 +224,9 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	// Read all velocity settings for ACS controllers
+	// Read velocity settings for ACS controllers
 	if (acsControllerManager) {
 		logger->LogInfo("Reading current velocity settings for ACS controllers...");
-
-		// Get all ACS controller names from config
 		std::vector<std::string> acsControllerNames = { "gantry-main" };
 
 		for (const std::string& controllerName : acsControllerNames) {
@@ -239,8 +234,6 @@ int main(int argc, char* argv[])
 
 			if (controller && controller->IsConnected()) {
 				logger->LogInfo("Reading velocities for controller: " + controllerName);
-
-				// Typical ACS gantry axes
 				std::vector<std::string> axes = { "X", "Y", "Z" };
 
 				for (const std::string& axis : axes) {
@@ -260,7 +253,7 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	//initialize EziIO system
+	// Initialize EziIO system
 	std::unique_ptr<EziIOManager> ioManager;
 	std::unique_ptr<IOConfigManager> ioconfigManager;
 	ioManager = std::make_unique<EziIOManager>();
@@ -283,15 +276,13 @@ int main(int argc, char* argv[])
 		logger->LogInfo("EziIO system initialized");
 	}
 
-	//Initialize Pneumatic System if enabled
-	// Pneumatic System (conditional)
+	// Initialize Pneumatic System
 	std::unique_ptr<PneumaticManager> pneumaticManager;
 	pneumaticManager = std::make_unique<PneumaticManager>(*ioManager);
 	if (!pneumaticManager->initialize()) {
 		logger->LogWarning("Failed to initialize Pneumatic Manager");
 	}
 	else {
-
 		if (!ioconfigManager->initializePneumaticManager(*pneumaticManager)) {
 			logger->LogWarning("Failed to initialize pneumatic manager");
 		}
@@ -308,12 +299,12 @@ int main(int argc, char* argv[])
 			default: stateStr = "Unknown";
 			}
 			logger->LogInfo("Pneumatic slide '" + slideName + "' changed state to: " + stateStr);
-			});
+		});
 
 		logger->LogInfo("Pneumatic system initialized");
 	}
 
-	//Camera initialization - Create local instance instead of global
+	// Camera initialization
 	std::unique_ptr<CameraManager> cameraManager = std::make_unique<CameraManager>();
 
 	// Camera 1 - Auto-connect to first available
@@ -322,60 +313,43 @@ int main(int argc, char* argv[])
 
 	// Initialize all cameras with auto-connect enabled
 	cameraManager->InitializeAllCameras();
-
 	CheckCameraStatus(*cameraManager);
-	// Start grabbing on all connected cameras
-	//cameraManager->StartGrabbingAll();
 
-	// ✅ Initialize TCP Data Client Manager
+	// Initialize TCP Data Client Manager
 	std::unique_ptr<DataClientManager> dataClientManager;
 	try {
 		dataClientManager = std::make_unique<DataClientManager>("DataServerConfig.json");
-
-		// Connect to auto-connect servers
 		dataClientManager->ConnectAutoClients();
-
 		logger->LogInfo("DataClientManager initialized successfully");
 	}
 	catch (const std::exception& e) {
 		logger->LogError("Failed to initialize DataClientManager: " + std::string(e.what()));
 		logger->LogWarning("TCP Data Manager will not be available");
-		// Continue without TCP data manager - the UI will handle this gracefully
 	}
 
-	// ADD THIS SECTION:
-	// ✅ Initialize CLD101x Manager
+	// Initialize CLD101x Manager
 	std::unique_ptr<CLD101xManager> cld101xManager;
-	//std::unique_ptr<CLD101xOperations> laserOps;
+	std::unique_ptr<CLD101xOperations> laserOps;
 
 	cld101xManager = std::make_unique<CLD101xManager>();
 	cld101xManager->Initialize();
-	//automatically connected to
-	//     AddClient("CLD101x", "127.0.0.11", 65432);
-	//laserOps = std::make_unique<CLD101xOperations>(*cld101xManager);
 	cld101xManager->ConnectAll();
 	logger->LogInfo("CLD101x system initialized");
 
-	std::unique_ptr<CLD101xOperations> laserOps;
 	laserOps = std::make_unique<CLD101xOperations>(*cld101xManager);
 
-	// ✅ Initialize Keithley 2400 Manager  
+	// Initialize Keithley 2400 Manager  
 	std::unique_ptr<Keithley2400Manager> keithleyManager;
 	std::unique_ptr<Keithley2400Operations> smuOps;
 
 	keithleyManager = std::make_unique<Keithley2400Manager>();
 
-	// Initialize from config file
 	if (keithleyManager->Initialize("smu_config.json")) {
 		logger->LogInfo("Keithley2400Manager initialized from config file");
-
 		smuOps = std::make_unique<Keithley2400Operations>(*keithleyManager);
 
-		// Try to connect based on config
 		if (keithleyManager->ConnectAll()) {
 			logger->LogInfo("Successfully connected to Keithley 2400 servers");
-			// Optional: Auto-start polling
-			// keithleyManager->StartAllPolling(1000); // Poll every 1 second
 		}
 		else {
 			logger->LogWarning("Failed to connect to some Keithley 2400 servers");
@@ -383,17 +357,13 @@ int main(int argc, char* argv[])
 	}
 	else {
 		logger->LogWarning("Failed to load Keithley config, using defaults");
-		// Fallback to manual setup if config fails
 		keithleyManager->AddClient("Keithley-Main", "127.0.0.101", 8888);
 		if (keithleyManager->ConnectAll()) {
 			logger->LogInfo("Successfully connected to Keithley 2400 servers (fallback)");
-			// Optional: Auto-start polling
-			// keithleyManager->StartAllPolling(1000);
 		}
 	}
 
-
-	// ✅ Create Motion Control Layer
+	// Create Motion Control Layer
 	std::unique_ptr<MotionControlLayer> motionControlLayer;
 	if (piControllerManager && acsControllerManager) {
 		motionControlLayer = std::make_unique<MotionControlLayer>(
@@ -410,89 +380,120 @@ int main(int argc, char* argv[])
 		logger->LogInfo("MotionControlLayer initialized");
 	}
 
-
-
-	// ✅ Machine Operations - Real Hardware
+	// Machine Operations - KEEP EXISTING CONSTRUCTOR
 	std::unique_ptr<MachineOperations> machineOps;
 
 	if (motionControlLayer && piControllerManager &&
 		ioManager && pneumaticManager) {
 
-		// Use real machine operations
 		machineOps = std::make_unique<MachineOperations>(
 			*motionControlLayer,
 			*piControllerManager,
 			*ioManager,
 			*pneumaticManager,
 			laserOps.get(),
-			cameraManager.get(),  // Using the camera manager instead of pylonCameraTest
-			smuOps.get()          // Pass SMU operations
+			cameraManager.get(),
+			smuOps.get()
 		);
 		logger->LogInfo("Real MachineOperations initialized");
 	}
 	else {
 		logger->LogWarning("MachineOperations not initialized - missing required components");
-		logger->LogInfo("Required: motionControlLayer=" + std::string(motionControlLayer ? "YES" : "NO"));
-		logger->LogInfo("Required: piControllerManager=" + std::string(piControllerManager ? "YES" : "NO"));
-		logger->LogInfo("Required: ioManager=" + std::string(ioManager ? "YES" : "NO"));
-		logger->LogInfo("Required: pneumaticManager=" + std::string(pneumaticManager ? "YES" : "NO"));
 	}
 
 
-	// ✅ Create the main UI manager with just the config manager
+#pragma region InitializeSplitOperations
+
+	// NEW: Initialize the split operation classes
+	std::unique_ptr<MotionOps> motionOps;
+	std::unique_ptr<IOOps> ioOps;
+	std::unique_ptr<VisionOps> visionOps;
+
+	// Get shared database managers from MachineOperations if available
+	std::shared_ptr<DatabaseManager> dbManager;
+	std::shared_ptr<OperationResultsManager> resultsManager;
+
+	if (machineOps) {
+		dbManager = machineOps->GetDatabaseManager();
+		resultsManager = machineOps->GetResultsManager();
+	}
+
+	// Initialize MotionOps
+	if (motionControlLayer && piControllerManager) {
+		motionOps = std::make_unique<MotionOps>(
+			*motionControlLayer,
+			*piControllerManager,
+			dbManager,
+			resultsManager
+		);
+		logger->LogInfo("MotionOps initialized");
+	}
+
+	// Initialize IOOps
+	if (ioManager && pneumaticManager) {
+		ioOps = std::make_unique<IOOps>(
+			*ioManager,
+			*pneumaticManager,
+			dbManager,
+			resultsManager
+		);
+		logger->LogInfo("IOOps initialized");
+	}
+
+	// Initialize VisionOps
+	if (cameraManager) {
+		visionOps = std::make_unique<VisionOps>(
+			cameraManager.get(),
+			dbManager,
+			resultsManager
+		);
+		logger->LogInfo("VisionOps initialized");
+	}
+
+
+
+#pragma endregion
+
+
+
+
+	// Create the main UI manager
 	MainUIManager uiManager(*motionConfigManager);
 	logger->LogInfo("MainUIManager created with MotionConfigManager");
 
-	// TODO: Later, when you have motion managers, you can add them like this:
-	// std::unique_ptr<PIControllerManager> piManager = std::make_unique<PIControllerManager>(*motionConfigManager);
-	// std::unique_ptr<ACSControllerManager> acsManager = std::make_unique<ACSControllerManager>(*motionConfigManager);
-	// uiManager.SetMotionManagers(piManager.get(), acsManager.get());
-
+	// Set all managers in UI
 	if (piControllerManager) {
 		uiManager.SetPIControllerManager(piControllerManager.get());
 	}
 	if (acsControllerManager) {
 		uiManager.SetACSControllerManager(acsControllerManager.get());
 	}
-
 	if (ioManager) {
 		uiManager.SetIOManager(ioManager.get(), ioconfigManager.get());
 	}
-
 	if (pneumaticManager) {
 		uiManager.SetPneumaticManager(pneumaticManager.get());
 	}
-
 	if (cameraManager && cameraManager->GetCameraCount() > 0) {
 		uiManager.SetCameraManager(cameraManager.get());
 	}
-
-	// ✅ Set the TCP Data Manager
 	if (dataClientManager) {
 		uiManager.SetDataClientManager(dataClientManager.get());
 	}
-
-	// ✅ Set the CLD101x Manager
 	if (cld101xManager) {
 		uiManager.SetCLD101xManager(cld101xManager.get());
 	}
-	// ✅ Set the Keithley2400 Manager
 	if (keithleyManager) {
 		uiManager.SetKeithley2400Manager(keithleyManager.get());
 	}
-
-
-
-
-	// ✅ Set MachineOperations in MainUIManager
 	if (machineOps) {
 		uiManager.SetMachineOperations(machineOps.get());
 		logger->LogInfo("MachineOperations set in MainUIManager");
 	}
 
-
 	bool done = false;
-	bool glyphChecked = false; // Flag to check glyph only once
+	bool glyphChecked = false;
+
 	while (!done)
 	{
 		// Poll and handle events
@@ -512,47 +513,116 @@ int main(int argc, char* argv[])
 		ImGui_ImplSDL2_NewFrame();
 		ImGui::NewFrame();
 
-		// SAFE: Check glyph after first frame when everything is ready
-		if (!glyphChecked && io.FontDefault != nullptr) {
-			try {
-				const ImFontGlyph* muGlyph = io.FontDefault->FindGlyph(0x03BC);
-				hasMusymbol = (muGlyph != nullptr && muGlyph->Visible);
 
-				if (hasMusymbol) {
-					logger->LogInfo("✓ μ symbol verified and ready to use");
-				}
-				else {
-					logger->LogInfo("μ symbol not available, will use 'um' notation");
-				}
-			}
-			catch (...) {
-				logger->LogWarning("Could not verify μ symbol, using fallback");
-				hasMusymbol = false;
-			}
-			glyphChecked = true;
-		}
 
-		// SIMPLE TEST: Add this temporarily to verify visually
-		static bool showTest = false;
-		if (showTest) {
-			ImGui::Begin("Font Test", &showTest);
-			ImGui::Text("Font test: μ α β γ");
-
-			if (ImGui::Button("0.5μm")) {
-				logger->LogInfo("μ button works!");
-			}
-
-			ImGui::Text("If you see μ above, Unicode works!");
-			ImGui::Text("If you see ?, Unicode failed");
-			ImGui::End();
-		}
-
-		// ✅ ADD THIS: Update DataClientManager continuously in background
+		// Update DataClientManager continuously in background
 		if (dataClientManager) {
 			dataClientManager->UpdateClients();
 		}
 
-		// ✅ Render the main UI
+		// NEW: Add test window for MotionOps
+		static bool showMotionTest = true;
+		if (showMotionTest && motionOps) {
+			ImGui::Begin("MotionOps Test", &showMotionTest);
+
+			ImGui::Text("Gantry Movement Test");
+			ImGui::Separator();
+
+			// Test buttons for gantry movement
+			if (ImGui::Button("Move X +1mm")) {
+				bool success = motionOps->MoveRelative("gantry-main", "X", 1.0, true, "MainLoop_Test");
+				//bool success = true;
+				if (success) {
+					logger->LogInfo("Successfully moved gantry X +1mm");
+				}
+				else {
+					logger->LogError("Failed to move gantry X +1mm");
+				}
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Move X -1mm")) {
+				bool success = motionOps->MoveRelative("gantry-main", "X", -1.0, true, "MainLoop_Test");
+				if (success) {
+					logger->LogInfo("Successfully moved gantry X -1mm");
+				}
+				else {
+					logger->LogError("Failed to move gantry X -1mm");
+				}
+			}
+
+			if (ImGui::Button("Move Y +1mm")) {
+				bool success = motionOps->MoveRelative("gantry-main", "Y", 1.0, true, "MainLoop_Test");
+				if (success) {
+					logger->LogInfo("Successfully moved gantry Y +1mm");
+				}
+				else {
+					logger->LogError("Failed to move gantry Y +1mm");
+				}
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Move Y -1mm")) {
+				bool success = motionOps->MoveRelative("gantry-main", "Y", -1.0, true, "MainLoop_Test");
+				if (success) {
+					logger->LogInfo("Successfully moved gantry Y -1mm");
+				}
+				else {
+					logger->LogError("Failed to move gantry Y -1mm");
+				}
+			}
+
+			if (ImGui::Button("Move Z +1mm")) {
+				bool success = motionOps->MoveRelative("gantry-main", "Z", 1.0, true, "MainLoop_Test");
+				if (success) {
+					logger->LogInfo("Successfully moved gantry Z +1mm");
+				}
+				else {
+					logger->LogError("Failed to move gantry Z +1mm");
+				}
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Move Z -1mm")) {
+				bool success = motionOps->MoveRelative("gantry-main", "Z", -1.0, true, "MainLoop_Test");
+				if (success) {
+					logger->LogInfo("Successfully moved gantry Z -1mm");
+				}
+				else {
+					logger->LogError("Failed to move gantry Z -1mm");
+				}
+			}
+
+			ImGui::Separator();
+			ImGui::Text("Device Status:");
+
+			if (motionOps->IsDeviceConnected("gantry-main")) {
+				ImGui::TextColored(ImVec4(0, 1, 0, 1), "✓ Gantry Connected");
+			}
+			else {
+				ImGui::TextColored(ImVec4(1, 0, 0, 1), "✗ Gantry Disconnected");
+			}
+
+			if (motionOps->IsDeviceMoving("gantry-main")) {
+				ImGui::TextColored(ImVec4(1, 1, 0, 1), "⚠ Gantry Moving");
+			}
+			else {
+				ImGui::TextColored(ImVec4(0, 1, 0, 1), "✓ Gantry Idle");
+			}
+
+			// Show current position if available
+			PositionStruct currentPos;
+			if (motionOps->GetDeviceCurrentPosition("gantry-main", currentPos)) {
+				ImGui::Text("Current Position:");
+				ImGui::Text("  X: %.3f mm", currentPos.x);
+				ImGui::Text("  Y: %.3f mm", currentPos.y);
+				ImGui::Text("  Z: %.3f mm", currentPos.z);
+			}
+
+			ImGui::End();
+		}
+
+		// Render the main UI
 		uiManager.RenderUI();
 
 		// Rendering
@@ -594,7 +664,7 @@ int main(int argc, char* argv[])
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
 
-	// Cleanup - ADD THIS before ImGui cleanup
+	// Cleanup ImPlot
 	ImPlot::DestroyContext();
 
 	ImGui_ImplOpenGL3_Shutdown();

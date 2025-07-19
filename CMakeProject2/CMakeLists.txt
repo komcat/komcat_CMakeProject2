@@ -189,6 +189,17 @@ set(PI_SOURCES
     "include/motions/pi_controller.cpp"
 )
 
+
+# Set HALCON paths based on your installation
+set(MAINUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mainUI")
+set(INCL_CAMERA "${CMAKE_CURRENT_SOURCE_DIR}/include/camera")
+set(INCL_OPS "${CMAKE_CURRENT_SOURCE_DIR}/include/ops")
+
+
+
+
+
+
 # Add source to this project's executable
 add_executable(CMakeProject2 
     "CMakeProject2.cpp" 
@@ -388,10 +399,65 @@ add_executable(CMakeProject2
      "include/siphog/siphog_client.cpp"
      "include/halcon/CircleDetectionUI.h" 
      "include/halcon/CircleDetectionUI.cpp"
- "mainUI/MainUIManager.h" "mainUI/MainUIManager.cpp"
-  
-  
-   "mainUI/UIConfigEditor.h" "mainUI/UIConfigEditor.cpp" "mainUI/UIConfigEditor_Devices.cpp" "mainUI/UIConfigEditor_Positions.cpp" "mainUI/UIConfigEditor_Helpers.cpp" "mainUI/UIConfigEditor_Graphs.cpp" "mainUI/UIConfigEditor_Details.cpp" "mainUI/UIConfigVisualizer.h" "mainUI/UIConfigVisualizer.cpp" "mainUI/UIConfigVisualizer_Graph.cpp" "mainUI/UIConfigVisualizer_Input.cpp" "mainUI/UIConfigVisualizer_Helpers.cpp" "mainUI/NodePropertiesHandler.h" "mainUI/NodePropertiesHandler.cpp" "mainUI/UIJogWindow.h" "mainUI/UIJogWindow.cpp" "mainUI/PIPanelUI.h" "mainUI/PIPanelUI.cpp" "mainUI/ACSPanelUI.h" "mainUI/ACSPanelUI.cpp" "mainUI/IOPanelUI.h" "mainUI/IOPanelUI.cpp" "mainUI/UIPneumaticPanel.h" "mainUI/UIPneumaticPanel.cpp" "include/camera/CameraManager.h" "include/camera/CameraManager.cpp" "mainUI/UICameraPanel.h" "mainUI/UICameraPanel.cpp" "mainUI/CameraFeedDisplay.h" "mainUI/CameraFeedDisplay.cpp" "mainUI/UICameraPanelLiveVideo.h" "mainUI/UICameraPanelSingleGrab.h" "mainUI/UICameraPanelUtility.h" "mainUI/UICameraPanelLiveVideo.cpp" "mainUI/UICameraPanelSingleGrab.cpp" "mainUI/UICameraPanelUtility.cpp" "include/motions/global_jog_panel_core.cpp" "include/motions/global_jog_panel_movement.cpp" "include/motions/global_jog_panel_device.cpp" "include/motions/global_jog_panel_ui.cpp" "include/motions/global_jog_panel_ui_positions.cpp" "mainUI/TCPDataManagerUI.h" "mainUI/TCPDataManagerUI.cpp" "mainUI/GlobalDataStoreViewerUI.h" "mainUI/GlobalDataStoreViewerUI.cpp" "mainUI/CLD101xEquipmentUI.h" "mainUI/CLD101xEquipmentUI.cpp" "mainUI/UISMUPanel.h" "mainUI/UISMUPanel.cpp")
+ "mainUI/MainUIManager.h"
+ "mainUI/MainUIManager.cpp"  
+   "mainUI/UIConfigEditor.h" 
+   "mainUI/UIConfigEditor.cpp" 
+   "mainUI/UIConfigEditor_Devices.cpp" 
+   "mainUI/UIConfigEditor_Positions.cpp" 
+   "mainUI/UIConfigEditor_Helpers.cpp" 
+   "mainUI/UIConfigEditor_Graphs.cpp" 
+   "mainUI/UIConfigEditor_Details.cpp" 
+   "mainUI/UIConfigVisualizer.h" 
+   "mainUI/UIConfigVisualizer.cpp" 
+   "mainUI/UIConfigVisualizer_Graph.cpp" 
+   "mainUI/UIConfigVisualizer_Input.cpp"
+   "mainUI/UIConfigVisualizer_Helpers.cpp"
+   "mainUI/NodePropertiesHandler.h" 
+   "mainUI/NodePropertiesHandler.cpp" 
+   "mainUI/UIJogWindow.h" 
+   "mainUI/UIJogWindow.cpp"
+   "mainUI/PIPanelUI.h"
+   "mainUI/PIPanelUI.cpp"
+   "mainUI/ACSPanelUI.h"
+   "mainUI/ACSPanelUI.cpp"
+   "mainUI/IOPanelUI.h"
+   "mainUI/IOPanelUI.cpp"
+   "mainUI/UIPneumaticPanel.h"
+   "mainUI/UIPneumaticPanel.cpp" 
+   "include/camera/CameraManager.h"
+   "include/camera/CameraManager.cpp"
+   "mainUI/UICameraPanel.h"
+   "mainUI/UICameraPanel.cpp"
+   "mainUI/CameraFeedDisplay.h"
+   "mainUI/CameraFeedDisplay.cpp"
+   "mainUI/UICameraPanelLiveVideo.h"
+   "mainUI/UICameraPanelSingleGrab.h"
+   "mainUI/UICameraPanelUtility.h" 
+   "mainUI/UICameraPanelLiveVideo.cpp"
+   "mainUI/UICameraPanelSingleGrab.cpp"
+   "mainUI/UICameraPanelUtility.cpp" 
+   "include/motions/global_jog_panel_core.cpp"
+   "include/motions/global_jog_panel_movement.cpp"
+   "include/motions/global_jog_panel_device.cpp" 
+   "include/motions/global_jog_panel_ui.cpp" 
+   "include/motions/global_jog_panel_ui_positions.cpp"
+   "mainUI/TCPDataManagerUI.h" 
+   "mainUI/TCPDataManagerUI.cpp"
+   "mainUI/GlobalDataStoreViewerUI.h"
+   "mainUI/GlobalDataStoreViewerUI.cpp"
+   "mainUI/CLD101xEquipmentUI.h" 
+   "mainUI/CLD101xEquipmentUI.cpp"
+   "mainUI/UISMUPanel.h"
+   "mainUI/UISMUPanel.cpp" 
+   "include/ops/motion_ops.h" 
+   "include/ops/motion_ops_movement.cpp"
+   "include/ops/io_ops.h" 
+   "include/ops/vision_ops.h"
+   "include/ops/motion_ops_acsc_specific.cpp"
+   "include/ops/motion_ops_scanning.cpp" 
+   "include/ops/motion_ops_position_related.cpp"
+    "include/ops/motion_ops.cpp" "include/ops/io_ops.cpp" "include/ops/vision_ops.cpp")
 
 
 
@@ -428,6 +494,7 @@ target_include_directories(CMakeProject2 PRIVATE
     ${RAYLIB_INCLUDE_DIR}  # Add this line
     ${HALCON_INCLUDE_DIR}  # Add this line for HALCON
      ${STB_IMAGE_DIR}  # Add this line
+     ${INCL_OPS}
 )
 
 # Link libraries - directly reference libraries
@@ -656,14 +723,67 @@ add_executable(uaa3App
   "include/halcon/CircleDetectionUI.cpp"
   "mainUI/MainUIManager.h"
   "mainUI/MainUIManager.cpp"
-  
-  
-  "mainUI/UIConfigEditor.h" "mainUI/UIConfigEditor.cpp" "mainUI/UIConfigEditor_Devices.cpp" "mainUI/UIConfigEditor_Positions.cpp" "mainUI/UIConfigEditor_Helpers.cpp" "mainUI/UIConfigEditor_Graphs.cpp" "mainUI/UIConfigEditor_Details.cpp" "mainUI/UIConfigVisualizer.h" "mainUI/UIConfigVisualizer.cpp" "mainUI/UIConfigVisualizer_Graph.cpp" "mainUI/UIConfigVisualizer_Input.cpp" "mainUI/UIConfigVisualizer_Helpers.cpp" "mainUI/NodePropertiesHandler.h" "mainUI/NodePropertiesHandler.cpp" "mainUI/UIJogWindow.h" "mainUI/UIJogWindow.cpp" "mainUI/PIPanelUI.h" "mainUI/PIPanelUI.cpp" "mainUI/ACSPanelUI.h" "mainUI/ACSPanelUI.cpp" "mainUI/IOPanelUI.h" "mainUI/IOPanelUI.cpp" "mainUI/UIPneumaticPanel.h" "mainUI/UIPneumaticPanel.cpp" "include/camera/CameraManager.h" "include/camera/CameraManager.cpp" "mainUI/UICameraPanel.h" "mainUI/UICameraPanel.cpp" "mainUI/CameraFeedDisplay.h" "mainUI/CameraFeedDisplay.cpp" "mainUI/UICameraPanelLiveVideo.h" "mainUI/UICameraPanelSingleGrab.h" "mainUI/UICameraPanelUtility.h" "mainUI/UICameraPanelLiveVideo.cpp" "mainUI/UICameraPanelSingleGrab.cpp" "mainUI/UICameraPanelUtility.cpp" "include/motions/global_jog_panel_core.cpp" "include/motions/global_jog_panel_movement.cpp" "include/motions/global_jog_panel_device.cpp" "include/motions/global_jog_panel_ui.cpp" "include/motions/global_jog_panel_ui_positions.cpp" "mainUI/TCPDataManagerUI.h" "mainUI/TCPDataManagerUI.cpp" "mainUI/GlobalDataStoreViewerUI.h" "mainUI/GlobalDataStoreViewerUI.cpp" "mainUI/CLD101xEquipmentUI.h" "mainUI/CLD101xEquipmentUI.cpp" "mainUI/UISMUPanel.h" "mainUI/UISMUPanel.cpp")
+  "mainUI/UIConfigEditor.h"
+  "mainUI/UIConfigEditor.cpp"
+  "mainUI/UIConfigEditor_Devices.cpp"
+  "mainUI/UIConfigEditor_Positions.cpp"
+  "mainUI/UIConfigEditor_Helpers.cpp"
+  "mainUI/UIConfigEditor_Graphs.cpp"
+  "mainUI/UIConfigEditor_Details.cpp" 
+  "mainUI/UIConfigVisualizer.h" 
+  "mainUI/UIConfigVisualizer.cpp"
+  "mainUI/UIConfigVisualizer_Graph.cpp"
+  "mainUI/UIConfigVisualizer_Input.cpp" 
+  "mainUI/UIConfigVisualizer_Helpers.cpp"
+  "mainUI/NodePropertiesHandler.h" 
+  "mainUI/NodePropertiesHandler.cpp" 
+  "mainUI/UIJogWindow.h"
+  "mainUI/UIJogWindow.cpp"
+  "mainUI/PIPanelUI.h"
+  "mainUI/PIPanelUI.cpp"
+  "mainUI/ACSPanelUI.h" 
+  "mainUI/ACSPanelUI.cpp" 
+  "mainUI/IOPanelUI.h"
+  "mainUI/IOPanelUI.cpp"
+  "mainUI/UIPneumaticPanel.h" 
+  "mainUI/UIPneumaticPanel.cpp"
+  "include/camera/CameraManager.h"
+  "include/camera/CameraManager.cpp"
+  "mainUI/UICameraPanel.h"
+  "mainUI/UICameraPanel.cpp" 
+  "mainUI/CameraFeedDisplay.h"
+  "mainUI/CameraFeedDisplay.cpp" 
+  "mainUI/UICameraPanelLiveVideo.h"
+  "mainUI/UICameraPanelSingleGrab.h"
+  "mainUI/UICameraPanelUtility.h" 
+  "mainUI/UICameraPanelLiveVideo.cpp"
+  "mainUI/UICameraPanelSingleGrab.cpp" 
+  "mainUI/UICameraPanelUtility.cpp" 
+  "include/motions/global_jog_panel_core.cpp"
+  "include/motions/global_jog_panel_movement.cpp"
+  "include/motions/global_jog_panel_device.cpp" 
+  "include/motions/global_jog_panel_ui.cpp" 
+  "include/motions/global_jog_panel_ui_positions.cpp" 
+  "mainUI/TCPDataManagerUI.h" 
+  "mainUI/TCPDataManagerUI.cpp"
+  "mainUI/GlobalDataStoreViewerUI.h" 
+  "mainUI/GlobalDataStoreViewerUI.cpp"
+  "mainUI/CLD101xEquipmentUI.h" 
+  "mainUI/CLD101xEquipmentUI.cpp"
+  "mainUI/UISMUPanel.h" 
+  "mainUI/UISMUPanel.cpp"
+  "include/ops/motion_ops.h"
+  "include/ops/motion_ops_movement.cpp"
+  "include/ops/io_ops.h"
+  "include/ops/vision_ops.h"
+  "include/ops/motion_ops_acsc_specific.cpp"
+  "include/ops/motion_ops_scanning.cpp" 
+  "include/ops/motion_ops_position_related.cpp" 
+  "include/ops/motion_ops.cpp"
+  "include/ops/io_ops.cpp"
+  "include/ops/vision_ops.cpp")
 
 
-# Set HALCON paths based on your installation
-set(MAINUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mainUI")
-set(INCL_CAMERA "${CMAKE_CURRENT_SOURCE_DIR}/include/camera")
 
 # Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
 target_include_directories(uaa3App PRIVATE
@@ -681,6 +801,7 @@ target_include_directories(uaa3App PRIVATE
     ${STB_IMAGE_DIR}  # Add this line
     ${MAINUI_DIR}
     ${INCL_CAMERA}
+    ${INCL_OPS}
 )
 
 # Link libraries - directly reference libraries
