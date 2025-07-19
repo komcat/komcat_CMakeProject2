@@ -12,8 +12,9 @@ CLD101xClient::CLD101xClient()
   , m_isConnected(false)
   , m_currentTemperature(0.0f)
   , m_currentLaserCurrent(0.0f)
+  , m_lastUpdateTime(std::chrono::steady_clock::now())
   , m_isPolling(false)
-  , m_pollingIntervalMs(1000)
+  , m_pollingIntervalMs(500)  // Default to 500ms
   , m_showWindow(true)
   , m_name("CLD101x Controller")
 {
@@ -80,8 +81,8 @@ bool CLD101xClient::Connect(const std::string& ip, int port) {
   m_isConnected = true;
   logger->LogInfo("CLD101xClient: Connected to " + ip + ":" + std::to_string(port));
 
-  // Start polling by default
-  StartPolling();
+  // Start polling automatically with default interval
+  StartPolling(m_pollingIntervalMs);
 
   return true;
 }
@@ -106,6 +107,31 @@ void CLD101xClient::Disconnect() {
 
 bool CLD101xClient::IsConnected() const {
   return m_isConnected;
+}
+
+// NEW: Get cached readings (thread-safe, for UI)
+float CLD101xClient::GetLatestTemperature() const {
+  std::lock_guard<std::mutex> lock(m_dataMutex);
+  return m_currentTemperature;
+}
+
+float CLD101xClient::GetLatestLaserCurrent() const {
+  std::lock_guard<std::mutex> lock(m_dataMutex);
+  return m_currentLaserCurrent;
+}
+
+std::chrono::steady_clock::time_point CLD101xClient::GetLastUpdateTime() const {
+  std::lock_guard<std::mutex> lock(m_dataMutex);
+  return m_lastUpdateTime;
+}
+
+// Existing methods for compatibility
+float CLD101xClient::GetTemperature() const {
+  return GetLatestTemperature();
+}
+
+float CLD101xClient::GetLaserCurrent() const {
+  return GetLatestLaserCurrent();
 }
 
 // Primary SendCommand method with pointer parameter (existing)
@@ -238,24 +264,21 @@ bool CLD101xClient::TECOff() {
   return result;
 }
 
-float CLD101xClient::GetTemperature() const {
-  std::lock_guard<std::mutex> lock(m_dataMutex);
-  return m_currentTemperature;
-}
-
-float CLD101xClient::GetLaserCurrent() const {
-  std::lock_guard<std::mutex> lock(m_dataMutex);
-  return m_currentLaserCurrent;
-}
-
 void CLD101xClient::StartPolling(int intervalMs) {
   // Don't start if already polling
   if (m_isPolling) {
+    Logger::GetInstance()->LogInfo("CLD101xClient: Polling already active");
     return;
   }
 
-  // Set polling interval (force to 500ms as per requirements)
-  m_pollingIntervalMs = 500; // Override the parameter to always use 500ms
+  // Don't start if not connected
+  if (!m_isConnected) {
+    Logger::GetInstance()->LogWarning("CLD101xClient: Cannot start polling - not connected");
+    return;
+  }
+
+  // Set polling interval (clamp between 100ms and 5000ms)
+  m_pollingIntervalMs = (std::max)(100, (std::min)(intervalMs, 5000));
 
   // Start polling thread
   m_isPolling = true;
@@ -284,7 +307,7 @@ void CLD101xClient::StopPolling() {
 
 void CLD101xClient::PollingThread() {
   Logger* logger = Logger::GetInstance();
-  logger->LogInfo("CLD101xClient: Polling thread started");
+  logger->LogInfo("CLD101xClient: Polling thread started with " + std::to_string(m_pollingIntervalMs) + "ms interval");
 
   while (m_isPolling && m_isConnected) {
     // Get current time for history
@@ -303,6 +326,7 @@ void CLD101xClient::PollingThread() {
           {
             std::lock_guard<std::mutex> lock(m_dataMutex);
             m_currentTemperature = temp;
+            m_lastUpdateTime = now;
             m_temperatureHistory.push_back({ now, temp });
 
             // Limit history size
@@ -362,6 +386,7 @@ void CLD101xClient::PollingThread() {
   logger->LogInfo("CLD101xClient: Polling thread stopped");
 }
 
+// Existing UI code stays the same...
 void CLD101xClient::RenderUI() {
   if (!m_showWindow) {
     return;
@@ -392,18 +417,24 @@ void CLD101xClient::RenderUI() {
 
       ImGui::SameLine();
 
-      // Polling controls
+      // Enhanced polling controls
       if (m_isPolling) {
         if (ImGui::Button("Stop Polling")) {
           StopPolling();
         }
         ImGui::SameLine();
         ImGui::Text("Polling every %d ms", m_pollingIntervalMs);
+
+        // Show last update time
+        auto lastUpdate = GetLastUpdateTime();
+        auto now = std::chrono::steady_clock::now();
+        auto ageSec = std::chrono::duration_cast<std::chrono::seconds>(now - lastUpdate).count();
+        ImGui::Text("Last update: %lds ago", ageSec);
       }
       else {
-        // Fixed polling interval of 500ms
+        // Configurable polling interval
         static int interval = 500;
-        ImGui::Text("Interval: 500 ms");
+        ImGui::SliderInt("Interval (ms)", &interval, 100, 2000);
         ImGui::SameLine();
         if (ImGui::Button("Start Polling")) {
           StartPolling(interval);
@@ -412,12 +443,13 @@ void CLD101xClient::RenderUI() {
 
       ImGui::Separator();
 
-      // Current readings section
-      ImGui::Text("Current Temperature: %.2f C", GetTemperature());
-      ImGui::Text("Current Laser Current: %.3f A", GetLaserCurrent());
+      // Current readings section with data age indicator
+      ImGui::Text("Current Temperature: %.2f C", GetLatestTemperature());
+      ImGui::Text("Current Laser Current: %.3f A", GetLatestLaserCurrent());
 
       ImGui::Separator();
 
+      // Rest of the existing UI code...
       // Controls section
       ImGui::Text("Laser Control:");
       // Button to turn laser on

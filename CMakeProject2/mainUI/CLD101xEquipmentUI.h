@@ -1,5 +1,5 @@
 // ==============================================================================
-// HEADER FILE: CLD101xEquipmentUI.h - Complete Update
+// HEADER FILE: CLD101xEquipmentUI.h - Enhanced with Polling Support
 // ==============================================================================
 #pragma once
 
@@ -7,6 +7,7 @@
 #include <string>
 #include <memory>
 #include <iostream>
+#include <chrono>
 
 // Forward declarations for integration
 class CLD101xManager;
@@ -64,6 +65,9 @@ private:
   bool m_autoRefresh = false;
   float m_lastStatusUpdate = 0.0f;
 
+  // NEW: Enhanced auto-refresh controls
+  float m_refreshRate = 2.0f; // Configurable refresh rate in seconds
+
   // Manager integration
   CLD101xManager* m_cld101xManager = nullptr;
 
@@ -93,4 +97,7 @@ private:
   void OnSendDebugCommand(const std::string& command);
   void OnGetStatus();
   void OnCheckErrors();
+  // Add this method to CLD101xEquipmentUI.h (private section):
+  void ForceImmediateRefresh();
+  void UpdateUIFromPollingCache();
 };

@@ -51,6 +51,11 @@ public:
   float GetTemperature() const; // Get the latest temperature reading (C)
   float GetLaserCurrent() const; // Get the latest laser current reading (A)
 
+  // NEW: Get cached readings (thread-safe, non-blocking)
+  float GetLatestTemperature() const;
+  float GetLatestLaserCurrent() const;
+  std::chrono::steady_clock::time_point GetLastUpdateTime() const;
+
   // Enhanced command interface for UI integration
   bool SendCommand(const std::string& command, std::string* response = nullptr);
   bool SendCommand(const std::string& command, std::string& response); // Overload for reference
@@ -64,10 +69,11 @@ public:
   bool IsVisible() const;
   const std::string& GetName() const;
 
-  // Start/stop background polling
+  // Enhanced polling controls
   void StartPolling(int intervalMs = 500); // Default to 500ms as per requirements
   void StopPolling();
   bool IsPolling() const { return m_isPolling; }
+  int GetPollingInterval() const { return m_pollingIntervalMs; }
 
 private:
   // Background polling thread
@@ -79,10 +85,11 @@ private:
   int m_serverPort;
   std::atomic<bool> m_isConnected;
 
-  // Latest readings
+  // Latest readings (thread-safe)
   mutable std::mutex m_dataMutex;
   float m_currentTemperature;
   float m_currentLaserCurrent;
+  std::chrono::steady_clock::time_point m_lastUpdateTime;
   std::string m_lastError;
 
   // Polling thread

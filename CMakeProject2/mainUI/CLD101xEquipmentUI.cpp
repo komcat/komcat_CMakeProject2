@@ -1,5 +1,5 @@
 // ==============================================================================
-// IMPLEMENTATION FILE: CLD101xEquipmentUI.cpp - Complete Update
+// IMPLEMENTATION FILE: CLD101xEquipmentUI.cpp - Enhanced with Polling Support
 // ==============================================================================
 #include "CLD101xEquipmentUI.h"
 #include "include/cld101x_manager.h"  // Add this include
@@ -36,11 +36,43 @@ void CLD101xEquipmentUI::SetCLD101xManager(CLD101xManager* manager) {
   }
 }
 
+
+
+// NEW: Add this method to automatically update UI from polling cache
+void CLD101xEquipmentUI::UpdateUIFromPollingCache() {
+  if (!m_isConnected || !IsManagerAvailable()) {
+    return;
+  }
+
+  try {
+    auto client = m_cld101xManager->GetClient("CLD101x");
+    if (client && client->IsPolling()) {
+      // Get fresh values from polling cache every frame
+      float pollingTemp = client->GetLatestTemperature();
+      float pollingCurrent = client->GetLatestLaserCurrent();
+
+      // Only update if values have changed (to avoid unnecessary updates)
+      if (std::abs(pollingTemp - m_currentTemperature) > 0.001f) {
+        m_currentTemperature = pollingTemp;
+      }
+
+      if (std::abs(pollingCurrent - m_currentLaserCurrent) > 0.000001f) {
+        m_currentLaserCurrent = pollingCurrent;
+      }
+    }
+  }
+  catch (const std::exception& e) {
+    // Silently ignore errors in UI update to avoid spam
+  }
+}
+
 void CLD101xEquipmentUI::Render() {
   if (!m_showWindow) {
     return;
   }
 
+  // NEW: Automatic UI updates from polling data
+  UpdateUIFromPollingCache();
   ImGui::SetWindowFontScale(1.5f);
   ImGui::Text("CLD101x Equipment Control");
   ImGui::SetWindowFontScale(1.0f);
@@ -90,10 +122,10 @@ void CLD101xEquipmentUI::Render() {
   // End two-column layout
   ImGui::Columns(1);
 
-  // Auto-refresh status if enabled
+  // Enhanced auto-refresh with polling awareness
   if (m_autoRefresh && m_isConnected) {
     float currentTime = ImGui::GetTime();
-    if (currentTime - m_lastStatusUpdate > 2.0f) {
+    if (currentTime - m_lastStatusUpdate > m_refreshRate) {
       OnGetStatus();
       m_lastStatusUpdate = currentTime;
     }
@@ -126,6 +158,28 @@ void CLD101xEquipmentUI::RenderConnectionSection() {
   }
   else {
     ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Not Connected");
+  }
+
+  // NEW: Show polling status
+  if (m_isConnected && IsManagerAvailable()) {
+    auto client = m_cld101xManager->GetClient("CLD101x");
+    if (client) {
+      ImGui::Text("Polling:");
+      ImGui::SameLine();
+      if (client->IsPolling()) {
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Active (%dms)", client->GetPollingInterval());
+
+        // Show data age
+        auto lastUpdate = client->GetLastUpdateTime();
+        auto now = std::chrono::steady_clock::now();
+        auto ageSec = std::chrono::duration_cast<std::chrono::seconds>(now - lastUpdate).count();
+        ImGui::SameLine();
+        ImGui::Text("(%.0fs ago)", (float)ageSec);
+      }
+      else {
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Stopped");
+      }
+    }
   }
 
   ImGui::Spacing();
@@ -378,6 +432,31 @@ void CLD101xEquipmentUI::RenderStatusSection() {
       ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Not Available");
     }
 
+    // NEW: Data freshness indicator when polling
+    if (m_isConnected && IsManagerAvailable()) {
+      auto client = m_cld101xManager->GetClient("CLD101x");
+      if (client && client->IsPolling()) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::Text("Data Age");
+        ImGui::TableNextColumn();
+
+        auto lastUpdate = client->GetLastUpdateTime();
+        auto now = std::chrono::steady_clock::now();
+        auto ageSec = std::chrono::duration_cast<std::chrono::seconds>(now - lastUpdate).count();
+
+        if (ageSec < 2) {
+          ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%.0fs (Fresh)", (float)ageSec);
+        }
+        else if (ageSec < 10) {
+          ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "%.0fs (Stale)", (float)ageSec);
+        }
+        else {
+          ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%.0fs (Old)", (float)ageSec);
+        }
+      }
+    }
+
     ImGui::EndTable();
   }
 }
@@ -385,6 +464,55 @@ void CLD101xEquipmentUI::RenderStatusSection() {
 void CLD101xEquipmentUI::RenderDebugSection() {
   ImGui::Text("Debug & Diagnostics:");
   ImGui::Separator();
+
+  // NEW: Enhanced polling controls
+  if (m_isConnected && IsManagerAvailable()) {
+    ImGui::Text("Continuous Reading Controls:");
+
+    auto client = m_cld101xManager->GetClient("CLD101x");
+    if (client) {
+      bool isPolling = client->IsPolling();
+
+      ImGui::Text("Polling Status:");
+      ImGui::SameLine();
+      if (isPolling) {
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Active (%dms)", client->GetPollingInterval());
+
+        if (ImGui::Button("Stop Polling", ImVec2(100, 25))) {
+          client->StopPolling();
+          AddDebugOutput("Stopped continuous polling");
+        }
+      }
+      else {
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Stopped");
+
+        ImGui::Text("Start polling:");
+        if (ImGui::Button("250ms", ImVec2(60, 25))) {
+          client->StartPolling(250);
+          AddDebugOutput("Started polling at 250ms interval");
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("500ms", ImVec2(60, 25))) {
+          client->StartPolling(500);
+          AddDebugOutput("Started polling at 500ms interval");
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("1000ms", ImVec2(60, 25))) {
+          client->StartPolling(1000);
+          AddDebugOutput("Started polling at 1000ms interval");
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("2000ms", ImVec2(60, 25))) {
+          client->StartPolling(2000);
+          AddDebugOutput("Started polling at 2000ms interval");
+        }
+      }
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+  }
 
   // Manual command interface
   ImGui::Text("Manual SCPI Commands:");
@@ -428,12 +556,17 @@ void CLD101xEquipmentUI::RenderDebugSection() {
     ImGui::PopStyleVar();
   }
 
-  // Auto-refresh status
+  // Enhanced auto-refresh controls
   ImGui::Spacing();
   ImGui::Checkbox("Auto-refresh status", &m_autoRefresh);
   if (m_autoRefresh) {
     ImGui::SameLine();
-    ImGui::Text("(every 2s)");
+    ImGui::SetNextItemWidth(100);
+    if (ImGui::SliderFloat("Rate(s)", &m_refreshRate, 0.5f, 10.0f, "%.1f")) {
+      m_refreshRate = (std::max)(0.1f, (std::min)(m_refreshRate, 10.0f)); // Clamp between 0.1s and 10s
+    }
+    ImGui::SameLine();
+    ImGui::Text("(%.1fs)", m_refreshRate);
   }
 
   // Debug output area
@@ -495,18 +628,21 @@ void CLD101xEquipmentUI::UpdateStatusFromManager() {
     auto client = m_cld101xManager->GetClient("CLD101x"); // Adjust client name as needed
     if (client) {
       // Update status from real hardware
-      // Note: You'll need to implement these methods in your CLD101xClient
-      // For now, we'll use basic connection status
       m_isConnected = client->IsConnected();
 
       if (m_isConnected) {
-        // Get real readings from the client
-        // m_currentLaserCurrent = client->GetCurrentLaserCurrent();
-        // m_currentTemperature = client->GetCurrentTemperature();
-        // m_laserOn = client->IsLaserOn();
-        // m_tecOn = client->IsTECOn();
-
-        AddDebugOutput("Status updated from hardware");
+        // Use cached readings from polling if available
+        if (client->IsPolling()) {
+          m_currentLaserCurrent = client->GetLatestLaserCurrent();
+          m_currentTemperature = client->GetLatestTemperature();
+          AddDebugOutput("Status updated from polling cache");
+        }
+        else {
+          // Fall back to direct reading if not polling
+          m_currentLaserCurrent = client->GetLaserCurrent();
+          m_currentTemperature = client->GetTemperature();
+          AddDebugOutput("Status updated from direct reading");
+        }
       }
     }
     else {
@@ -545,6 +681,13 @@ void CLD101xEquipmentUI::OnConnect() {
       m_lastConnectionTime = ImGui::GetTime();
       AddDebugOutput("Successfully connected to instrument");
 
+      // NEW: Start polling automatically if not already started
+      auto client = m_cld101xManager->GetClient("CLD101x");
+      if (client && !client->IsPolling()) {
+        client->StartPolling(500); // Start with 500ms polling
+        AddDebugOutput("Started automatic polling at 500ms interval");
+      }
+
       // Get initial status
       OnGetStatus();
     }
@@ -568,6 +711,12 @@ void CLD101xEquipmentUI::OnDisconnect() {
     try {
       auto client = m_cld101xManager->GetClient("CLD101x");
       if (client) {
+        // NEW: Stop polling before disconnecting
+        if (client->IsPolling()) {
+          client->StopPolling();
+          AddDebugOutput("Stopped polling before disconnect");
+        }
+
         client->Disconnect();
         AddDebugOutput("Disconnected from instrument");
       }
@@ -582,8 +731,6 @@ void CLD101xEquipmentUI::OnDisconnect() {
   m_tecOn = false;
   m_lastConnectionTime = 0;
 }
-
-
 
 void CLD101xEquipmentUI::OnLaserOn() {
   if (!m_isConnected) {
@@ -718,6 +865,60 @@ void CLD101xEquipmentUI::OnTECOff() {
   }
 }
 
+
+// Add this implementation to CLD101xEquipmentUI.cpp:
+void CLD101xEquipmentUI::ForceImmediateRefresh() {
+  if (!m_isConnected || !IsManagerAvailable()) {
+    return;
+  }
+
+  AddDebugOutput("Forcing immediate refresh of readings...");
+
+  try {
+    auto client = m_cld101xManager->GetClient("CLD101x");
+    if (client) {
+      // Get fresh temperature reading
+      std::string tempResponse;
+      if (client->SendCommand("READ_TEC_TEMPERATURE", &tempResponse)) {
+        size_t pos = tempResponse.find(": ");
+        if (pos != std::string::npos) {
+          try {
+            float temp = std::stof(tempResponse.substr(pos + 2));
+            m_currentTemperature = temp;
+          }
+          catch (const std::exception& e) {
+            AddDebugOutput("Error parsing temperature: " + std::string(e.what()));
+          }
+        }
+      }
+
+      // Small delay between commands
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+      // Get fresh current reading
+      std::string currentResponse;
+      if (client->SendCommand("READ_LASER_CURRENT", &currentResponse)) {
+        size_t pos = currentResponse.find(": ");
+        if (pos != std::string::npos) {
+          try {
+            float current = std::stof(currentResponse.substr(pos + 2));
+            m_currentLaserCurrent = current;
+            AddDebugOutput("Immediate refresh: Current=" + std::to_string(current) +
+              "A, Temp=" + std::to_string(m_currentTemperature) + "°C");
+          }
+          catch (const std::exception& e) {
+            AddDebugOutput("Error parsing current: " + std::string(e.what()));
+          }
+        }
+      }
+    }
+  }
+  catch (const std::exception& e) {
+    AddDebugOutput("Immediate refresh failed: " + std::string(e.what()));
+  }
+}
+
+// Then update OnSetCurrent to use this:
 void CLD101xEquipmentUI::OnSetCurrent() {
   if (!m_isConnected || !IsManagerAvailable()) {
     AddDebugOutput("Cannot set current: Not connected or manager unavailable");
@@ -729,10 +930,15 @@ void CLD101xEquipmentUI::OnSetCurrent() {
   try {
     auto client = m_cld101xManager->GetClient("CLD101x");
     if (client) {
-      bool success = client->SetLaserCurrent(m_currentSetpoint); // This method exists
+      bool success = client->SetLaserCurrent(m_currentSetpoint);
       if (success) {
         AddDebugOutput("Current set successfully to " + std::to_string(m_currentSetpoint) + " A");
-        OnGetStatus(); // Refresh status to get actual current
+
+        // Wait for instrument to settle
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        // Force immediate refresh
+        ForceImmediateRefresh();
       }
       else {
         m_lastError = "Failed to set current";
@@ -748,6 +954,7 @@ void CLD101xEquipmentUI::OnSetCurrent() {
     AddDebugOutput("Set current failed: " + m_lastError);
   }
 }
+// Add these method implementations to your existing CLD101xEquipmentUI.cpp file
 
 void CLD101xEquipmentUI::OnSetTemperature() {
   if (!m_isConnected || !IsManagerAvailable()) {
@@ -829,13 +1036,31 @@ void CLD101xEquipmentUI::OnGetStatus() {
       m_isConnected = client->IsConnected();
 
       if (m_isConnected) {
-        // Get current readings from the instrument using actual available methods
+        // FIXED: Always update the UI values regardless of polling status
         try {
-          m_currentLaserCurrent = client->GetLaserCurrent(); // Available method
-          m_currentTemperature = client->GetTemperature(); // Available method
+          if (client->IsPolling()) {
+            // Use cached values from polling thread
+            m_currentLaserCurrent = client->GetLatestLaserCurrent();
+            m_currentTemperature = client->GetLatestTemperature();
 
-          AddDebugOutput("Status updated: Current=" + std::to_string(m_currentLaserCurrent) +
-            "A, Temp=" + std::to_string(m_currentTemperature) + "°C");
+            auto lastUpdate = client->GetLastUpdateTime();
+            auto now = std::chrono::steady_clock::now();
+            auto ageSec = std::chrono::duration_cast<std::chrono::seconds>(now - lastUpdate).count();
+
+            AddDebugOutput("Status from polling: Current=" + std::to_string(m_currentLaserCurrent) +
+              "A, Temp=" + std::to_string(m_currentTemperature) + "°C (age: " +
+              std::to_string(ageSec) + "s)");
+
+            // IMPORTANT: Force UI update by calling UpdateStatusFromManager
+            UpdateStatusFromManager();
+          }
+          else {
+            // Fall back to direct reading if not polling
+            m_currentLaserCurrent = client->GetLaserCurrent();
+            m_currentTemperature = client->GetTemperature();
+            AddDebugOutput("Status updated: Current=" + std::to_string(m_currentLaserCurrent) +
+              "A, Temp=" + std::to_string(m_currentTemperature) + "°C");
+          }
         }
         catch (const std::exception& e) {
           AddDebugOutput("Error reading status values: " + std::string(e.what()));
@@ -855,6 +1080,7 @@ void CLD101xEquipmentUI::OnGetStatus() {
     AddDebugOutput("Status query failed: " + m_lastError);
   }
 }
+
 
 void CLD101xEquipmentUI::OnCheckErrors() {
   if (!m_isConnected || !IsManagerAvailable()) {
@@ -909,6 +1135,23 @@ void CLD101xEquipmentUI::OnTestConnection() {
       bool success = client->SendCommand("READ_TEC_TEMPERATURE", &response);
       if (success) {
         AddDebugOutput("Communication test successful: " + response);
+
+        // Also test if polling is working
+        if (client->IsPolling()) {
+          auto lastUpdate = client->GetLastUpdateTime();
+          auto now = std::chrono::steady_clock::now();
+          auto ageSec = std::chrono::duration_cast<std::chrono::seconds>(now - lastUpdate).count();
+
+          if (ageSec < 5) {
+            AddDebugOutput("Polling test successful - data is fresh");
+          }
+          else {
+            AddDebugOutput("Polling test warning - data is " + std::to_string(ageSec) + "s old");
+          }
+        }
+        else {
+          AddDebugOutput("Note: Polling is not active");
+        }
       }
       else {
         AddDebugOutput("Communication test failed");
