@@ -2,12 +2,25 @@ import pyvisa
 import socket
 import threading
 import tkinter as tk
-from tkinter import ttk, scrolledtext
+from tkinter import ttk, scrolledtext, messagebox
 import time
 import queue
 from datetime import datetime
 import argparse
 import sys
+import base64
+from io import BytesIO
+
+# Try to import pystray for system tray functionality
+try:
+    import pystray
+    from pystray import MenuItem as item
+    from PIL import Image, ImageDraw
+    TRAY_AVAILABLE = True
+except ImportError:
+    TRAY_AVAILABLE = False
+    print("Warning: pystray and/or PIL not available. System tray functionality disabled.")
+    print("Install with: pip install pystray pillow")
 
 class CLD101xServerGUI:
     def __init__(self, auto_start=False):
@@ -31,6 +44,10 @@ class CLD101xServerGUI:
         self.log_queue = queue.Queue()
         self.status_queue = queue.Queue()
         
+        # System tray
+        self.tray_icon = None
+        self.is_minimized_to_tray = False
+        
         # Server settings
         self.host = tk.StringVar(value="127.0.0.11")
         self.port = tk.IntVar(value=65432)
@@ -43,12 +60,165 @@ class CLD101xServerGUI:
         self.tec_state = tk.StringVar(value="--")
         
         self.setup_ui()
+        self.setup_system_tray()
         self.start_log_updater()
+        
+        # Configure window close behavior
+        self.root.protocol("WM_DELETE_WINDOW", self.on_window_close)
         
         # Auto-start functionality
         if self.auto_start:
-            self.root.after(1000, self.auto_start_sequence)  # Wait 1 second then auto-start
+            self.root.after(1000, self.auto_start_sequence)
         
+    def create_tray_icon(self):
+        """Create a simple icon for the system tray"""
+        # Create a simple 64x64 icon
+        width = 64
+        height = 64
+        
+        # Create image with transparent background
+        image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        
+        # Draw a simple server icon
+        if self.server_running:
+            # Green circle for running server
+            draw.ellipse([8, 8, 56, 56], fill=(0, 255, 0, 255), outline=(0, 200, 0, 255), width=2)
+            # Add "S" for Server
+            draw.text((24, 20), "S", fill=(255, 255, 255, 255))
+        else:
+            # Red circle for stopped server
+            draw.ellipse([8, 8, 56, 56], fill=(255, 0, 0, 255), outline=(200, 0, 0, 255), width=2)
+            # Add "S" for Server
+            draw.text((24, 20), "S", fill=(255, 255, 255, 255))
+            
+        return image
+    
+    def setup_system_tray(self):
+        """Setup system tray icon and menu"""
+        if not TRAY_AVAILABLE:
+            return
+            
+        try:
+            # Create tray menu
+            menu = pystray.Menu(
+                item('Show Window', self.show_window),
+                item('Hide Window', self.hide_window),
+                pystray.Menu.SEPARATOR,
+                item('Server Status', self.show_server_status),
+                item('Start Server', self.start_server_from_tray, enabled=lambda item: not self.server_running),
+                item('Stop Server', self.stop_server_from_tray, enabled=lambda item: self.server_running),
+                pystray.Menu.SEPARATOR,
+                item('Exit', self.quit_application)
+            )
+            
+            # Create tray icon
+            icon_image = self.create_tray_icon()
+            self.tray_icon = pystray.Icon("CLD101x Server", icon_image, menu=menu)
+            
+        except Exception as e:
+            print(f"Failed to setup system tray: {e}")
+            self.tray_icon = None
+    
+    def start_tray_icon(self):
+        """Start the system tray icon in a separate thread"""
+        if self.tray_icon and TRAY_AVAILABLE:
+            try:
+                tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
+                tray_thread.start()
+            except Exception as e:
+                print(f"Failed to start tray icon: {e}")
+    
+    def update_tray_icon(self):
+        """Update the tray icon to reflect server status"""
+        if self.tray_icon and TRAY_AVAILABLE:
+            try:
+                new_icon = self.create_tray_icon()
+                self.tray_icon.icon = new_icon
+                
+                # Update tooltip
+                status = "Running" if self.server_running else "Stopped"
+                self.tray_icon.title = f"CLD101x Server - {status}"
+            except Exception as e:
+                print(f"Failed to update tray icon: {e}")
+    
+    def show_window(self, icon=None, item=None):
+        """Show the main window"""
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+        self.is_minimized_to_tray = False
+    
+    def hide_window(self, icon=None, item=None):
+        """Hide the main window to system tray"""
+        if TRAY_AVAILABLE and self.tray_icon:
+            self.root.withdraw()
+            self.is_minimized_to_tray = True
+            
+            # Show notification on first minimize
+            if not hasattr(self, '_first_minimize_done'):
+                self._first_minimize_done = True
+                self.show_tray_notification("CLD101x Server minimized to system tray")
+        else:
+            messagebox.showwarning("System Tray Not Available", 
+                                 "System tray functionality is not available.\n"
+                                 "Install pystray and pillow: pip install pystray pillow")
+    
+    def show_tray_notification(self, message):
+        """Show a system tray notification"""
+        if self.tray_icon and TRAY_AVAILABLE:
+            try:
+                self.tray_icon.notify(message, "CLD101x Server")
+            except Exception as e:
+                print(f"Failed to show notification: {e}")
+    
+    def show_server_status(self, icon=None, item=None):
+        """Show server status in tray notification"""
+        status_msg = f"Server: {'Running' if self.server_running else 'Stopped'}\n"
+        status_msg += f"Clients: {self.client_count}\n"
+        status_msg += f"Commands: {self.total_commands}"
+        
+        if self.tray_icon and TRAY_AVAILABLE:
+            try:
+                self.tray_icon.notify(status_msg, "CLD101x Server Status")
+            except Exception as e:
+                print(f"Failed to show status notification: {e}")
+    
+    def start_server_from_tray(self, icon=None, item=None):
+        """Start server from tray menu"""
+        self.start_server()
+        self.show_tray_notification("Server started")
+    
+    def stop_server_from_tray(self, icon=None, item=None):
+        """Stop server from tray menu"""
+        self.stop_server()
+        self.show_tray_notification("Server stopped")
+    
+    def quit_application(self, icon=None, item=None):
+        """Quit the entire application"""
+        self.is_minimized_to_tray = False
+        self.on_closing()
+    
+    def on_window_close(self):
+        """Handle window close button - minimize to tray instead of closing"""
+        if TRAY_AVAILABLE and self.tray_icon:
+            self.hide_window()
+        else:
+            # If tray not available, ask user
+            result = messagebox.askyesnocancel(
+                "Close Application",
+                "System tray is not available.\n\n"
+                "Yes: Exit application\n"
+                "No: Minimize to taskbar\n"
+                "Cancel: Keep window open"
+            )
+            
+            if result is True:  # Yes - exit
+                self.on_closing()
+            elif result is False:  # No - minimize to taskbar
+                self.root.iconify()
+            # Cancel - do nothing
+    
     def auto_start_sequence(self):
         """Automatically start the server after GUI initialization"""
         self.log_message("Auto-start sequence initiated...")
@@ -87,7 +257,19 @@ class CLD101xServerGUI:
         self.setup_log_tab(log_frame)
         
     def setup_server_tab(self, parent):
-        # Auto-start indicator (NEW)
+        # System tray info
+        if TRAY_AVAILABLE:
+            tray_frame = ttk.Frame(parent)
+            tray_frame.pack(fill='x', padx=5, pady=5)
+            ttk.Label(tray_frame, text="💾 System Tray: Available - Close window to minimize to tray", 
+                     foreground="blue", font=('Arial', 9)).pack()
+        else:
+            tray_frame = ttk.Frame(parent)
+            tray_frame.pack(fill='x', padx=5, pady=5)
+            ttk.Label(tray_frame, text="❌ System Tray: Not Available (pip install pystray pillow)", 
+                     foreground="red", font=('Arial', 9)).pack()
+        
+        # Auto-start indicator
         if self.auto_start:
             auto_frame = ttk.Frame(parent)
             auto_frame.pack(fill='x', padx=5, pady=5)
@@ -119,8 +301,11 @@ class CLD101xServerGUI:
         
         ttk.Button(control_frame, text="Test VISA Connection", command=self.test_visa).pack(side='left', padx=5, pady=5)
         
-        # Restart button (NEW)
         ttk.Button(control_frame, text="Restart Server", command=self.restart_server).pack(side='left', padx=5, pady=5)
+        
+        # Tray control buttons
+        if TRAY_AVAILABLE:
+            ttk.Button(control_frame, text="Hide to Tray", command=self.hide_window).pack(side='right', padx=5, pady=5)
         
         # Server Status
         status_frame = ttk.LabelFrame(parent, text="Server Status")
@@ -184,11 +369,10 @@ class CLD101xServerGUI:
         ttk.Checkbutton(control_frame, text="Auto-scroll", variable=self.auto_scroll).pack(side='left', padx=5)
         
     def restart_server(self):
-        """Restart the server (NEW METHOD)"""
+        """Restart the server"""
         self.log_message("Restarting server...")
         if self.server_running:
             self.stop_server()
-            # Wait a moment for clean shutdown
             self.root.after(1000, self.start_server)
         else:
             self.start_server()
@@ -197,8 +381,6 @@ class CLD101xServerGUI:
         timestamp = datetime.now().strftime("%H:%M:%S")
         log_entry = f"[{timestamp}] {level}: {message}\n"
         self.log_queue.put(log_entry)
-        
-        # Also print to console for debugging
         print(f"[{timestamp}] {level}: {message}")
         
     def start_log_updater(self):
@@ -212,7 +394,6 @@ class CLD101xServerGUI:
         except queue.Empty:
             pass
         
-        # Schedule next update
         self.root.after(100, self.start_log_updater)
         
     def test_visa(self):
@@ -230,7 +411,6 @@ class CLD101xServerGUI:
             self.visa_label.config(text=f"VISA: Connected - {idn.strip()}")
             self.log_message(f"VISA connected: {idn.strip()}")
             
-            # Update initial readings
             self.update_readings()
             
         except Exception as e:
@@ -242,14 +422,12 @@ class CLD101xServerGUI:
             return
             
         try:
-            # Test VISA connection first
             if self.instr is None:
                 self.test_visa()
                 if self.instr is None:
                     self.log_message("Cannot start server: VISA not connected", "ERROR")
                     return
             
-            # Start server thread
             self.server_thread = threading.Thread(target=self.server_worker, daemon=True)
             self.server_running = True
             self.server_thread.start()
@@ -257,6 +435,9 @@ class CLD101xServerGUI:
             self.start_btn.config(state='disabled')
             self.stop_btn.config(state='normal')
             self.status_label.config(text="Server: Running")
+            
+            # Update tray icon
+            self.update_tray_icon()
             
             self.log_message(f"Server started on {self.host.get()}:{self.port.get()}")
             
@@ -276,6 +457,9 @@ class CLD101xServerGUI:
         self.stop_btn.config(state='disabled')
         self.status_label.config(text="Server: Stopped")
         
+        # Update tray icon
+        self.update_tray_icon()
+        
         self.log_message("Server stopped")
         
     def server_worker(self):
@@ -288,10 +472,9 @@ class CLD101xServerGUI:
             
             while self.server_running:
                 try:
-                    self.server_socket.settimeout(1.0)  # Non-blocking accept
+                    self.server_socket.settimeout(1.0)
                     conn, addr = self.server_socket.accept()
                     
-                    # Handle client in separate thread
                     client_thread = threading.Thread(target=self.handle_client, args=(conn, addr), daemon=True)
                     client_thread.start()
                     
@@ -339,7 +522,6 @@ class CLD101xServerGUI:
             self.client_count -= 1
             self.root.after(0, lambda: self.client_label.config(text=f"Active Clients: {self.client_count}"))
             self.log_message(f"Client disconnected: {addr}")
-            
     
     def process_command(self, data):
         """Process incoming command and return response"""
@@ -350,7 +532,7 @@ class CLD101xServerGUI:
         value = parts[1] if len(parts) > 1 else None
         
         try:
-            # **EXISTING COMMANDS**
+            # EXISTING COMMANDS
             if command == "SET_LASER_CURRENT" and value is not None:
                 self.instr.write(f"source1:current:level:amplitude {value}")
                 response = f"Set LD current [A]: {self.instr.query('source1:current:level:amplitude?')}"
@@ -399,12 +581,10 @@ class CLD101xServerGUI:
                 finally:
                     self.instr.timeout = original_timeout
             
-            # **NEW: STATUS QUERY COMMANDS**
+            # STATUS QUERY COMMANDS
             elif command in ["OUTPUT1:STATE?", "OUTPut1:STATe?", "output1:state?"]:
-                # Query laser output state
                 try:
                     state = self.instr.query("output1:state?")
-                    # Clean up response and ensure consistent format
                     state_clean = state.strip().upper()
                     self.log_message(f"Raw laser state from hardware: '{state}' -> '{state_clean}'")
                     
@@ -417,23 +597,20 @@ class CLD101xServerGUI:
                         
                 except Exception as e:
                     self.log_message(f"Failed to query laser state: {e}", "ERROR")
-                    # Fallback - try to infer from current reading
                     try:
                         current = float(self.instr.query("sense3:current:dc:data?").strip())
-                        if current > 0.001:  # If current > 1mA, laser is probably on
+                        if current > 0.001:
                             response = "ON"
                             self.log_message(f"Inferred laser ON from current: {current}A")
                         else:
                             response = "OFF"
                             self.log_message(f"Inferred laser OFF from current: {current}A")
                     except:
-                        response = "OFF"  # Default to OFF if all else fails
+                        response = "OFF"
                         
             elif command in ["OUTPUT2:STATE?", "OUTPut2:STATe?", "output2:state?"]:
-                # Query TEC output state
                 try:
                     state = self.instr.query("output2:state?")
-                    # Clean up response and ensure consistent format
                     state_clean = state.strip().upper()
                     self.log_message(f"Raw TEC state from hardware: '{state}' -> '{state_clean}'")
                     
@@ -446,38 +623,36 @@ class CLD101xServerGUI:
                         
                 except Exception as e:
                     self.log_message(f"Failed to query TEC state: {e}", "ERROR")
-                    # Fallback - try to infer from temperature stability
                     try:
                         temp = float(self.instr.query("SENSe2:temperature:data?").strip())
                         setpoint = float(self.instr.query("source2:temperature:spoint?").strip())
                         temp_diff = abs(temp - setpoint)
                         
-                        if temp_diff < 2.0:  # If within 2°C of setpoint, TEC is probably on
+                        if temp_diff < 2.0:
                             response = "ON"
                             self.log_message(f"Inferred TEC ON - Temp: {temp}°C, Setpoint: {setpoint}°C")
                         else:
                             response = "OFF"
                             self.log_message(f"Inferred TEC OFF - Temp: {temp}°C, Setpoint: {setpoint}°C")
                     except:
-                        response = "OFF"  # Default to OFF if all else fails
+                        response = "OFF"
             
-            # **NEW: INSTRUMENT IDENTIFICATION**
+            # INSTRUMENT IDENTIFICATION
             elif command in ["*IDN?", "IDN?"]:
                 try:
                     response = self.instr.query("*IDN?")
                 except Exception as e:
                     response = f"ERROR: Failed to query instrument ID - {str(e)}"
             
-            # **NEW: ERROR QUEUE QUERY**
+            # ERROR QUEUE QUERY
             elif command in ["SYST:ERR?", "SYSTEM:ERROR?"]:
                 try:
                     response = self.instr.query("system:error?")
                 except Exception as e:
                     response = f"ERROR: Failed to query error queue - {str(e)}"
             
-            # **NEW: GENERIC SCPI QUERY PASSTHROUGH**
+            # GENERIC SCPI QUERY PASSTHROUGH
             elif command.endswith('?'):
-                # Any query command - pass through directly to instrument
                 try:
                     response = self.instr.query(command)
                     self.log_message(f"Generic SCPI query: {command} -> {response}")
@@ -497,8 +672,6 @@ class CLD101xServerGUI:
             
         self.log_message(f"Response: {response}")
         return response
-        
-
         
     def read_temperature(self):
         """Manual temperature reading"""
@@ -550,12 +723,23 @@ class CLD101xServerGUI:
         
     def run(self):
         """Start the GUI application"""
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        # Start tray icon
+        self.start_tray_icon()
+        
+        # Start GUI
+        self.root.protocol("WM_DELETE_WINDOW", self.on_window_close)
         self.root.mainloop()
         
     def on_closing(self):
         """Clean shutdown"""
         self.stop_server()
+        
+        # Stop tray icon
+        if self.tray_icon and TRAY_AVAILABLE:
+            try:
+                self.tray_icon.stop()
+            except:
+                pass
         
         if self.instr:
             try:
@@ -647,7 +831,7 @@ def run_headless_server(host, port, visa_resource):
             conn, addr = server_socket.accept()
             print(f"Client connected: {addr}")
             
-            # Handle client in separate thread (similar to GUI version)
+            # Handle client in separate thread
             client_thread = threading.Thread(
                 target=lambda: handle_headless_client(conn, addr, instr), 
                 daemon=True
@@ -661,8 +845,6 @@ def run_headless_server(host, port, visa_resource):
         instr.close()
         rm.close()
 
-
-# ALSO UPDATE the handle_headless_client function for headless mode:
 def handle_headless_client(conn, addr, instr):
     """Handle client in headless mode"""
     try:
@@ -679,7 +861,7 @@ def handle_headless_client(conn, addr, instr):
             value = parts[1] if len(parts) > 1 else None
             
             try:
-                # **EXISTING COMMANDS**
+                # EXISTING COMMANDS
                 if command == "SET_LASER_CURRENT" and value is not None:
                     instr.write(f"source1:current:level:amplitude {value}")
                     response = f"Set LD current [A]: {instr.query('source1:current:level:amplitude?')}"
@@ -715,7 +897,7 @@ def handle_headless_client(conn, addr, instr):
                     finally:
                         instr.timeout = original_timeout
                 
-                # **NEW: STATUS QUERY COMMANDS FOR HEADLESS MODE**
+                # STATUS QUERY COMMANDS FOR HEADLESS MODE
                 elif command in ["OUTPUT1:STATE?", "OUTPut1:STATe?", "output1:state?"]:
                     try:
                         state = instr.query("output1:state?")
@@ -757,71 +939,6 @@ def handle_headless_client(conn, addr, instr):
                     response = instr.query("system:error?")
                 elif command.endswith('?'):
                     response = instr.query(command)
-                else:
-                    response = "Unknown command or missing value"
-                    
-            except pyvisa.errors.VisaIOError as e:
-                response = f"ERROR: VISA communication error - {str(e)}"
-            except Exception as e:
-                response = f"ERROR: {str(e)}"
-                
-            print(f"Response to {addr}: {response}")
-            conn.sendall(response.encode())
-            
-    except Exception as e:
-        print(f"Client {addr} error: {e}")
-    finally:
-        conn.close()
-        print(f"Client {addr} disconnected")
-        """Handle client in headless mode"""
-    try:
-        while True:
-            data = conn.recv(1024).decode()
-            if not data:
-                break
-                
-            print(f"Command from {addr}: {data.strip()}")
-            
-            # Process command (same logic as GUI version)
-            parts = data.split()
-            command = parts[0] if parts else ""
-            value = parts[1] if len(parts) > 1 else None
-            
-            try:
-                if command == "SET_LASER_CURRENT" and value is not None:
-                    instr.write(f"source1:current:level:amplitude {value}")
-                    response = f"Set LD current [A]: {instr.query('source1:current:level:amplitude?')}"
-                elif command == "SET_TEC_TEMPERATURE" and value is not None:
-                    instr.write(f"source2:temperature:spoint {value}")
-                    response = f"Set TEC temperature [C]: {instr.query('source2:temperature:spoint?')}"
-                elif command == "LASER_ON":
-                    instr.write("output1:state on")
-                    response = f"Laser state: {instr.query('output1:state?')}"
-                elif command == "LASER_OFF":
-                    instr.write("output1:state off")
-                    response = f"Laser state: {instr.query('output1:state?')}"
-                elif command == "TEC_ON":
-                    instr.write("output2:state on")
-                    response = f"TEC state: {instr.query('output2:state?')}"
-                elif command == "TEC_OFF":
-                    instr.write("output2:state off")
-                    response = f"TEC state: {instr.query('output2:state?')}"
-                elif command == "READ_LASER_CURRENT":
-                    current = instr.query("sense3:current:dc:data?")
-                    response = f"Current laser current [A]: {current}"
-                elif command == "READ_TEC_TEMPERATURE":
-                    try:
-                        original_timeout = instr.timeout
-                        instr.timeout = 200
-                        temp = instr.query("SENSe2:temperature:data?")
-                        response = f"Current TEC temperature [C]: {temp}"
-                    except pyvisa.errors.VisaIOError as e:
-                        if "timeout" in str(e).lower():
-                            response = "ERROR: Temperature reading timeout"
-                        else:
-                            response = f"ERROR: VISA error - {str(e)}"
-                    finally:
-                        instr.timeout = original_timeout
                 else:
                     response = "Unknown command or missing value"
                     
