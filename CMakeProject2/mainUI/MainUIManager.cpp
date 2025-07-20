@@ -47,7 +47,14 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 
     // Initialize MachineBlockUI
     m_machineBlockUI = std::make_unique<MachineBlockUI>();
+    // Initialize MacroManager
+    m_macroManager = std::make_unique<MacroManager>();
 
+    // Connect MacroManager to MachineBlockUI for program execution
+    if (m_macroManager && m_machineBlockUI) {
+      m_macroManager->SetMachineBlockUI(m_machineBlockUI.get());
+      std::cout << "MainUIManager: MacroManager connected to MachineBlockUI" << std::endl;
+    }
 
     // Initialize TCP Data Manager UI
     m_tcpDataManagerUI = std::make_unique<TCPDataManagerUI>();
@@ -1044,6 +1051,16 @@ void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
       m_machineBlockUI->SetMachineOperations(machineOps);
       std::cout << "MainUIManager: MachineBlockUI updated with MachineOperations" << std::endl;
     }
+
+
+    // IMPORTANT: Reconnect MacroManager to MachineBlockUI after MachineOperations is set
+// This ensures MacroManager has access to the fully initialized MachineBlockUI
+    if (m_macroManager && m_machineBlockUI) {
+      m_macroManager->SetMachineBlockUI(m_machineBlockUI.get());
+      std::cout << "MainUIManager: MacroManager reconnected with initialized MachineBlockUI" << std::endl;
+    }
+
+
     // Optionally, you can create any UI components that depend on MachineOperations here
     // For example, if you had a MachineOperationsUI panel:
     // m_machineOpsPanelUI = std::make_unique<MachineOperationsPanelUI>(*m_machineOperations);
@@ -1122,18 +1139,14 @@ void MainUIManager::RenderProgrammingPage() {
 }
 
 
-// Implement RenderProgrammingSubPage():
+
+// 7. Update RenderProgrammingSubPage() to handle both sub-pages:
 void MainUIManager::RenderProgrammingSubPage() {
   if (currentProgrammingSubPage == ProgrammingSubPage::MACHINE_BLOCK_UI) {
     RenderMachineBlockPage();
   }
   else if (currentProgrammingSubPage == ProgrammingSubPage::MACRO_MANAGER) {
-    // TODO: Step 4 - Implement MacroManager
-    ImGui::SetWindowFontScale(1.5f);
-    ImGui::Text("Macro Manager");
-    ImGui::SetWindowFontScale(1.0f);
-    ImGui::Spacing();
-    ImGui::Text("Macro Manager will be implemented in Step 4");
+    RenderMacroManagerPage();  // Add this case
   }
 }
 
@@ -1148,6 +1161,27 @@ void MainUIManager::RenderMachineBlockPage() {
     ImGui::SetWindowFontScale(1.0f);
     ImGui::Spacing();
     ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create Machine Block UI");
+    ImGui::Text("Check console for error messages");
+  }
+}
+
+
+void MainUIManager::RenderMacroManagerPage() {
+  if (m_macroManager) {
+    // Ensure the window is visible
+    if (!m_macroManager->IsVisible()) {
+      m_macroManager->ToggleWindow();
+    }
+
+    m_macroManager->RenderUI();
+  }
+  else {
+    ImGui::SetWindowFontScale(1.5f);
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Macro Manager");
+    ImGui::SetWindowFontScale(1.0f);
+
+    ImGui::Spacing();
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create Macro Manager");
     ImGui::Text("Check console for error messages");
   }
 }

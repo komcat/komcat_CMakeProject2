@@ -13,6 +13,7 @@
 #include "CLD101xEquipmentUI.h"
 #include "UISMUPanel.h"
 #include "Programming/MachineBlockUI.h"
+#include "Programming/MacroManager.h"
 
 // Forward declarations
 class MotionConfigManager;
@@ -150,7 +151,7 @@ private:
   // Add in private section with other member variables:
   ProgrammingSubPage currentProgrammingSubPage = ProgrammingSubPage::NONE;
   std::unique_ptr<MachineBlockUI> m_machineBlockUI;
-
+  std::unique_ptr<MacroManager> m_macroManager;
 
   void RenderTopMenuBar();
   void RenderDateTime();
@@ -197,5 +198,5 @@ private:
   void RenderMachineBlockPage();
 
 
-
+  void RenderMacroManagerPage();
 };
