@@ -194,7 +194,7 @@ set(PI_SOURCES
 set(MAINUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mainUI")
 set(INCL_CAMERA "${CMAKE_CURRENT_SOURCE_DIR}/include/camera")
 set(INCL_OPS "${CMAKE_CURRENT_SOURCE_DIR}/include/ops")
-
+set(INCL_PROGRAM "${CMAKE_CURRENT_SOURCE_DIR}/Programming")
 
 
 
@@ -457,7 +457,12 @@ add_executable(CMakeProject2
    "include/ops/motion_ops_acsc_specific.cpp"
    "include/ops/motion_ops_scanning.cpp" 
    "include/ops/motion_ops_position_related.cpp"
-    "include/ops/motion_ops.cpp" "include/ops/io_ops.cpp" "include/ops/vision_ops.cpp")
+   "include/ops/motion_ops.cpp"
+   "include/ops/io_ops.cpp"
+   "include/ops/vision_ops.cpp"
+   "mainUI/MacroPanelUI.h" 
+   "mainUI/MacroPanelUI.cpp"
+)
 
 
 
@@ -495,6 +500,7 @@ target_include_directories(CMakeProject2 PRIVATE
     ${HALCON_INCLUDE_DIR}  # Add this line for HALCON
      ${STB_IMAGE_DIR}  # Add this line
      ${INCL_OPS}
+     ${INCL_PROGRAM}
 )
 
 # Link libraries - directly reference libraries
@@ -781,7 +787,7 @@ add_executable(uaa3App
   "include/ops/motion_ops_position_related.cpp" 
   "include/ops/motion_ops.cpp"
   "include/ops/io_ops.cpp"
-  "include/ops/vision_ops.cpp")
+  "include/ops/vision_ops.cpp" "mainUI/MacroPanelUI.h" "mainUI/MacroPanelUI.cpp")
 
 
 
@@ -802,6 +808,7 @@ target_include_directories(uaa3App PRIVATE
     ${MAINUI_DIR}
     ${INCL_CAMERA}
     ${INCL_OPS}
+    ${INCL_PROGRAM}
 )
 
 # Link libraries - directly reference libraries

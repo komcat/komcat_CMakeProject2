@@ -14,6 +14,7 @@
 #include "UISMUPanel.h"
 #include "Programming/MachineBlockUI.h"
 #include "Programming/MacroManager.h"
+#include "MacroPanelUI.h"
 
 // Forward declarations
 class MotionConfigManager;
@@ -121,6 +122,8 @@ private:
   std::unique_ptr<UICameraPanel> m_cameraPanelUI;
   std::unique_ptr<GlobalDataStoreViewerUI> m_globalDataStoreViewerUI;
   std::unique_ptr<CLD101xEquipmentUI> m_cld101xEquipmentUI;
+  std::unique_ptr<MacroPanelUI> m_macroPanelUI;
+
   CLD101xManager* m_cld101xManager = nullptr;
 
   // Motion managers (optional, set later)
