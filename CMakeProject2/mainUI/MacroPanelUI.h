@@ -7,6 +7,10 @@
 #include <map>
 #include <memory>
 #include <functional>
+// Add these includes at the top
+#include <filesystem>
+
+
 
 // Forward declarations ONLY - no includes in header
 class MacroManager;
@@ -76,6 +80,9 @@ private:
   void RenderProgramRow(int rowIndex, MacroProgramItem& item);
   void RenderProgramRowColumns(int rowIndex, MacroProgramItem& item); // New column-based method
   void RenderExecutionControls();
+  void RenderProgramRowColumnsSafe(int rowIndex, MacroProgramItem& item);
+  void RenderProgramRowSimple(int rowIndex, MacroProgramItem& item);
+  void RenderProgramTableVertical();
 
   // Right Panel Methods
   void RenderMacroProperties();
@@ -93,9 +100,16 @@ private:
   // Execution Methods
   void ExecuteSelectedPrograms();
   void ExecuteSingleProgram(const std::string& programName);
+  void ExecuteNextSelectedProgram(); // NEW METHOD - sequential execution
+  void ExecuteSelectedProgramsClean(); // NEW METHOD - simple clean approach
   void PlayExecution();
   void PauseExecution();
   void StopExecution();
+
+  // Add these member variables in the private section:
+  std::vector<std::string> m_selectedProgramsQueue; // Queue of selected programs to execute
+  int m_currentExecutionIndex = 0; // Current index in the execution queue
+
 
   // Data
   std::vector<std::string> m_availableMacros;
@@ -103,13 +117,18 @@ private:
 
   // File dialog state
   bool m_showLoadDialog = false;
-  std::vector<std::string> m_availableMacroFiles;
-  int m_selectedFileIndex = 0;
-  char m_loadDialogSearchBuffer[256] = "";
+  bool m_showSaveDialog = false;
+  std::string m_currentDirectory = "macros";
+  std::vector<std::filesystem::directory_entry> m_directoryEntries;
+  int m_selectedFileIndex = -1;
+  char m_saveFileName[256] = "";
 
-  // Add these method declarations:
+  // File dialog methods
+  void RenderFileDialog();
   void RenderLoadDialog();
-  void RefreshMacroFiles();
-  std::vector<std::string> GetMacroFilesFromDirectory();
+  void RenderSaveDialog();
+  void RefreshDirectoryListing();
+  void NavigateToDirectory(const std::string& path);
+  bool IsJsonFile(const std::filesystem::directory_entry& entry);
 
 };

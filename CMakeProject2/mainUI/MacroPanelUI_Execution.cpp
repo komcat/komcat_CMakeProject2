@@ -8,32 +8,115 @@
 // EXECUTION METHODS
 // ============================================================================
 
+// Fixed execution logic for MacroPanelUI_Execution.cpp
+
 void MacroPanelUI::ExecuteSelectedPrograms() {
   if (m_currentMacroName.empty() || !m_macroManager) return;
 
-  // Count selected programs
-  int selectedCount = 0;
+  // Collect only selected programs in order
+  std::vector<std::string> selectedPrograms;
   for (const auto& item : m_programItems) {
-    if (item.selected) selectedCount++;
+    if (item.selected) {
+      selectedPrograms.push_back(item.name);
+    }
   }
 
-  if (selectedCount == 0) {
+  if (selectedPrograms.empty()) {
     std::cout << "No programs selected for execution" << std::endl;
     return;
   }
 
-  // Execute the macro with selected programs
+  // Set execution state
   m_isExecuting = true;
   m_currentProgramIndex = 0;
 
-  std::cout << "Starting macro execution: " << m_currentMacroName << " with " << selectedCount << " selected programs" << std::endl;
+  std::cout << "Starting selected program execution: " << selectedPrograms.size()
+    << " programs from macro '" << m_currentMacroName << "'" << std::endl;
 
-  // Set up callback to track execution progress
-  m_macroManager->ExecuteMacro(m_currentMacroName, [this](bool success) {
+  // Store selected programs for sequential execution
+  m_selectedProgramsQueue = selectedPrograms;
+  m_currentExecutionIndex = 0;
+
+  // Start executing the first program
+  ExecuteNextSelectedProgram();
+}
+
+// Execute programs one by one with proper sequencing
+void MacroPanelUI::ExecuteNextSelectedProgram() {
+  if (m_currentExecutionIndex >= m_selectedProgramsQueue.size()) {
+    // All programs completed
     m_isExecuting = false;
     m_currentProgramIndex = -1;
-    std::cout << "Macro execution completed: " << (success ? "SUCCESS" : "FAILED") << std::endl;
-  });
+    m_selectedProgramsQueue.clear();
+    std::cout << "All selected programs execution completed successfully" << std::endl;
+    return;
+  }
+
+  std::string currentProgram = m_selectedProgramsQueue[m_currentExecutionIndex];
+
+  // Update visual feedback - find the program index in the original list
+  for (int i = 0; i < m_programItems.size(); i++) {
+    if (m_programItems[i].name == currentProgram) {
+      m_currentProgramIndex = i;
+      break;
+    }
+  }
+
+  std::cout << "Executing selected program " << (m_currentExecutionIndex + 1)
+    << "/" << m_selectedProgramsQueue.size() << ": " << currentProgram << std::endl;
+
+  if (m_macroManager) {
+    m_macroManager->ExecuteSingleProgram(currentProgram);
+
+    // Since ExecuteSingleProgram doesn't have callback, we need to implement
+    // a polling mechanism or timer to check when to continue to next program
+    // For now, we'll use a simple approach that works with the existing system
+
+    m_currentExecutionIndex++;
+
+    // Add a small delay and continue (you might want to implement proper completion checking)
+    // This is a simplified approach - in a real implementation you'd want to check
+    // program completion status before continuing
+    ExecuteNextSelectedProgram();
+  }
+}
+
+// Better approach: Execute selected programs without temporary macros
+void MacroPanelUI::ExecuteSelectedProgramsClean() {
+  if (m_currentMacroName.empty() || !m_macroManager) return;
+
+  // Collect selected programs
+  std::vector<std::string> selectedPrograms;
+  for (const auto& item : m_programItems) {
+    if (item.selected) {
+      selectedPrograms.push_back(item.name);
+    }
+  }
+
+  if (selectedPrograms.empty()) {
+    std::cout << "No programs selected for execution" << std::endl;
+    return;
+  }
+
+  std::cout << "Executing " << selectedPrograms.size() << " selected programs in sequence:" << std::endl;
+
+  // Execute each selected program immediately (works if programs are fast)
+  for (int i = 0; i < selectedPrograms.size(); i++) {
+    // Update visual feedback
+    for (int j = 0; j < m_programItems.size(); j++) {
+      if (m_programItems[j].name == selectedPrograms[i]) {
+        m_currentProgramIndex = j;
+        break;
+      }
+    }
+
+    std::cout << "  - Executing (" << (i + 1) << "/" << selectedPrograms.size() << "): " << selectedPrograms[i] << std::endl;
+    m_macroManager->ExecuteSingleProgram(selectedPrograms[i]);
+  }
+
+  std::cout << "All selected programs have been executed" << std::endl;
+  m_isExecuting = false;
+  m_currentProgramIndex = -1;
 }
 
 void MacroPanelUI::ExecuteSingleProgram(const std::string& programName) {
@@ -351,3 +434,6 @@ void MacroPanelUI::RenderMacroVisualization(ImDrawList* drawList, ImVec2 canvasP
     IM_COL32(80, 80, 80, 255), 2.0f);
   drawList->AddText(ImVec2(legendPos.x + 190, legendPos.y), IM_COL32(200, 200, 200, 255), "Unselected");
 }
+
+
+

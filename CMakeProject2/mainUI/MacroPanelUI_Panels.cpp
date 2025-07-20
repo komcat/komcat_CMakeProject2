@@ -143,49 +143,34 @@ void MacroPanelUI::RenderNewMacroSection() {
   }
 }
 
+
 void MacroPanelUI::RenderLoadSaveSection() {
   ImGui::Text("File Operations:");
 
-  // Load button (full width)
+  // Load button - opens file dialog
   if (ImGui::Button("Load", ImVec2(-1, 0))) {
-    // Try to load the test_macro.json file we can see in your screenshot
-    if (m_macroManager) {
-      std::string macroFileName = "macros/test_macro.json";
-      m_macroManager->LoadMacro(macroFileName);
-
-      // After loading, refresh everything
-      RefreshMacroList();
-      RefreshAvailablePrograms();
-
-      // Set the loaded macro as current if it exists
-      if (!m_availableMacros.empty()) {
-        for (int i = 0; i < m_availableMacros.size(); i++) {
-          if (m_availableMacros[i] == "test") {  // "test_macro.json" becomes "test"
-            m_selectedMacroIndex = i;
-            m_currentMacroName = m_availableMacros[i];
-            RefreshProgramItems();
-            break;
-          }
-        }
-      }
-
-      std::cout << "Attempted to load macro: " << macroFileName << std::endl;
-    }
+    m_showLoadDialog = true;
+    NavigateToDirectory("macros"); // Start in macros directory
+    RefreshDirectoryListing();
+    m_selectedFileIndex = -1;
   }
 
-  // Save button (full width, UNDER Load button)
+  // Save button - opens save dialog
   if (ImGui::Button("Save", ImVec2(-1, 0))) {
-    if (!m_currentMacroName.empty() && m_macroManager) {
-      std::string fileName = "macros/" + m_currentMacroName + "_macro.json";
-      m_macroManager->SaveMacro(m_currentMacroName, fileName);
-      std::cout << "Saved macro: " << m_currentMacroName << " to " << fileName << std::endl;
+    if (!m_currentMacroName.empty()) {
+      m_showSaveDialog = true;
+      NavigateToDirectory("macros"); // Start in macros directory
+      RefreshDirectoryListing();
+
+      // Pre-fill with default name
+      std::string defaultName = m_currentMacroName + "_macro.json";
+      strncpy_s(m_saveFileName, sizeof(m_saveFileName), defaultName.c_str(), sizeof(m_saveFileName) - 1);
     }
     else {
       std::cout << "No macro selected to save" << std::endl;
     }
   }
 }
-
 // ============================================================================
 // MIDDLE PANEL - Program Items Table - RENAMED to avoid conflicts
 // ============================================================================
@@ -255,6 +240,7 @@ void MacroPanelUI::RenderExecutionControls() {
   }
 }
 
+// COMPLETE REPLACEMENT for RenderProgramTable() - No columns, no crashes
 void MacroPanelUI::RenderProgramTable() {
   if (m_programItems.empty()) {
     ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No programs in this macro");
@@ -262,32 +248,217 @@ void MacroPanelUI::RenderProgramTable() {
     return;
   }
 
-  // Use proper table columns that fit in the 25% width
-  ImGui::Columns(4, "ProgramColumns", true);
-  ImGui::SetColumnWidth(0, 25);  // ID column - smaller
-  ImGui::SetColumnWidth(1, 25);  // Checkbox column - smaller
-  ImGui::SetColumnWidth(2, 80);  // Program name - smaller to fit 25% width
-  ImGui::SetColumnWidth(3, 70);  // Run/Remove buttons - adjusted
-
-  // Header
-  ImGui::Text("ID");
-  ImGui::NextColumn();
-  ImGui::Text("✓");
-  ImGui::NextColumn();
-  ImGui::Text("Program");
-  ImGui::NextColumn();
-  ImGui::Text("Actions");
-  ImGui::NextColumn();
+  // Simple header without columns
+  ImGui::Text("Programs in Macro:");
   ImGui::Separator();
 
-  // Program rows using column layout
+  // Render each program as a simple row without columns
   for (int i = 0; i < m_programItems.size(); i++) {
-    RenderProgramRowColumns(i, m_programItems[i]);
+    RenderProgramRowSimple(i, m_programItems[i]);
+    if (i < m_programItems.size() - 1) {
+      ImGui::Spacing();
+    }
   }
-
-  ImGui::Columns(1); // Reset columns
 }
 
+// Safe row rendering without columns or complex layouts
+void MacroPanelUI::RenderProgramRowSimple(int rowIndex, MacroProgramItem& item) {
+  ImGui::PushID(rowIndex);
+
+  // Create a horizontal layout manually without columns
+  float windowWidth = ImGui::GetContentRegionAvail().x;
+  float buttonWidth = 30.0f;
+  float checkboxWidth = 20.0f;
+  float idWidth = 25.0f;
+  float spacingWidth = 10.0f;
+
+  // Background highlight for currently executing program
+  if (m_isExecuting && rowIndex == m_currentProgramIndex) {
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImVec2 size = ImVec2(windowWidth, 25.0f);
+    ImGui::GetWindowDrawList()->AddRectFilled(pos,
+      ImVec2(pos.x + size.x, pos.y + size.y),
+      IM_COL32(0, 100, 0, 80)); // Green background
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 1.0f, 0.2f, 1.0f));
+  }
+
+  // Row ID
+  ImGui::Text("%d.", rowIndex + 1);
+
+  // Checkbox (same line)
+  ImGui::SameLine(idWidth);
+  ImGui::Checkbox("##selected", &item.selected);
+
+  // Program name (same line)  
+  ImGui::SameLine(idWidth + checkboxWidth + spacingWidth);
+  std::string displayName = item.name;
+  if (m_isExecuting && rowIndex == m_currentProgramIndex) {
+    displayName = "▶ " + displayName;
+  }
+
+  // Truncate if too long
+  float remainingWidth = windowWidth - (idWidth + checkboxWidth + spacingWidth + 2 * buttonWidth + 2 * spacingWidth);
+  ImVec2 textSize = ImGui::CalcTextSize(displayName.c_str());
+  if (textSize.x > remainingWidth) {
+    // Truncate the display name
+    while (displayName.length() > 3 && ImGui::CalcTextSize((displayName + "..").c_str()).x > remainingWidth) {
+      displayName.pop_back();
+    }
+    displayName += "..";
+  }
+
+  ImGui::Text("%s", displayName.c_str());
+
+  // Run button (same line, positioned from right)
+  float runButtonPos = windowWidth - (2 * buttonWidth + spacingWidth);
+  ImGui::SameLine(runButtonPos);
+
+  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.9f, 1.0f));
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 1.0f, 1.0f));
+  if (ImGui::Button((">>##run" + std::to_string(rowIndex)).c_str(), ImVec2(buttonWidth, 20))) {
+    ExecuteSingleProgram(item.name);
+  }
+  ImGui::PopStyleColor(2);
+
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Run this program only");
+  }
+
+  // Remove button (same line)
+  ImGui::SameLine(windowWidth - buttonWidth);
+
+  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+  if (ImGui::Button(("X##remove" + std::to_string(rowIndex)).c_str(), ImVec2(buttonWidth, 20))) {
+    if (m_macroManager && !m_currentMacroName.empty()) {
+      m_macroManager->RemoveProgramFromMacro(m_currentMacroName, rowIndex);
+      RefreshProgramItems();
+      std::cout << "Removed program '" << item.name << "' from macro" << std::endl;
+    }
+  }
+  ImGui::PopStyleColor(2);
+
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Remove from macro");
+  }
+
+  // Pop the highlighting color if it was set
+  if (m_isExecuting && rowIndex == m_currentProgramIndex) {
+    ImGui::PopStyleColor();
+  }
+
+  ImGui::PopID();
+}
+
+// Alternative: Ultra-simple vertical layout (safest option)
+void MacroPanelUI::RenderProgramTableVertical() {
+  if (m_programItems.empty()) {
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No programs in this macro");
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Add programs from the left panel");
+    return;
+  }
+
+  ImGui::Text("Programs (%zu):", m_programItems.size());
+  ImGui::Separator();
+
+  for (int i = 0; i < m_programItems.size(); i++) {
+    ImGui::PushID(i);
+
+    // Simple vertical layout for each program
+    if (m_isExecuting && i == m_currentProgramIndex) {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 1.0f, 0.2f, 1.0f));
+      ImGui::Text("▶ %d. %s (RUNNING)", i + 1, m_programItems[i].name.c_str());
+      ImGui::PopStyleColor();
+    }
+    else {
+      ImGui::Text("%d. %s", i + 1, m_programItems[i].name.c_str());
+    }
+
+    ImGui::SameLine();
+    ImGui::Checkbox("##selected", &m_programItems[i].selected);
+
+    ImGui::SameLine();
+    if (ImGui::Button("Run")) {
+      ExecuteSingleProgram(m_programItems[i].name);
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Remove")) {
+      if (m_macroManager && !m_currentMacroName.empty()) {
+        m_macroManager->RemoveProgramFromMacro(m_currentMacroName, i);
+        RefreshProgramItems();
+        std::cout << "Removed program '" << m_programItems[i].name << "' from macro" << std::endl;
+        ImGui::PopID();
+        break; // Exit loop since we modified the vector
+      }
+    }
+
+    if (i < m_programItems.size() - 1) {
+      ImGui::Separator();
+    }
+
+    ImGui::PopID();
+  }
+}
+
+// Safer version of the column-based row rendering
+void MacroPanelUI::RenderProgramRowColumnsSafe(int rowIndex, MacroProgramItem& item) {
+  ImGui::PushID(rowIndex);
+
+  // Highlight current executing row
+  if (m_isExecuting && rowIndex == m_currentProgramIndex) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 1.0f, 0.2f, 1.0f));
+  }
+
+  // ID Column - with safety check
+  ImGui::Text("%d", rowIndex + 1);
+  if (ImGui::GetColumnsCount() > 1) ImGui::NextColumn();
+
+  // Checkbox Column
+  ImGui::Checkbox("##selected", &item.selected);
+  if (ImGui::GetColumnsCount() > 1) ImGui::NextColumn();
+
+  // Program Name Column (truncated to fit)
+  std::string displayName = item.name;
+  if (displayName.length() > 8) {
+    displayName = displayName.substr(0, 6) + "..";
+  }
+
+  if (m_isExecuting && rowIndex == m_currentProgramIndex) {
+    ImGui::Text("▶%s", displayName.c_str());
+  }
+  else {
+    ImGui::Text("%s", displayName.c_str());
+  }
+  if (ImGui::GetColumnsCount() > 1) ImGui::NextColumn();
+
+  // Actions Column (Run and Remove buttons)
+  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.9f, 1.0f));
+  if (ImGui::Button((">>##run" + std::to_string(rowIndex)).c_str(), ImVec2(25, 18))) {
+    ExecuteSingleProgram(item.name);
+  }
+  ImGui::PopStyleColor();
+
+  ImGui::SameLine();
+
+  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+  if (ImGui::Button(("X##remove" + std::to_string(rowIndex)).c_str(), ImVec2(20, 18))) {
+    if (m_macroManager && !m_currentMacroName.empty()) {
+      m_macroManager->RemoveProgramFromMacro(m_currentMacroName, rowIndex);
+      RefreshProgramItems();
+      std::cout << "Removed program '" << item.name << "' from macro" << std::endl;
+    }
+  }
+  ImGui::PopStyleColor();
+
+  if (ImGui::GetColumnsCount() > 1) ImGui::NextColumn();
+
+  if (m_isExecuting && rowIndex == m_currentProgramIndex) {
+    ImGui::PopStyleColor();
+  }
+
+  ImGui::PopID();
+}
 // ============================================================================
 // RIGHT PANEL - Properties & Actions - RENAMED to avoid conflicts
 // ============================================================================
