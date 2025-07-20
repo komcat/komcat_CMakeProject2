@@ -12,6 +12,7 @@
 #include "GlobalDataStoreViewerUI.h"
 #include "CLD101xEquipmentUI.h"
 #include "UISMUPanel.h"
+#include "Programming/MachineBlockUI.h"
 
 // Forward declarations
 class MotionConfigManager;
@@ -36,7 +37,16 @@ public:
     DATA_INSTRUMENT,
     RUN_PROGRAM,
     CONFIG,
-    VISION
+    VISION,
+    PROGRAMMING    // Add this new page
+  };
+
+
+  // Add new enum for Programming sub-pages:
+  enum class ProgrammingSubPage {
+    NONE,
+    MACHINE_BLOCK_UI,
+    MACRO_MANAGER
   };
 
   // Update the ManualSubPage enum to include PNEUMATIC:
@@ -137,6 +147,9 @@ private:
   CameraManager* m_cameraManager = nullptr;
   MachineOperations* m_machineOperations = nullptr;
 
+  // Add in private section with other member variables:
+  ProgrammingSubPage currentProgrammingSubPage = ProgrammingSubPage::NONE;
+  std::unique_ptr<MachineBlockUI> m_machineBlockUI;
 
 
   void RenderTopMenuBar();
@@ -151,6 +164,7 @@ private:
   void RenderRunProgramPage();
   void RenderConfigPage();
   void RenderVisionPage();
+  void RenderProgrammingPage();
 
   // Manual sub-pages
   void RenderManualSubPage();
@@ -177,4 +191,11 @@ private:
   void RenderTcpDataManagerPage();
   void RenderCld101xEquipmentPage();
   void RenderSmuManagerPage();
+
+
+  void RenderProgrammingSubPage();
+  void RenderMachineBlockPage();
+
+
+
 };

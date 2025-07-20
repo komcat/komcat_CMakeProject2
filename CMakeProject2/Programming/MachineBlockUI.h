@@ -1,6 +1,6 @@
 ﻿// MachineBlockUI.h - Fixed version
 #pragma once
-
+#include "include/SequenceStep.h"
 #include "imgui.h"
 #include <string>
 #include <vector>

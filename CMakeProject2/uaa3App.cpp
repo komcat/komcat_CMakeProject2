@@ -42,6 +42,9 @@
 #include "io_ops.h"
 #include "vision_ops.h"
 
+bool g_deugMode = false; // Global debug mode flag
+
+
 // Example: Check camera status
 void CheckCameraStatus(CameraManager& cameraManager) {
 	auto statusList = cameraManager.GetAllCameraStatus();
@@ -327,18 +330,37 @@ int main(int argc, char* argv[])
 		logger->LogWarning("TCP Data Manager will not be available");
 	}
 
-	// Initialize CLD101x Manager
+	// FIXED: Initialize CLD101x Manager with proper error handling
 	std::unique_ptr<CLD101xManager> cld101xManager;
 	std::unique_ptr<CLD101xOperations> laserOps;
 
 	cld101xManager = std::make_unique<CLD101xManager>();
-	cld101xManager->Initialize();
-	cld101xManager->ConnectAll();
-	logger->LogInfo("CLD101x system initialized");
 
-	laserOps = std::make_unique<CLD101xOperations>(*cld101xManager);
+	// Try to initialize with error checking
+	if (cld101xManager->Initialize()) {
+		logger->LogInfo("CLD101x Manager initialized successfully");
 
-	// Initialize Keithley 2400 Manager  
+		// Try to connect to laser hardware
+		if (cld101xManager->ConnectAll()) {
+			logger->LogInfo("Successfully connected to CLD101x laser systems");
+			// Only create laserOps after successful connection
+			laserOps = std::make_unique<CLD101xOperations>(*cld101xManager);
+			logger->LogInfo("CLD101x operations module created");
+		}
+		else {
+			logger->LogWarning("Failed to connect to CLD101x laser hardware");
+			logger->LogInfo("Laser operations will be disabled - system will run without laser control");
+			// laserOps remains nullptr - this is safe and intentional
+		}
+	}
+	else {
+		logger->LogError("Failed to initialize CLD101x Manager");
+		logger->LogInfo("Laser operations will be disabled - system will run without laser control");
+		// laserOps remains nullptr - this is safe and intentional
+	}
+
+
+	// FIXED: Initialize Keithley 2400 Manager  
 	std::unique_ptr<Keithley2400Manager> keithleyManager;
 	std::unique_ptr<Keithley2400Operations> smuOps;
 
@@ -346,20 +368,29 @@ int main(int argc, char* argv[])
 
 	if (keithleyManager->Initialize("smu_config.json")) {
 		logger->LogInfo("Keithley2400Manager initialized from config file");
-		smuOps = std::make_unique<Keithley2400Operations>(*keithleyManager);
 
 		if (keithleyManager->ConnectAll()) {
 			logger->LogInfo("Successfully connected to Keithley 2400 servers");
+			// Only create smuOps after successful connection
+			smuOps = std::make_unique<Keithley2400Operations>(*keithleyManager);
 		}
 		else {
-			logger->LogWarning("Failed to connect to some Keithley 2400 servers");
+			logger->LogWarning("Failed to connect to Keithley 2400 servers from config");
+			// Don't create smuOps if connection failed
 		}
 	}
 	else {
-		logger->LogWarning("Failed to load Keithley config, using defaults");
+		logger->LogWarning("Failed to load Keithley config, trying fallback connection");
 		keithleyManager->AddClient("Keithley-Main", "127.0.0.101", 8888);
+
 		if (keithleyManager->ConnectAll()) {
 			logger->LogInfo("Successfully connected to Keithley 2400 servers (fallback)");
+			// Only create smuOps after successful fallback connection
+			smuOps = std::make_unique<Keithley2400Operations>(*keithleyManager);
+		}
+		else {
+			logger->LogInfo("No Keithley hardware available - SMU operations will be disabled");
+			// smuOps remains nullptr - this is intentional and safe
 		}
 	}
 
@@ -380,25 +411,68 @@ int main(int argc, char* argv[])
 		logger->LogInfo("MotionControlLayer initialized");
 	}
 
-	// Machine Operations - KEEP EXISTING CONSTRUCTOR
+	// Machine Operations - SAFE: Works with or without optional hardware
 	std::unique_ptr<MachineOperations> machineOps;
-
-	if (motionControlLayer && piControllerManager &&
-		ioManager && pneumaticManager) {
+	if (motionControlLayer && piControllerManager && ioManager && pneumaticManager) {
 
 		machineOps = std::make_unique<MachineOperations>(
 			*motionControlLayer,
 			*piControllerManager,
 			*ioManager,
 			*pneumaticManager,
-			laserOps.get(),
+			laserOps.get(),      // Safe - can be nullptr
 			cameraManager.get(),
-			smuOps.get()
+			smuOps.get()         // Safe - can be nullptr
 		);
-		logger->LogInfo("Real MachineOperations initialized");
+
+		// Build comprehensive hardware status message
+		std::string hardwareStatus = "Real MachineOperations initialized";
+
+		// Check laser hardware status
+		if (laserOps) {
+			hardwareStatus += " WITH laser support";
+		}
+		else {
+			hardwareStatus += " WITHOUT laser support";
+		}
+
+		// Check SMU hardware status
+		if (smuOps) {
+			hardwareStatus += " and WITH SMU support";
+		}
+		else {
+			hardwareStatus += " and WITHOUT SMU support";
+		}
+
+		// Check camera hardware status (optional additional info)
+		if (cameraManager) {
+			hardwareStatus += " and WITH camera support";
+		}
+		else {
+			hardwareStatus += " and WITHOUT camera support";
+		}
+
+		logger->LogInfo(hardwareStatus);
+
+		// Log individual hardware status details for diagnostics
+		if (!laserOps) {
+			logger->LogInfo("Note: Laser operations disabled - LaserOn(), LaserOff(), SetLaserCurrent(), etc. will return false");
+		}
+
+		if (!smuOps) {
+			logger->LogInfo("Note: SMU operations disabled - SMU_SetOutput(), SMU_ReadVoltage(), etc. will return false");
+		}
+
+		// Log what core systems are working
+		logger->LogInfo("Core systems available: Motion Control, IO Management, Pneumatics");
 	}
 	else {
-		logger->LogWarning("MachineOperations not initialized - missing required components");
+		logger->LogWarning("MachineOperations not initialized - missing required core components");
+		logger->LogInfo("Required core components status:");
+		logger->LogInfo("  - motionControlLayer: " + std::string(motionControlLayer ? "AVAILABLE" : "MISSING"));
+		logger->LogInfo("  - piControllerManager: " + std::string(piControllerManager ? "AVAILABLE" : "MISSING"));
+		logger->LogInfo("  - ioManager: " + std::string(ioManager ? "AVAILABLE" : "MISSING"));
+		logger->LogInfo("  - pneumaticManager: " + std::string(pneumaticManager ? "AVAILABLE" : "MISSING"));
 	}
 
 
@@ -520,110 +594,118 @@ int main(int argc, char* argv[])
 			dataClientManager->UpdateClients();
 		}
 
-		// NEW: Add test window for MotionOps
-		static bool showMotionTest = true;
-		if (showMotionTest && motionOps) {
-			ImGui::Begin("MotionOps Test", &showMotionTest);
 
-			ImGui::Text("Gantry Movement Test");
-			ImGui::Separator();
-
-			// Test buttons for gantry movement
-			if (ImGui::Button("Move X +1mm")) {
-				bool success = motionOps->MoveRelative("gantry-main", "X", 1.0, true, "MainLoop_Test");
-				//bool success = true;
-				if (success) {
-					logger->LogInfo("Successfully moved gantry X +1mm");
-				}
-				else {
-					logger->LogError("Failed to move gantry X +1mm");
-				}
-			}
-
-			ImGui::SameLine();
-			if (ImGui::Button("Move X -1mm")) {
-				bool success = motionOps->MoveRelative("gantry-main", "X", -1.0, true, "MainLoop_Test");
-				if (success) {
-					logger->LogInfo("Successfully moved gantry X -1mm");
-				}
-				else {
-					logger->LogError("Failed to move gantry X -1mm");
-				}
-			}
-
-			if (ImGui::Button("Move Y +1mm")) {
-				bool success = motionOps->MoveRelative("gantry-main", "Y", 1.0, true, "MainLoop_Test");
-				if (success) {
-					logger->LogInfo("Successfully moved gantry Y +1mm");
-				}
-				else {
-					logger->LogError("Failed to move gantry Y +1mm");
-				}
-			}
-
-			ImGui::SameLine();
-			if (ImGui::Button("Move Y -1mm")) {
-				bool success = motionOps->MoveRelative("gantry-main", "Y", -1.0, true, "MainLoop_Test");
-				if (success) {
-					logger->LogInfo("Successfully moved gantry Y -1mm");
-				}
-				else {
-					logger->LogError("Failed to move gantry Y -1mm");
-				}
-			}
-
-			if (ImGui::Button("Move Z +1mm")) {
-				bool success = motionOps->MoveRelative("gantry-main", "Z", 1.0, true, "MainLoop_Test");
-				if (success) {
-					logger->LogInfo("Successfully moved gantry Z +1mm");
-				}
-				else {
-					logger->LogError("Failed to move gantry Z +1mm");
-				}
-			}
-
-			ImGui::SameLine();
-			if (ImGui::Button("Move Z -1mm")) {
-				bool success = motionOps->MoveRelative("gantry-main", "Z", -1.0, true, "MainLoop_Test");
-				if (success) {
-					logger->LogInfo("Successfully moved gantry Z -1mm");
-				}
-				else {
-					logger->LogError("Failed to move gantry Z -1mm");
-				}
-			}
-
-			ImGui::Separator();
-			ImGui::Text("Device Status:");
-
-			if (motionOps->IsDeviceConnected("gantry-main")) {
-				ImGui::TextColored(ImVec4(0, 1, 0, 1), "✓ Gantry Connected");
-			}
-			else {
-				ImGui::TextColored(ImVec4(1, 0, 0, 1), "✗ Gantry Disconnected");
-			}
-
-			if (motionOps->IsDeviceMoving("gantry-main")) {
-				ImGui::TextColored(ImVec4(1, 1, 0, 1), "⚠ Gantry Moving");
-			}
-			else {
-				ImGui::TextColored(ImVec4(0, 1, 0, 1), "✓ Gantry Idle");
-			}
-
-			// Show current position if available
-			PositionStruct currentPos;
-			if (motionOps->GetDeviceCurrentPosition("gantry-main", currentPos)) {
-				ImGui::Text("Current Position:");
-				ImGui::Text("  X: %.3f mm", currentPos.x);
-				ImGui::Text("  Y: %.3f mm", currentPos.y);
-				ImGui::Text("  Z: %.3f mm", currentPos.z);
-			}
-
-			ImGui::End();
-		}
+		
 
 		// Render the main UI
 		uiManager.RenderUI();
+
+#pragma region DebugMode
+		//debug mode smaller ops
+		if (g_deugMode) {
+			// NEW: Add test window for MotionOps
+			static bool showMotionTest = true;
+			if (showMotionTest && motionOps) {
+				ImGui::Begin("MotionOps Test", &showMotionTest);
+
+				ImGui::Text("Gantry Movement Test");
+				ImGui::Separator();
+
+				// Test buttons for gantry movement
+				if (ImGui::Button("Move X +1mm")) {
+					bool success = motionOps->MoveRelative("gantry-main", "X", 1.0, true, "MainLoop_Test");
+					//bool success = true;
+					if (success) {
+						logger->LogInfo("Successfully moved gantry X +1mm");
+					}
+					else {
+						logger->LogError("Failed to move gantry X +1mm");
+					}
+				}
+
+				ImGui::SameLine();
+				if (ImGui::Button("Move X -1mm")) {
+					bool success = motionOps->MoveRelative("gantry-main", "X", -1.0, true, "MainLoop_Test");
+					if (success) {
+						logger->LogInfo("Successfully moved gantry X -1mm");
+					}
+					else {
+						logger->LogError("Failed to move gantry X -1mm");
+					}
+				}
+
+				if (ImGui::Button("Move Y +1mm")) {
+					bool success = motionOps->MoveRelative("gantry-main", "Y", 1.0, true, "MainLoop_Test");
+					if (success) {
+						logger->LogInfo("Successfully moved gantry Y +1mm");
+					}
+					else {
+						logger->LogError("Failed to move gantry Y +1mm");
+					}
+				}
+
+				ImGui::SameLine();
+				if (ImGui::Button("Move Y -1mm")) {
+					bool success = motionOps->MoveRelative("gantry-main", "Y", -1.0, true, "MainLoop_Test");
+					if (success) {
+						logger->LogInfo("Successfully moved gantry Y -1mm");
+					}
+					else {
+						logger->LogError("Failed to move gantry Y -1mm");
+					}
+				}
+
+				if (ImGui::Button("Move Z +1mm")) {
+					bool success = motionOps->MoveRelative("gantry-main", "Z", 1.0, true, "MainLoop_Test");
+					if (success) {
+						logger->LogInfo("Successfully moved gantry Z +1mm");
+					}
+					else {
+						logger->LogError("Failed to move gantry Z +1mm");
+					}
+				}
+
+				ImGui::SameLine();
+				if (ImGui::Button("Move Z -1mm")) {
+					bool success = motionOps->MoveRelative("gantry-main", "Z", -1.0, true, "MainLoop_Test");
+					if (success) {
+						logger->LogInfo("Successfully moved gantry Z -1mm");
+					}
+					else {
+						logger->LogError("Failed to move gantry Z -1mm");
+					}
+				}
+
+				ImGui::Separator();
+				ImGui::Text("Device Status:");
+
+				if (motionOps->IsDeviceConnected("gantry-main")) {
+					ImGui::TextColored(ImVec4(0, 1, 0, 1), "✓ Gantry Connected");
+				}
+				else {
+					ImGui::TextColored(ImVec4(1, 0, 0, 1), "✗ Gantry Disconnected");
+				}
+
+				if (motionOps->IsDeviceMoving("gantry-main")) {
+					ImGui::TextColored(ImVec4(1, 1, 0, 1), "⚠ Gantry Moving");
+				}
+				else {
+					ImGui::TextColored(ImVec4(0, 1, 0, 1), "✓ Gantry Idle");
+				}
+
+				// Show current position if available
+				PositionStruct currentPos;
+				if (motionOps->GetDeviceCurrentPosition("gantry-main", currentPos)) {
+					ImGui::Text("Current Position:");
+					ImGui::Text("  X: %.3f mm", currentPos.x);
+					ImGui::Text("  Y: %.3f mm", currentPos.y);
+					ImGui::Text("  Z: %.3f mm", currentPos.z);
+				}
+
+				ImGui::End();
+			}
+		}
+#pragma endregion
 
 		// Rendering
 		ImGui::Render();

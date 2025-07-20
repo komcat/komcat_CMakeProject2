@@ -45,6 +45,10 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
     // Create UIJogWindow using the single-parameter constructor for mock mode
     m_uiJogWindow = std::make_unique<UIJogWindow>(motionConfigManager);
 
+    // Initialize MachineBlockUI
+    m_machineBlockUI = std::make_unique<MachineBlockUI>();
+
+
     // Initialize TCP Data Manager UI
     m_tcpDataManagerUI = std::make_unique<TCPDataManagerUI>();
     if (!m_tcpDataManagerUI->Initialize()) {
@@ -102,7 +106,8 @@ void MainUIManager::RenderUI() {
 
 // Update RenderBackButton() to handle Data Instrument sub-pages
 
-// 4. UPDATE RenderBackButton() - Change enum reference:
+
+// Update RenderBackButton() to handle Programming sub-pages:
 void MainUIManager::RenderBackButton() {
   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(15, 8));
   ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
@@ -113,11 +118,13 @@ void MainUIManager::RenderBackButton() {
       currentManualSubPage = ManualSubPage::NONE;
     }
     else if (currentDataInstrumentSubPage != DataInstrumentSubPage::NONE) {
-      // This line already works correctly - no change needed
       currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
     }
     else if (currentConfigSubPage != ConfigSubPage::NONE) {
       currentConfigSubPage = ConfigSubPage::NONE;
+    }
+    else if (currentProgrammingSubPage != ProgrammingSubPage::NONE) {
+      currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Handle programming sub-pages
     }
     else {
       currentMainPage = MainPage::MAIN;
@@ -128,7 +135,7 @@ void MainUIManager::RenderBackButton() {
   ImGui::PopStyleVar();
 }
 
-// Update RenderTopMenuBar() to reset Data Instrument sub-page when switching
+// Update RenderTopMenuBar() to add Programming button:
 void MainUIManager::RenderTopMenuBar() {
   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(20, 10));
   ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.3f, 0.8f, 1.0f));
@@ -139,13 +146,16 @@ void MainUIManager::RenderTopMenuBar() {
     currentManualSubPage = ManualSubPage::NONE;
     currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
     currentConfigSubPage = ConfigSubPage::NONE;
+    currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
   }
 
+  ImGui::SameLine();
   if (ImGui::Button("Data & Instrument", ImVec2(150, 40))) {
     currentMainPage = MainPage::DATA_INSTRUMENT;
     currentManualSubPage = ManualSubPage::NONE;
-    currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;  // This line is correct
+    currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
     currentConfigSubPage = ConfigSubPage::NONE;
+    currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
   }
 
   ImGui::SameLine();
@@ -154,6 +164,7 @@ void MainUIManager::RenderTopMenuBar() {
     currentManualSubPage = ManualSubPage::NONE;
     currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
     currentConfigSubPage = ConfigSubPage::NONE;
+    currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
   }
 
   ImGui::SameLine();
@@ -162,6 +173,7 @@ void MainUIManager::RenderTopMenuBar() {
     currentManualSubPage = ManualSubPage::NONE;
     currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
     currentConfigSubPage = ConfigSubPage::NONE;
+    currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
   }
 
   ImGui::SameLine();
@@ -170,11 +182,22 @@ void MainUIManager::RenderTopMenuBar() {
     currentManualSubPage = ManualSubPage::NONE;
     currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
     currentConfigSubPage = ConfigSubPage::NONE;
+    currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Programming", ImVec2(130, 40))) {
+    currentMainPage = MainPage::PROGRAMMING;
+    currentManualSubPage = ManualSubPage::NONE;
+    currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
+    currentConfigSubPage = ConfigSubPage::NONE;
+    currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
   }
 
   ImGui::PopStyleColor(2);
   ImGui::PopStyleVar();
 }
+
 
 // In RenderDateTime method - UPDATE the JOG button logic:
 void MainUIManager::RenderDateTime() {
@@ -336,7 +359,8 @@ void MainUIManager::RenderBreadcrumbs() {
 }
 
 
-// Update RenderMainContent() to handle Data Instrument sub-pages
+
+// Update RenderMainContent() to handle Programming page:
 void MainUIManager::RenderMainContent() {
   ImGui::SetCursorPosY(100);
 
@@ -373,6 +397,15 @@ void MainUIManager::RenderMainContent() {
   else if (currentMainPage == MainPage::VISION) {
     RenderVisionPage();
   }
+  else if (currentMainPage == MainPage::PROGRAMMING) {
+    if (currentProgrammingSubPage == ProgrammingSubPage::NONE) {
+      RenderProgrammingPage();
+    }
+    else {
+      RenderProgrammingSubPage();
+    }
+  }
+
   // Update TCP Data Manager if on that page
   if (currentMainPage == MainPage::DATA_INSTRUMENT &&
     currentDataInstrumentSubPage == DataInstrumentSubPage::TCP_DATA_MANAGER) {
@@ -381,7 +414,6 @@ void MainUIManager::RenderMainContent() {
     }
   }
 }
-
 
 
 
@@ -1007,7 +1039,11 @@ void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
 
 		uiConfigVisualizer->SetMachineOperations(m_machineOperations);
 
-
+    // Pass MachineOperations to MachineBlockUI for real execution
+    if (m_machineBlockUI && machineOps) {
+      m_machineBlockUI->SetMachineOperations(machineOps);
+      std::cout << "MainUIManager: MachineBlockUI updated with MachineOperations" << std::endl;
+    }
     // Optionally, you can create any UI components that depend on MachineOperations here
     // For example, if you had a MachineOperationsUI panel:
     // m_machineOpsPanelUI = std::make_unique<MachineOperationsPanelUI>(*m_machineOperations);
@@ -1043,4 +1079,75 @@ void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
 // Optionally, add a getter method as well
 MachineOperations* MainUIManager::GetMachineOperations() {
   return m_machineOperations;
+}
+
+
+// Implement RenderProgrammingPage():
+void MainUIManager::RenderProgrammingPage() {
+  ImGui::SetWindowFontScale(1.5f);
+  ImGui::Text("Programming");
+  ImGui::SetWindowFontScale(1.0f);
+
+  ImGui::Spacing();
+  ImGui::Text("Select programming tool:");
+  ImGui::Spacing();
+
+  // Two main buttons for Step 2
+  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(20, 15));
+  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+
+  if (ImGui::Button("Block Script", ImVec2(200, 80))) {
+    currentProgrammingSubPage = ProgrammingSubPage::MACHINE_BLOCK_UI;
+  }
+
+  ImGui::SameLine();
+  ImGui::Spacing();
+  ImGui::SameLine();
+
+  if (ImGui::Button("Macro Program", ImVec2(200, 80))) {
+    currentProgrammingSubPage = ProgrammingSubPage::MACRO_MANAGER;
+  }
+
+  ImGui::PopStyleColor(2);
+  ImGui::PopStyleVar();
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  // Add descriptions
+  ImGui::Text("Block Script: Visual block-based programming interface");
+  ImGui::Text("Macro Program: Sequence multiple programs into macros");
+}
+
+
+// Implement RenderProgrammingSubPage():
+void MainUIManager::RenderProgrammingSubPage() {
+  if (currentProgrammingSubPage == ProgrammingSubPage::MACHINE_BLOCK_UI) {
+    RenderMachineBlockPage();
+  }
+  else if (currentProgrammingSubPage == ProgrammingSubPage::MACRO_MANAGER) {
+    // TODO: Step 4 - Implement MacroManager
+    ImGui::SetWindowFontScale(1.5f);
+    ImGui::Text("Macro Manager");
+    ImGui::SetWindowFontScale(1.0f);
+    ImGui::Spacing();
+    ImGui::Text("Macro Manager will be implemented in Step 4");
+  }
+}
+
+// Implement RenderMachineBlockPage():
+void MainUIManager::RenderMachineBlockPage() {
+  if (m_machineBlockUI) {
+    m_machineBlockUI->RenderUI();
+  }
+  else {
+    ImGui::SetWindowFontScale(1.5f);
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Machine Block UI");
+    ImGui::SetWindowFontScale(1.0f);
+    ImGui::Spacing();
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create Machine Block UI");
+    ImGui::Text("Check console for error messages");
+  }
 }
