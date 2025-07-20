@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.12)
 project(CMakeProject2)
 
 # Set C++ standard
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Enable Hot Reload for MSVC compilers if supported.
@@ -461,8 +461,8 @@ add_executable(CMakeProject2
    "include/ops/io_ops.cpp"
    "include/ops/vision_ops.cpp"
    "mainUI/MacroPanelUI.h" 
-   "mainUI/MacroPanelUI.cpp"
-)
+   
+ "mainUI/MacroPanelCameraHandler.h" "mainUI/MacroPanelCameraHandler.cpp" "mainUI/MacroPanelUI_Main.cpp" "mainUI/MacroPanelUI_Panels.cpp" "mainUI/MacroPanelUI_Execution.cpp")
 
 
 
@@ -787,7 +787,7 @@ add_executable(uaa3App
   "include/ops/motion_ops_position_related.cpp" 
   "include/ops/motion_ops.cpp"
   "include/ops/io_ops.cpp"
-  "include/ops/vision_ops.cpp" "mainUI/MacroPanelUI.h" "mainUI/MacroPanelUI.cpp")
+  "include/ops/vision_ops.cpp" "mainUI/MacroPanelUI.h"  "mainUI/MacroPanelCameraHandler.h" "mainUI/MacroPanelCameraHandler.cpp" "mainUI/MacroPanelUI_Main.cpp" "mainUI/MacroPanelUI_Panels.cpp" "mainUI/MacroPanelUI_Execution.cpp")
 
 
 

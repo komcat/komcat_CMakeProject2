@@ -8,9 +8,11 @@
 #include <memory>
 #include <functional>
 
-// Forward declarations
+// Forward declarations ONLY - no includes in header
 class MacroManager;
 class MachineBlockUI;
+class CameraManager;               // Forward declaration only
+class MacroPanelCameraHandler;     // Forward declaration only
 
 struct MacroProgramItem {
   int id;
@@ -22,12 +24,15 @@ struct MacroProgramItem {
 
 class MacroPanelUI {
 public:
-  MacroPanelUI();
-  ~MacroPanelUI() = default;
+  MacroPanelUI(CameraManager* cameraManager = nullptr);  // Updated constructor
+  ~MacroPanelUI(); // Need explicit destructor for std::unique_ptr with forward declaration
 
-  void RenderUI();
+  void RenderMacroPanel();  // RENAMED: was RenderUI() - avoids conflict with MachineBlockUI
   void SetMacroManager(MacroManager* macroManager);
   void SetMachineBlockUI(MachineBlockUI* blockUI);
+
+  // Camera management
+  void SetCameraManager(CameraManager* cameraManager);
 
   // Control functions (remove ToggleWindow and IsVisible since we're embedded)
   void SetVisible(bool visible) { m_showWindow = visible; }
@@ -37,6 +42,9 @@ private:
   bool m_showWindow = true;
   MacroManager* m_macroManager = nullptr;
   MachineBlockUI* m_blockUI = nullptr;
+
+  // Camera handler - clean separation of concerns
+  std::unique_ptr<MacroPanelCameraHandler> m_cameraHandler;
 
   // UI State
   std::string m_currentMacroName;
@@ -51,10 +59,10 @@ private:
   int m_selectedMacroIndex = 0;
   int m_selectedProgramIndex = 0;
 
-  // UI Rendering Methods
-  void RenderLeftPanel();   // 25% - Macro List & Controls
-  void RenderMiddlePanel(); // 50% - Program Items Table
-  void RenderRightPanel();  // 25% - Properties & Actions
+  // UI Rendering Methods - RENAMED to avoid conflicts with MachineBlockUI
+  void RenderMacroLeftPanel();    // 33% - Macro List & Controls
+  void RenderMacroMiddlePanel();  // 25% - Program Items Table
+  void RenderMacroRightPanel();   // 42% - Properties & Actions
 
   // Left Panel Methods
   void RenderMacroList();
@@ -92,4 +100,16 @@ private:
   // Data
   std::vector<std::string> m_availableMacros;
   std::vector<std::string> m_availablePrograms;
+
+  // File dialog state
+  bool m_showLoadDialog = false;
+  std::vector<std::string> m_availableMacroFiles;
+  int m_selectedFileIndex = 0;
+  char m_loadDialogSearchBuffer[256] = "";
+
+  // Add these method declarations:
+  void RenderLoadDialog();
+  void RefreshMacroFiles();
+  std::vector<std::string> GetMacroFilesFromDirectory();
+
 };

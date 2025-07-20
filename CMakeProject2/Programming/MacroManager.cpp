@@ -441,7 +441,6 @@ void MacroManager::LoadMacro(const std::string& filePath) {
           filePath.c_str());
         return;
       }
-
       // Legacy macro file without file_type - allow it but warn
       if (m_debugMode) {
         printf("[MACRO DEBUG] [LOAD] Loading legacy macro file without file_type identifier\n");
@@ -452,12 +451,15 @@ void MacroManager::LoadMacro(const std::string& filePath) {
     macro.name = macroJson["name"];
     macro.description = macroJson["description"];
 
-    // Use macro_id if available, otherwise fall back to id
+    // FIXED: Use macro_id if available, otherwise fall back to id
     if (macroJson.contains("macro_id")) {
-      macro.id = macroJson["macro_id"];
+      macro.id = macroJson["macro_id"].get<int>();  // Explicit conversion
+    }
+    else if (macroJson.contains("id")) {
+      macro.id = macroJson["id"].get<int>();        // Explicit conversion
     }
     else {
-      macro.id = macroJson.contains("id") ? macroJson["id"] : m_nextMacroId++;
+      macro.id = m_nextMacroId++;
     }
 
     if (macroJson.contains("programs")) {
@@ -474,13 +476,11 @@ void MacroManager::LoadMacro(const std::string& filePath) {
     m_macros[macro.name] = macro;
     printf("[MACRO] Loaded macro '%s' (ID: %d) with %zu programs\n",
       macro.name.c_str(), macro.id, macro.programs.size());
-
   }
   catch (const std::exception& e) {
     printf("[MACRO] Error loading macro: %s\n", e.what());
   }
 }
-
 
 // Fix 2: Updated ExecuteSingleProgram() - Use actual filename directly
 void MacroManager::ExecuteSingleProgram(const std::string& programName) {

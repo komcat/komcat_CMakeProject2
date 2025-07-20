@@ -1,6 +1,5 @@
 // script_executor.h
 #pragma once
-
 #include "include/script/script_parser.h"
 #include "include/SequenceStep.h"
 #include "include/machine_operations.h"
@@ -57,12 +56,15 @@ public:
     m_printHandler = handler;
   }
 
-  std::string ScriptExecutor::ReplaceVariables(const std::string& expression);
+  // FIXED: Remove ScriptExecutor:: qualifier in header declaration
+  std::string ReplaceVariables(const std::string& expression);
 
 private:
   // Helper method to trim whitespace from strings
   std::string TrimString(const std::string& str);
+
   bool m_threadRunning;  // Flag to track if thread is active
+
   // Execution methods for control flow
   void ExecuteScriptInternal();
   bool EvaluateCondition(const std::string& condition);
@@ -112,7 +114,6 @@ private:
   // Callbacks
   ExecutionCallback m_executionCallback;
   LogCallback m_logCallback;
-
   UserInteractionManager* m_uiManager = nullptr;
 
   // Print handler

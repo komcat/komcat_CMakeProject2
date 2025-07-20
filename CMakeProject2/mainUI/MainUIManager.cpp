@@ -1047,6 +1047,12 @@ void MainUIManager::SetCameraManager(CameraManager* cameraManager) {
 		uiConfigVisualizer = std::make_unique<UIConfigVisualizer>(motionConfigManager, m_cameraManager);
 		std::cout << "MainUIManager: UIConfigVisualizer updated with Camera Manager" << std::endl;
 	}
+
+	// NEW: Pass camera manager to MacroPanelUI for camera handler
+	if (m_macroPanelUI && m_cameraManager) {
+		m_macroPanelUI->SetCameraManager(m_cameraManager);
+		std::cout << "MainUIManager: MacroPanelUI updated with Camera Manager" << std::endl;
+	}
 }
 
 
@@ -1188,7 +1194,7 @@ void MainUIManager::RenderMachineBlockPage() {
 void MainUIManager::RenderMacroManagerPage() {
 	if (m_macroPanelUI) {
 		// Use the new clean MacroPanelUI instead of MacroManager's RenderUI()
-		m_macroPanelUI->RenderUI();
+		m_macroPanelUI->RenderMacroPanel();
 	}
 	else {
 		ImGui::SetWindowFontScale(1.5f);

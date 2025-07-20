@@ -1059,6 +1059,7 @@ double PylonCamera::GetGain() const {
 }
 
 // Check if auto exposure is enabled
+// Check if auto exposure is enabled
 bool PylonCamera::IsExposureAuto() const {
 	if (!ValidateConnectionForRead()) return false;
 
@@ -1069,7 +1070,8 @@ bool PylonCamera::IsExposureAuto() const {
 		if (camera.GetNodeMap().GetNode("ExposureAuto")) {
 			Pylon::CEnumParameter exposureAuto(camera.GetNodeMap(), "ExposureAuto");
 			if (exposureAuto.IsReadable()) {
-				std::string autoMode = exposureAuto.GetValue();
+				// Fix: Convert Pylon::String_t to std::string using .c_str()
+				std::string autoMode = std::string(exposureAuto.GetValue().c_str());
 				return (autoMode == "Continuous" || autoMode == "Once");
 			}
 		}
@@ -1079,7 +1081,6 @@ bool PylonCamera::IsExposureAuto() const {
 	}
 	return false;
 }
-
 // Check if auto gain is enabled
 bool PylonCamera::IsGainAuto() const {
 	if (!ValidateConnectionForRead()) return false;
@@ -1091,7 +1092,8 @@ bool PylonCamera::IsGainAuto() const {
 		if (camera.GetNodeMap().GetNode("GainAuto")) {
 			Pylon::CEnumParameter gainAuto(camera.GetNodeMap(), "GainAuto");
 			if (gainAuto.IsReadable()) {
-				std::string autoMode = gainAuto.GetValue();
+				// Fix: Convert Pylon::String_t to std::string using .c_str()
+				std::string autoMode = std::string(gainAuto.GetValue().c_str());
 				return (autoMode == "Continuous" || autoMode == "Once");
 			}
 		}
@@ -1101,7 +1103,6 @@ bool PylonCamera::IsGainAuto() const {
 	}
 	return false;
 }
-
 // Apply multiple settings at once (more efficient)
 bool PylonCamera::ApplyExposureSettings(const ExposureSettings& settings) {
 	if (!ValidateConnection()) return false;

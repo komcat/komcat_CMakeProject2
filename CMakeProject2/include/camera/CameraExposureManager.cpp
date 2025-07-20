@@ -1036,7 +1036,8 @@ CameraExposureSettings CameraExposureManager::ReadCurrentCameraSettings(PylonCam
       if (internalCamera.GetNodeMap().GetNode("ExposureMode")) {
         Pylon::CEnumParameter exposureMode(internalCamera.GetNodeMap(), "ExposureMode");
         if (exposureMode.IsReadable()) {
-          std::string modeValue = exposureMode.GetValue();
+          // FIXED: Convert Pylon::String_t to std::string using .c_str()
+          std::string modeValue = std::string(exposureMode.GetValue().c_str());
           std::cout << "Current exposure mode: " << modeValue << std::endl;
         }
       }
@@ -1084,7 +1085,8 @@ CameraExposureSettings CameraExposureManager::ReadCurrentCameraSettings(PylonCam
       if (internalCamera.GetNodeMap().GetNode("GainSelector")) {
         Pylon::CEnumParameter gainSelector(internalCamera.GetNodeMap(), "GainSelector");
         if (gainSelector.IsReadable()) {
-          std::string selectorValue = gainSelector.GetValue();
+          // FIXED: Convert Pylon::String_t to std::string using .c_str()
+          std::string selectorValue = std::string(gainSelector.GetValue().c_str());
           std::cout << "Current gain selector: " << selectorValue << std::endl;
         }
       }
@@ -1120,7 +1122,8 @@ CameraExposureSettings CameraExposureManager::ReadCurrentCameraSettings(PylonCam
       if (internalCamera.GetNodeMap().GetNode("ExposureAuto")) {
         Pylon::CEnumParameter exposureAuto(internalCamera.GetNodeMap(), "ExposureAuto");
         if (exposureAuto.IsReadable()) {
-          std::string autoMode = exposureAuto.GetValue();
+          // FIXED: Convert Pylon::String_t to std::string using .c_str()
+          std::string autoMode = std::string(exposureAuto.GetValue().c_str());
           currentSettings.exposure_auto = (autoMode == "Continuous" || autoMode == "Once");
           std::cout << "Current exposure auto: " << autoMode << std::endl;
         }
@@ -1134,7 +1137,8 @@ CameraExposureSettings CameraExposureManager::ReadCurrentCameraSettings(PylonCam
       if (internalCamera.GetNodeMap().GetNode("GainAuto")) {
         Pylon::CEnumParameter gainAuto(internalCamera.GetNodeMap(), "GainAuto");
         if (gainAuto.IsReadable()) {
-          std::string autoMode = gainAuto.GetValue();
+          // FIXED: Convert Pylon::String_t to std::string using .c_str()
+          std::string autoMode = std::string(gainAuto.GetValue().c_str());
           currentSettings.gain_auto = (autoMode == "Continuous" || autoMode == "Once");
           std::cout << "Current gain auto: " << autoMode << std::endl;
         }
@@ -1180,6 +1184,7 @@ CameraExposureSettings CameraExposureManager::ReadCurrentCameraSettings(PylonCam
 
   return currentSettings;
 }
+
 
 bool CameraExposureManager::VerifySettingsApplied(PylonCamera& camera, const std::string& nodeId) const {
   std::cout << "\n=== VERIFYING CAMERA SETTINGS FOR NODE " << nodeId << " ===" << std::endl;
