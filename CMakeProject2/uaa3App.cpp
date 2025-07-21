@@ -314,6 +314,10 @@ int main(int argc, char* argv[])
 	CameraInfo camera1("main_camera", "Top view camera");
 	cameraManager->AddCamera(camera1);
 
+	// Camera 1 - Auto-connect to first available
+	CameraInfo camera2("test_camera", "Axu view camera");
+	cameraManager->AddCamera(camera2);
+
 	// Initialize all cameras with auto-connect enabled
 	cameraManager->InitializeAllCameras();
 	CheckCameraStatus(*cameraManager);

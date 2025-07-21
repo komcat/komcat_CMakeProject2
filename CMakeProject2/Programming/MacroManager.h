@@ -140,5 +140,8 @@ private:
   bool IsEditMode(const std::string& macroName) const;
   void SetEditMode(const std::string& macroName, bool editMode);
   MacroEditState& GetEditState(const std::string& macroName);
-
+  // NEW: Add these private methods for better callback management
+  void ExecuteProgramSequence(const std::vector<SavedProgram>& programs, size_t currentIndex);
+  void OnProgramComplete(const std::vector<SavedProgram>& programs, size_t currentIndex, bool success);
+  void OnSequenceComplete(bool success);
 };

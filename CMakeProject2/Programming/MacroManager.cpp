@@ -397,19 +397,18 @@ void MacroManager::ExecuteMacro(const std::string& macroName, std::function<void
   executionThread.detach();
 }
 
-// MacroManager.cpp - COMPLETE ExecuteMacroWithIndices method with proper state tracking
+// MacroManager.cpp - FIXED ExecuteMacroWithIndices method
+// Replace your existing ExecuteMacroWithIndices method with this version
 
 void MacroManager::ExecuteMacroWithIndices(const std::string& macroName, const std::vector<int>& indices) {
   auto it = m_macros.find(macroName);
   if (it == m_macros.end()) {
     printf("[MACRO ERROR] Macro '%s' not found\n", macroName.c_str());
-    AddExecutionLog("ERROR: Macro '" + macroName + "' not found");
     return;
   }
 
   if (m_isExecuting) {
     printf("[MACRO ERROR] Another macro is already executing\n");
-    AddExecutionLog("ERROR: Another macro is already executing");
     return;
   }
 
@@ -417,155 +416,88 @@ void MacroManager::ExecuteMacroWithIndices(const std::string& macroName, const s
 
   // Create subset of programs to execute
   std::vector<SavedProgram> programsToExecute;
-  std::vector<int> validIndices; // Keep track of valid indices for state tracking
-
   for (int index : indices) {
     if (index >= 0 && index < macro.programs.size()) {
       programsToExecute.push_back(macro.programs[index]);
-      validIndices.push_back(index);
     }
   }
 
   if (programsToExecute.empty()) {
     printf("[MACRO ERROR] No valid programs selected\n");
-    AddExecutionLog("ERROR: No valid programs selected for execution");
     return;
   }
 
-  // IMPORTANT: Initialize execution state properly
+  // Set execution state
   m_isExecuting = true;
   m_currentMacro = macroName;
-  m_currentProgramIndex = -1;        // Will be set to actual index when program starts
-  m_currentExecutingProgram = "";    // Will be set when program starts
 
   AddExecutionLog("=== EXECUTING SELECTED PROGRAMS ===");
   AddExecutionLog("Macro: " + macroName);
   AddExecutionLog("Programs: " + std::to_string(programsToExecute.size()) + "/" + std::to_string(macro.programs.size()));
 
-  printf("[MACRO] Starting execution of %zu selected programs from macro '%s'\n",
-    programsToExecute.size(), macroName.c_str());
-
-  std::thread executionThread([this, programsToExecute, validIndices, macroName]() {
-    bool success = true;
-
-    for (size_t i = 0; i < programsToExecute.size(); i++) {
-      // Check if execution was stopped
-      if (!m_isExecuting) {
-        AddExecutionLog("STOPPED: Execution stopped by user");
-        success = false;
-        break;
-      }
-
-      const SavedProgram& program = programsToExecute[i];
-
-      // CRITICAL: Set the ORIGINAL index from the macro, not the subset index
-      m_currentProgramIndex = validIndices[i];  // Use original index in the macro
-      m_currentExecutingProgram = program.name;
-
-      AddExecutionLog("Executing " + std::to_string(i + 1) + "/" +
-        std::to_string(programsToExecute.size()) + ": " + program.name +
-        " (position " + std::to_string(m_currentProgramIndex + 1) + " in macro)");
-
-      printf("[MACRO] Executing selected program %zu/%zu: %s (original index %d)\n",
-        i + 1, programsToExecute.size(), program.name.c_str(), m_currentProgramIndex);
-
-      try {
-        // Load and execute the program
-        if (m_blockUI) {
-          m_blockUI->LoadProgram(program.name);
-          AddExecutionLog("Program loaded, starting execution...");
-          std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-          bool programSuccess = false;
-          bool executionComplete = false;
-
-          m_blockUI->ExecuteProgramAsSequence([&programSuccess, &executionComplete, &program, this](bool result) {
-            try {
-              programSuccess = result;
-              executionComplete = true;
-
-              std::string resultMsg = result ?
-                ("Program '" + program.name + "' completed: SUCCESS") :
-                ("Program '" + program.name + "' completed: FAILED");
-
-              AddExecutionLog(resultMsg);
-              printf("[MACRO] %s\n", resultMsg.c_str());
-            }
-            catch (...) {
-              // Continue execution even if assignment fails
-              programSuccess = false;
-              executionComplete = true;
-              AddExecutionLog("ERROR: Exception in program completion callback");
-            }
-          });
-
-          // Wait for completion with timeout
-          int timeout = 0;
-          const int maxTimeout = 60000; // 60 seconds timeout
-          while (!executionComplete && timeout < maxTimeout && m_isExecuting) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            timeout += 100;
-          }
-
-          // Check results
-          if (!m_isExecuting) {
-            AddExecutionLog("STOPPED: Execution was stopped during program execution");
-            success = false;
-            break;
-          }
-          else if (timeout >= maxTimeout) {
-            AddExecutionLog("ERROR: Program '" + program.name + "' timed out");
-            success = false;
-            break;
-          }
-          else if (!executionComplete) {
-            AddExecutionLog("ERROR: Program '" + program.name + "' did not complete");
-            success = false;
-            break;
-          }
-          else if (!programSuccess) {
-            AddExecutionLog("ERROR: Program '" + program.name + "' failed");
-            success = false;
-            break;
-          }
-        }
-        else {
-          AddExecutionLog("ERROR: BlockUI not available");
-          success = false;
-          break;
-        }
-      }
-      catch (const std::exception& e) {
-        AddExecutionLog("ERROR: Exception in program '" + program.name + "': " + e.what());
-        success = false;
-        break;
-      }
-      catch (...) {
-        AddExecutionLog("ERROR: Unknown exception in program '" + program.name + "'");
-        success = false;
-        break;
-      }
-
-      // Small delay between programs
-      if (i < programsToExecute.size() - 1 && m_isExecuting) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-      }
-    }
-
-    // CRITICAL: Reset execution state when done
-    m_isExecuting = false;
-    m_currentMacro = "";
-    m_currentProgramIndex = -1;
-    m_currentExecutingProgram = "";
-
-    std::string result = success ? "SUCCESS" : "FAILED";
-    AddExecutionLog("=== EXECUTION " + result + " ===");
-    printf("[MACRO] Selected programs execution completed: %s\n", result.c_str());
-  });
-
-  executionThread.detach();
+  // FIXED: Use member function instead of complex lambda
+  ExecuteProgramSequence(programsToExecute, 0);
 }
 
+// NEW: Add this method to MacroManager class
+void MacroManager::ExecuteProgramSequence(const std::vector<SavedProgram>& programs, size_t currentIndex) {
+  if (currentIndex >= programs.size() || !m_isExecuting) {
+    // Execution complete or stopped
+    OnSequenceComplete(currentIndex == programs.size());
+    return;
+  }
+
+  const SavedProgram& program = programs[currentIndex];
+
+  AddExecutionLog("Executing " + std::to_string(currentIndex + 1) + "/" +
+    std::to_string(programs.size()) + ": " + program.name);
+
+  try {
+    m_blockUI->LoadProgram(program.name);
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+    // FIXED: Use simple member function callback instead of complex lambda
+    m_blockUI->ExecuteProgramAsSequence([this, programs, currentIndex](bool success) {
+      OnProgramComplete(programs, currentIndex, success);
+    });
+
+  }
+  catch (const std::exception& e) {
+    printf("[MACRO ERROR] Exception during program execution: %s\n", e.what());
+    AddExecutionLog("ERROR: " + std::string(e.what()));
+    OnSequenceComplete(false);
+  }
+}
+
+// NEW: Add this method to MacroManager class
+void MacroManager::OnProgramComplete(const std::vector<SavedProgram>& programs, size_t currentIndex, bool success) {
+  if (!success) {
+    AddExecutionLog("FAILED: " + programs[currentIndex].name);
+    OnSequenceComplete(false);
+    return;
+  }
+
+  AddExecutionLog("SUCCESS: " + programs[currentIndex].name);
+
+  // Continue with next program
+  ExecuteProgramSequence(programs, currentIndex + 1);
+}
+
+// NEW: Add this method to MacroManager class  
+void MacroManager::OnSequenceComplete(bool success) {
+  m_isExecuting = false;
+
+  if (success) {
+    AddExecutionLog("=== MACRO EXECUTION COMPLETED SUCCESSFULLY ===");
+    printf("[MACRO SUCCESS] Macro '%s' completed successfully\n", m_currentMacro.c_str());
+  }
+  else {
+    AddExecutionLog("=== MACRO EXECUTION FAILED ===");
+    printf("[MACRO FAILED] Macro '%s' execution failed\n", m_currentMacro.c_str());
+  }
+
+  m_currentMacro.clear();
+}
   // MacroManager.cpp - ADD this implementation
 
   MacroManager::ExecutionProgress MacroManager::GetExecutionProgress() const {
