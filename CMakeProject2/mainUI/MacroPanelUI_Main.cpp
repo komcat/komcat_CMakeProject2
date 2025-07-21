@@ -19,6 +19,15 @@ MacroPanelUI::MacroPanelUI(CameraManager* cameraManager) {
 
   // Initialize camera handler
   m_cameraHandler = std::make_unique<MacroPanelCameraHandler>(cameraManager);
+
+  // NEW: Initialize card renderer
+  m_cardRenderer = std::make_unique<ProgramCardRenderer>();
+
+  // Configure card renderer
+  m_cardRenderer->SetCardHeight(85.0f);
+  m_cardRenderer->SetCardSpacing(12.0f);
+  m_cardRenderer->SetShowIcons(true);
+  m_cardRenderer->SetShowConnectors(true);
 }
 
 // Add explicit destructor for std::unique_ptr with forward declaration

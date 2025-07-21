@@ -124,6 +124,7 @@ void MacroPanelUI::RenderLoadSaveSection() {
 // MIDDLE PANEL - Program Sequence & Execution Controls
 // ============================================================================
 
+
 void MacroPanelUI::RenderMacroMiddlePanel() {
   ImGui::Text("Program Sequence");
   ImGui::Separator();
@@ -137,10 +138,103 @@ void MacroPanelUI::RenderMacroMiddlePanel() {
   }
 
   ImGui::Spacing();
-  RenderExecutionControls();
+
+  // NEW: Use enhanced execution controls
+  RenderEnhancedExecutionControls();
+
   ImGui::Spacing();
-  RenderProgramTable();
+  ImGui::Separator();
+
+  // NEW: Use card-based program display
+  RenderProgramCards();
 }
+
+// NEW METHOD: Enhanced execution controls using card renderer
+void MacroPanelUI::RenderEnhancedExecutionControls() {
+  // Sync state first
+  SyncExecutionState();
+
+  bool macroManagerExecuting = m_macroManager ? m_macroManager->IsExecuting() : false;
+
+  if (m_cardRenderer) {
+    m_cardRenderer->RenderEnhancedExecutionControls(
+      macroManagerExecuting,
+      m_isPaused,
+      [this]() { PlayExecution(); },      // onPlay
+      [this]() { StopExecution(); },      // onStop  
+      [this]() { PauseExecution(); }      // onPause
+    );
+  }
+
+  // Execution status text
+  ImGui::Spacing();
+  if (macroManagerExecuting) {
+    if (m_currentProgramIndex >= 0 && m_currentProgramIndex < m_programItems.size()) {
+      ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f),
+        "Executing: %s (%d/%zu)",
+        m_programItems[m_currentProgramIndex].name.c_str(),
+        m_currentProgramIndex + 1,
+        m_programItems.size());
+    }
+    else {
+      ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Executing...");
+    }
+  }
+  else if (m_isPaused) {
+    ImGui::TextColored(ImVec4(0.8f, 0.6f, 0.2f, 1.0f), "Paused");
+  }
+  else {
+    int selectedCount = 0;
+    for (const auto& item : m_programItems) {
+      if (item.selected) selectedCount++;
+    }
+
+    if (selectedCount > 0) {
+      ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f),
+        "Ready to execute %d programs", selectedCount);
+    }
+    else {
+      ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Ready");
+    }
+  }
+}
+
+void MacroPanelUI::RenderProgramCards() {
+  if (m_cardRenderer) {
+    // CRITICAL: Sync state before rendering
+    SyncExecutionState();
+
+    bool macroManagerExecuting = m_macroManager ? m_macroManager->IsExecuting() : false;
+
+    m_cardRenderer->RenderProgramCards(
+      m_programItems,
+      m_currentProgramIndex,  // Now correctly synchronized
+      macroManagerExecuting,
+      [this](const std::string& programName) {
+      ExecuteSingleProgram(programName);
+    },
+      [this](int index) {
+      RemoveProgramFromMacro(index);
+    }
+    );
+  }
+}
+
+
+// NEW METHOD: Handle program removal with proper cleanup
+void MacroPanelUI::RemoveProgramFromMacro(int index) {
+  if (m_macroManager && !m_currentMacroName.empty() &&
+    index >= 0 && index < m_programItems.size()) {
+
+    std::string programName = m_programItems[index].name;
+    m_macroManager->RemoveProgramFromMacro(m_currentMacroName, index);
+    RefreshProgramItems();
+
+    std::cout << "Removed program '" << programName << "' from macro '"
+      << m_currentMacroName << "'" << std::endl;
+  }
+}
+
 
 void MacroPanelUI::RenderProgramTable() {
   if (m_programItems.empty()) {

@@ -462,7 +462,7 @@ add_executable(CMakeProject2
    "include/ops/vision_ops.cpp"
    "mainUI/MacroPanelUI.h" 
    
- "mainUI/MacroPanelCameraHandler.h" "mainUI/MacroPanelCameraHandler.cpp" "mainUI/MacroPanelUI_Main.cpp" "mainUI/MacroPanelUI_Panels.cpp" "mainUI/MacroPanelUI_Execution.cpp" "mainUI/MacroPanelUI_FileDialog.cpp")
+ "mainUI/MacroPanelCameraHandler.h" "mainUI/MacroPanelCameraHandler.cpp" "mainUI/MacroPanelUI_Main.cpp" "mainUI/MacroPanelUI_Panels.cpp" "mainUI/MacroPanelUI_Execution.cpp" "mainUI/MacroPanelUI_FileDialog.cpp" "mainUI/ProgramCardRenderer.h" "mainUI/ProgramCardRenderer.cpp")
 
 
 
@@ -787,7 +787,7 @@ add_executable(uaa3App
   "include/ops/motion_ops_position_related.cpp" 
   "include/ops/motion_ops.cpp"
   "include/ops/io_ops.cpp"
-  "include/ops/vision_ops.cpp" "mainUI/MacroPanelUI.h"  "mainUI/MacroPanelCameraHandler.h" "mainUI/MacroPanelCameraHandler.cpp" "mainUI/MacroPanelUI_Main.cpp" "mainUI/MacroPanelUI_Panels.cpp" "mainUI/MacroPanelUI_Execution.cpp" "mainUI/MacroPanelUI_FileDialog.cpp")
+  "include/ops/vision_ops.cpp" "mainUI/MacroPanelUI.h"  "mainUI/MacroPanelCameraHandler.h" "mainUI/MacroPanelCameraHandler.cpp" "mainUI/MacroPanelUI_Main.cpp" "mainUI/MacroPanelUI_Panels.cpp" "mainUI/MacroPanelUI_Execution.cpp" "mainUI/MacroPanelUI_FileDialog.cpp" "mainUI/ProgramCardRenderer.h" "mainUI/ProgramCardRenderer.cpp")
 
 
 

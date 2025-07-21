@@ -73,6 +73,22 @@ public:
   void ExecuteMacroWithIndices(const std::string& macroName, const std::vector<int>& indices);
 
 
+  // NEW: Execution state getters for UI synchronization
+  int GetCurrentProgramIndex() const { return m_currentProgramIndex; }
+  std::string GetCurrentExecutingProgram() const { return m_currentExecutingProgram; }
+
+  // NEW: Get detailed execution progress information
+  struct ExecutionProgress {
+    bool isExecuting = false;
+    std::string currentMacro;
+    std::string currentProgram;
+    int currentIndex = -1;
+    int totalPrograms = 0;
+    bool stopRequested = false;
+  };
+
+  ExecutionProgress GetExecutionProgress() const;
+
 private:
   bool m_showWindow = false;
   std::map<std::string, SavedProgram> m_savedPrograms;

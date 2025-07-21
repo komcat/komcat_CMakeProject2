@@ -377,24 +377,92 @@ void MacroPanelUI::RenderMacroVisualization(ImDrawList* drawList, ImVec2 canvasP
 // NEW METHOD: SYNC UI STATE WITH MACROMANAGER
 // ============================================================================
 
+
+// MacroPanelUI_Execution.cpp - OPTIMIZED SyncExecutionState with reduced debug output
+
 void MacroPanelUI::SyncExecutionState() {
   if (!m_macroManager) return;
 
+  // Get current execution state from MacroManager
   bool macroManagerExecuting = m_macroManager->IsExecuting();
   std::string currentMacro = m_macroManager->GetCurrentMacro();
+  std::string currentProgram = m_macroManager->GetCurrentExecutingProgram();
+  int currentIndex = m_macroManager->GetCurrentProgramIndex();
 
-  // Check if MacroManager finished execution
+  // Check if execution just finished
   if (m_isExecuting && !macroManagerExecuting) {
     // Execution completed - reset UI state
     m_isExecuting = false;
     m_currentProgramIndex = -1;
-    std::cout << "Execution completed - UI state synchronized" << std::endl;
+    std::cout << "SYNC: Execution completed - UI state reset" << std::endl;
+    return;
   }
+
+  // Store previous state for change detection
+  static int lastDisplayedIndex = -2;  // Use -2 to ensure first state change is logged
+  static std::string lastDisplayedProgram = "";
+
+  // Update UI execution state
+  bool wasExecuting = m_isExecuting;
+  m_isExecuting = macroManagerExecuting;
 
   // Update current program index if we're executing the same macro
   if (macroManagerExecuting && currentMacro == m_currentMacroName) {
-    m_isExecuting = true;
-    // You could get the current program index from MacroManager if needed
-    // For now, we'll rely on the existing logic
+
+    int newIndex = -1;
+
+    // Method 1: Find program by name (most reliable)
+    if (!currentProgram.empty()) {
+      for (int i = 0; i < m_programItems.size(); i++) {
+        if (m_programItems[i].name == currentProgram) {
+          newIndex = i;
+          break;
+        }
+      }
+
+      // Method 2: Fallback to MacroManager's index if name not found
+      if (newIndex == -1 && currentIndex >= 0 && currentIndex < m_programItems.size()) {
+        newIndex = currentIndex;
+      }
+    }
+    else if (currentIndex >= 0 && currentIndex < m_programItems.size()) {
+      // Method 3: Use index directly if no program name
+      newIndex = currentIndex;
+    }
+
+    // Update index
+    m_currentProgramIndex = newIndex;
+
+  }
+  else if (!macroManagerExecuting) {
+    // Not executing - clear the index
+    m_currentProgramIndex = -1;
+  }
+  else if (macroManagerExecuting && currentMacro != m_currentMacroName) {
+    // Executing different macro - clear index
+    m_currentProgramIndex = -1;
+  }
+
+  // OPTIMIZED: Only log when state actually changes
+  bool stateChanged = (m_currentProgramIndex != lastDisplayedIndex) ||
+    (currentProgram != lastDisplayedProgram) ||
+    (m_isExecuting != wasExecuting);
+
+  if (stateChanged) {
+    if (macroManagerExecuting && m_currentProgramIndex >= 0) {
+      std::cout << "SYNC: Now executing '" << currentProgram
+        << "' at index " << m_currentProgramIndex << std::endl;
+    }
+    else if (!macroManagerExecuting && wasExecuting) {
+      std::cout << "SYNC: Execution stopped" << std::endl;
+    }
+    else if (macroManagerExecuting && m_currentProgramIndex == -1) {
+      std::cout << "SYNC: WARNING - Cannot sync program '" << currentProgram
+        << "' (index " << currentIndex << ")" << std::endl;
+    }
+
+    // Update tracking variables
+    lastDisplayedIndex = m_currentProgramIndex;
+    lastDisplayedProgram = currentProgram;
   }
 }

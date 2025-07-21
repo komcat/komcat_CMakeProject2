@@ -9,7 +9,7 @@
 #include <functional>
 #include <filesystem>
 #include "Programming/UserPromptUI.h"
-
+#include "ProgramCardRenderer.h"
 // Forward declarations ONLY - no includes in header
 class MacroManager;
 class MachineBlockUI;
@@ -45,7 +45,7 @@ private:
   MachineBlockUI* m_blockUI = nullptr;
   UserPromptUI* m_promptUI = nullptr;
   std::unique_ptr<MacroPanelCameraHandler> m_cameraHandler;
-
+  std::unique_ptr<ProgramCardRenderer> m_cardRenderer;
   // UI State
   std::string m_currentMacroName;
   std::vector<MacroProgramItem> m_programItems;
@@ -122,4 +122,7 @@ private:
   // NEW METHOD: Synchronize UI state with MacroManager
   void SyncExecutionState();
 
+  void RenderEnhancedExecutionControls();
+  void RenderProgramCards();
+  void RemoveProgramFromMacro(int index);
 };
