@@ -3653,3 +3653,21 @@ extern "C" {
   }
 
 }
+
+// In machine_operations.cpp
+void MachineOperations::SetLaserOperations(CLD101xOperations* ops) {
+  m_laserOps = ops;
+  if (m_laserOps) {
+    m_logger->LogInfo("MachineOperations: Laser operations module NOW CONNECTED!");
+  }
+}
+
+void MachineOperations::SetSMUOperations(Keithley2400Operations* ops) {
+  m_smuOps = ops;
+  if (m_smuOps) {
+    m_logger->LogInfo("MachineOperations: SMU operations module NOW CONNECTED!");
+  }
+  else {
+    m_logger->LogInfo("MachineOperations: SMU operations module set to NULL");
+  }
+}

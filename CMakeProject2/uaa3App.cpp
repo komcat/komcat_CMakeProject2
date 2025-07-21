@@ -461,6 +461,7 @@ int main(int argc, char* argv[])
 		// Check laser hardware status
 		if (laserOps) {
 			hardwareStatus += " WITH laser support";
+			machineOps->SetLaserOperations(laserOps.get());
 		}
 		else {
 			hardwareStatus += " WITHOUT laser support";
@@ -469,6 +470,7 @@ int main(int argc, char* argv[])
 		// Check SMU hardware status
 		if (smuOps) {
 			hardwareStatus += " and WITH SMU support";
+			machineOps->SetSMUOperations(smuOps.get());
 		}
 		else {
 			hardwareStatus += " and WITHOUT SMU support";

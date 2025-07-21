@@ -428,6 +428,11 @@ public:
 	bool StopAllOperations();
 	bool IsOperationRunning() const;
 
+	// In machine_operations.h
+	void SetLaserOperations(CLD101xOperations* ops);
+	// Add this method declaration
+	void SetSMUOperations(Keithley2400Operations* ops);
+
 private:
 	Logger* m_logger;
 	bool m_enableDebug = false;
