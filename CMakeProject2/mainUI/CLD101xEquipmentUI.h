@@ -40,7 +40,7 @@ private:
   std::string m_name = "CLD101x Equipment Control";
 
   // Connection settings
-  char m_ipAddress[64] = "127.0.0.11";
+  char m_ipAddress[64] = "127.0.0.88";
   int m_port = 65432;
 
   // Control settings

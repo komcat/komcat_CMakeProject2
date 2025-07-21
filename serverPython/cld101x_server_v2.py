@@ -49,7 +49,7 @@ class CLD101xServerGUI:
         self.is_minimized_to_tray = False
         
         # Server settings
-        self.host = tk.StringVar(value="127.0.0.11")
+        self.host = tk.StringVar(value="127.0.0.88")
         self.port = tk.IntVar(value=65432)
         self.visa_resource = tk.StringVar(value="USB0::0x1313::0x804F::M00930341::INSTR")
         

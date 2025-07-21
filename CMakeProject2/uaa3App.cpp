@@ -336,27 +336,57 @@ int main(int argc, char* argv[])
 
 	cld101xManager = std::make_unique<CLD101xManager>();
 
-	// Try to initialize with error checking
-	if (cld101xManager->Initialize()) {
-		logger->LogInfo("CLD101x Manager initialized successfully");
+	//// Try to initialize with error checking
+	//if (cld101xManager->Initialize()) {
+	//	logger->LogInfo("CLD101x Manager initialized successfully");
 
-		// Try to connect to laser hardware
+	//	// Try to connect to laser hardware
+	//	if (cld101xManager->ConnectAll()) {
+	//		logger->LogInfo("Successfully connected to CLD101x laser systems");
+	//		// Only create laserOps after successful connection
+	//		laserOps = std::make_unique<CLD101xOperations>(*cld101xManager);
+	//		logger->LogInfo("CLD101x operations module created");
+	//	}
+	//	else {
+	//		logger->LogWarning("Failed to connect to CLD101x laser hardware");
+	//		logger->LogInfo("Laser operations will be disabled - system will run without laser control");
+	//		// laserOps remains nullptr - this is safe and intentional
+	//	}
+	//}
+	//else {
+	//	logger->LogError("Failed to initialize CLD101x Manager");
+	//	logger->LogInfo("Laser operations will be disabled - system will run without laser control");
+	//	// laserOps remains nullptr - this is safe and intentional
+	//}
+
+	// After creating cld101xManager, before creating MachineOperations:
+// After creating cld101xManager, before creating MachineOperations:
+	if (cld101xManager) {
+		logger->LogInfo("=== MANUAL CLD101x CONNECTION ATTEMPT ===");
+
+		// Manually add the client that the UI successfully connects to
+		logger->LogInfo("Adding CLD101x client: 127.0.0.88:65432");
+		cld101xManager->AddClient("CLD101x", "127.0.0.88", 65432);
+
+		logger->LogInfo("Attempting ConnectAll()...");
 		if (cld101xManager->ConnectAll()) {
-			logger->LogInfo("Successfully connected to CLD101x laser systems");
-			// Only create laserOps after successful connection
+			logger->LogInfo("ConnectAll() returned SUCCESS");
+			logger->LogInfo("Creating CLD101xOperations...");
 			laserOps = std::make_unique<CLD101xOperations>(*cld101xManager);
-			logger->LogInfo("CLD101x operations module created");
+
+			if (laserOps) {
+				logger->LogInfo("LaserOps successfully created!");
+			}
+			else {
+				logger->LogError("LaserOps creation FAILED!");
+			}
 		}
 		else {
-			logger->LogWarning("Failed to connect to CLD101x laser hardware");
-			logger->LogInfo("Laser operations will be disabled - system will run without laser control");
-			// laserOps remains nullptr - this is safe and intentional
+			logger->LogError("ConnectAll() returned FAILURE");
 		}
-	}
-	else {
-		logger->LogError("Failed to initialize CLD101x Manager");
-		logger->LogInfo("Laser operations will be disabled - system will run without laser control");
-		// laserOps remains nullptr - this is safe and intentional
+
+		logger->LogInfo("Final laserOps status: " + std::string(laserOps ? "AVAILABLE" : "NULL"));
+		logger->LogInfo("=== END MANUAL CONNECTION ===");
 	}
 
 
