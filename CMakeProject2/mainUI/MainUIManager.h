@@ -105,7 +105,8 @@ private:
   ManualSubPage currentManualSubPage = ManualSubPage::NONE;
   ConfigSubPage currentConfigSubPage = ConfigSubPage::NONE;
   DataInstrumentSubPage currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
-
+  // ADD THIS LINE with other UI components:
+  std::unique_ptr<UserPromptUI> m_promptUI;
 
   // Reference to the config manager (owned by main)
   MotionConfigManager& motionConfigManager;

@@ -15,7 +15,7 @@
 #include "UIPneumaticPanel.h"
 // Add this include at the top with other includes:
 #include "UISMUPanel.h"
-
+#include "UserPromptUI.h"  // ADD THIS LINE
 
 #include "include/data/global_data_store.h" // Add this with your other includes
 #include "include/machine_operations.h"  // Add this include at the top
@@ -45,15 +45,18 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 	// Create UIJogWindow using the single-parameter constructor for mock mode
 	m_uiJogWindow = std::make_unique<UIJogWindow>(motionConfigManager);
 
+	// STEP 1: Initialize UserPromptUI FIRST
+	m_promptUI = std::make_unique<UserPromptUI>();
 
-	// Initialize MachineBlockUI (should already exist from Step 3)
+	// STEP 2: Initialize MachineBlockUI
 	m_machineBlockUI = std::make_unique<MachineBlockUI>();
 
-	// Initialize MacroManager (should already exist from Step 4)
+	// STEP 3: Initialize MacroManager
 	m_macroManager = std::make_unique<MacroManager>();
 
-	// NEW: Initialize MacroPanelUI
+	// STEP 4: Initialize MacroPanelUI and connect prompt UI
 	m_macroPanelUI = std::make_unique<MacroPanelUI>();
+	m_macroPanelUI->SetPromptUI(m_promptUI.get()); // NOW THIS WORKS!
 
 	// Connect MacroManager to MachineBlockUI
 	if (m_macroManager && m_machineBlockUI) {
@@ -61,12 +64,17 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 		std::cout << "MainUIManager: MacroManager connected to MachineBlockUI" << std::endl;
 	}
 
-	// NEW: Connect MacroPanelUI to MacroManager and MachineBlockUI
+	// Connect MacroPanelUI to MacroManager and MachineBlockUI
 	if (m_macroPanelUI && m_macroManager && m_machineBlockUI) {
 		m_macroPanelUI->SetMacroManager(m_macroManager.get());
 		m_macroPanelUI->SetMachineBlockUI(m_machineBlockUI.get());
 		std::cout << "MainUIManager: MacroPanelUI connected to MacroManager and MachineBlockUI" << std::endl;
 	}
+
+	// STEP 5: Connect prompt UI to MachineBlockUI as well (if it has this method)
+	// if (m_machineBlockUI) {
+	//     m_machineBlockUI->SetPromptUI(m_promptUI.get());
+	// }
 
 	// Initialize TCP Data Manager UI
 	m_tcpDataManagerUI = std::make_unique<TCPDataManagerUI>();
@@ -74,6 +82,7 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 		// Log error but continue - the UI will show the error state
 		std::cout << "Warning: TCP Data Manager failed to initialize" << std::endl;
 	}
+
 	// Initialize Global Data Store Viewer UI
 	m_globalDataStoreViewerUI = std::make_unique<GlobalDataStoreViewerUI>();
 
@@ -85,6 +94,7 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 		m_cld101xEquipmentUI = nullptr;
 	}
 }
+
 
 MainUIManager::~MainUIManager() = default;
 

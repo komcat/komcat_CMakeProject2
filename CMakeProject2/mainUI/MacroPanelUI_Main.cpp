@@ -49,7 +49,7 @@ void MacroPanelUI::RenderMacroPanel() {
   // Get content region for 3-column layout with new proportions
   ImVec2 contentRegion = ImGui::GetContentRegionAvail();
   float leftWidth = contentRegion.x * 0.15f;   // 33% for left panel (was 25%)
-  float middleWidth = contentRegion.x * 0.40f; // 25% for middle panel (was 50%) 
+  float middleWidth = contentRegion.x * 0.25f; // 25% for middle panel (was 50%) 
   float rightWidth = contentRegion.x * 0.55f;  // 42% for right panel (was 25%)
 
   // === LEFT PANEL ===
@@ -74,6 +74,11 @@ void MacroPanelUI::RenderMacroPanel() {
 
   // === RENDER FILE DIALOGS (Modal windows) ===
   RenderFileDialog();
+
+  // QUICK TEST: Render prompts through MachineBlockUI
+  if (m_blockUI) {
+    m_blockUI->RenderFeedbackAndPrompts();
+  }
 }
 
 // ============================================================================
@@ -118,6 +123,13 @@ std::vector<std::string> MacroPanelUI::GetAvailablePrograms() {
     return m_macroManager->GetProgramNames();
   }
   return {};
+}
+
+void MacroPanelUI::RenderPrompts() {
+  // Render prompt UI if available
+  if (m_promptUI) {
+    m_promptUI->Render();
+  }
 }
 
 

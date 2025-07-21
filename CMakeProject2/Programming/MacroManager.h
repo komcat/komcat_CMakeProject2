@@ -70,6 +70,9 @@ public:
   void AddExecutionLog(const std::string& message);
   std::string GetCurrentTimeString();
   void ClearExecutionLog();
+  void ExecuteMacroWithIndices(const std::string& macroName, const std::vector<int>& indices);
+
+
 private:
   bool m_showWindow = false;
   std::map<std::string, SavedProgram> m_savedPrograms;
@@ -111,7 +114,6 @@ private:
 
 
   void ProcessPendingLogs();
-  void ExecuteMacroWithIndices(const std::string& macroName, const std::vector<int>& indices);
 
   // NEW: Edit mode state for each macro
   std::map<std::string, bool> m_editModeStates;

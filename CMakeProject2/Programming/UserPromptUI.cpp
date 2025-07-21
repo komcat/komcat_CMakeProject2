@@ -60,25 +60,47 @@ UserPromptUI::~UserPromptUI() {
 
 
 void UserPromptUI::Render() {
+  //printf("[DEBUG] Render() called - m_isVisible=%d, m_isPromptActive=%d, m_promptRequested=%d\n",    m_isVisible, m_isPromptActive, m_promptRequested);
+
   // Check if we need to open a new prompt (thread-safe)
   {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_promptRequested && !m_isPromptActive) {
+      //printf("[DEBUG] Activating prompt in Render()\n");
       m_isPromptActive = true;
       m_promptRequested = false;
     }
   }
 
-  if (!m_isVisible || !m_isPromptActive) return;
+  //printf("[DEBUG] After check - m_isVisible=%d, m_isPromptActive=%d\n", m_isVisible, m_isPromptActive);
+
+  if (!m_isVisible || !m_isPromptActive) {
+    //printf("[DEBUG] Early return from Render()\n");
+    return;
+  }
+
+  //printf("[DEBUG] Proceeding to render ImGui window\n");
+
+  // Force focus on the next window if prompt just became active
+  static bool needsFocus = false;
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_isPromptActive && !needsFocus) {
+      needsFocus = true;
+      ImGui::SetNextWindowFocus();
+    }
+  }
 
   // UPDATED: Center window only when it first appears, then let user move it
   ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-  ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f)); // Changed to Appearing
-  ImGui::SetNextWindowSize(ImVec2(600, 350), ImGuiCond_Appearing);          // Changed to Appearing
+  ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::SetNextWindowSize(ImVec2(600, 350), ImGuiCond_Appearing);
 
-  // UPDATED: Remove NoMove flag to make window movable
+  // Enhanced flags to make window more prominent and stay on top
   ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize |
-    ImGuiWindowFlags_NoCollapse;
+    ImGuiWindowFlags_NoCollapse |
+    ImGuiWindowFlags_NoDocking |
+    ImGuiWindowFlags_NoScrollbar;
 
   SetupPromptStyling();
 
@@ -88,6 +110,25 @@ void UserPromptUI::Render() {
   std::string windowID = "User Confirmation Required##prompt_" + std::to_string((uintptr_t)this);
 
   if (ImGui::Begin(windowID.c_str(), &isOpen, flags)) {
+
+    // Make window focused and bring to front when it appears or when not focused
+    if (ImGui::IsWindowAppearing()) {
+      printf("[DEBUG] Window appearing - setting focus\n");
+      ImGui::SetWindowFocus();
+      needsFocus = false;
+    }
+    else if (m_isPromptActive && !ImGui::IsWindowFocused()) {
+      printf("[DEBUG] Window not focused - setting focus\n");
+      ImGui::SetWindowFocus();
+    }
+    else if (ImGui::IsWindowFocused() && needsFocus) {
+      needsFocus = false;
+    }
+
+    // Keep trying to focus if still needed
+    if (needsFocus) {
+      ImGui::SetWindowFocus();
+    }
 
     // Header
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.0f, 1.0f));
@@ -196,7 +237,6 @@ void UserPromptUI::Render() {
     OnCancelClicked();
   }
 }
-
 
 PromptResult UserPromptUI::GetResult() const {
   std::lock_guard<std::mutex> lock(m_mutex);

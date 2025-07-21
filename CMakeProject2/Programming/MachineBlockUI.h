@@ -193,7 +193,7 @@ public:
 
   // Generate unique filename (delegates to ProgramManager)
   std::string GenerateUniqueFilename(const std::string& baseName);
-
+  void RenderFeedbackAndPrompts();
 
 private:
   // UI state
@@ -379,7 +379,7 @@ private:
   void RenderProgramValidationStatus();
   void RenderMainPanels();
   void RenderPopupDialogs();
-  void RenderFeedbackAndPrompts();
+
 
   // Toolbar components
   void RenderSaveProgramButton();
