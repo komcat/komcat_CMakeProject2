@@ -1047,7 +1047,6 @@ set(CONFIG_FILES
     "io_panel_config.json"
     "IOConfig.json"
     "motion_config.json"
-    "motion_config_backup_before_position_swap.json"
     "program.json"
     "script_runner_config.json"
     "smu_config.json"
