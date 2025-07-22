@@ -310,17 +310,28 @@ int main(int argc, char* argv[])
 	// Camera initialization
 	std::unique_ptr<CameraManager> cameraManager = std::make_unique<CameraManager>();
 
-	// Camera 1 - Auto-connect to first available
-	CameraInfo camera1("main_camera", "Top view camera");
+	//// Camera 1 - Auto-connect to first available
+	//CameraInfo camera1("main_camera", "Top view camera");
+	//cameraManager->AddCamera(camera1);
+
+	//// Initialize all cameras with auto-connect enabled
+	//cameraManager->InitializeAllCameras();
+
+	// In your main application, try this:
+	auto camera1 = CameraInfo::CreateByIP("main_camera", "192.168.0.68", "Your existing camera");
 	cameraManager->AddCamera(camera1);
-
-	// Camera 1 - Auto-connect to first available
-	CameraInfo camera2("test_camera", "Axu view camera");
-	cameraManager->AddCamera(camera2);
-
-	// Initialize all cameras with auto-connect enabled
 	cameraManager->InitializeAllCameras();
+
+
+
 	CheckCameraStatus(*cameraManager);
+
+
+
+
+
+
+
 
 	// Initialize TCP Data Client Manager
 	std::unique_ptr<DataClientManager> dataClientManager;

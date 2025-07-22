@@ -45,6 +45,9 @@ void MacroPanelUI::SetMachineBlockUI(MachineBlockUI* blockUI) {
 void MacroPanelUI::SetCameraManager(CameraManager* cameraManager) {
   if (m_cameraHandler) {
     m_cameraHandler->SetCameraManager(cameraManager);
+
+    std::cout << "[DEBUG] Camera manager set, camera count: "
+      << (cameraManager ? cameraManager->GetCameraCount() : 0) << std::endl;
   }
 }
 

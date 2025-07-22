@@ -181,7 +181,9 @@ void UICameraPanelUtility::RenderDebugControls() {
 }
 
 bool UICameraPanelUtility::ValidateCamera() const {
-	return (m_currentCamera != nullptr);
+	bool isValid = (m_currentCamera != nullptr);
+	//std::cout << "[DEBUG] ValidateCamera: m_currentCamera = "		<< (m_currentCamera ? "valid" : "null") << std::endl;
+	return isValid;
 }
 
 void UICameraPanelUtility::UpdateExposureUIFromCamera() {

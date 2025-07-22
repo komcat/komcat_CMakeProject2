@@ -30,6 +30,7 @@ void UICameraPanel::RenderUI() {
     return;
   }
 
+
   // Calculate content size for 3-column layout: 25% / 50% / 25%
   ImVec2 contentSize = ImGui::GetContentRegionAvail();
   float leftPanelWidth = contentSize.x * 0.25f;

@@ -43,11 +43,17 @@ public:
   // Initialize the camera system - call once before using any other methods
   bool Initialize();
 
-  // Connect to the first available camera
+  // EXISTING: Connect to the first available camera
   bool Connect();
 
-  // Connect to a specific camera by serial number
+  // EXISTING: Connect to a specific camera by serial number
   bool ConnectToSerial(const std::string& serialNumber);
+
+  // NEW: Connect to a specific camera by IP address (GigE cameras)
+  bool ConnectToIP(const std::string& ipAddress);
+
+  // NEW: Connect to camera by device index
+  bool ConnectToIndex(int deviceIndex);
 
   // Disconnect from the camera
   void Disconnect();
@@ -60,6 +66,9 @@ public:
 
   // Get camera information
   std::string GetDeviceInfo() const;
+
+  // NEW: Get detailed camera network info (for GigE cameras)
+  std::string GetNetworkInfo() const;
 
   // Check if camera is connected
   bool IsConnected() const;
@@ -86,7 +95,7 @@ public:
   Pylon::CInstantCamera& GetInternalCamera() { return m_camera; }
   const Pylon::CInstantCamera& GetInternalCamera() const { return m_camera; }
 
-  // NEW: Direct exposure control methods
+  // EXISTING: Direct exposure control methods
   // Set exposure time in microseconds
   bool SetExposureTime(double microseconds);
 
@@ -127,6 +136,18 @@ public:
   void DebugCameraSettings();
 
 private:
+  // NEW: Enhanced connection methods
+  bool ConnectToDevice(const Pylon::CDeviceInfo& deviceInfo);
+  Pylon::CDeviceInfo CreateIPDeviceInfo(const std::string& ipAddress);
+  bool FindDeviceByIP(const std::string& ipAddress, Pylon::CDeviceInfo& deviceInfo);
+  bool FindDeviceBySerial(const std::string& serialNumber, Pylon::CDeviceInfo& deviceInfo);
+  bool FindDeviceByIndex(int deviceIndex, Pylon::CDeviceInfo& deviceInfo);
+
+  // NEW: Configuration methods
+  void ConfigureGigECamera();
+  void ConfigureCamera();
+  std::string GetCurrentCameraIP() const;
+
   // Grab thread function for continuous image acquisition
   void GrabThreadFunction();
 
@@ -134,6 +155,8 @@ private:
   bool SetExposureMode();  // Set to "Timed" mode
   bool ValidateConnection() const;  // Check if camera is connected and open
   bool ValidateConnectionForRead() const;  // Check connection for read operations (handles const issues)
+  void DebugAllCameras();
+  bool ConnectToIPWithFallback(const std::string& ipAddress, const std::string& fallbackSerial = "");
 
 private:
   // Pylon camera object
@@ -145,9 +168,13 @@ private:
   bool m_deviceRemoved;
   std::atomic<bool> m_reconnecting;
 
-  // Device info for reconnection
+  // EXISTING: Device info for reconnection
   Pylon::String_t m_lastDeviceSerialNumber;
   Pylon::String_t m_lastDeviceClass;
+
+  // NEW: Additional device info for enhanced reconnection
+  std::string m_lastIPAddress;      // Store IP address for reconnection
+  int m_lastDeviceIndex;           // Store device index for reconnection
 
   // Grabbing thread
   std::thread m_grabThread;

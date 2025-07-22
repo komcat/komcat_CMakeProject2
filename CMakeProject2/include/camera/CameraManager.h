@@ -7,20 +7,87 @@
 #include <string>
 #include <unordered_map>
 
-// Simple structure to identify cameras
+// Step 2.1: Update CameraManager.h - Enhanced CameraInfo structure
+
+// REPLACE your existing CameraInfo struct in CameraManager.h with this enhanced version:
+
+// Enhanced structure to identify cameras
 struct CameraInfo {
-  std::string id;           // Camera identifier (e.g., "camera_1", "camera_2")
+  std::string id;           // Camera identifier (e.g., "camera_1", "camera_2") 
   std::string serialNumber; // Camera serial number (if connecting by serial)
+  std::string ipAddress;    // Camera IP address (for GigE cameras)
   std::string description;  // Human readable description
   bool autoConnect;         // Whether to auto-connect this camera
 
+  // Connection method preference
+  enum class ConnectionMethod {
+    AUTO,           // Connect to first available
+    SERIAL_NUMBER,  // Connect by serial number
+    IP_ADDRESS,     // Connect by IP address (GigE cameras)
+    DEVICE_INDEX    // Connect by device index
+  };
+
+  ConnectionMethod connectionMethod;
+  int deviceIndex = 0;  // For device index connection
+
+  // EXISTING: Constructor for auto/description only (backward compatibility)
   CameraInfo(const std::string& cameraId, const std::string& desc = "", bool autoConn = true)
-    : id(cameraId), description(desc), autoConnect(autoConn) {
+    : id(cameraId), description(desc), autoConnect(autoConn), connectionMethod(ConnectionMethod::AUTO) {
   }
 
+  // EXISTING: Constructor for serial number connection (backward compatibility)
   CameraInfo(const std::string& cameraId, const std::string& serial, const std::string& desc, bool autoConn = true)
-    : id(cameraId), serialNumber(serial), description(desc), autoConnect(autoConn) {
+    : id(cameraId), serialNumber(serial), description(desc), autoConnect(autoConn),
+    connectionMethod(ConnectionMethod::SERIAL_NUMBER) {
   }
+
+  // NEW: Static factory method for IP-based connection (GigE cameras)
+  static CameraInfo CreateByIP(const std::string& cameraId, const std::string& ip,
+    const std::string& desc = "", bool autoConn = true) {
+    CameraInfo info;
+    info.id = cameraId;
+    info.ipAddress = ip;
+    info.description = desc;
+    info.autoConnect = autoConn;
+    info.connectionMethod = ConnectionMethod::IP_ADDRESS;
+    return info;
+  }
+
+  // NEW: Static factory method for device index connection
+  static CameraInfo CreateByIndex(const std::string& cameraId, int index,
+    const std::string& desc = "", bool autoConn = true) {
+    CameraInfo info;
+    info.id = cameraId;
+    info.deviceIndex = index;
+    info.description = desc;
+    info.autoConnect = autoConn;
+    info.connectionMethod = ConnectionMethod::DEVICE_INDEX;
+    return info;
+  }
+
+  // Helper methods for checking connection type
+  bool IsIPConnection() const { return connectionMethod == ConnectionMethod::IP_ADDRESS; }
+  bool IsSerialConnection() const { return connectionMethod == ConnectionMethod::SERIAL_NUMBER; }
+  bool IsIndexConnection() const { return connectionMethod == ConnectionMethod::DEVICE_INDEX; }
+  bool IsAutoConnection() const { return connectionMethod == ConnectionMethod::AUTO; }
+
+  // Get connection info string for debugging and UI display
+  std::string GetConnectionInfo() const {
+    switch (connectionMethod) {
+    case ConnectionMethod::IP_ADDRESS:
+      return "IP: " + ipAddress;
+    case ConnectionMethod::SERIAL_NUMBER:
+      return "Serial: " + serialNumber;
+    case ConnectionMethod::DEVICE_INDEX:
+      return "Index: " + std::to_string(deviceIndex);
+    default:
+      return "Auto";
+    }
+  }
+
+private:
+  // Private default constructor for factory methods
+  CameraInfo() : autoConnect(true), connectionMethod(ConnectionMethod::AUTO), deviceIndex(0) {}
 };
 
 // Simple multi-camera manager that wraps PylonCameraTest instances
@@ -127,4 +194,11 @@ private:
   void RenderSelectedCameraPanel();
   void RenderCameraStatusTable();
   void RenderBulkOperations();
+
+
+
+  // NEW: Enhanced UI rendering methods
+  void RenderEnhancedCameraList();         // Enhanced camera list with connection info
+  void RenderEnhancedCameraStatusTable();  // Enhanced status table with network info
+
 };

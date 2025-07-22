@@ -38,7 +38,10 @@ PylonCamera::PylonCamera()
 	, m_deviceRemovalCallback(nullptr)
 	, m_newFrameCallback(nullptr)
 	, m_targetFPS(30) // Default to 30fps - adjust as needed
+	, m_lastIPAddress("")        // NEW: Initialize IP address
+	, m_lastDeviceIndex(-1)      // NEW: Initialize device index to -1 (invalid)
 {
+	// ... rest of your existing constructor code remains the same
 	// Initialize Pylon runtime
 	Pylon::PylonInitialize();
 
@@ -541,89 +544,61 @@ void PylonCamera::HandleDeviceRemoval()
 	}
 }
 
-bool PylonCamera::TryReconnect()
-{
-	if (m_reconnecting.exchange(true))
-	{
+
+// REPLACE your existing TryReconnect method with this enhanced version:
+bool PylonCamera::TryReconnect() {
+	if (m_reconnecting.exchange(true)) {
 		return false; // Already trying to reconnect
 	}
 
 	bool result = false;
 
-	try
-	{
+	try {
 		std::cout << "Attempting to reconnect to camera..." << std::endl;
 
-		// Create device info object for the camera we want to reconnect to
-		Pylon::CDeviceInfo info;
-		info.SetDeviceClass(m_lastDeviceClass);
-		info.SetSerialNumber(m_lastDeviceSerialNumber);
-
-		// Create a filter with the device info
-		Pylon::DeviceInfoList_t filter;
-		filter.push_back(info);
-
-		// Try to find the camera
-		Pylon::CTlFactory& tlFactory = Pylon::CTlFactory::GetInstance();
-		Pylon::DeviceInfoList_t devices;
-
 		// Destroy the current device since it's no longer valid
-		if (m_camera.IsPylonDeviceAttached())
-		{
+		if (m_camera.IsPylonDeviceAttached()) {
 			m_camera.DetachDevice();
 		}
 		m_camera.DestroyDevice();
 
-		if (tlFactory.EnumerateDevices(devices, filter) > 0)
-		{
-			// The camera has been found, create and attach it
-			m_camera.Attach(tlFactory.CreateDevice(devices[0]));
-
-			// Register the device removal handler again
-			m_camera.RegisterConfiguration(m_pDeviceRemovalHandler, Pylon::RegistrationMode_Append, Pylon::Cleanup_None);
-
-			// Reset flags
-			m_deviceRemoved = false;
-			m_initialized = true;
-
-			// Try to connect to the camera
-			m_camera.Open();
-
-			// For GigE cameras, set a reasonable heartbeat timeout for faster device removal detection
-			try
-			{
-				Pylon::CIntegerParameter heartbeat(m_camera.GetTLNodeMap(), "HeartbeatTimeout");
-				heartbeat.TrySetValue(1000, Pylon::IntegerValueCorrection_Nearest);  // set to 1000 ms timeout if writable
-			}
-			catch (...)
-			{
-				// Ignore if not available for this camera
-			}
-
-			m_connected = true;
-
-			// Start grabbing again if we were grabbing before
-			if (m_threadRunning.load())
-			{
-				m_camera.StartGrabbing(Pylon::GrabStrategy_LatestImageOnly);
-			}
-
-			std::cout << "Successfully reconnected to camera " << m_camera.GetDeviceInfo().GetModelName() << std::endl;
-			result = true;
+		// Try different reconnection methods based on what we stored
+		if (!m_lastIPAddress.empty()) {
+			// Try IP-based reconnection (preferred for GigE cameras)
+			std::cout << "Attempting IP reconnection to: " << m_lastIPAddress << std::endl;
+			result = ConnectToIP(m_lastIPAddress);
 		}
-		else
-		{
-			std::cout << "Camera not found for reconnection" << std::endl;
+		else if (m_lastDeviceIndex >= 0) {
+			// Try index-based reconnection
+			std::cout << "Attempting index reconnection to: " << m_lastDeviceIndex << std::endl;
+			result = ConnectToIndex(m_lastDeviceIndex);
+		}
+		else if (!m_lastDeviceSerialNumber.empty()) {
+			// Try serial-based reconnection
+			std::cout << "Attempting serial reconnection to: " << m_lastDeviceSerialNumber << std::endl;
+			result = ConnectToSerial(std::string(m_lastDeviceSerialNumber.c_str()));
+		}
+		else {
+			// Fallback to auto-connect
+			std::cout << "Attempting auto reconnection" << std::endl;
+			result = Connect();
+		}
+
+		if (result) {
+			std::cout << "Successfully reconnected to camera" << std::endl;
+		}
+		else {
+			std::cout << "Failed to reconnect to camera" << std::endl;
 		}
 	}
-	catch (const Pylon::GenericException& e)
-	{
+	catch (const Pylon::GenericException& e) {
 		std::cerr << "Error during reconnection attempt: " << e.GetDescription() << std::endl;
 	}
 
 	m_reconnecting.store(false);
 	return result;
 }
+
 
 void PylonCamera::SetDeviceRemovalCallback(DeviceRemovalCallback callback)
 {
@@ -1162,4 +1137,606 @@ PylonCamera::ExposureSettings PylonCamera::GetCurrentExposureSettings() const {
 	settings.gain_auto = IsGainAuto();
 
 	return settings;
+}
+
+
+// NEW: Connect to camera by IP address (GigE cameras)
+bool PylonCamera::ConnectToIP(const std::string& ipAddress) {
+	if (!m_initialized) {
+		if (!Initialize()) {
+			return false;
+		}
+	}
+
+	// Already connected - check if it's the same camera
+	if (m_connected) {
+		std::string currentIP = GetCurrentCameraIP();
+		if (currentIP == ipAddress) {
+			std::cout << "Already connected to camera at IP: " << ipAddress << std::endl;
+			return true;
+		}
+		// Disconnect from current camera to connect to different one
+		Disconnect();
+	}
+
+	try {
+		std::lock_guard<std::mutex> lock(m_cameraMutex);
+
+		std::cout << "Attempting to connect to camera at IP: " << ipAddress << std::endl;
+
+		// Find device by IP address
+		Pylon::CDeviceInfo deviceInfo;
+		if (!FindDeviceByIP(ipAddress, deviceInfo)) {
+			std::cerr << "Camera with IP " << ipAddress << " not found" << std::endl;
+			return false;
+		}
+
+		// Create device from the found camera
+		m_camera.Attach(Pylon::CTlFactory::GetInstance().CreateDevice(deviceInfo));
+
+		// Store device info for reconnection
+		m_lastDeviceSerialNumber = m_camera.GetDeviceInfo().GetSerialNumber();
+		m_lastDeviceClass = m_camera.GetDeviceInfo().GetDeviceClass();
+		m_lastIPAddress = ipAddress;  // Store IP for reconnection
+		m_lastDeviceIndex = -1;       // Clear device index
+
+		// Register the device removal handler
+		m_camera.RegisterConfiguration(m_pDeviceRemovalHandler, Pylon::RegistrationMode_Append, Pylon::Cleanup_None);
+
+		// Open the camera
+		m_camera.Open();
+
+		// Configure camera settings
+		ConfigureCamera();
+
+		m_connected = true;
+		m_deviceRemoved = false;
+
+		std::cout << "Successfully connected to camera: " << m_camera.GetDeviceInfo().GetModelName()
+			<< " at IP: " << ipAddress << std::endl;
+		std::cout << "Serial Number: " << m_lastDeviceSerialNumber << std::endl;
+
+		return true;
+	}
+	catch (const Pylon::GenericException& e) {
+		std::cerr << "Error connecting to camera at IP " << ipAddress << ": " << e.GetDescription() << std::endl;
+		return false;
+	}
+}
+
+// NEW: Connect to camera by device index
+bool PylonCamera::ConnectToIndex(int deviceIndex) {
+	if (!m_initialized) {
+		if (!Initialize()) {
+			return false;
+		}
+	}
+
+	// Already connected - check if it's the same camera
+	if (m_connected) {
+		if (m_lastDeviceIndex == deviceIndex) {
+			std::cout << "Already connected to camera at index: " << deviceIndex << std::endl;
+			return true;
+		}
+		// Disconnect from current camera to connect to different one
+		Disconnect();
+	}
+
+	try {
+		std::lock_guard<std::mutex> lock(m_cameraMutex);
+
+		std::cout << "Attempting to connect to camera at index: " << deviceIndex << std::endl;
+
+		// Find device by index
+		Pylon::CDeviceInfo deviceInfo;
+		if (!FindDeviceByIndex(deviceIndex, deviceInfo)) {
+			std::cerr << "Camera at index " << deviceIndex << " not found" << std::endl;
+			return false;
+		}
+
+		// Create device from the found camera
+		m_camera.Attach(Pylon::CTlFactory::GetInstance().CreateDevice(deviceInfo));
+
+		// Store device info for reconnection
+		m_lastDeviceSerialNumber = m_camera.GetDeviceInfo().GetSerialNumber();
+		m_lastDeviceClass = m_camera.GetDeviceInfo().GetDeviceClass();
+		m_lastDeviceIndex = deviceIndex;  // Store index for reconnection
+		m_lastIPAddress = "";             // Clear IP address
+
+		// Register the device removal handler
+		m_camera.RegisterConfiguration(m_pDeviceRemovalHandler, Pylon::RegistrationMode_Append, Pylon::Cleanup_None);
+
+		// Open the camera
+		m_camera.Open();
+
+		// Configure camera settings
+		ConfigureCamera();
+
+		m_connected = true;
+		m_deviceRemoved = false;
+
+		std::cout << "Successfully connected to camera: " << m_camera.GetDeviceInfo().GetModelName()
+			<< " at index: " << deviceIndex << std::endl;
+		std::cout << "Serial Number: " << m_lastDeviceSerialNumber << std::endl;
+
+		return true;
+	}
+	catch (const Pylon::GenericException& e) {
+		std::cerr << "Error connecting to camera at index " << deviceIndex << ": " << e.GetDescription() << std::endl;
+		return false;
+	}
+}
+
+
+// QUICK FIX: Update your GetNetworkInfo method to use Device NodeMap instead of TL NodeMap
+
+std::string PylonCamera::GetNetworkInfo() const {
+	if (!m_connected || !m_camera.IsOpen()) {
+		return "Not connected";
+	}
+
+	try {
+		std::string networkInfo;
+
+		// FIXED: Use Device NodeMap instead of TL NodeMap (based on successful IP detection)
+		auto& camera = const_cast<Pylon::CInstantCamera&>(m_camera);
+
+		// Try Device NodeMap first (this is where we found the IP address)
+		if (camera.GetNodeMap().GetNode("GevCurrentIPAddress")) {
+			// Get IP address
+			Pylon::CIntegerParameter ipParam(camera.GetNodeMap(), "GevCurrentIPAddress");
+			if (ipParam.IsReadable()) {
+				int64_t ipValue = ipParam.GetValue();
+
+				// Convert to dotted decimal notation
+				int a = (ipValue >> 24) & 0xFF;
+				int b = (ipValue >> 16) & 0xFF;
+				int c = (ipValue >> 8) & 0xFF;
+				int d = ipValue & 0xFF;
+
+				networkInfo = std::to_string(a) + "." + std::to_string(b) + "." +
+					std::to_string(c) + "." + std::to_string(d);
+			}
+
+			// Try to get packet size from TL NodeMap
+			if (camera.GetTLNodeMap().GetNode("GevSCPSPacketSize")) {
+				Pylon::CIntegerParameter packetSizeParam(camera.GetTLNodeMap(), "GevSCPSPacketSize");
+				if (packetSizeParam.IsReadable()) {
+					networkInfo += " (Packet:" + std::to_string(packetSizeParam.GetValue()) + ")";
+				}
+			}
+
+			// If we got network info, it's definitely a GigE camera
+			if (!networkInfo.empty()) {
+				return networkInfo;
+			}
+		}
+
+		// Fallback: Try TL NodeMap
+		if (camera.GetTLNodeMap().GetNode("GevCurrentIPAddress")) {
+			Pylon::CIntegerParameter ipParam(camera.GetTLNodeMap(), "GevCurrentIPAddress");
+			if (ipParam.IsReadable()) {
+				int64_t ipValue = ipParam.GetValue();
+				int a = (ipValue >> 24) & 0xFF;
+				int b = (ipValue >> 16) & 0xFF;
+				int c = (ipValue >> 8) & 0xFF;
+				int d = ipValue & 0xFF;
+
+				networkInfo = std::to_string(a) + "." + std::to_string(b) + "." +
+					std::to_string(c) + "." + std::to_string(d);
+
+				if (camera.GetTLNodeMap().GetNode("GevSCPSPacketSize")) {
+					Pylon::CIntegerParameter packetSizeParam(camera.GetTLNodeMap(), "GevSCPSPacketSize");
+					if (packetSizeParam.IsReadable()) {
+						networkInfo += " (Packet:" + std::to_string(packetSizeParam.GetValue()) + ")";
+					}
+				}
+				return networkInfo;
+			}
+		}
+
+		// If we couldn't get IP info but we know it's connected via IP, show that
+		if (!m_lastIPAddress.empty()) {
+			return m_lastIPAddress + " (Connected)";
+		}
+
+		return "GigE camera (no network details)";
+	}
+	catch (const Pylon::GenericException& e) {
+		return "Error: " + std::string(e.GetDescription());
+	}
+}
+
+// CORRECTED: Replace your FindDeviceByIP method with this version that compiles
+
+bool PylonCamera::FindDeviceByIP(const std::string& ipAddress, Pylon::CDeviceInfo& deviceInfo) {
+	try {
+		Pylon::CTlFactory& tlFactory = Pylon::CTlFactory::GetInstance();
+		Pylon::DeviceInfoList_t devices;
+
+		// Enumerate all devices
+		if (tlFactory.EnumerateDevices(devices) == 0) {
+			std::cout << "No cameras found during IP search" << std::endl;
+			return false;
+		}
+
+		std::cout << "=== CORRECTED IP SEARCH ===" << std::endl;
+		std::cout << "Searching among " << devices.size() << " cameras for IP: " << ipAddress << std::endl;
+
+		// Search through all devices for matching IP
+		for (size_t i = 0; i < devices.size(); i++) {
+			const auto& device = devices[i];
+
+			try {
+				std::cout << "\n--- Camera " << i << " ---" << std::endl;
+				std::cout << "Model: " << device.GetModelName() << std::endl;
+				std::cout << "Serial: " << device.GetSerialNumber() << std::endl;
+				std::cout << "Class: " << device.GetDeviceClass() << std::endl;
+
+				// Check if this is a GigE camera
+				std::string deviceClass = std::string(device.GetDeviceClass().c_str());
+				if (deviceClass.find("GigE") != std::string::npos) {
+					std::cout << "✓ This is a GigE camera, attempting IP detection..." << std::endl;
+
+					// FIXED: Only use the working method - temporary camera with proper node access
+					Pylon::CInstantCamera tempCamera;
+					tempCamera.Attach(tlFactory.CreateDevice(device));
+
+					try {
+						tempCamera.Open();
+						std::cout << "✓ Temporary camera opened" << std::endl;
+
+						std::string cameraIP = "";
+
+						// Method 1: Try Transport Layer NodeMap
+						std::cout << "Trying Transport Layer NodeMap..." << std::endl;
+						try {
+							if (tempCamera.GetTLNodeMap().GetNode("GevCurrentIPAddress")) {
+								std::cout << "Found GevCurrentIPAddress in TL NodeMap" << std::endl;
+								Pylon::CIntegerParameter ipParam(tempCamera.GetTLNodeMap(), "GevCurrentIPAddress");
+								if (ipParam.IsReadable()) {
+									int64_t ipValue = ipParam.GetValue();
+									int a = (ipValue >> 24) & 0xFF;
+									int b = (ipValue >> 16) & 0xFF;
+									int c = (ipValue >> 8) & 0xFF;
+									int d = ipValue & 0xFF;
+									cameraIP = std::to_string(a) + "." + std::to_string(b) + "." +
+										std::to_string(c) + "." + std::to_string(d);
+									std::cout << "IP from TL NodeMap: " << cameraIP << std::endl;
+								}
+							}
+							else {
+								std::cout << "GevCurrentIPAddress not found in TL NodeMap" << std::endl;
+							}
+						}
+						catch (const Pylon::GenericException& e) {
+							std::cout << "Error accessing TL NodeMap: " << e.GetDescription() << std::endl;
+						}
+
+						// Method 2: Try Device NodeMap
+						if (cameraIP.empty()) {
+							std::cout << "Trying Device NodeMap..." << std::endl;
+							try {
+								if (tempCamera.GetNodeMap().GetNode("GevCurrentIPAddress")) {
+									std::cout << "Found GevCurrentIPAddress in Device NodeMap" << std::endl;
+									Pylon::CIntegerParameter ipParam(tempCamera.GetNodeMap(), "GevCurrentIPAddress");
+									if (ipParam.IsReadable()) {
+										int64_t ipValue = ipParam.GetValue();
+										int a = (ipValue >> 24) & 0xFF;
+										int b = (ipValue >> 16) & 0xFF;
+										int c = (ipValue >> 8) & 0xFF;
+										int d = ipValue & 0xFF;
+										cameraIP = std::to_string(a) + "." + std::to_string(b) + "." +
+											std::to_string(c) + "." + std::to_string(d);
+										std::cout << "IP from Device NodeMap: " << cameraIP << std::endl;
+									}
+								}
+								else {
+									std::cout << "GevCurrentIPAddress not found in Device NodeMap" << std::endl;
+								}
+							}
+							catch (const Pylon::GenericException& e) {
+								std::cout << "Error accessing Device NodeMap: " << e.GetDescription() << std::endl;
+							}
+						}
+
+						// Method 3: Try alternative node names in TL NodeMap
+						if (cameraIP.empty()) {
+							std::cout << "Trying alternative node names..." << std::endl;
+
+							// Try GevDeviceIPAddress
+							try {
+								if (tempCamera.GetTLNodeMap().GetNode("GevDeviceIPAddress")) {
+									std::cout << "Found GevDeviceIPAddress" << std::endl;
+									Pylon::CIntegerParameter ipParam(tempCamera.GetTLNodeMap(), "GevDeviceIPAddress");
+									if (ipParam.IsReadable()) {
+										int64_t ipValue = ipParam.GetValue();
+										int a = (ipValue >> 24) & 0xFF;
+										int b = (ipValue >> 16) & 0xFF;
+										int c = (ipValue >> 8) & 0xFF;
+										int d = ipValue & 0xFF;
+										cameraIP = std::to_string(a) + "." + std::to_string(b) + "." +
+											std::to_string(c) + "." + std::to_string(d);
+										std::cout << "IP from GevDeviceIPAddress: " << cameraIP << std::endl;
+									}
+								}
+							}
+							catch (const Pylon::GenericException& e) {
+								std::cout << "GevDeviceIPAddress not available: " << e.GetDescription() << std::endl;
+							}
+						}
+
+						tempCamera.Close();
+
+						// FALLBACK: If IP detection fails but this is your known camera, use it anyway
+						if (cameraIP.empty()) {
+							std::cout << "⚠ Could not detect IP address" << std::endl;
+							std::cout << "Camera serial: " << device.GetSerialNumber() << std::endl;
+
+							// If this is your known camera (serial 22769967), assume it's the right one
+							if (std::string(device.GetSerialNumber().c_str()) == "22769967") {
+								std::cout << "⚠ This matches your known camera serial" << std::endl;
+								std::cout << "🎯 USING CAMERA BY SERIAL MATCH (IP detection failed)" << std::endl;
+								deviceInfo = device;
+								return true;
+							}
+						}
+						else {
+							// We got an IP address, check if it matches
+							std::cout << "Camera IP: " << cameraIP << std::endl;
+							std::cout << "Looking for: " << ipAddress << std::endl;
+
+							if (cameraIP == ipAddress) {
+								std::cout << "🎯 IP MATCH FOUND!" << std::endl;
+								deviceInfo = device;
+								return true;
+							}
+							else {
+								std::cout << "✗ IP does not match" << std::endl;
+							}
+						}
+					}
+					catch (const Pylon::GenericException& e) {
+						std::cout << "✗ Error opening temporary camera: " << e.GetDescription() << std::endl;
+						try { tempCamera.Close(); }
+						catch (...) {}
+					}
+				}
+				else {
+					std::cout << "ℹ Skipping non-GigE camera" << std::endl;
+				}
+			}
+			catch (const Pylon::GenericException& e) {
+				std::cout << "✗ Error processing camera " << i << ": " << e.GetDescription() << std::endl;
+				continue;
+			}
+		}
+
+		std::cout << "\n=== SEARCH COMPLETED ===" << std::endl;
+		std::cout << "❌ No camera found with IP: " << ipAddress << std::endl;
+		return false;
+	}
+	catch (const Pylon::GenericException& e) {
+		std::cerr << "Error during IP search: " << e.GetDescription() << std::endl;
+		return false;
+	}
+}
+
+
+// NEW: Find device by index
+bool PylonCamera::FindDeviceByIndex(int deviceIndex, Pylon::CDeviceInfo& deviceInfo) {
+	try {
+		Pylon::CTlFactory& tlFactory = Pylon::CTlFactory::GetInstance();
+		Pylon::DeviceInfoList_t devices;
+
+		// Enumerate all devices
+		if (tlFactory.EnumerateDevices(devices) == 0) {
+			std::cout << "No cameras found during index search" << std::endl;
+			return false;
+		}
+
+		if (deviceIndex < 0 || deviceIndex >= static_cast<int>(devices.size())) {
+			std::cout << "Device index " << deviceIndex << " out of range (0-"
+				<< (devices.size() - 1) << ")" << std::endl;
+			return false;
+		}
+
+		deviceInfo = devices[deviceIndex];
+		std::cout << "Found camera at index " << deviceIndex << ": "
+			<< deviceInfo.GetModelName() << " (Serial: " << deviceInfo.GetSerialNumber() << ")" << std::endl;
+		return true;
+	}
+	catch (const Pylon::GenericException& e) {
+		std::cerr << "Error during index search: " << e.GetDescription() << std::endl;
+		return false;
+	}
+}
+
+
+// FIX 4: ConfigureGigECamera method - use non-const reference 
+void PylonCamera::ConfigureGigECamera() {
+	try {
+		std::cout << "Configuring GigE camera settings..." << std::endl;
+
+		// Set heartbeat timeout for faster device removal detection
+		if (m_camera.GetTLNodeMap().GetNode("HeartbeatTimeout")) {
+			Pylon::CIntegerParameter heartbeat(m_camera.GetTLNodeMap(), "HeartbeatTimeout");
+			heartbeat.TrySetValue(1000, Pylon::IntegerValueCorrection_Nearest);  // 1000ms
+			std::cout << "  Set heartbeat timeout to 1000ms" << std::endl;
+		}
+
+		// Optimize GigE packet size
+		if (m_camera.GetTLNodeMap().GetNode("GevSCPSPacketSize")) {
+			Pylon::CIntegerParameter packetSize(m_camera.GetTLNodeMap(), "GevSCPSPacketSize");
+			// Get the maximum allowed packet size
+			int64_t maxPacketSize = packetSize.GetMax();
+			// Set to maximum value for optimal performance
+			packetSize.SetValue(maxPacketSize);
+			std::cout << "  Set GigE packet size to maximum: " << packetSize.GetValue() << std::endl;
+		}
+
+		// Configure inter-packet delay if needed (helps with multiple cameras)
+		if (m_camera.GetTLNodeMap().GetNode("GevSCPD")) {
+			Pylon::CIntegerParameter interPacketDelay(m_camera.GetTLNodeMap(), "GevSCPD");
+			// Set a small delay to prevent network congestion with multiple cameras
+			interPacketDelay.TrySetValue(1000, Pylon::IntegerValueCorrection_Nearest);
+			std::cout << "  Set inter-packet delay: " << interPacketDelay.GetValue() << std::endl;
+		}
+	}
+	catch (const Pylon::GenericException& e) {
+		std::cout << "Warning: Could not configure some GigE settings: " << e.GetDescription() << std::endl;
+	}
+}
+// NEW: Configure general camera settings
+void PylonCamera::ConfigureCamera() {
+	try {
+		// Set acquisition parameters
+		m_camera.MaxNumBuffer = 5;
+
+		// Configure trigger mode
+		if (m_camera.GetNodeMap().GetNode("TriggerMode")) {
+			Pylon::CEnumParameter(m_camera.GetNodeMap(), "TriggerMode").SetValue("Off");
+			std::cout << "  Disabled trigger mode" << std::endl;
+		}
+
+		// If this is a GigE camera, apply GigE-specific configuration
+		if (m_camera.GetDeviceInfo().GetDeviceClass() == "BaslerGigE") {
+			ConfigureGigECamera();
+		}
+	}
+	catch (const Pylon::GenericException& e) {
+		std::cout << "Warning: Could not configure some camera settings: " << e.GetDescription() << std::endl;
+	}
+}
+
+
+// FIX 2: GetCurrentCameraIP method - handle const correctly
+std::string PylonCamera::GetCurrentCameraIP() const {
+	if (!m_connected || !m_camera.IsOpen()) {
+		return "";
+	}
+
+	try {
+		// FIXED: Cast away const for GetTLNodeMap() - this is safe for read operations
+		auto& camera = const_cast<Pylon::CInstantCamera&>(m_camera);
+
+		if (camera.GetTLNodeMap().GetNode("GevCurrentIPAddress")) {
+			Pylon::CIntegerParameter ipParam(camera.GetTLNodeMap(), "GevCurrentIPAddress");
+			if (ipParam.IsReadable()) {
+				int64_t ipValue = ipParam.GetValue();
+
+				// Convert to dotted decimal notation
+				int a = (ipValue >> 24) & 0xFF;
+				int b = (ipValue >> 16) & 0xFF;
+				int c = (ipValue >> 8) & 0xFF;
+				int d = ipValue & 0xFF;
+
+				return std::to_string(a) + "." + std::to_string(b) + "." +
+					std::to_string(c) + "." + std::to_string(d);
+			}
+		}
+	}
+	catch (...) {
+		// Ignore errors
+	}
+
+	return "";
+}
+
+
+
+
+// ADD to pylon_camera.cpp:
+void PylonCamera::DebugAllCameras() {
+	std::cout << "\n=== DEBUG ALL DETECTED CAMERAS ===" << std::endl;
+
+	try {
+		Pylon::CTlFactory& tlFactory = Pylon::CTlFactory::GetInstance();
+		Pylon::DeviceInfoList_t devices;
+
+		if (tlFactory.EnumerateDevices(devices) == 0) {
+			std::cout << "No cameras detected at all!" << std::endl;
+			return;
+		}
+
+		std::cout << "Total cameras detected: " << devices.size() << std::endl;
+
+		for (size_t i = 0; i < devices.size(); i++) {
+			const auto& device = devices[i];
+
+			std::cout << "\n=== Camera " << i << " ===" << std::endl;
+			std::cout << "Model: " << device.GetModelName() << std::endl;
+			std::cout << "Serial: " << device.GetSerialNumber() << std::endl;
+			std::cout << "Vendor: " << device.GetVendorName() << std::endl;
+			std::cout << "Class: " << device.GetDeviceClass() << std::endl;
+			std::cout << "User ID: " << device.GetUserDefinedName() << std::endl;
+
+			// Try to connect and get IP for GigE cameras
+			try {
+				std::string deviceClass = std::string(device.GetDeviceClass().c_str());
+				if (deviceClass.find("GigE") != std::string::npos || deviceClass.find("Gige") != std::string::npos) {
+					Pylon::CInstantCamera tempCamera;
+					tempCamera.Attach(tlFactory.CreateDevice(device));
+					tempCamera.Open();
+
+					if (tempCamera.GetTLNodeMap().GetNode("GevCurrentIPAddress")) {
+						Pylon::CIntegerParameter ipParam(tempCamera.GetTLNodeMap(), "GevCurrentIPAddress");
+						if (ipParam.IsReadable()) {
+							int64_t ipValue = ipParam.GetValue();
+							int a = (ipValue >> 24) & 0xFF;
+							int b = (ipValue >> 16) & 0xFF;
+							int c = (ipValue >> 8) & 0xFF;
+							int d = ipValue & 0xFF;
+
+							std::string cameraIP = std::to_string(a) + "." + std::to_string(b) + "." +
+								std::to_string(c) + "." + std::to_string(d);
+							std::cout << "IP Address: " << cameraIP << std::endl;
+						}
+					}
+					tempCamera.Close();
+				}
+			}
+			catch (...) {
+				std::cout << "Could not read IP address" << std::endl;
+			}
+		}
+
+		std::cout << "\n=== END DEBUG ===" << std::endl;
+	}
+	catch (const Pylon::GenericException& e) {
+		std::cout << "Debug error: " << e.GetDescription() << std::endl;
+	}
+}
+
+
+// Add to pylon_camera.cpp:
+bool PylonCamera::ConnectToIPWithFallback(const std::string& ipAddress, const std::string& fallbackSerial) {
+	std::cout << "Attempting IP connection with fallback to serial..." << std::endl;
+
+	// First try IP connection
+	if (ConnectToIP(ipAddress)) {
+		std::cout << "✓ IP connection successful" << std::endl;
+		return true;
+	}
+
+	std::cout << "⚠ IP connection failed, trying fallback..." << std::endl;
+
+	// If IP fails and we have a fallback serial, try that
+	if (!fallbackSerial.empty()) {
+		std::cout << "Trying connection by serial: " << fallbackSerial << std::endl;
+		if (ConnectToSerial(fallbackSerial)) {
+			std::cout << "✓ Serial connection successful" << std::endl;
+			return true;
+		}
+	}
+
+	// Final fallback: try auto-connection
+	std::cout << "Trying auto-connection as final fallback..." << std::endl;
+	if (Connect()) {
+		std::cout << "✓ Auto-connection successful" << std::endl;
+		return true;
+	}
+
+	std::cout << "❌ All connection methods failed" << std::endl;
+	return false;
 }

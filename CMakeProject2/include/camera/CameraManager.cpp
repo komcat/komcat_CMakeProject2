@@ -457,6 +457,8 @@ void CameraManager::RenderCameraStatusTable() {
   }
 }
 
+
+// UPDATE your existing AddCamera method to show connection info:
 bool CameraManager::AddCamera(const CameraInfo& cameraInfo) {
   // Check if camera with this ID already exists
   if (m_cameras.find(cameraInfo.id) != m_cameras.end()) {
@@ -471,7 +473,7 @@ bool CameraManager::AddCamera(const CameraInfo& cameraInfo) {
   if (!cameraInfo.description.empty()) {
     std::cout << " (" << cameraInfo.description << ")";
   }
-  std::cout << std::endl;
+  std::cout << " - Connection: " << cameraInfo.GetConnectionInfo() << std::endl;  // NEW: Show connection method
 
   m_cameras[cameraInfo.id] = std::move(managedCamera);
 
@@ -482,6 +484,7 @@ bool CameraManager::AddCamera(const CameraInfo& cameraInfo) {
 
   return true;
 }
+
 
 bool CameraManager::RemoveCamera(const std::string& cameraId) {
   auto it = m_cameras.find(cameraId);
@@ -521,10 +524,12 @@ std::vector<std::string> CameraManager::GetCameraIds() const {
   return ids;
 }
 
+
+// UPDATE your existing InitializeAllCameras method to show connection details:
 bool CameraManager::InitializeAllCameras() {
   bool allSuccess = true;
 
-  std::cout << "Initializing all cameras..." << std::endl;
+  std::cout << "Initializing all cameras with enhanced connection support..." << std::endl;
 
   for (auto& [id, managedCamera] : m_cameras) {
     if (!managedCamera->info.autoConnect) {
@@ -532,37 +537,19 @@ bool CameraManager::InitializeAllCameras() {
       continue;
     }
 
-    std::cout << "Initializing camera: " << id << std::endl;
+    std::cout << "Initializing camera: " << id << " (" << managedCamera->info.GetConnectionInfo() << ")" << std::endl;  // NEW: Show connection method
 
-    auto& camera = managedCamera->camera->GetCamera();
-
-    if (!camera.Initialize()) {
-      std::cerr << "Failed to initialize camera: " << id << std::endl;
-      allSuccess = false;
-      continue;
-    }
-
-    // Connect by serial number if specified, otherwise connect to first available
-    bool connected = false;
-    if (!managedCamera->info.serialNumber.empty()) {
-      connected = camera.ConnectToSerial(managedCamera->info.serialNumber);
-    }
-    else {
-      connected = camera.Connect();
-    }
-
-    if (!connected) {
+    if (!ConnectCamera(id)) {
       std::cerr << "Failed to connect camera: " << id << std::endl;
       allSuccess = false;
-    }
-    else {
-      std::cout << "Successfully connected camera: " << id << std::endl;
     }
   }
 
   std::cout << "Camera initialization " << (allSuccess ? "completed successfully" : "completed with errors") << std::endl;
   return allSuccess;
 }
+
+
 
 bool CameraManager::ConnectCamera(const std::string& cameraId) {
   auto* managedCamera = FindCamera(cameraId);
@@ -572,6 +559,7 @@ bool CameraManager::ConnectCamera(const std::string& cameraId) {
   }
 
   auto& camera = managedCamera->camera->GetCamera();
+  const auto& info = managedCamera->info;
 
   if (!camera.Initialize()) {
     std::cerr << "Failed to initialize camera: " << cameraId << std::endl;
@@ -579,15 +567,41 @@ bool CameraManager::ConnectCamera(const std::string& cameraId) {
   }
 
   bool connected = false;
-  if (!managedCamera->info.serialNumber.empty()) {
-    connected = camera.ConnectToSerial(managedCamera->info.serialNumber);
-  }
-  else {
+
+  // NEW: Enhanced connection logic based on camera info
+  switch (info.connectionMethod) {
+  case CameraInfo::ConnectionMethod::IP_ADDRESS:
+    std::cout << "Connecting to camera " << cameraId << " via IP: " << info.ipAddress << std::endl;
+    connected = camera.ConnectToIP(info.ipAddress);
+    break;
+
+  case CameraInfo::ConnectionMethod::SERIAL_NUMBER:
+    std::cout << "Connecting to camera " << cameraId << " via Serial: " << info.serialNumber << std::endl;
+    connected = camera.ConnectToSerial(info.serialNumber);
+    break;
+
+  case CameraInfo::ConnectionMethod::DEVICE_INDEX:
+    std::cout << "Connecting to camera " << cameraId << " via Index: " << info.deviceIndex << std::endl;
+    connected = camera.ConnectToIndex(info.deviceIndex);
+    break;
+
+  case CameraInfo::ConnectionMethod::AUTO:
+  default:
+    std::cout << "Connecting to camera " << cameraId << " via Auto-detection" << std::endl;
     connected = camera.Connect();
+    break;
   }
 
   if (connected) {
-    std::cout << "Connected camera: " << cameraId << std::endl;
+    std::cout << "Successfully connected camera: " << cameraId << std::endl;
+
+    // NEW: Log network information for GigE cameras
+    if (info.IsIPConnection()) {
+      std::string networkInfo = camera.GetNetworkInfo();
+      if (!networkInfo.empty()) {
+        std::cout << "  Network Info: " << networkInfo << std::endl;
+      }
+    }
   }
   else {
     std::cerr << "Failed to connect camera: " << cameraId << std::endl;
@@ -595,6 +609,7 @@ bool CameraManager::ConnectCamera(const std::string& cameraId) {
 
   return connected;
 }
+
 
 bool CameraManager::DisconnectCamera(const std::string& cameraId) {
   auto* managedCamera = FindCamera(cameraId);
@@ -633,4 +648,128 @@ bool CameraManager::StartGrabbingAll() {
   }
 
   return allSuccess;
+}
+
+
+// ADD this new method to your CameraManager.cpp (enhanced status table):
+void CameraManager::RenderEnhancedCameraStatusTable() {
+  ImGui::Text("Enhanced Camera Status");
+
+  if (ImGui::BeginTable("EnhancedCameraStatusTable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+    ImGui::TableSetupColumn("ID");
+    ImGui::TableSetupColumn("Connection");
+    ImGui::TableSetupColumn("Connected");
+    ImGui::TableSetupColumn("Grabbing");
+    ImGui::TableSetupColumn("Device Info");
+    ImGui::TableSetupColumn("Network Info");
+    ImGui::TableSetupColumn("Exposure");
+    ImGui::TableSetupColumn("Gain");
+    ImGui::TableHeadersRow();
+
+    for (const auto& [id, managedCamera] : m_cameras) {
+      ImGui::TableNextRow();
+
+      const auto& camera = managedCamera->camera->GetCamera();
+      const auto& info = managedCamera->info;
+
+      ImGui::TableSetColumnIndex(0);
+      ImGui::Text("%s", id.c_str());
+
+      ImGui::TableSetColumnIndex(1);
+      ImGui::Text("%s", info.GetConnectionInfo().c_str());
+
+      ImGui::TableSetColumnIndex(2);
+      ImGui::Text("%s", camera.IsConnected() ? "Yes" : "No");
+
+      ImGui::TableSetColumnIndex(3);
+      ImGui::Text("%s", camera.IsGrabbing() ? "Yes" : "No");
+
+      ImGui::TableSetColumnIndex(4);
+      if (camera.IsConnected()) {
+        std::string deviceInfo = camera.GetDeviceInfo();
+        if (deviceInfo.length() > 20) {
+          deviceInfo = deviceInfo.substr(0, 17) + "...";
+        }
+        ImGui::Text("%s", deviceInfo.c_str());
+      }
+      else {
+        ImGui::Text("N/A");
+      }
+
+      ImGui::TableSetColumnIndex(5);
+      if (camera.IsConnected() && info.IsIPConnection()) {
+        std::string networkInfo = camera.GetNetworkInfo();
+        if (networkInfo.length() > 15) {
+          networkInfo = networkInfo.substr(0, 12) + "...";
+        }
+        ImGui::Text("%s", networkInfo.c_str());
+      }
+      else {
+        ImGui::Text("N/A");
+      }
+
+      ImGui::TableSetColumnIndex(6);
+      if (camera.IsConnected()) {
+        ImGui::Text("%.0f us", camera.GetExposureTime());
+      }
+      else {
+        ImGui::Text("N/A");
+      }
+
+      ImGui::TableSetColumnIndex(7);
+      if (camera.IsConnected()) {
+        ImGui::Text("%.1f", camera.GetGain());
+      }
+      else {
+        ImGui::Text("N/A");
+      }
+    }
+
+    ImGui::EndTable();
+  }
+}
+
+// ADD this new method to your CameraManager.cpp (enhanced camera list):
+void CameraManager::RenderEnhancedCameraList() {
+  ImGui::Text("Camera List");
+  ImGui::Separator();
+
+  for (const auto& [id, managedCamera] : m_cameras) {
+    bool isSelected = (m_selectedCameraId == id);
+
+    if (ImGui::Selectable(id.c_str(), isSelected)) {
+      m_selectedCameraId = id;
+    }
+
+    // Right-click context menu
+    if (ImGui::BeginPopupContextItem()) {
+      if (ImGui::MenuItem("Remove Camera")) {
+        RemoveCamera(id);
+        if (m_selectedCameraId == id) {
+          m_selectedCameraId = "";
+        }
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
+    }
+
+    // NEW: Show connection info
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "[%s]", managedCamera->info.GetConnectionInfo().c_str());
+
+    // Show status indicator
+    const auto& camera = managedCamera->camera->GetCamera();
+    ImGui::SameLine();
+    if (camera.IsConnected()) {
+      if (camera.IsGrabbing()) {
+        ImGui::TextColored(ImVec4(0, 1, 0, 1), "[GRAB]");
+      }
+      else {
+        ImGui::TextColored(ImVec4(0, 0.8f, 0, 1), "[CONN]");
+      }
+    }
+    else {
+      ImGui::TextColored(ImVec4(0.8f, 0, 0, 1), "[DISC]");
+    }
+  }
 }
