@@ -1,0 +1,246 @@
+{
+  "blocks": [
+    {
+      "color": 4280849960,
+      "id": 1,
+      "label": "START",
+      "parameters": [
+        {
+          "description": "Name of this program",
+          "name": "program_name",
+          "type": "string",
+          "value": "MyProgram"
+        },
+        {
+          "description": "What this program does",
+          "name": "description",
+          "type": "string",
+          "value": "Program description"
+        },
+        {
+          "description": "Program author",
+          "name": "author",
+          "type": "string",
+          "value": "User"
+        }
+      ],
+      "position": {
+        "x": 130.0,
+        "y": 86.0
+      },
+      "type": "START"
+    },
+    {
+      "color": 4290017350,
+      "id": 2,
+      "label": "Move Node",
+      "parameters": [
+        {
+          "description": "Name of the device to move",
+          "name": "device_name",
+          "type": "string",
+          "value": "gantry-main"
+        },
+        {
+          "description": "Name of the motion graph",
+          "name": "graph_name",
+          "type": "string",
+          "value": "Process_Flow"
+        },
+        {
+          "description": "Target node ID",
+          "name": "node_id",
+          "type": "string",
+          "value": "node_4027"
+        },
+        {
+          "description": "Wait for completion",
+          "name": "blocking",
+          "type": "bool",
+          "value": "true"
+        }
+      ],
+      "position": {
+        "x": 200.0,
+        "y": 180.0
+      },
+      "type": "MOVE_NODE"
+    },
+    {
+      "color": 4280845000,
+      "id": 3,
+      "label": "Wait",
+      "parameters": [
+        {
+          "description": "Time to wait in milliseconds",
+          "name": "milliseconds",
+          "type": "int",
+          "value": "1000"
+        },
+        {
+          "description": "Purpose of this wait",
+          "name": "description",
+          "type": "string",
+          "value": "Pause"
+        }
+      ],
+      "position": {
+        "x": 270.0,
+        "y": 284.0
+      },
+      "type": "WAIT"
+    },
+    {
+      "color": 4290017350,
+      "id": 4,
+      "label": "Move Node",
+      "parameters": [
+        {
+          "description": "Name of the device to move",
+          "name": "device_name",
+          "type": "string",
+          "value": "gantry-main"
+        },
+        {
+          "description": "Name of the motion graph",
+          "name": "graph_name",
+          "type": "string",
+          "value": "Process_Flow"
+        },
+        {
+          "description": "Target node ID",
+          "name": "node_id",
+          "type": "string",
+          "value": "node_4107"
+        },
+        {
+          "description": "Wait for completion",
+          "name": "blocking",
+          "type": "bool",
+          "value": "true"
+        }
+      ],
+      "position": {
+        "x": 313.0,
+        "y": 393.0
+      },
+      "type": "MOVE_NODE"
+    },
+    {
+      "color": 4280845000,
+      "id": 5,
+      "label": "Wait",
+      "parameters": [
+        {
+          "description": "Time to wait in milliseconds",
+          "name": "milliseconds",
+          "type": "int",
+          "value": "1000"
+        },
+        {
+          "description": "Purpose of this wait",
+          "name": "description",
+          "type": "string",
+          "value": "Pause"
+        }
+      ],
+      "position": {
+        "x": 117.0,
+        "y": 420.0
+      },
+      "type": "WAIT"
+    },
+    {
+      "color": 4290017350,
+      "id": 6,
+      "label": "Move Node",
+      "parameters": [
+        {
+          "description": "Name of the device to move",
+          "name": "device_name",
+          "type": "string",
+          "value": "gantry-main"
+        },
+        {
+          "description": "Name of the motion graph",
+          "name": "graph_name",
+          "type": "string",
+          "value": "Process_Flow"
+        },
+        {
+          "description": "Target node ID",
+          "name": "node_id",
+          "type": "string",
+          "value": "node_4027"
+        },
+        {
+          "description": "Wait for completion",
+          "name": "blocking",
+          "type": "bool",
+          "value": "true"
+        }
+      ],
+      "position": {
+        "x": 200.0,
+        "y": 500.0
+      },
+      "type": "MOVE_NODE"
+    },
+    {
+      "color": 4282132660,
+      "id": 7,
+      "label": "END",
+      "parameters": [
+        {
+          "description": "Perform cleanup operations",
+          "name": "cleanup",
+          "type": "bool",
+          "value": "true"
+        },
+        {
+          "description": "Return to home position",
+          "name": "return_home",
+          "type": "bool",
+          "value": "false"
+        },
+        {
+          "description": "Save execution log",
+          "name": "save_log",
+          "type": "bool",
+          "value": "true"
+        }
+      ],
+      "position": {
+        "x": 200.0,
+        "y": 580.0
+      },
+      "type": "END"
+    }
+  ],
+  "connections": [
+    {
+      "from_block_id": 1,
+      "to_block_id": 2
+    },
+    {
+      "from_block_id": 2,
+      "to_block_id": 3
+    },
+    {
+      "from_block_id": 3,
+      "to_block_id": 4
+    },
+    {
+      "from_block_id": 4,
+      "to_block_id": 5
+    },
+    {
+      "from_block_id": 5,
+      "to_block_id": 6
+    },
+    {
+      "from_block_id": 6,
+      "to_block_id": 7
+    }
+  ]
+}

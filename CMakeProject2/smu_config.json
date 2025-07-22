@@ -10,13 +10,13 @@
   "clients": [
     {
       "name": "SMU1",
-      "display_name": "Keithley 2400 SMU1",
+      "display_name": "Keithley 2400 Main Device",
       "ip": "127.0.0.101",
       "port": 8888,
       "auto_connect": true,
       "enabled": true,
-      "polling_interval": 120,
-      "description": "SMU1 Keithley 2400"
+      "polling_interval": 1000,
+      "description": "Primary Keithley 2400 for main measurements"
     }
   ]
 }

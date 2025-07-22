@@ -19,30 +19,30 @@
       "enable": true
     },
     {
-      "id": "SMU1_V",
+      "id": "SMU1-Voltage",
       "displayName": "SMU1 Voltage",
       "unit": "V",
       "displayUnitSuffix": true,
       "enable": true
     },
     {
-      "id": "SMU1_A",
+      "id": "SMU1-Current",
       "displayName": "SMU1 Current",
       "unit": "A",
       "displayUnitSuffix": true,
       "enable": true
     },
     {
-      "id": "SMU1_R",
+      "id": "SMU1-Resistance",
       "displayName": "SMU1 Resistance",
       "unit": "Ohms",
       "displayUnitSuffix": true,
       "enable": false
     },
     {
-      "id": "SMU1_P",
+      "id": "SMU1-Power",
       "displayName": "SMU1 Power",
-      "unit": "Watts",
+      "unit": "W",
       "displayUnitSuffix": true,
       "enable": false
     },

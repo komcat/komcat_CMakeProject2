@@ -470,10 +470,10 @@
             "RequiresOperatorApproval": false,
             "TimeoutSeconds": 0
           },
-          "Id": "edge_9120",
-          "Label": "zero home",
-          "Source": "node_5480",
-          "Target": "node_9103"
+          "Id": "edge_4464",
+          "Label": "clear vision ",
+          "Source": "node_4423",
+          "Target": "node_5480"
         },
         {
           "Conditions": {
@@ -481,10 +481,10 @@
             "RequiresOperatorApproval": false,
             "TimeoutSeconds": 0
           },
-          "Id": "edge_9148",
-          "Label": "zero home",
+          "Id": "edge_4488",
+          "Label": "clear vision",
           "Source": "node_5136",
-          "Target": "node_9110"
+          "Target": "node_4448"
         }
       ],
       "Nodes": [
@@ -573,8 +573,8 @@
           "Id": "node_4500",
           "Label": "SN view",
           "Position": "snviewing",
-          "X": -226,
-          "Y": 1290
+          "X": -240,
+          "Y": 1248
         },
         {
           "Device": "hex-left",
@@ -677,8 +677,8 @@
           "Id": "caldot",
           "Label": "caldot",
           "Position": "caldot",
-          "X": 287,
-          "Y": 42
+          "X": 286,
+          "Y": 28
         },
         {
           "Device": "gantry-main",
@@ -741,24 +741,24 @@
           "Id": "node_2644",
           "Label": "Disp2Safe",
           "Position": "dispense2safe",
-          "X": -201,
+          "X": -45,
           "Y": -164
         },
         {
           "Device": "hex-left",
-          "Id": "node_9103",
-          "Label": "zero",
-          "Position": "zero",
-          "X": 1493,
-          "Y": -702
+          "Id": "node_4423",
+          "Label": "l clear vision",
+          "Position": "clear_vision",
+          "X": 1951,
+          "Y": -772
         },
         {
           "Device": "hex-right",
-          "Id": "node_9110",
-          "Label": "zero",
-          "Position": "zero",
-          "X": 1792,
-          "Y": -2516
+          "Id": "node_4448",
+          "Label": "r clear vision",
+          "Position": "clear_vision",
+          "X": 1956,
+          "Y": -2455
         }
       ]
     }
@@ -783,8 +783,8 @@
           "u": 0.0,
           "v": 0.0,
           "w": 0.0,
-          "x": 173.97644912067622,
-          "y": 80.78319364429515,
+          "x": 173.8762709832546,
+          "y": 80.82136639968556,
           "z": 16.894765
         },
         "_cam_dispense_2": {
@@ -1049,13 +1049,13 @@
           "y": 7.99999455736,
           "z": 9.06757038239e-07
         },
-        "clear_bench": {
-          "u": -1.999994,
-          "v": 5e-06,
-          "w": -1e-06,
-          "x": -2.090001,
-          "y": 6.929987,
-          "z": -1.199997
+        "clear_vision": {
+          "u": -3e-06,
+          "v": 0.0,
+          "w": 3e-06,
+          "x": 4.640003,
+          "y": 14.499992,
+          "z": 1e-06
         },
         "home": {
           "u": -8.63582253746e-07,
@@ -1112,14 +1112,6 @@
           "x": -5.45999613865,
           "y": 7.97999166547,
           "z": -2.25999874438
-        },
-        "zero": {
-          "u": 0.0,
-          "v": 0.0,
-          "w": 0.0,
-          "x": 0.0,
-          "y": 0.0,
-          "z": 0.0
         }
       },
       "installAxes": "X Y Z U V W",
@@ -1155,6 +1147,14 @@
           "x": 4.64000497644,
           "y": -7.99999744005,
           "z": -1.19999947306
+        },
+        "clear_vision": {
+          "u": 1e-06,
+          "v": 2e-06,
+          "w": -3e-06,
+          "x": 4.640003,
+          "y": -9.999994,
+          "z": -1.2
         },
         "home": {
           "u": 3.42387907228e-06,
@@ -1219,14 +1219,6 @@
           "x": 4.63999624681,
           "y": -5.5,
           "z": -1.2
-        },
-        "zero": {
-          "u": 0.0,
-          "v": 0.0,
-          "w": 0.0,
-          "x": 0.0,
-          "y": 0.0,
-          "z": 0.0
         }
       },
       "installAxes": "X Y Z U V W",
