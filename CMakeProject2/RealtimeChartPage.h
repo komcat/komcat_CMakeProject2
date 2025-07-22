@@ -80,7 +80,13 @@ private:
   // RunScanOperation execution helpers
   void executeRunScanOperation(const std::string& device,
     const std::vector<double>& stepSizes);
+  // NEW: Channel selection
+  std::vector<std::string> m_availableChannels;
+  int m_selectedChannelIndex;
 
+  // NEW: Helper methods
+  void updateAvailableChannels();
+  void renderChannelSelector();
 public:
   RealtimeChartPage(Logger* logger);
   ~RealtimeChartPage();

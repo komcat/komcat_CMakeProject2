@@ -6,6 +6,7 @@
 #include <raylib.h>
 #include <algorithm>
 #include <cmath>
+#include "imgui.h"
 
 // Forward declaration approach to avoid header conflicts
 // We'll use void* pointers and cast them when needed
@@ -46,11 +47,15 @@ extern "C" bool MachineOperations_IsScanActive(void* machineOpsPtr, const char* 
 
 RealtimeChartPage::RealtimeChartPage(Logger* logger)
   : m_logger(logger), m_dataStore(nullptr), m_fontLoaded(false),
-  m_machineOperations(nullptr), m_piControllerManager(nullptr),  // Update variable names
-  m_dataChannel("GPIB-Current"), m_timeWindow(10.0f),
+  m_machineOperations(nullptr), m_piControllerManager(nullptr),
+  m_dataChannel("GPIB-Current"), m_timeWindow(10.0f),  // Keep default
   m_currentValue(0.0f), m_scaledValue(0.0f),
+  m_selectedChannelIndex(0),  // NEW: Initialize channel index
   m_leftCoarseState(ScanState::IDLE), m_leftFineState(ScanState::IDLE),
   m_rightCoarseState(ScanState::IDLE), m_rightFineState(ScanState::IDLE) {
+
+  // NEW: Initialize available channels with default
+  m_availableChannels = { "GPIB-Current" };
 
   if (m_logger) {
     m_logger->LogInfo("RealtimeChartPage created");
@@ -98,6 +103,9 @@ void RealtimeChartPage::Render() {
   // Update data first
   updateData();
 
+  // Update available channels
+  updateAvailableChannels();
+
   // Update button states from scanning system
   updateButtonStatesFromScanning();
 
@@ -125,6 +133,9 @@ void RealtimeChartPage::Render() {
 
   // Render chart (bottom 40%)
   renderChart();
+
+  // MOVED: Render channel selector LAST so it appears on top
+  renderChannelSelector();
 }
 
 void RealtimeChartPage::updateData() {
@@ -699,4 +710,84 @@ bool RealtimeChartPage::isDeviceScanning(const std::string& deviceName) {
     }
     return false;
   }
+}
+
+
+void RealtimeChartPage::updateAvailableChannels() {
+  if (!m_dataStore) return;
+
+  // Get channels from data store
+  std::vector<std::string> storeChannels = m_dataStore->GetAvailableChannels();
+
+  // Only update if we have new channels
+  if (storeChannels.size() > m_availableChannels.size()) {
+    m_availableChannels = storeChannels;
+
+    // If our current channel isn't in the list, find its index
+    auto it = std::find(m_availableChannels.begin(), m_availableChannels.end(), m_dataChannel);
+    if (it != m_availableChannels.end()) {
+      m_selectedChannelIndex = std::distance(m_availableChannels.begin(), it);
+    }
+    else {
+      m_selectedChannelIndex = 0;
+      if (!m_availableChannels.empty()) {
+        m_dataChannel = m_availableChannels[0];
+      }
+    }
+  }
+}
+
+void RealtimeChartPage::renderChannelSelector() {
+  int screenWidth = GetScreenWidth();
+  int screenHeight = GetScreenHeight();
+  int topSectionHeight = (int)(screenHeight * 0.6f);
+
+  // Position under the large digital value display
+  int selectorX = screenWidth / 2 - 100;  // Center horizontally
+  int selectorY = topSectionHeight - 120;  // Above the STOP button area
+  int selectorWidth = 200;
+  int selectorHeight = 30;
+
+  Rectangle selectorRect = { (float)selectorX, (float)selectorY, (float)selectorWidth, (float)selectorHeight };
+
+  // Draw background with border
+  DrawRectangleRec(selectorRect, Color{ 60, 60, 70, 255 });
+  DrawRectangleLinesEx(selectorRect, 2, WHITE);
+
+  // Draw current channel name
+  Font font = m_fontLoaded ? m_customFont : GetFontDefault();
+  DrawTextEx(font, m_dataChannel.c_str(), Vector2{ (float)selectorX + 10, (float)selectorY + 8 }, 16, 2, WHITE);
+
+  // Draw dropdown arrow on the right
+  DrawTextEx(font, "▼", Vector2{ (float)(selectorX + selectorWidth - 25), (float)selectorY + 8 }, 16, 2, LIGHTGRAY);
+
+  // Handle click to cycle through channels
+  Vector2 mousePos = GetMousePosition();
+  bool isHovered = CheckCollisionPointRec(mousePos, selectorRect);
+
+  // Highlight on hover
+  if (isHovered) {
+    DrawRectangleLinesEx(selectorRect, 2, YELLOW);
+  }
+
+  if (isHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    // Cycle to next channel
+    if (!m_availableChannels.empty()) {
+      m_selectedChannelIndex = (m_selectedChannelIndex + 1) % m_availableChannels.size();
+      m_dataChannel = m_availableChannels[m_selectedChannelIndex];
+
+      // Clear old data when changing channels
+      m_dataBuffer.clear();
+
+      if (m_logger) {
+        m_logger->LogInfo("RealtimeChart: Switched to channel: " + m_dataChannel);
+      }
+    }
+  }
+
+  // Show channel info below the selector (smaller text)
+  char channelInfo[64];
+  snprintf(channelInfo, sizeof(channelInfo), "%d/%d",
+    m_selectedChannelIndex + 1, (int)m_availableChannels.size());
+  DrawTextEx(font, channelInfo, Vector2{ (float)selectorX + selectorWidth + 10, (float)selectorY + 8 }, 12, 2, LIGHTGRAY);
 }
