@@ -42,6 +42,9 @@
 #include "io_ops.h"
 #include "vision_ops.h"
 #include "Version.h"
+
+#include "raylibclass.h"
+
 bool g_deugMode = false; // Global debug mode flag
 
 
@@ -612,6 +615,59 @@ int main(int argc, char* argv[])
 		logger->LogInfo("MachineOperations set in MainUIManager");
 	}
 
+
+
+	// Initialize RaylibWindow (add this section after machineOps creation)
+	std::unique_ptr<RaylibWindow> raylibWindow;
+
+	// Check if we should enable the 3D window (you can add this to a config file later)
+	bool enableRaylib3D = true; // Set to false to disable
+
+	if (enableRaylib3D) {
+		raylibWindow = std::make_unique<RaylibWindow>();
+
+		// Set the logger first
+		raylibWindow->SetLogger(logger);
+
+		// Set connections BEFORE initializing
+		if (piControllerManager) {
+			raylibWindow->SetPIControllerManager(piControllerManager.get());
+		}
+		if (dataStore) {
+			raylibWindow->SetDataStore(dataStore);
+		}
+
+		// Connect MachineOperations if available
+		if (machineOps) {
+			raylibWindow->SetMachineOperations(machineOps.get());
+			logger->LogInfo("Connected MachineOperations to raylib window");
+		}
+
+		// Connect camera if available
+		if (cameraManager && cameraManager->GetCameraCount() > 0) {
+			// Assuming you want to connect the first camera for video feed
+			auto cameraIds = cameraManager->GetCameraIds();
+			if (!cameraIds.empty()) {
+				PylonCameraTest* firstCamera = cameraManager->GetCamera(cameraIds[0]);
+				if (firstCamera) {
+					// You'll need to add this method to your PylonCameraTest or use the existing pattern
+					// from CMakeProject2 where it calls SetRaylibWindow
+					logger->LogInfo("Connected camera to raylib window for video feed");
+				}
+			}
+		}
+
+		// THEN initialize the thread
+		if (raylibWindow->Initialize()) {
+			logger->LogInfo("Raylib 3D Window thread started successfully");
+		}
+		else {
+			logger->LogError("Failed to start Raylib 3D Window");
+			raylibWindow.reset(); // Clean up on failure
+		}
+	}
+
+
 	bool done = false;
 	bool glyphChecked = false;
 
@@ -646,6 +702,26 @@ int main(int argc, char* argv[])
 
 		// Render the main UI
 		uiManager.RenderUI();
+
+
+		// Update raylib window with current machine data (add this in the main loop)
+		if (raylibWindow && raylibWindow->IsRunning()) {
+			// Collect current machine data from your systems
+			MachineData data = { 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false };
+
+
+			// Update 3D visualization (thread-safe)
+			raylibWindow->UpdateMachineData(data);
+
+			// Check if raylib window was closed
+			if (raylibWindow->ShouldClose()) {
+				logger->LogInfo("Raylib window closed by user");
+				raylibWindow->Shutdown();
+				raylibWindow.reset();
+			}
+		}
+
+
 
 #pragma region DebugMode
 		//debug mode smaller ops
@@ -762,6 +838,14 @@ int main(int argc, char* argv[])
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
 		SDL_GL_SwapWindow(window);
+	}
+
+
+	// Cleanup RaylibWindow (add this in the cleanup section)
+	if (raylibWindow) {
+		logger->LogInfo("Shutting down Raylib thread...");
+		raylibWindow->Shutdown();
+		raylibWindow.reset();
 	}
 
 	// Cleanup
