@@ -1,14 +1,14 @@
-#include "MenuManager.h"
+#include "MenuManager_uaa3.h"
 #include "imgui.h"
 #include "Version.h"
 
-MenuManager::MenuManager() {
+MenuManagerUaa3::MenuManagerUaa3() {
 }
 
-MenuManager::~MenuManager() {
+MenuManagerUaa3::~MenuManagerUaa3() {
 }
 
-void MenuManager::RenderMainMenuBar() {
+void MenuManagerUaa3::RenderMainMenuBar() {
   if (ImGui::BeginMainMenuBar()) {
     RenderFileMenu();
     RenderRaylibMenu();
@@ -22,7 +22,7 @@ void MenuManager::RenderMainMenuBar() {
   RenderAboutDialog();
 }
 
-void MenuManager::RenderFileMenu() {
+void MenuManagerUaa3::RenderFileMenu() {
   if (ImGui::BeginMenu("File")) {
     if (ImGui::MenuItem("New Project", "Ctrl+N")) {
       // TODO: Implement new project
@@ -44,7 +44,7 @@ void MenuManager::RenderFileMenu() {
   }
 }
 
-void MenuManager::RenderRaylibMenu() {
+void MenuManagerUaa3::RenderRaylibMenu() {
   if (ImGui::BeginMenu("Raylib")) {
     ImGui::MenuItem("Live Feed Debug", nullptr, &m_showRaylibDebug);
 
@@ -62,7 +62,7 @@ void MenuManager::RenderRaylibMenu() {
   }
 }
 
-void MenuManager::RenderDebugMenu() {
+void MenuManagerUaa3::RenderDebugMenu() {
   if (ImGui::BeginMenu("Debug")) {
     ImGui::MenuItem("Show Demo Window", nullptr, &m_showDemo);
 
@@ -85,7 +85,7 @@ void MenuManager::RenderDebugMenu() {
   }
 }
 
-void MenuManager::RenderHelpMenu() {
+void MenuManagerUaa3::RenderHelpMenu() {
   if (ImGui::BeginMenu("Help")) {
     if (ImGui::MenuItem("About")) {
       m_showAbout = true;
@@ -99,7 +99,7 @@ void MenuManager::RenderHelpMenu() {
   }
 }
 
-void MenuManager::RenderAboutDialog() {
+void MenuManagerUaa3::RenderAboutDialog() {
   if (m_showAbout) {
     ImGui::OpenPopup("About");
   }

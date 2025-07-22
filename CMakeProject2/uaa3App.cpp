@@ -45,7 +45,8 @@
 
 #include "raylibclass.h"
 #include "CameraFeedDisplay.h"
-
+#include "MenuManager_uaa3.h"
+#include "RaylibDebugWindow.h"
 
 bool g_deugMode = false; // Global debug mode flag
 
@@ -784,6 +785,31 @@ int main(int argc, char* argv[])
 	bool done = false;
 	bool glyphChecked = false;
 
+
+
+	// ADD MenuManager creation HERE instead:
+// Create menu manager and debug window
+	std::unique_ptr<MenuManagerUaa3> menuManager = std::make_unique<MenuManagerUaa3>();
+	std::unique_ptr<RaylibDebugWindow> raylibDebugWindow = std::make_unique<RaylibDebugWindow>();
+
+	// Set up the raylib debug window
+	if (cameraManager) {
+		raylibDebugWindow->SetCameraManager(cameraManager.get());
+	}
+	if (raylibWindow) {
+		raylibDebugWindow->SetRaylibWindow(raylibWindow.get());
+	}
+	if (raylibCameraFeed) {
+		raylibDebugWindow->SetCameraFeedDisplay(raylibCameraFeed.get());
+	}
+	raylibDebugWindow->SetLogger(logger);
+
+	// Set up menu callbacks
+	menuManager->SetOnExitCallback([&done]() {
+		done = true;
+	});
+
+
 	while (!done)
 	{
 		// Poll and handle events
@@ -803,7 +829,8 @@ int main(int argc, char* argv[])
 		ImGui_ImplSDL2_NewFrame();
 		ImGui::NewFrame();
 
-
+		// RENDER MENU BAR FIRST - BEFORE ANYTHING ELSE
+		menuManager->RenderMainMenuBar();
 
 		// Update DataClientManager continuously in background
 		if (dataClientManager) {
@@ -816,7 +843,110 @@ int main(int argc, char* argv[])
 		// Render the main UI
 		uiManager.RenderUI();
 
+		// RENDER RAYLIB DEBUG WINDOW (controlled by menu)
+		if (menuManager->IsRaylibDebugVisible()) {
+			ImGui::Begin("Raylib Live Feed Debug", nullptr);
 
+			// Put your existing debug code here temporarily
+			ImGui::Text("3D Window Camera Feed Control");
+			ImGui::Separator();
+
+			// Camera selection dropdown
+			static std::string selectedCameraId;
+			auto cameraIds = cameraManager->GetCameraIds();
+
+			if (!cameraIds.empty()) {
+				// Initialize selection if empty
+				if (selectedCameraId.empty()) {
+					selectedCameraId = cameraIds[0];
+				}
+
+				ImGui::Text("Select Camera:");
+				if (ImGui::BeginCombo("##CameraSelection", selectedCameraId.c_str())) {
+					for (const auto& cameraId : cameraIds) {
+						bool isSelected = (selectedCameraId == cameraId);
+						auto status = cameraManager->GetCameraStatus(cameraId);
+
+						std::string displayName = cameraId;
+						if (status.connected) {
+							displayName += " (Connected)";
+						}
+						else {
+							displayName += " (Disconnected)";
+						}
+
+						if (ImGui::Selectable(displayName.c_str(), isSelected)) {
+							selectedCameraId = cameraId;
+
+							PylonCameraTest* newCamera = cameraManager->GetCamera(selectedCameraId);
+							if (newCamera && raylibCameraFeed) {
+								raylibCameraFeed->SetPylonCameraSource(newCamera);
+								logger->LogInfo("Switched raylib camera feed to: " + selectedCameraId);
+							}
+						}
+
+						if (isSelected) {
+							ImGui::SetItemDefaultFocus();
+						}
+					}
+					ImGui::EndCombo();
+				}
+
+				// Add basic camera controls
+				auto status = cameraManager->GetCameraStatus(selectedCameraId);
+				ImGui::Separator();
+				ImGui::Text("Camera Status:");
+				ImGui::SameLine();
+				if (status.connected) {
+					ImGui::TextColored(ImVec4(0, 1, 0, 1), "Connected");
+				}
+				else {
+					ImGui::TextColored(ImVec4(1, 0, 0, 1), "Disconnected");
+				}
+
+				// Quick start button
+				if (ImGui::Button("Quick Start: Connect & Start Feed")) {
+					if (cameraManager->ConnectCamera(selectedCameraId)) {
+						logger->LogInfo("Connected camera: " + selectedCameraId);
+						if (cameraManager->StartGrabbing(selectedCameraId)) {
+							logger->LogInfo("Started video feed for: " + selectedCameraId);
+							PylonCameraTest* camera = cameraManager->GetCamera(selectedCameraId);
+							if (camera && raylibCameraFeed) {
+								raylibCameraFeed->SetPylonCameraSource(camera);
+								raylibWindow->SetCameraFeedVisible(true);
+								logger->LogInfo("Camera feed connected to 3D window");
+							}
+						}
+					}
+				}
+
+
+				// Add this right after the "Quick Start" button in your debug window:
+				ImGui::Separator();
+				ImGui::Text("Live Preview:");
+
+				if (!selectedCameraId.empty()) {
+					PylonCameraTest* camera = cameraManager->GetCamera(selectedCameraId);
+					if (camera && camera->HasValidTexture()) {
+						ImTextureID texID = (ImTextureID)(intptr_t)camera->GetTextureID();
+						ImGui::Image(texID, ImVec2(300, 200)); // Small preview
+
+						if (ImGui::Button("Copy to Main Camera UI")) {
+							// This could trigger showing the same feed in your main camera window
+							logger->LogInfo("Camera feed copied to main UI");
+						}
+					}
+					else {
+						ImGui::Button("No Feed Available", ImVec2(300, 200));
+					}
+				}
+			}
+			else {
+				ImGui::Text("No cameras available");
+			}
+
+			ImGui::End();
+		}
 
 #pragma region rayLibwindow
 
@@ -837,384 +967,384 @@ int main(int argc, char* argv[])
 			}
 		}
 		// Camera Feed Controls for Raylib
-		if (raylibWindow && cameraManager) {
-			static bool showCameraFeedControls = true; // Start visible for easier access
+		//if (raylibWindow && cameraManager) {
+		//	static bool showCameraFeedControls = true; // Start visible for easier access
 
-			// Add to your main menu bar (if you have one) or create a new window
-			if (ImGui::Begin("Raylib Camera Feed", &showCameraFeedControls)) {
+		//	// Add to your main menu bar (if you have one) or create a new window
+		//	if (ImGui::Begin("Raylib Camera Feed", &showCameraFeedControls)) {
 
-				ImGui::Text("3D Window Camera Feed Control");
-				ImGui::Separator();
+		//		ImGui::Text("3D Window Camera Feed Control");
+		//		ImGui::Separator();
 
-				// Camera selection dropdown
-				static std::string selectedCameraId;
-				auto cameraIds = cameraManager->GetCameraIds();
+		//		// Camera selection dropdown
+		//		static std::string selectedCameraId;
+		//		auto cameraIds = cameraManager->GetCameraIds();
 
-				if (!cameraIds.empty()) {
-					// Initialize selection if empty
-					if (selectedCameraId.empty()) {
-						selectedCameraId = cameraIds[0];
-					}
+		//		if (!cameraIds.empty()) {
+		//			// Initialize selection if empty
+		//			if (selectedCameraId.empty()) {
+		//				selectedCameraId = cameraIds[0];
+		//			}
 
-					ImGui::Text("Select Camera:");
-					if (ImGui::BeginCombo("##CameraSelection", selectedCameraId.c_str())) {
-						for (const auto& cameraId : cameraIds) {
-							bool isSelected = (selectedCameraId == cameraId);
-							auto status = cameraManager->GetCameraStatus(cameraId);
+		//			ImGui::Text("Select Camera:");
+		//			if (ImGui::BeginCombo("##CameraSelection", selectedCameraId.c_str())) {
+		//				for (const auto& cameraId : cameraIds) {
+		//					bool isSelected = (selectedCameraId == cameraId);
+		//					auto status = cameraManager->GetCameraStatus(cameraId);
 
-							// Add status indicator to the name
-							std::string displayName = cameraId;
-							if (status.connected) {
-								displayName += " (Connected)";
-							}
-							else {
-								displayName += " (Disconnected)";
-							}
+		//					// Add status indicator to the name
+		//					std::string displayName = cameraId;
+		//					if (status.connected) {
+		//						displayName += " (Connected)";
+		//					}
+		//					else {
+		//						displayName += " (Disconnected)";
+		//					}
 
-							if (ImGui::Selectable(displayName.c_str(), isSelected)) {
-								selectedCameraId = cameraId;
+		//					if (ImGui::Selectable(displayName.c_str(), isSelected)) {
+		//						selectedCameraId = cameraId;
 
-								// Immediately connect the new camera to feed
-								PylonCameraTest* newCamera = cameraManager->GetCamera(selectedCameraId);
-								if (newCamera && raylibCameraFeed) {
-									raylibCameraFeed->SetPylonCameraSource(newCamera);
-									logger->LogInfo("Switched raylib camera feed to: " + selectedCameraId);
-								}
-							}
+		//						// Immediately connect the new camera to feed
+		//						PylonCameraTest* newCamera = cameraManager->GetCamera(selectedCameraId);
+		//						if (newCamera && raylibCameraFeed) {
+		//							raylibCameraFeed->SetPylonCameraSource(newCamera);
+		//							logger->LogInfo("Switched raylib camera feed to: " + selectedCameraId);
+		//						}
+		//					}
 
-							if (isSelected) {
-								ImGui::SetItemDefaultFocus();
-							}
-						}
-						ImGui::EndCombo();
-					}
+		//					if (isSelected) {
+		//						ImGui::SetItemDefaultFocus();
+		//					}
+		//				}
+		//				ImGui::EndCombo();
+		//			}
 
-					ImGui::Separator();
+		//			ImGui::Separator();
 
-					// Camera connection controls
-					auto status = cameraManager->GetCameraStatus(selectedCameraId);
-					ImGui::Text("Camera Status:");
-					ImGui::SameLine();
-					if (status.connected) {
-						ImGui::TextColored(ImVec4(0, 1, 0, 1), "Connected");
-					}
-					else {
-						ImGui::TextColored(ImVec4(1, 0, 0, 1), "Disconnected");
-					}
+		//			// Camera connection controls
+		//			auto status = cameraManager->GetCameraStatus(selectedCameraId);
+		//			ImGui::Text("Camera Status:");
+		//			ImGui::SameLine();
+		//			if (status.connected) {
+		//				ImGui::TextColored(ImVec4(0, 1, 0, 1), "Connected");
+		//			}
+		//			else {
+		//				ImGui::TextColored(ImVec4(1, 0, 0, 1), "Disconnected");
+		//			}
 
-					// Connect/Disconnect button
-					if (!status.connected) {
-						if (ImGui::Button("Connect Camera")) {
-							if (cameraManager->ConnectCamera(selectedCameraId)) {
-								logger->LogInfo("Connected camera: " + selectedCameraId);
-							}
-							else {
-								logger->LogError("Failed to connect camera: " + selectedCameraId);
-							}
-						}
-					}
-					else {
-						if (ImGui::Button("Disconnect Camera")) {
-							cameraManager->StopGrabbing(selectedCameraId);
-							cameraManager->DisconnectCamera(selectedCameraId);
-							logger->LogInfo("Disconnected camera: " + selectedCameraId);
-						}
-					}
+		//			// Connect/Disconnect button
+		//			if (!status.connected) {
+		//				if (ImGui::Button("Connect Camera")) {
+		//					if (cameraManager->ConnectCamera(selectedCameraId)) {
+		//						logger->LogInfo("Connected camera: " + selectedCameraId);
+		//					}
+		//					else {
+		//						logger->LogError("Failed to connect camera: " + selectedCameraId);
+		//					}
+		//				}
+		//			}
+		//			else {
+		//				if (ImGui::Button("Disconnect Camera")) {
+		//					cameraManager->StopGrabbing(selectedCameraId);
+		//					cameraManager->DisconnectCamera(selectedCameraId);
+		//					logger->LogInfo("Disconnected camera: " + selectedCameraId);
+		//				}
+		//			}
 
-					// Grabbing controls (only if connected)
-					if (status.connected) {
-						ImGui::Separator();
-						ImGui::Text("Video Feed:");
-						ImGui::SameLine();
-						if (status.grabbing) {
-							ImGui::TextColored(ImVec4(0, 1, 0, 1), "Active");
-						}
-						else {
-							ImGui::TextColored(ImVec4(1, 1, 0, 1), "Stopped");
-						}
+		//			// Grabbing controls (only if connected)
+		//			if (status.connected) {
+		//				ImGui::Separator();
+		//				ImGui::Text("Video Feed:");
+		//				ImGui::SameLine();
+		//				if (status.grabbing) {
+		//					ImGui::TextColored(ImVec4(0, 1, 0, 1), "Active");
+		//				}
+		//				else {
+		//					ImGui::TextColored(ImVec4(1, 1, 0, 1), "Stopped");
+		//				}
 
-						// Start/Stop grabbing buttons
-						if (!status.grabbing) {
-							if (ImGui::Button("Start Video Feed")) {
-								if (cameraManager->StartGrabbing(selectedCameraId)) {
-									logger->LogInfo("Started video feed for: " + selectedCameraId);
-								}
-								else {
-									logger->LogError("Failed to start video feed for: " + selectedCameraId);
-								}
-							}
-						}
-						else {
-							if (ImGui::Button("Stop Video Feed")) {
-								cameraManager->StopGrabbing(selectedCameraId);
-								logger->LogInfo("Stopped video feed for: " + selectedCameraId);
-							}
-						}
+		//				// Start/Stop grabbing buttons
+		//				if (!status.grabbing) {
+		//					if (ImGui::Button("Start Video Feed")) {
+		//						if (cameraManager->StartGrabbing(selectedCameraId)) {
+		//							logger->LogInfo("Started video feed for: " + selectedCameraId);
+		//						}
+		//						else {
+		//							logger->LogError("Failed to start video feed for: " + selectedCameraId);
+		//						}
+		//					}
+		//				}
+		//				else {
+		//					if (ImGui::Button("Stop Video Feed")) {
+		//						cameraManager->StopGrabbing(selectedCameraId);
+		//						logger->LogInfo("Stopped video feed for: " + selectedCameraId);
+		//					}
+		//				}
 
-						// Quick capture button
-						ImGui::SameLine();
-						if (ImGui::Button("Capture Image")) {
-							if (cameraManager->CaptureImage(selectedCameraId)) {
-								logger->LogInfo("Captured image from: " + selectedCameraId);
-							}
-							else {
-								logger->LogError("Failed to capture image from: " + selectedCameraId);
-							}
-						}
-					}
+		//				// Quick capture button
+		//				ImGui::SameLine();
+		//				if (ImGui::Button("Capture Image")) {
+		//					if (cameraManager->CaptureImage(selectedCameraId)) {
+		//						logger->LogInfo("Captured image from: " + selectedCameraId);
+		//					}
+		//					else {
+		//						logger->LogError("Failed to capture image from: " + selectedCameraId);
+		//					}
+		//				}
+		//			}
 
-					ImGui::Separator();
+		//			ImGui::Separator();
 
-					// 3D Window feed controls
-					ImGui::Text("3D Window Display:");
-					bool feedVisible = raylibWindow->IsCameraFeedVisible();
-					if (ImGui::Checkbox("Show Feed in 3D Window", &feedVisible)) {
-						raylibWindow->SetCameraFeedVisible(feedVisible);
-						logger->LogInfo("3D camera feed " + std::string(feedVisible ? "enabled" : "disabled"));
-					}
+		//			// 3D Window feed controls
+		//			ImGui::Text("3D Window Display:");
+		//			bool feedVisible = raylibWindow->IsCameraFeedVisible();
+		//			if (ImGui::Checkbox("Show Feed in 3D Window", &feedVisible)) {
+		//				raylibWindow->SetCameraFeedVisible(feedVisible);
+		//				logger->LogInfo("3D camera feed " + std::string(feedVisible ? "enabled" : "disabled"));
+		//			}
 
-					// Feed status
-					if (raylibCameraFeed) {
-						ImGui::Text("Feed Status: %s", raylibCameraFeed->GetStatusText().c_str());
+		//			// Feed status
+		//			if (raylibCameraFeed) {
+		//				ImGui::Text("Feed Status: %s", raylibCameraFeed->GetStatusText().c_str());
 
-						if (raylibCameraFeed->HasValidTexture()) {
-							ImGui::Text("Resolution: %dx%d",
-								raylibCameraFeed->GetTextureWidth(),
-								raylibCameraFeed->GetTextureHeight());
+		//				if (raylibCameraFeed->HasValidTexture()) {
+		//					ImGui::Text("Resolution: %dx%d",
+		//						raylibCameraFeed->GetTextureWidth(),
+		//						raylibCameraFeed->GetTextureHeight());
 
-							bool isReceiving = raylibCameraFeed->IsReceivingFrames();
-							ImGui::Text("Receiving Frames: ");
-							ImGui::SameLine();
-							if (isReceiving) {
-								ImGui::TextColored(ImVec4(0, 1, 0, 1), "Yes");
-							}
-							else {
-								ImGui::TextColored(ImVec4(1, 1, 0, 1), "No");
-							}
+		//					bool isReceiving = raylibCameraFeed->IsReceivingFrames();
+		//					ImGui::Text("Receiving Frames: ");
+		//					ImGui::SameLine();
+		//					if (isReceiving) {
+		//						ImGui::TextColored(ImVec4(0, 1, 0, 1), "Yes");
+		//					}
+		//					else {
+		//						ImGui::TextColored(ImVec4(1, 1, 0, 1), "No");
+		//					}
 
-							// Transparency control
-							static float alpha = 0.8f;
-							if (ImGui::SliderFloat("Feed Transparency", &alpha, 0.1f, 1.0f)) {
-								raylibWindow->SetCameraFeedAlpha(alpha);
-							}
-						}
-					}
-					// Replace your debug section with this corrected version:
+		//					// Transparency control
+		//					static float alpha = 0.8f;
+		//					if (ImGui::SliderFloat("Feed Transparency", &alpha, 0.1f, 1.0f)) {
+		//						raylibWindow->SetCameraFeedAlpha(alpha);
+		//					}
+		//				}
+		//			}
+		//			// Replace your debug section with this corrected version:
 
-					// Add this debug method to help troubleshoot the texture issue
-					// Add this to your camera controls UI section:
+		//			// Add this debug method to help troubleshoot the texture issue
+		//			// Add this to your camera controls UI section:
 
-					ImGui::Separator();
-					ImGui::Text("=== DETAILED TEXTURE DEBUG ===");
+		//			ImGui::Separator();
+		//			ImGui::Text("=== DETAILED TEXTURE DEBUG ===");
 
-					// FIX: Get the camera from the selected camera ID
-					PylonCameraTest* camera = cameraManager->GetCamera(selectedCameraId);
-					if (camera && raylibCameraFeed) {
-						// Get current values
-						unsigned int camTextureID = camera->GetTextureID();
-						bool camHasTexture = camera->HasValidTexture();
-						unsigned int feedTextureID = raylibCameraFeed->GetTextureID();
-						bool feedHasTexture = raylibCameraFeed->HasValidTexture();
+		//			// FIX: Get the camera from the selected camera ID
+		//			PylonCameraTest* camera = cameraManager->GetCamera(selectedCameraId);
+		//			if (camera && raylibCameraFeed) {
+		//				// Get current values
+		//				unsigned int camTextureID = camera->GetTextureID();
+		//				bool camHasTexture = camera->HasValidTexture();
+		//				unsigned int feedTextureID = raylibCameraFeed->GetTextureID();
+		//				bool feedHasTexture = raylibCameraFeed->HasValidTexture();
 
-						ImGui::Text("Camera Texture ID: %u", camTextureID);
-						ImGui::Text("Camera Has Texture: %s", camHasTexture ? "Yes" : "No");
-						ImGui::Text("Feed Texture ID: %u", feedTextureID);
-						ImGui::Text("Feed Has Texture: %s", feedHasTexture ? "Yes" : "No");
-						ImGui::Text("IDs Match: %s", (camTextureID == feedTextureID) ? "Yes" : "No");
+		//				ImGui::Text("Camera Texture ID: %u", camTextureID);
+		//				ImGui::Text("Camera Has Texture: %s", camHasTexture ? "Yes" : "No");
+		//				ImGui::Text("Feed Texture ID: %u", feedTextureID);
+		//				ImGui::Text("Feed Has Texture: %s", feedHasTexture ? "Yes" : "No");
+		//				ImGui::Text("IDs Match: %s", (camTextureID == feedTextureID) ? "Yes" : "No");
 
-						// Check OpenGL validity
-						if (camTextureID > 0) {
-							bool isValidGL = glIsTexture(camTextureID);
-							ImGui::Text("Camera Texture Valid in OpenGL: %s", isValidGL ? "Yes" : "No");
-						}
+		//				// Check OpenGL validity
+		//				if (camTextureID > 0) {
+		//					bool isValidGL = glIsTexture(camTextureID);
+		//					ImGui::Text("Camera Texture Valid in OpenGL: %s", isValidGL ? "Yes" : "No");
+		//				}
 
-						if (feedTextureID > 0 && feedTextureID != camTextureID) {
-							bool isValidGL = glIsTexture(feedTextureID);
-							ImGui::Text("Feed Texture Valid in OpenGL: %s", isValidGL ? "Yes" : "No");
-						}
+		//				if (feedTextureID > 0 && feedTextureID != camTextureID) {
+		//					bool isValidGL = glIsTexture(feedTextureID);
+		//					ImGui::Text("Feed Texture Valid in OpenGL: %s", isValidGL ? "Yes" : "No");
+		//				}
 
-						ImGui::Separator();
+		//				ImGui::Separator();
 
-						// Force a complete refresh
-						if (ImGui::Button("Complete Refresh Chain")) {
-							logger->LogInfo("=== COMPLETE REFRESH CHAIN ===");
+		//				// Force a complete refresh
+		//				if (ImGui::Button("Complete Refresh Chain")) {
+		//					logger->LogInfo("=== COMPLETE REFRESH CHAIN ===");
 
-							// Step 1: Force camera texture update
-							camera->UpdateTextureIfReady();
-							unsigned int newCamID = camera->GetTextureID();
-							logger->LogInfo("Step 1 - Camera texture ID: " + std::to_string(newCamID));
+		//					// Step 1: Force camera texture update
+		//					camera->UpdateTextureIfReady();
+		//					unsigned int newCamID = camera->GetTextureID();
+		//					logger->LogInfo("Step 1 - Camera texture ID: " + std::to_string(newCamID));
 
-							// Step 2: Reconnect feed to camera
-							raylibCameraFeed->ClearSource();
-							raylibCameraFeed->SetPylonCameraSource(camera);
-							logger->LogInfo("Step 2 - Reconnected feed to camera");
+		//					// Step 2: Reconnect feed to camera
+		//					raylibCameraFeed->ClearSource();
+		//					raylibCameraFeed->SetPylonCameraSource(camera);
+		//					logger->LogInfo("Step 2 - Reconnected feed to camera");
 
-							// Step 3: Force feed update
-							bool feedResult = raylibCameraFeed->UpdateTexture();
-							unsigned int newFeedID = raylibCameraFeed->GetTextureID();
-							logger->LogInfo("Step 3 - Feed update result: " + std::string(feedResult ? "Success" : "Failed"));
-							logger->LogInfo("Step 3 - Feed texture ID: " + std::to_string(newFeedID));
+		//					// Step 3: Force feed update
+		//					bool feedResult = raylibCameraFeed->UpdateTexture();
+		//					unsigned int newFeedID = raylibCameraFeed->GetTextureID();
+		//					logger->LogInfo("Step 3 - Feed update result: " + std::string(feedResult ? "Success" : "Failed"));
+		//					logger->LogInfo("Step 3 - Feed texture ID: " + std::to_string(newFeedID));
 
-							// Step 4: Check final state
-							logger->LogInfo("Step 4 - Feed has valid texture: " +
-								std::string(raylibCameraFeed->HasValidTexture() ? "Yes" : "No"));
-							logger->LogInfo("=== END REFRESH CHAIN ===");
-						}
+		//					// Step 4: Check final state
+		//					logger->LogInfo("Step 4 - Feed has valid texture: " +
+		//						std::string(raylibCameraFeed->HasValidTexture() ? "Yes" : "No"));
+		//					logger->LogInfo("=== END REFRESH CHAIN ===");
+		//				}
 
-						// Test if camera window needs to be visible
-						ImGui::Separator();
-						ImGui::Text("Camera Window Test:");
-						bool windowVisible = camera->IsVisible();
-						ImGui::Text("Camera Window Visible: %s", windowVisible ? "Yes" : "No");
+		//				// Test if camera window needs to be visible
+		//				ImGui::Separator();
+		//				ImGui::Text("Camera Window Test:");
+		//				bool windowVisible = camera->IsVisible();
+		//				ImGui::Text("Camera Window Visible: %s", windowVisible ? "Yes" : "No");
 
-						if (ImGui::Button("Show Camera Window + Update")) {
-							if (!camera->IsVisible()) {
-								camera->ToggleWindow();
-								logger->LogInfo("Showed camera window");
-							}
+		//				if (ImGui::Button("Show Camera Window + Update")) {
+		//					if (!camera->IsVisible()) {
+		//						camera->ToggleWindow();
+		//						logger->LogInfo("Showed camera window");
+		//					}
 
-							// Wait for a few frames then force update
-							std::this_thread::sleep_for(std::chrono::milliseconds(200));
-							camera->UpdateTextureIfReady();
+		//					// Wait for a few frames then force update
+		//					std::this_thread::sleep_for(std::chrono::milliseconds(200));
+		//					camera->UpdateTextureIfReady();
 
-							unsigned int newID = camera->GetTextureID();
-							logger->LogInfo("After showing window - texture ID: " + std::to_string(newID));
-						}
+		//					unsigned int newID = camera->GetTextureID();
+		//					logger->LogInfo("After showing window - texture ID: " + std::to_string(newID));
+		//				}
 
-						// Check if the texture has actual image data
-						if (camTextureID > 0) {
-							ImGui::Separator();
-							if (ImGui::Button("Test Texture Data")) {
-								// Bind the texture and check its properties
-								glBindTexture(GL_TEXTURE_2D, camTextureID);
+		//				// Check if the texture has actual image data
+		//				if (camTextureID > 0) {
+		//					ImGui::Separator();
+		//					if (ImGui::Button("Test Texture Data")) {
+		//						// Bind the texture and check its properties
+		//						glBindTexture(GL_TEXTURE_2D, camTextureID);
 
-								GLint width, height;
-								glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
-								glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
+		//						GLint width, height;
+		//						glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
+		//						glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
 
-								logger->LogInfo("Texture " + std::to_string(camTextureID) + " size: " +
-									std::to_string(width) + "x" + std::to_string(height));
+		//						logger->LogInfo("Texture " + std::to_string(camTextureID) + " size: " +
+		//							std::to_string(width) + "x" + std::to_string(height));
 
-								glBindTexture(GL_TEXTURE_2D, 0);
-							}
-						}
+		//						glBindTexture(GL_TEXTURE_2D, 0);
+		//					}
+		//				}
 
-						// Manual texture display test
-						if (camTextureID > 0) {
-							ImGui::Separator();
-							ImGui::Text("Manual Texture Display Test:");
+		//				// Manual texture display test
+		//				if (camTextureID > 0) {
+		//					ImGui::Separator();
+		//					ImGui::Text("Manual Texture Display Test:");
 
-							// Try to display the camera texture directly in ImGui
-							ImTextureID texID = (ImTextureID)(intptr_t)camTextureID;
-							ImGui::Image(texID, ImVec2(160, 120)); // Small preview
+		//					// Try to display the camera texture directly in ImGui
+		//					ImTextureID texID = (ImTextureID)(intptr_t)camTextureID;
+		//					ImGui::Image(texID, ImVec2(160, 120)); // Small preview
 
-							if (ImGui::IsItemHovered()) {
-								ImGui::SetTooltip("Camera Texture ID: %u\nSize: %ux%u",
-									camTextureID,
-									camera->GetImageWidth(),
-									camera->GetImageHeight());
-							}
-						}
-					}
-					else {
-						ImGui::Text("No camera selected or camera feed not available");
-					}
-
-
-					ImGui::Separator();
-					ImGui::Text("=== RAYLIB THREAD DEBUG ===");
-
-					if (raylibWindow) {
-						ImGui::Text("Raylib Window Running: %s", raylibWindow->IsRunning() ? "Yes" : "No");
-						ImGui::Text("Raylib Window Visible: %s", raylibWindow->IsVisible() ? "Yes" : "No");
-						ImGui::Text("Raylib Has Camera Feed: %s", raylibWindow->HasCameraFeed() ? "Yes" : "No");
-						ImGui::Text("Raylib Feed Visible: %s", raylibWindow->IsCameraFeedVisible() ? "Yes" : "No");
-
-						// Force raylib to acknowledge the feed
-						if (ImGui::Button("Force Raylib Reconnect")) {
-							if (raylibCameraFeed) {
-								// Clear and reset the raylib connection
-								raylibWindow->ClearCameraFeed();
-								std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-								raylibWindow->SetCameraFeedDisplay(raylibCameraFeed.get());
-								raylibWindow->SetCameraFeedVisible(true);
-
-								logger->LogInfo("Forced Raylib camera feed reconnection");
-							}
-						}
-
-						// Test if the issue is OpenGL context sharing  
-						if (ImGui::Button("Test OpenGL Context")) {
-							if (camera && camera->GetTextureID() > 0) {
-								unsigned int texID = camera->GetTextureID();
-
-								// SIMPLIFIED: Just log texture ID info without OpenGL validation
-								logger->LogInfo("Camera texture ID in main thread: " + std::to_string(texID));
-								logger->LogInfo("Camera image size: " + std::to_string(camera->GetImageWidth()) + "x" +
-									std::to_string(camera->GetImageHeight()));
-
-								// The actual OpenGL validation would need proper includes:
-								// bool isValid = glIsTexture(texID);
-								// logger->LogInfo("Texture valid: " + std::string(isValid ? "Yes" : "No"));
-							}
-						}
-
-						// Manual feed visibility toggle
-						bool feedVisible = raylibWindow->IsCameraFeedVisible();
-						if (ImGui::Checkbox("Force Feed Visible in Raylib", &feedVisible)) {
-							raylibWindow->SetCameraFeedVisible(feedVisible);
-							logger->LogInfo("Manually toggled Raylib feed visibility: " + std::string(feedVisible ? "ON" : "OFF"));
-						}
-					}
-
-					//== end debug section ==
-					//== end debug section ==
-
-				}
-				else {
-					ImGui::Text("No cameras available");
-					if (ImGui::Button("Refresh Camera List")) {
-						// Re-scan for cameras
-						cameraManager->InitializeAllCameras();
-					}
-				}
-
-				ImGui::Separator();
-				ImGui::Text("3D Window Controls:");
-				ImGui::BulletText("Press 'C' to toggle camera feed");
-				ImGui::BulletText("Press 'V' to switch corner/fullscreen");
-
-				// Auto-start helper
-				ImGui::Separator();
-				if (ImGui::Button("Quick Start: Connect & Start Feed")) {
-					if (!cameraIds.empty()) {
-						std::string targetCamera = selectedCameraId.empty() ? cameraIds[0] : selectedCameraId;
-
-						// Connect camera
-						if (cameraManager->ConnectCamera(targetCamera)) {
-							logger->LogInfo("Connected camera: " + targetCamera);
-
-							// Start grabbing
-							if (cameraManager->StartGrabbing(targetCamera)) {
-								logger->LogInfo("Started video feed for: " + targetCamera);
-
-								// Make sure it's connected to the raylib feed
-								PylonCameraTest* camera = cameraManager->GetCamera(targetCamera);
-								if (camera && raylibCameraFeed) {
-									raylibCameraFeed->SetPylonCameraSource(camera);
-									raylibWindow->SetCameraFeedVisible(true);
-									logger->LogInfo("Camera feed connected to 3D window");
-								}
-							}
-						}
-					}
-				}
-			}
+		//					if (ImGui::IsItemHovered()) {
+		//						ImGui::SetTooltip("Camera Texture ID: %u\nSize: %ux%u",
+		//							camTextureID,
+		//							camera->GetImageWidth(),
+		//							camera->GetImageHeight());
+		//					}
+		//				}
+		//			}
+		//			else {
+		//				ImGui::Text("No camera selected or camera feed not available");
+		//			}
 
 
-			ImGui::End();
-		}
+		//			ImGui::Separator();
+		//			ImGui::Text("=== RAYLIB THREAD DEBUG ===");
+
+		//			if (raylibWindow) {
+		//				ImGui::Text("Raylib Window Running: %s", raylibWindow->IsRunning() ? "Yes" : "No");
+		//				ImGui::Text("Raylib Window Visible: %s", raylibWindow->IsVisible() ? "Yes" : "No");
+		//				ImGui::Text("Raylib Has Camera Feed: %s", raylibWindow->HasCameraFeed() ? "Yes" : "No");
+		//				ImGui::Text("Raylib Feed Visible: %s", raylibWindow->IsCameraFeedVisible() ? "Yes" : "No");
+
+		//				// Force raylib to acknowledge the feed
+		//				if (ImGui::Button("Force Raylib Reconnect")) {
+		//					if (raylibCameraFeed) {
+		//						// Clear and reset the raylib connection
+		//						raylibWindow->ClearCameraFeed();
+		//						std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+		//						raylibWindow->SetCameraFeedDisplay(raylibCameraFeed.get());
+		//						raylibWindow->SetCameraFeedVisible(true);
+
+		//						logger->LogInfo("Forced Raylib camera feed reconnection");
+		//					}
+		//				}
+
+		//				// Test if the issue is OpenGL context sharing  
+		//				if (ImGui::Button("Test OpenGL Context")) {
+		//					if (camera && camera->GetTextureID() > 0) {
+		//						unsigned int texID = camera->GetTextureID();
+
+		//						// SIMPLIFIED: Just log texture ID info without OpenGL validation
+		//						logger->LogInfo("Camera texture ID in main thread: " + std::to_string(texID));
+		//						logger->LogInfo("Camera image size: " + std::to_string(camera->GetImageWidth()) + "x" +
+		//							std::to_string(camera->GetImageHeight()));
+
+		//						// The actual OpenGL validation would need proper includes:
+		//						// bool isValid = glIsTexture(texID);
+		//						// logger->LogInfo("Texture valid: " + std::string(isValid ? "Yes" : "No"));
+		//					}
+		//				}
+
+		//				// Manual feed visibility toggle
+		//				bool feedVisible = raylibWindow->IsCameraFeedVisible();
+		//				if (ImGui::Checkbox("Force Feed Visible in Raylib", &feedVisible)) {
+		//					raylibWindow->SetCameraFeedVisible(feedVisible);
+		//					logger->LogInfo("Manually toggled Raylib feed visibility: " + std::string(feedVisible ? "ON" : "OFF"));
+		//				}
+		//			}
+
+		//			//== end debug section ==
+		//			//== end debug section ==
+
+		//		}
+		//		else {
+		//			ImGui::Text("No cameras available");
+		//			if (ImGui::Button("Refresh Camera List")) {
+		//				// Re-scan for cameras
+		//				cameraManager->InitializeAllCameras();
+		//			}
+		//		}
+
+		//		ImGui::Separator();
+		//		ImGui::Text("3D Window Controls:");
+		//		ImGui::BulletText("Press 'C' to toggle camera feed");
+		//		ImGui::BulletText("Press 'V' to switch corner/fullscreen");
+
+		//		// Auto-start helper
+		//		ImGui::Separator();
+		//		if (ImGui::Button("Quick Start: Connect & Start Feed")) {
+		//			if (!cameraIds.empty()) {
+		//				std::string targetCamera = selectedCameraId.empty() ? cameraIds[0] : selectedCameraId;
+
+		//				// Connect camera
+		//				if (cameraManager->ConnectCamera(targetCamera)) {
+		//					logger->LogInfo("Connected camera: " + targetCamera);
+
+		//					// Start grabbing
+		//					if (cameraManager->StartGrabbing(targetCamera)) {
+		//						logger->LogInfo("Started video feed for: " + targetCamera);
+
+		//						// Make sure it's connected to the raylib feed
+		//						PylonCameraTest* camera = cameraManager->GetCamera(targetCamera);
+		//						if (camera && raylibCameraFeed) {
+		//							raylibCameraFeed->SetPylonCameraSource(camera);
+		//							raylibWindow->SetCameraFeedVisible(true);
+		//							logger->LogInfo("Camera feed connected to 3D window");
+		//						}
+		//					}
+		//				}
+		//			}
+		//		}
+		//	}
+
+
+		//	ImGui::End();
+		//}
 #pragma endregion
 
 #pragma region DebugMode

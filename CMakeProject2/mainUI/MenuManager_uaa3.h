@@ -1,10 +1,10 @@
 #pragma once
 #include <functional>
-
-class MenuManager {
+#include <string>
+class MenuManagerUaa3 {
 public:
-  MenuManager();
-  ~MenuManager();
+  MenuManagerUaa3();
+  ~MenuManagerUaa3();
 
   void RenderMainMenuBar();
 

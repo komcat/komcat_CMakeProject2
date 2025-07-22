@@ -378,7 +378,7 @@ add_executable(CMakeProject2
      "Programming/MacroManager.h" 
      "Programming/MacroManager.cpp"
      "Programming/MacroEditState.h"
-     "include/ui/MenuManager.h"
+     "mainUI/MenuManager_uaa3.h"
      "include/ui/MenuManager.cpp"
      "include/data/DatabaseManager.h"
      "include/data/OperationResultsManager.h"
@@ -462,7 +462,19 @@ add_executable(CMakeProject2
    "include/ops/vision_ops.cpp"
    "mainUI/MacroPanelUI.h" 
    
- "mainUI/MacroPanelCameraHandler.h" "mainUI/MacroPanelCameraHandler.cpp" "mainUI/MacroPanelUI_Main.cpp" "mainUI/MacroPanelUI_Panels.cpp" "mainUI/MacroPanelUI_Execution.cpp" "mainUI/MacroPanelUI_FileDialog.cpp" "mainUI/ProgramCardRenderer.h" "mainUI/ProgramCardRenderer.cpp" "mainUI/MenuManager.h" "mainUI/MenuManager.cpp" "mainUI/RaylibDebugWindow.h" "mainUI/RaylibDebugWindow.cpp")
+ "mainUI/MacroPanelCameraHandler.h"
+ "mainUI/MacroPanelCameraHandler.cpp"
+ "mainUI/MacroPanelUI_Main.cpp"
+ "mainUI/MacroPanelUI_Panels.cpp" 
+ "mainUI/MacroPanelUI_Execution.cpp"
+ "mainUI/MacroPanelUI_FileDialog.cpp"
+ "mainUI/ProgramCardRenderer.h" 
+ "mainUI/ProgramCardRenderer.cpp"
+ "mainUI/MenuManager_uaa3.h"
+ "mainUI/MenuManager_uaa3.cpp"
+ "mainUI/RaylibDebugWindow.h" 
+ "mainUI/RaylibDebugWindow.cpp"
+ )
 
 
 
@@ -706,7 +718,7 @@ add_executable(uaa3App
   "Programming/MacroManager.h" 
   "Programming/MacroManager.cpp"
   "Programming/MacroEditState.h"
-  "include/ui/MenuManager.h"
+  "mainUI/MenuManager_uaa3.h"
   "include/ui/MenuManager.cpp"
   "include/data/DatabaseManager.h"
   "include/data/OperationResultsManager.h"
@@ -787,7 +799,20 @@ add_executable(uaa3App
   "include/ops/motion_ops_position_related.cpp" 
   "include/ops/motion_ops.cpp"
   "include/ops/io_ops.cpp"
-  "include/ops/vision_ops.cpp" "mainUI/MacroPanelUI.h"  "mainUI/MacroPanelCameraHandler.h" "mainUI/MacroPanelCameraHandler.cpp" "mainUI/MacroPanelUI_Main.cpp" "mainUI/MacroPanelUI_Panels.cpp" "mainUI/MacroPanelUI_Execution.cpp" "mainUI/MacroPanelUI_FileDialog.cpp" "mainUI/ProgramCardRenderer.h" "mainUI/ProgramCardRenderer.cpp" "mainUI/MenuManager.h" "mainUI/MenuManager.cpp" "mainUI/RaylibDebugWindow.h" "mainUI/RaylibDebugWindow.cpp")
+  "include/ops/vision_ops.cpp"
+  "mainUI/MacroPanelUI.h"
+  "mainUI/MacroPanelCameraHandler.h" 
+  "mainUI/MacroPanelCameraHandler.cpp"
+  "mainUI/MacroPanelUI_Main.cpp"
+  "mainUI/MacroPanelUI_Panels.cpp"
+  "mainUI/MacroPanelUI_Execution.cpp" 
+  "mainUI/MacroPanelUI_FileDialog.cpp"
+  "mainUI/ProgramCardRenderer.h"
+  "mainUI/ProgramCardRenderer.cpp"
+  "mainUI/MenuManager_uaa3.h" 
+  "mainUI/MenuManager_uaa3.cpp"
+  "mainUI/RaylibDebugWindow.h" 
+  "mainUI/RaylibDebugWindow.cpp")
 
 
 
