@@ -86,13 +86,13 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 	// Initialize Global Data Store Viewer UI
 	m_globalDataStoreViewerUI = std::make_unique<GlobalDataStoreViewerUI>();
 
-	try {
-		m_cld101xEquipmentUI = std::make_unique<CLD101xEquipmentUI>();
-	}
-	catch (const std::exception& e) {
-		// Handle initialization error if needed
-		m_cld101xEquipmentUI = nullptr;
-	}
+	//try {
+	//	m_cld101xEquipmentUI = std::make_unique<CLD101xEquipmentUI>();
+	//}
+	//catch (const std::exception& e) {
+	//	// Handle initialization error if needed
+	//	m_cld101xEquipmentUI = nullptr;
+	//}
 }
 
 
@@ -798,14 +798,13 @@ CLD101xManager* m_cld101xManager = nullptr;
 void MainUIManager::SetCLD101xManager(CLD101xManager* cld101xManager) {
 	m_cld101xManager = cld101xManager;
 
-	// Pass the manager to the UI component
-	if (m_cld101xEquipmentUI) {
-		m_cld101xEquipmentUI->SetCLD101xManager(cld101xManager);
-	}
+	// REMOVE the CLD101xEquipmentUI connection:
+	// if (m_cld101xEquipmentUI) {
+	//     m_cld101xEquipmentUI->SetCLD101xManager(cld101xManager);
+	// }
 
-	// ENABLE GLOBAL DATA STORE INTEGRATION
+	// KEEP the Global Data Store integration:
 	if (cld101xManager) {
-		// Enable for all clients with appropriate prefixes
 		cld101xManager->EnableGlobalDataStoreForAll(true);
 		Logger::GetInstance()->LogInfo("MainUIManager: Enabled Global Data Store for CLD101x equipment");
 	}
@@ -814,18 +813,34 @@ void MainUIManager::SetCLD101xManager(CLD101xManager* cld101xManager) {
 
 // 2. UPDATE RenderCld101xEquipmentPage() to use the manager:
 void MainUIManager::RenderCld101xEquipmentPage() {
-	if (m_cld101xEquipmentUI) {
-		m_cld101xEquipmentUI->Render();
+	if (m_cld101xManager) {
+		// Render manager UI directly
+		m_cld101xManager->RenderUI();
+
+		// Also render individual client UIs if needed
+		auto clientNames = m_cld101xManager->GetClientNames();
+		for (const auto& clientName : clientNames) {
+			auto client = m_cld101xManager->GetClient(clientName);
+			if (client && client->IsVisible()) {
+				client->RenderUI();
+			}
+		}
 	}
 	else {
-		// Fallback error display
+		// Fallback when manager not available
 		ImGui::SetWindowFontScale(1.5f);
-		ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "CLD101x Equipment Control");
+		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "CLD101x Equipment Control");
 		ImGui::SetWindowFontScale(1.0f);
 
 		ImGui::Spacing();
-		ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create CLD101x Equipment UI");
-		ImGui::Text("Check console for error messages");
+		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "CLD101x Manager not available");
+		ImGui::Text("Equipment control is not initialized.");
+		ImGui::Spacing();
+		ImGui::Text("This typically means:");
+		ImGui::BulletText("CLD101x manager is still loading");
+		ImGui::BulletText("No CLD101x devices are configured");
+		ImGui::BulletText("Hardware connection issues");
+		ImGui::BulletText("Check network connectivity to laser controllers");
 	}
 }
 

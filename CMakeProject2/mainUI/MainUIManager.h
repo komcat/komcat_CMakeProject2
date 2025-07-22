@@ -10,7 +10,7 @@
 #include "include/data/data_client_manager.h"
 #include "include/machine_operations.h"
 #include "GlobalDataStoreViewerUI.h"
-#include "CLD101xEquipmentUI.h"
+//#include "CLD101xEquipmentUI.h"
 #include "UISMUPanel.h"
 #include "Programming/MachineBlockUI.h"
 #include "Programming/MacroManager.h"
@@ -122,7 +122,7 @@ private:
   std::unique_ptr<UIPneumaticPanel> m_pneumaticPanelUI;
   std::unique_ptr<UICameraPanel> m_cameraPanelUI;
   std::unique_ptr<GlobalDataStoreViewerUI> m_globalDataStoreViewerUI;
-  std::unique_ptr<CLD101xEquipmentUI> m_cld101xEquipmentUI;
+  //std::unique_ptr<CLD101xEquipmentUI> m_cld101xEquipmentUI;
   std::unique_ptr<MacroPanelUI> m_macroPanelUI;
 
   CLD101xManager* m_cld101xManager = nullptr;

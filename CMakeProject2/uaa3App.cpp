@@ -323,7 +323,7 @@ int main(int argc, char* argv[])
 	// In your main application, try this:
 	auto camera1 = CameraInfo::CreateByIP("main_camera", "192.168.0.68", "Top view camera");
 	cameraManager->AddCamera(camera1);
-	auto camera1 = CameraInfo::CreateByIP("aux_camera", "192.168.0.69", "Auxilary Camera");
+	auto camera2 = CameraInfo::CreateByIP("aux_camera", "192.168.0.69", "Auxilary Camera");
 	cameraManager->AddCamera(camera1);
 
 	cameraManager->InitializeAllCameras();
