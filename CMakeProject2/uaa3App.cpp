@@ -41,7 +41,7 @@
 #include "motion_ops.h"
 #include "io_ops.h"
 #include "vision_ops.h"
-
+#include "Version.h"
 bool g_deugMode = false; // Global debug mode flag
 
 
@@ -83,7 +83,7 @@ int main(int argc, char* argv[])
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
 	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-	SDL_Window* window = SDL_CreateWindow("uaa3App - Motion Configuration",
+	SDL_Window* window = SDL_CreateWindow(Version::getWindowTitle().c_str(),
 		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 		1200, 800, window_flags);
 
