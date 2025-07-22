@@ -11,6 +11,7 @@
 class PIControllerManager;
 class GlobalDataStore;
 class Logger;
+class CameraFeedDisplay;  // ADD THIS LINE
 
 struct MachineData {
   float gantryX, gantryY, gantryZ;
@@ -80,8 +81,18 @@ public:
   // Thread-safe status
   bool IsVisible() const { return isVisible.load(); }
   bool ShouldClose() const { return shouldClose.load(); }
+  // NEW: Camera feed methods - ADD THESE
+  void SetCameraFeedDisplay(CameraFeedDisplay* feedDisplay);
+  void ClearCameraFeed();
+  bool HasCameraFeed() const { return m_cameraFeedDisplay != nullptr; }
 
+  // Camera overlay controls
+  void ToggleCameraFeed() { m_showCameraFeed = !m_showCameraFeed; }
+  void SetCameraFeedVisible(bool visible) { m_showCameraFeed = visible; }
+  void SetCameraFeedAlpha(float alpha) { m_cameraFeedAlpha = alpha; }
+  bool IsCameraFeedVisible() const { return m_showCameraFeed; }
 private:
+  Logger* m_logger = nullptr;  // ADD THIS LINE if it's missing
   // Threading
   std::thread raylibThread;
   std::atomic<bool> isRunning;
@@ -115,4 +126,18 @@ private:
   // NEW: Video frame management
   VideoFrame GetVideoFrameThreadSafe();
   void UpdateRaylibVideoFrame();
+
+
+  // NEW: Camera feed integration members
+  CameraFeedDisplay* m_cameraFeedDisplay = nullptr;
+  unsigned int m_cameraTextureID = 0;
+  bool m_showCameraFeed = true;
+  float m_cameraFeedAlpha = 0.8f;
+  bool m_cameraFullscreenMode = false;
+  // NEW: Camera rendering methods - ADD THESE
+  void UpdateCameraTexture();
+  void RenderCameraOverlay();
+  void RenderCameraInCorner();
+  void RenderCameraFullscreen();
+
 };

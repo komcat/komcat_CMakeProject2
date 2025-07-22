@@ -6,6 +6,7 @@
 // 1. ADD INCLUDE at the top with other includes:
 #include "RealtimeChartPage.h"
 #include "include/data/global_data_store.h"  // ADD THIS LINE
+#include "mainUI/CameraFeedDisplay.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -414,8 +415,15 @@ void RaylibWindow::RaylibThreadFunction() {
 
     if (logger) logger->LogInfo("Raylib ready with live video support and MachineOperations integration");
 
+    // REPLACE your main raylib loop in RaylibThreadFunction() with this:
+
     // Main raylib loop
     while (!WindowShouldClose() && !shouldShutdown.load()) {
+
+      // === ADD CAMERA UPDATE HERE (CRITICAL!) ===
+      // Update camera texture from OpenGL - MUST be called every frame
+      UpdateCameraTexture();
+      // ==========================================
 
       // Update video frame for raylib thread
       UpdateRaylibVideoFrame();
@@ -433,9 +441,27 @@ void RaylibWindow::RaylibThreadFunction() {
       if (IsKeyPressed(KEY_R)) {  // R for Rectangles/Visualize
         currentPage = VISUALIZE_PAGE;
       }
-      if (IsKeyPressed(KEY_C)) {          // ADD THIS BLOCK
+      if (IsKeyPressed(KEY_C)) {
         currentPage = REALTIME_CHART_PAGE;
       }
+
+      // === ADD CAMERA CONTROLS HERE ===
+      // Handle camera visibility toggle with different key (since C is used for chart)
+      if (IsKeyPressed(KEY_F)) {  // F for Feed toggle
+        ToggleCameraFeed();
+        if (logger) {
+          logger->LogInfo("Camera feed " + std::string(m_showCameraFeed ? "enabled" : "disabled"));
+        }
+      }
+
+      // Handle camera fullscreen toggle
+      if (IsKeyPressed(KEY_G)) {  // G for fullscreen toggle (since V is used for video page)
+        m_cameraFullscreenMode = !m_cameraFullscreenMode;
+        if (logger) {
+          logger->LogInfo("Camera view mode: " + std::string(m_cameraFullscreenMode ? "Fullscreen" : "Corner"));
+        }
+      }
+      // ================================
 
       // Handle video controls via keyboard
       if (IsKeyPressed(KEY_SPACE)) {
@@ -458,14 +484,30 @@ void RaylibWindow::RaylibThreadFunction() {
       else if (currentPage == VISUALIZE_PAGE) {
         visualizePage.Render();
       }
-      else if (currentPage == REALTIME_CHART_PAGE) {  // ADD THIS BLOCK
+      else if (currentPage == REALTIME_CHART_PAGE) {
         realtimeChartPage.Render();
       }
+
+      // === ADD CAMERA OVERLAY RENDERING HERE (CRITICAL!) ===
+      // Render camera overlay on ALL pages - MUST be called every frame
+      RenderCameraOverlay();
+
+      // Add camera status display
+      if (m_cameraFeedDisplay) {
+        std::string cameraStatus = m_cameraFeedDisplay->GetStatusText();
+        Color statusColor = m_cameraFeedDisplay->IsReceivingFrames() ? GREEN : ORANGE;
+        DrawText(cameraStatus.c_str(), 10, GetScreenHeight() - 60, 16, statusColor);
+
+        if (m_cameraFeedDisplay->HasValidTexture()) {
+          DrawText("Camera: F=Toggle, G=Fullscreen", 10, GetScreenHeight() - 40, 12, LIGHTGRAY);
+        }
+      }
+      // =====================================================
+
       DrawFPS(10, GetScreenHeight() - 30);
 
       EndDrawing();
     }
-
     if (logger) logger->LogInfo("Raylib thread main loop ended, cleaning up...");
 
     // Cleanup
@@ -486,33 +528,326 @@ void RaylibWindow::RaylibThreadFunction() {
   if (logger) logger->LogInfo("Raylib thread function ended");
 }
 
+// Update your existing RaylibWindow::RenderScene() method in raylibclass.cpp
+// Check your RenderScene() method in raylibclass.cpp
+// Make sure it looks like this and is actually being called:
+
 void RaylibWindow::RenderScene() {
-  // Get current machine data
-  MachineData data = GetMachineDataThreadSafe();
+  // Add this debug at the very beginning to verify the method is called
+  static int renderCallCount = 0;
+  renderCallCount++;
 
-  // Coordinate axes
-  DrawLine3D({ 0, 0, 0 }, { 10, 0, 0 }, RED);    // X - Red
-  DrawLine3D({ 0, 0, 0 }, { 0, 10, 0 }, GREEN);  // Y - Green
-  DrawLine3D({ 0, 0, 0 }, { 0, 0, 10 }, BLUE);   // Z - Blue
+  if (renderCallCount % 300 == 0) { // Every 5 seconds at 60fps
+    if (m_logger) {
+      m_logger->LogInfo("RaylibWindow::RenderScene called " + std::to_string(renderCallCount) + " times");
+    }
+  }
 
-  // Gantry system
-  Vector3 gantryPos = { data.gantryX * 0.01f, data.gantryY * 0.01f + 5, data.gantryZ * 0.01f };
-  Color gantryColor = data.gantryConnected ? BLUE : GRAY;
-  DrawCube(gantryPos, 15.0f, 2.0f, 2.0f, gantryColor);
-  DrawCubeWires(gantryPos, 15.0f, 2.0f, 2.0f, BLACK);
+  BeginDrawing();
 
-  // Hexapod Left
-  Vector3 hexLeftPos = { data.hexLeftX * 0.01f - 5, data.hexLeftY * 0.01f, data.hexLeftZ * 0.01f };
-  Color hexLeftColor = data.hexLeftConnected ? ORANGE : GRAY;
-  DrawCylinder(hexLeftPos, 2.0f, 2.0f, 1.0f, 6, hexLeftColor);
-  DrawCylinderWires(hexLeftPos, 2.0f, 2.0f, 1.0f, 6, BLACK);
+  // Clear background
+  ClearBackground(DARKBLUE);
 
-  // Hexapod Right
-  Vector3 hexRightPos = { data.hexRightX * 0.01f + 5, data.hexRightY * 0.01f, data.hexRightZ * 0.01f };
-  Color hexRightColor = data.hexRightConnected ? PURPLE : GRAY;
-  DrawCylinder(hexRightPos, 2.0f, 2.0f, 1.0f, 6, hexRightColor);
-  DrawCylinderWires(hexRightPos, 2.0f, 2.0f, 1.0f, 6, BLACK);
+  // === YOUR EXISTING 3D RENDERING CODE ===
+  // Draw grid, 3D models, etc.
+  DrawGrid(20, 5.0f);
+  // ... other 3D rendering ...
 
-  // Work area
-  DrawCubeWires({ 0, -2, 0 }, 20.0f, 1.0f, 20.0f, LIGHTGRAY);
+  // === CRITICAL: These camera calls MUST be here ===
+  // Update camera texture from OpenGL
+  UpdateCameraTexture();
+
+  // Render camera overlay (corner or fullscreen)
+  RenderCameraOverlay();
+
+  // Handle camera visibility toggle
+  if (IsKeyPressed(KEY_C)) {
+    ToggleCameraFeed();
+    if (m_logger) {
+      m_logger->LogInfo("Camera feed " + std::string(m_showCameraFeed ? "enabled" : "disabled"));
+    }
+  }
+
+  // === YOUR EXISTING 2D RENDERING ===
+  DrawFPS(10, 10);
+
+  // Add camera status
+  if (m_cameraFeedDisplay) {
+    std::string cameraStatus = m_cameraFeedDisplay->GetStatusText();
+    Color statusColor = m_cameraFeedDisplay->IsReceivingFrames() ? GREEN : ORANGE;
+    DrawText(cameraStatus.c_str(), 10, GetScreenHeight() - 40, 16, statusColor);
+
+    if (m_cameraFeedDisplay->HasValidTexture()) {
+      DrawText("Camera Controls: C=Toggle, V=Fullscreen", 10, GetScreenHeight() - 20, 12, LIGHTGRAY);
+    }
+  }
+
+  EndDrawing();
+}
+void RaylibWindow::SetCameraFeedDisplay(CameraFeedDisplay* feedDisplay) {
+  if (m_cameraFeedDisplay != feedDisplay) {
+    m_cameraFeedDisplay = feedDisplay;
+    m_cameraTextureID = 0; // Reset texture reference
+
+    // Safe logging - only log if logger exists
+    if (m_logger && feedDisplay) {
+      m_logger->LogInfo("RaylibWindow: Camera feed display connected");
+    }
+  }
+}
+
+void RaylibWindow::ClearCameraFeed() {
+  m_cameraFeedDisplay = nullptr;
+  m_cameraTextureID = 0;
+
+  // Safe logging - only log if logger exists
+  if (m_logger) {
+    m_logger->LogInfo("RaylibWindow: Camera feed cleared");
+  }
+}
+
+
+void RaylibWindow::UpdateCameraTexture() {
+  if (!m_cameraFeedDisplay) {
+    return;
+  }
+
+  // NEW: Add debug logging
+  static int updateCount = 0;
+  updateCount++;
+
+  // Log every 60 calls (about once per second at 60fps)
+  if (updateCount % 60 == 0) {
+    if (m_logger) {
+      m_logger->LogInfo("RaylibWindow: UpdateCameraTexture called " + std::to_string(updateCount) + " times");
+      m_logger->LogInfo("  Feed has source: " + std::string(m_cameraFeedDisplay->HasSource() ? "Yes" : "No"));
+      m_logger->LogInfo("  Feed has texture: " + std::string(m_cameraFeedDisplay->HasValidTexture() ? "Yes" : "No"));
+    }
+  }
+
+  // Update the camera feed display (this updates the OpenGL texture)
+  if (m_cameraFeedDisplay->UpdateTexture() && m_cameraFeedDisplay->HasValidTexture()) {
+    unsigned int newTextureID = m_cameraFeedDisplay->GetTextureID();
+
+    // NEW: Log when texture ID changes
+    if (newTextureID != m_cameraTextureID) {
+      if (m_logger) {
+        m_logger->LogInfo("RaylibWindow: Camera texture ID changed from " +
+          std::to_string(m_cameraTextureID) + " to " + std::to_string(newTextureID));
+      }
+    }
+
+    m_cameraTextureID = newTextureID;
+  }
+}
+
+
+void RaylibWindow::RenderCameraOverlay() {
+  if (!m_showCameraFeed || !m_cameraFeedDisplay || m_cameraTextureID == 0) {
+    // NEW: Log why we're not rendering
+    static int noRenderCount = 0;
+    noRenderCount++;
+
+    if (noRenderCount % 300 == 0) { // Log every 5 seconds
+      if (m_logger) {
+        std::string reason = "Unknown";
+        if (!m_showCameraFeed) reason = "Feed not visible";
+        else if (!m_cameraFeedDisplay) reason = "No feed display";
+        else if (m_cameraTextureID == 0) reason = "No texture ID";
+
+        m_logger->LogInfo("RaylibWindow: Not rendering camera overlay - " + reason);
+      }
+    }
+    return;
+  }
+
+  // NEW: Log successful renders occasionally
+  static int renderCount = 0;
+  renderCount++;
+
+  if (renderCount % 300 == 0) { // Log every 5 seconds
+    if (m_logger) {
+      m_logger->LogInfo("RaylibWindow: Rendering camera overlay (render #" + std::to_string(renderCount) + ")");
+      m_logger->LogInfo("  Texture ID: " + std::to_string(m_cameraTextureID));
+      m_logger->LogInfo("  Mode: " + std::string(m_cameraFullscreenMode ? "Fullscreen" : "Corner"));
+    }
+  }
+
+  // Get camera texture dimensions
+  uint32_t texWidth = m_cameraFeedDisplay->GetTextureWidth();
+  uint32_t texHeight = m_cameraFeedDisplay->GetTextureHeight();
+
+  if (texWidth == 0 || texHeight == 0) {
+    if (m_logger && renderCount % 300 == 0) {
+      m_logger->LogInfo("RaylibWindow: Invalid texture dimensions: " +
+        std::to_string(texWidth) + "x" + std::to_string(texHeight));
+    }
+    return;
+  }
+
+  // Toggle with 'V' key
+  if (IsKeyPressed(KEY_V)) {
+    m_cameraFullscreenMode = !m_cameraFullscreenMode;
+    if (m_logger) {
+      m_logger->LogInfo("Camera view mode: " + std::string(m_cameraFullscreenMode ? "Fullscreen" : "Corner"));
+    }
+  }
+
+  if (m_cameraFullscreenMode) {
+    RenderCameraFullscreen();
+  }
+  else {
+    RenderCameraInCorner();
+  }
+}
+
+
+
+// First, add this include at the top of your raylibclass.cpp file:
+// #include <GL/gl.h>  // For OpenGL functions like glIsTexture
+// OR if you're using a different OpenGL loader:
+// #include <glad/glad.h>  // or whatever OpenGL loader you're using
+
+// Add this validation to your RenderCameraInCorner method:
+
+void RaylibWindow::RenderCameraInCorner() {
+  if (m_cameraTextureID == 0) return;
+
+  // SIMPLIFIED: Skip OpenGL validation for now - Raylib handles this
+  // if (!glIsTexture(m_cameraTextureID)) {
+  //     if (m_logger) {
+  //         m_logger->LogWarning("RaylibWindow: Texture ID " + std::to_string(m_cameraTextureID) + 
+  //                            " is not valid in OpenGL context");
+  //     }
+  //     return;
+  // }
+
+  int screenWidth = GetScreenWidth();
+  int screenHeight = GetScreenHeight();
+
+  // Camera feed in top-right corner
+  float feedWidth = 320.0f;
+  float feedHeight = 240.0f;
+  float margin = 20.0f;
+
+  // Position in corner
+  Rectangle destRect = {
+      screenWidth - feedWidth - margin,
+      margin,
+      feedWidth,
+      feedHeight
+  };
+
+  // Source rectangle (full texture)
+  Rectangle sourceRect = {
+      0, 0,
+      (float)m_cameraFeedDisplay->GetTextureWidth(),
+      -(float)m_cameraFeedDisplay->GetTextureHeight()  // Negative height to flip Y
+  };
+
+  // Create a Raylib texture from OpenGL texture ID
+  Texture2D cameraTexture = {
+      .id = m_cameraTextureID,
+      .width = (int)m_cameraFeedDisplay->GetTextureWidth(),
+      .height = (int)m_cameraFeedDisplay->GetTextureHeight(),
+      .mipmaps = 1,
+      .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
+  };
+
+  // NEW: Log texture details occasionally
+  static int renderDetailCount = 0;
+  renderDetailCount++;
+
+  if (renderDetailCount % 300 == 0) {
+    if (m_logger) {
+      m_logger->LogInfo("RaylibWindow Corner Render Details:");
+      m_logger->LogInfo("  Texture ID: " + std::to_string(cameraTexture.id));
+      m_logger->LogInfo("  Texture Size: " + std::to_string(cameraTexture.width) + "x" + std::to_string(cameraTexture.height));
+      m_logger->LogInfo("  Dest Rect: " + std::to_string((int)destRect.x) + "," + std::to_string((int)destRect.y) +
+        " " + std::to_string((int)destRect.width) + "x" + std::to_string((int)destRect.height));
+    }
+  }
+
+  // Draw with transparency
+  Color tint = { 255, 255, 255, (unsigned char)(255 * m_cameraFeedAlpha) };
+
+  // Draw background for camera feed
+  DrawRectangleRec(destRect, Fade(BLACK, 0.3f));
+
+  // Draw camera texture
+  DrawTexturePro(cameraTexture, sourceRect, destRect, Vector2{ 0, 0 }, 0.0f, tint);
+
+  // Draw border
+  DrawRectangleLinesEx(destRect, 2, WHITE);
+
+  // Draw label
+  DrawText("CAMERA FEED",
+    (int)(destRect.x + 5),
+    (int)(destRect.y + destRect.height + 5),
+    16, WHITE);
+
+  // NEW: Add debug info
+  DrawText(("ID:" + std::to_string(m_cameraTextureID)).c_str(),
+    (int)(destRect.x + 5),
+    (int)(destRect.y - 40),
+    12, YELLOW);
+
+  // Draw controls hint
+  DrawText("Press 'V' for fullscreen",
+    (int)(destRect.x + 5),
+    (int)(destRect.y - 20),
+    12, LIGHTGRAY);
+}
+
+
+void RaylibWindow::RenderCameraFullscreen() {
+  if (m_cameraTextureID == 0) return;
+
+  int screenWidth = GetScreenWidth();
+  int screenHeight = GetScreenHeight();
+
+  // Calculate aspect ratio preserving dimensions
+  float texWidth = (float)m_cameraFeedDisplay->GetTextureWidth();
+  float texHeight = (float)m_cameraFeedDisplay->GetTextureHeight();
+  float aspectRatio = texWidth / texHeight;
+
+  float displayWidth, displayHeight;
+  float offsetX = 0, offsetY = 0;
+
+  // Fit to screen while maintaining aspect ratio
+  if (aspectRatio > ((float)screenWidth / screenHeight)) {
+    // Fit by width
+    displayWidth = screenWidth;
+    displayHeight = screenWidth / aspectRatio;
+    offsetY = (screenHeight - displayHeight) * 0.5f;
+  }
+  else {
+    // Fit by height
+    displayHeight = screenHeight;
+    displayWidth = screenHeight * aspectRatio;
+    offsetX = (screenWidth - displayWidth) * 0.5f;
+  }
+
+  Rectangle destRect = { offsetX, offsetY, displayWidth, displayHeight };
+  Rectangle sourceRect = { 0, 0, texWidth, -texHeight };  // Negative height to flip Y
+
+  // Create texture reference
+  Texture2D cameraTexture = {
+      .id = m_cameraTextureID,
+      .width = (int)texWidth,
+      .height = (int)texHeight,
+      .mipmaps = 1,
+      .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
+  };
+
+  // Semi-transparent background
+  DrawRectangle(0, 0, screenWidth, screenHeight, Fade(BLACK, 0.5f));
+
+  // Draw camera feed
+  DrawTexturePro(cameraTexture, sourceRect, destRect, Vector2{ 0, 0 }, 0.0f, WHITE);
+
+  // Draw controls
+  DrawText("CAMERA FEED - FULLSCREEN MODE", 20, 20, 24, WHITE);
+  DrawText("Press 'V' to return to corner view", 20, 50, 16, LIGHTGRAY);
+  DrawText("Press 'C' to hide camera feed", 20, 70, 16, LIGHTGRAY);
 }

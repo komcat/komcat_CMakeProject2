@@ -289,7 +289,7 @@ void RealtimeChartPage::renderButtons() {
 
   // Left side buttons
   int leftX = 30;
-  int leftCoarseY = 150;
+  int leftCoarseY = 300;
   int leftFineY = leftCoarseY + buttonHeight + buttonSpacing;
 
   Rectangle leftCoarseBtn = { (float)leftX, (float)leftCoarseY, (float)buttonWidth, (float)buttonHeight };
@@ -297,7 +297,7 @@ void RealtimeChartPage::renderButtons() {
 
   // Right side buttons  
   int rightX = screenWidth - buttonWidth - 30;
-  int rightCoarseY = 150;
+  int rightCoarseY = 300;
   int rightFineY = rightCoarseY + buttonHeight + buttonSpacing;
 
   Rectangle rightCoarseBtn = { (float)rightX, (float)rightCoarseY, (float)buttonWidth, (float)buttonHeight };
