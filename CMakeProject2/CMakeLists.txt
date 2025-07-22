@@ -1031,3 +1031,58 @@ add_custom_command(TARGET CMakeProject2 POST_BUILD
     $<TARGET_FILE_DIR:CMakeProject2>/assets/fonts/
     COMMENT "Copying font files to build directory"
 )
+
+
+
+# Add this section to your existing CMakeLists.txt file
+# (after your existing POST_BUILD commands, before the end of the file)
+
+# Define configuration files to copy
+set(CONFIG_FILES
+    "camera_calibration.json"
+    "camera_exposure_config.json"
+    "camera_to_object_offset.json"
+    "data_display_config.json"
+    "DataServerConfig.json"
+    "io_panel_config.json"
+    "IOConfig.json"
+    "motion_config.json"
+    "motion_config_backup_before_position_swap.json"
+    "program.json"
+    "script_runner_config.json"
+    "smu_config.json"
+    "toolbar_state.json"
+    "transformation_matrix.json"
+)
+
+# Function to copy config files for a target (copy if not exist or newer)
+function(copy_config_files TARGET_NAME)
+    foreach(CONFIG_FILE ${CONFIG_FILES})
+        # Method 1: Using copy_if_different (already handles both conditions)
+        add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/${CONFIG_FILE}"
+            $<TARGET_FILE_DIR:${TARGET_NAME}>/
+            COMMENT "Copying ${CONFIG_FILE} if not exist or newer"
+        )
+        
+        # Alternative Method 2: More explicit check (uncomment if you prefer this approach)
+        # add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+        #     COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        #     "${CMAKE_CURRENT_SOURCE_DIR}/${CONFIG_FILE}"
+        #     "$<TARGET_FILE_DIR:${TARGET_NAME}>/${CONFIG_FILE}"
+        #     COMMENT "Copying ${CONFIG_FILE} (if not exist or source is newer)"
+        #     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${CONFIG_FILE}"
+        # )
+    endforeach()
+endfunction()
+
+# Copy configuration files for both executables
+copy_config_files(CMakeProject2)
+copy_config_files(uaa3App)
+
+# Add verification message
+add_custom_command(TARGET CMakeProject2 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E echo "Configuration files synchronized to build directory"
+    COMMENT "Configuration file copy completed"
+)
