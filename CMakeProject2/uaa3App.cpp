@@ -72,12 +72,14 @@ void CheckCameraStatus(CameraManager& cameraManager) {
 }
 
 
-void DebugCameraFeedSetup(CameraManager* cameraManager,
+
+// **NEW: Enhanced debug function for camera feed**
+void DebugCameraFeedSetupEnhanced(CameraManager* cameraManager,
 	CameraFeedDisplay* raylibCameraFeed,
 	RaylibWindow* raylibWindow,
 	Logger* logger) {
 
-	logger->LogInfo("=== CAMERA FEED DEBUG ===");
+	logger->LogInfo("=== ENHANCED CAMERA FEED DEBUG ===");
 
 	// Check camera manager
 	if (!cameraManager) {
@@ -86,6 +88,8 @@ void DebugCameraFeedSetup(CameraManager* cameraManager,
 	}
 
 	logger->LogInfo("Camera count: " + std::to_string(cameraManager->GetCameraCount()));
+	logger->LogInfo("Subscriber count: " + std::to_string(cameraManager->GetSubscriberCount()));
+	logger->LogInfo("Broadcasting active: " + std::string(cameraManager->GetSubscriberCount() > 0 ? "YES" : "NO"));
 
 	auto cameraIds = cameraManager->GetCameraIds();
 	for (const auto& id : cameraIds) {
@@ -102,9 +106,14 @@ void DebugCameraFeedSetup(CameraManager* cameraManager,
 		return;
 	}
 
-	logger->LogInfo("Camera feed has source: " + std::string(raylibCameraFeed->HasSource() ? "Yes" : "No"));
-	logger->LogInfo("Camera feed has texture: " + std::string(raylibCameraFeed->HasValidTexture() ? "Yes" : "No"));
-	logger->LogInfo("Camera feed status: " + raylibCameraFeed->GetStatusText());
+	logger->LogInfo("=== CAMERA FEED DISPLAY STATUS ===");
+	logger->LogInfo("Feed has source: " + std::string(raylibCameraFeed->HasSource() ? "Yes" : "No"));
+	logger->LogInfo("Feed has texture: " + std::string(raylibCameraFeed->HasValidTexture() ? "Yes" : "No"));
+	logger->LogInfo("Feed status: " + raylibCameraFeed->GetStatusText());
+	logger->LogInfo("Feed receiving frames: " + std::string(raylibCameraFeed->IsReceivingFrames() ? "Yes" : "No"));
+	logger->LogInfo("Feed total frames: " + std::to_string(raylibCameraFeed->GetTotalFramesReceived()));
+	logger->LogInfo("Feed frame rate: " + std::to_string(raylibCameraFeed->GetActualFrameRate()) + " fps");
+	logger->LogInfo("Feed subscriber ID: " + raylibCameraFeed->GetSubscriberId());
 
 	// Check raylib window
 	if (!raylibWindow) {
@@ -112,10 +121,11 @@ void DebugCameraFeedSetup(CameraManager* cameraManager,
 		return;
 	}
 
+	logger->LogInfo("=== RAYLIB WINDOW STATUS ===");
 	logger->LogInfo("Raylib has camera feed: " + std::string(raylibWindow->HasCameraFeed() ? "Yes" : "No"));
 	logger->LogInfo("Raylib feed visible: " + std::string(raylibWindow->IsCameraFeedVisible() ? "Yes" : "No"));
 
-	logger->LogInfo("=== END DEBUG ===");
+	logger->LogInfo("=== END ENHANCED DEBUG ===");
 }
 
 
@@ -679,6 +689,8 @@ int main(int argc, char* argv[])
 
 
 
+	// In your uaa3App.cpp, replace the camera feed setup section with this:
+
 	// CORRECTED: Create CameraFeedDisplay FIRST, then RaylibWindow
 	std::unique_ptr<CameraFeedDisplay> raylibCameraFeed;
 	std::unique_ptr<RaylibWindow> raylibWindow;
@@ -690,7 +702,7 @@ int main(int argc, char* argv[])
 		// Create camera feed display
 		raylibCameraFeed = std::make_unique<CameraFeedDisplay>();
 
-		// Connect to the first available camera
+		// **NEW: Connect to broadcasting system instead of direct camera**
 		auto cameraIds = cameraManager->GetCameraIds();
 		if (!cameraIds.empty()) {
 			// Try to find a connected camera
@@ -709,28 +721,49 @@ int main(int argc, char* argv[])
 				logger->LogInfo("No connected cameras found, will try to connect to: " + selectedCameraId);
 			}
 
+			// **CRITICAL CHANGE: Use broadcasting system instead of direct camera connection**
+			logger->LogInfo("=== SETTING UP CAMERA FEED WITH BROADCASTING ===");
+
+			// Set the target camera for the feed display
+			raylibCameraFeed->SetTargetCamera(selectedCameraId);
+			logger->LogInfo("CameraFeedDisplay set to target camera: " + selectedCameraId);
+
+			// **CRITICAL: Subscribe the CameraFeedDisplay to the broadcasting system**
+			std::shared_ptr<CameraFrameSubscriber> feedSubscriber =
+				std::static_pointer_cast<CameraFrameSubscriber>(
+					std::shared_ptr<CameraFeedDisplay>(raylibCameraFeed.get(), [](CameraFeedDisplay*) {}));
+
+			cameraManager->SubscribeToFrames(feedSubscriber);
+			logger->LogInfo("CameraFeedDisplay subscribed to broadcasting system");
+
+			// **CRITICAL: Start the broadcasting system if not already started**
+			cameraManager->StartBroadcastSystem();
+			logger->LogInfo("Camera broadcasting system started");
+
+			// Try to auto-start the camera if it's connected
 			PylonCameraTest* selectedCamera = cameraManager->GetCamera(selectedCameraId);
 			if (selectedCamera) {
-				// Set the camera source in the feed display
-				raylibCameraFeed->SetPylonCameraSource(selectedCamera);
-				logger->LogInfo("Connected camera '" + selectedCameraId + "' to camera feed display");
-
-				// Try to auto-start the camera if it's connected
 				auto& pylonCamera = selectedCamera->GetCamera();
 				if (pylonCamera.IsConnected()) {
 					if (!pylonCamera.IsGrabbing()) {
-						if (pylonCamera.StartGrabbing()) {
-							logger->LogInfo("Started camera grabbing for raylib feed");
+						// **IMPORTANT: Use StartGrabbing which automatically sets up broadcasting**
+						if (cameraManager->StartGrabbing(selectedCameraId)) {
+							logger->LogInfo("Started camera grabbing with broadcasting for raylib feed");
 						}
 						else {
 							logger->LogWarning("Failed to start camera grabbing for raylib feed");
 						}
+					}
+					else {
+						logger->LogInfo("Camera already grabbing - should be broadcasting");
 					}
 				}
 				else {
 					logger->LogInfo("Camera not connected yet - feed will activate when camera connects");
 				}
 			}
+
+			logger->LogInfo("=== CAMERA FEED SETUP COMPLETE ===");
 		}
 	}
 	else {
@@ -784,7 +817,7 @@ int main(int argc, char* argv[])
 
 	//debug setup 
 // You can call this function in your main loop or when troubleshooting:
- DebugCameraFeedSetup(cameraManager.get(), raylibCameraFeed.get(), raylibWindow.get(), logger);
+	DebugCameraFeedSetupEnhanced(cameraManager.get(), raylibCameraFeed.get(), raylibWindow.get(), logger);
 
 
 

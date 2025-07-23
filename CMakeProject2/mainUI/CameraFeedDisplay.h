@@ -1,89 +1,103 @@
+// CameraFeedDisplay.h - Updated to support broadcasting system
 #pragma once
 
-#include <cstdint>
+#include "include/camera/CameraFrameData.h"  // For CameraFrameSubscriber interface
+#include <memory>
 #include <string>
-#include <functional>
 #include <mutex>
-#include <vector>
+#include <atomic>
+#include <chrono>
 
 // Forward declarations
 class PylonCameraTest;
 
-// Generic camera feed display class that can work with any camera type
-class CameraFeedDisplay {
+class CameraFeedDisplay : public CameraFrameSubscriber {
 public:
   CameraFeedDisplay();
-  ~CameraFeedDisplay();
+  virtual ~CameraFeedDisplay();
 
-  // Disable copy/move to avoid texture issues
-  CameraFeedDisplay(const CameraFeedDisplay&) = delete;
-  CameraFeedDisplay& operator=(const CameraFeedDisplay&) = delete;
-  CameraFeedDisplay(CameraFeedDisplay&&) = delete;
-  CameraFeedDisplay& operator=(CameraFeedDisplay&&) = delete;
+  // **NEW: CameraFrameSubscriber interface implementation**
+  void OnNewFrame(const CameraFrameData& frameData) override;
+  void OnCameraStatusChanged(const std::string& cameraId, bool connected, bool grabbing) override;
+  std::string GetSubscriberId() const override;
+  bool WantsFramesFromCamera(const std::string& cameraId) const override;
+  int GetMinFrameIntervalMs() const override { return 33; } // ~30fps
 
-  // Camera source management
+  // **ENHANCED: Source management methods**
   void SetPylonCameraSource(PylonCameraTest* camera);
+  void SetTargetCamera(const std::string& cameraId);  // NEW: For broadcast system
   void ClearSource();
-  bool HasSource() const { return m_sourceType != SourceType::NONE; }
+  bool HasSource() const;
 
-  // Texture update and rendering
+  // **ENHANCED: Texture management methods**
   bool UpdateTexture();
-  void RenderToCanvas(float canvasWidth, float canvasHeight);
+  bool HasValidTexture() const;
+  unsigned int GetTextureID() const;
+  uint32_t GetTextureWidth() const;
+  uint32_t GetTextureHeight() const;
 
-  // Texture info
-  bool HasValidTexture() const { return m_textureInitialized && m_hasValidFrame; }
-  unsigned int GetTextureID() const { return m_textureID; }
-  uint32_t GetTextureWidth() const { return m_frameWidth; }
-  uint32_t GetTextureHeight() const { return m_frameHeight; }
-
-  // Display settings
-  void SetMaintainAspectRatio(bool maintain) { m_maintainAspectRatio = maintain; }
-  void SetCenterImage(bool center) { m_centerImage = center; }
-  void SetPlaceholderText(const std::string& text) { m_placeholderText = text; }
-
-  // Status
-  std::string GetStatusText() const;
+  // **NEW: Frame reception status methods**
   bool IsReceivingFrames() const;
+  uint64_t GetLastFrameTime() const;
+  uint64_t GetTotalFramesReceived() const;
+  std::string GetStatusText() const;
+
+  // **NEW: Performance and debugging methods**
+  void SetFrameRateLimit(float fps);
+  float GetActualFrameRate() const;
+  void ResetStatistics();
+
+  // **BACKWARD COMPATIBILITY: Legacy rendering methods**
+  void RenderToCanvas();  // For UIConfigVisualizer compatibility
+  void RenderToCanvas(int width, int height);  // Overload with size parameters
+  void RenderPreview(int width = 320, int height = 240);  // Legacy preview method
+  void SetPlaceholderText(const std::string& text);  // Set placeholder text when no feed
 
 private:
-  enum class SourceType {
-    NONE,
-    PYLON_CAMERA_TEST
-    // Future: FLIR_CAMERA, USB_CAMERA, etc.
-  };
+  // **LEGACY: Direct camera source (for backward compatibility)**
+  PylonCameraTest* m_camera;
 
-  // Source management
-  SourceType m_sourceType = SourceType::NONE;
-  PylonCameraTest* m_pylonCamera = nullptr;
+  // **NEW: Broadcasting system members**
+  std::string m_subscriberId;
+  std::string m_targetCameraId;
+  std::atomic<bool> m_isSubscriberMode;
 
-  // OpenGL texture
-  unsigned int m_textureID = 0;
-  bool m_textureInitialized = false;
-  bool m_hasValidFrame = false;
-  uint32_t m_frameWidth = 0;
-  uint32_t m_frameHeight = 0;
+  // **NEW: Frame data management (thread-safe)**
+  mutable std::mutex m_frameMutex;
+  CameraFrameData m_latestFrame;
+  std::atomic<bool> m_hasNewFrame;
+  std::atomic<uint64_t> m_lastFrameTimestamp;
+  std::atomic<uint64_t> m_totalFramesReceived;
 
-  // **REMOVED PROBLEMATIC MEMBERS:**
-  // - m_imageBuffer
-  // - m_bufferMutex  
-  // - m_bufferValid
-  // - m_bufferWidth
-  // - m_bufferHeight
-  // - m_safeImageData (this was causing the access violation)
+  // **NEW: Frame rate limiting**
+  std::chrono::steady_clock::time_point m_lastFrameTime;
+  std::atomic<int> m_minFrameIntervalMs;
 
-  // Display settings
-  bool m_maintainAspectRatio = true;
-  bool m_centerImage = true;
-  std::string m_placeholderText = "No Camera Feed";
+  // **ENHANCED: OpenGL texture management**
+  unsigned int m_textureID;
+  uint32_t m_textureWidth;
+  uint32_t m_textureHeight;
+  std::atomic<bool> m_textureValid;
 
-  // Statistics
-  uint64_t m_lastFrameTime = 0;
-  uint32_t m_frameCount = 0;
+  // **NEW: Performance tracking**
+  std::chrono::steady_clock::time_point m_lastUpdateTime;
+  std::atomic<float> m_actualFrameRate;
+  std::atomic<int> m_frameCounter;
 
-  // Internal methods
-  bool InitializeTexture();
+  // **NEW: Status tracking**
+  std::atomic<bool> m_cameraConnected;
+  std::atomic<bool> m_cameraGrabbing;
+
+  // **NEW: Placeholder text for UI display**
+  std::string m_placeholderText;
+
+  // **ENHANCED: Internal methods**
+  bool CreateOrUpdateTexture(const CameraFrameData& frameData);
+  void UpdateFrameRateStatistics();
   void CleanupTexture();
-  bool UpdateFromPylonCamera();
-  void RenderPlaceholder(float canvasWidth, float canvasHeight, const std::string& text, uint32_t color);
-  void CalculateDisplaySize(float canvasWidth, float canvasHeight, float& displayWidth, float& displayHeight, float& offsetX, float& offsetY);
+  bool IsFrameRateLimited() const;
+
+  // **NEW: Thread-safe getters for internal use**
+  CameraFrameData GetLatestFrameThreadSafe() const;
+  void SetLatestFrameThreadSafe(const CameraFrameData& frame);
 };
