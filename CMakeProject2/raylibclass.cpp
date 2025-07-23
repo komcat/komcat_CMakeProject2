@@ -351,6 +351,8 @@ void RaylibWindow::RaylibThreadFunction() {
     // Initialize raylib in this thread
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(1200, 800, "Raylib Canvas Window");
+    SetExitKey(0);  // 0 = disables ESC as exit key
+
 
     // ADD THIS LINE to disable raylib debug output
     SetTraceLogLevel(LOG_WARNING); // Only show warnings and errors
@@ -742,7 +744,7 @@ void RaylibWindow::RenderCameraInCorner() {
   Rectangle sourceRect = {
       0, 0,
       (float)m_cameraFeedDisplay->GetTextureWidth(),
-      -(float)m_cameraFeedDisplay->GetTextureHeight()  // Negative height to flip Y
+      (float)m_cameraFeedDisplay->GetTextureHeight()  // Negative height to flip Y
   };
 
   // Create a Raylib texture from OpenGL texture ID
@@ -829,7 +831,7 @@ void RaylibWindow::RenderCameraFullscreen() {
   }
 
   Rectangle destRect = { offsetX, offsetY, displayWidth, displayHeight };
-  Rectangle sourceRect = { 0, 0, texWidth, -texHeight };  // Negative height to flip Y
+  Rectangle sourceRect = { 0, 0, texWidth, texHeight };  // Negative height to flip Y
 
   // Create texture reference
   Texture2D cameraTexture = {
