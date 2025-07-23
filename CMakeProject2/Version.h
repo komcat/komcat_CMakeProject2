@@ -12,9 +12,9 @@ version 2.1.0.46
 
 // Version information - manually set for now
 #define VERSION_MAJOR 2
-#define VERSION_MINOR 1
+#define VERSION_MINOR 2
 #define VERSION_PATCH 1
-#define VERSION_BUILD 157
+#define VERSION_BUILD 158
 
 // Build information
 #define BUILD_DATE __DATE__

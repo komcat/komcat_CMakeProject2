@@ -2,6 +2,7 @@
 #include "MacroPanelUI.h"
 #include "MacroManager.h"
 #include "MacroPanelCameraHandler.h"
+#include "MacroPanelCameraHandler.h"  // UPDATED: New broadcasting handler
 #include <algorithm>
 #include <iostream>
 
@@ -259,10 +260,17 @@ void MacroPanelUI::RenderProgramTable() {
 // RIGHT PANEL - Properties & Status
 // ============================================================================
 
+
 void MacroPanelUI::RenderMacroRightPanel() {
-  // Camera feed display - MOVED TO TOP
+  // UPDATED: Camera feed display with broadcasting support
   if (m_cameraHandler) {
-    m_cameraHandler->RenderCameraCanvas();
+    // Enhanced camera canvas with broadcasting status
+    RenderBroadcastingCameraSection();
+  }
+  else {
+    ImGui::Text("Camera System");
+    ImGui::Separator();
+    ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "Camera handler not initialized");
   }
 
   ImGui::Spacing();
@@ -274,6 +282,71 @@ void MacroPanelUI::RenderMacroRightPanel() {
   RenderMacroProperties();
   ImGui::Spacing();
   RenderExecutionStatus();
+}
+
+// NEW: Enhanced camera section with broadcasting information
+void MacroPanelUI::RenderBroadcastingCameraSection() {
+  ImGui::Text("Live Camera Feed");
+
+  // UPDATED: Show broadcasting status
+  if (m_cameraHandler->GetSubscriber()) {
+    auto subscriber = m_cameraHandler->GetSubscriber();
+
+    ImGui::SameLine();
+    if (subscriber->IsCameraGrabbing()) {
+      ImGui::TextColored(ImVec4(0, 1, 0, 1), "[LIVE]");
+    }
+    else if (subscriber->IsCameraConnected()) {
+      ImGui::TextColored(ImVec4(1, 1, 0, 1), "[READY]");
+    }
+    else {
+      ImGui::TextColored(ImVec4(1, 0, 0, 1), "[OFFLINE]");
+    }
+
+    // Show subscriber info on hover
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Broadcasting Subscriber: %s\nFrames Received: %llu\nCamera: %s",
+        subscriber->GetSubscriberId().c_str(),
+        subscriber->GetTotalFramesReceived(),
+        subscriber->GetTargetCamera().c_str());
+    }
+  }
+
+  ImGui::Separator();
+
+  // Render the camera canvas (now with broadcasting support)
+  m_cameraHandler->RenderCameraCanvas();
+
+  // UPDATED: Show enhanced status information
+  if (m_cameraHandler->GetSubscriber()) {
+    auto subscriber = m_cameraHandler->GetSubscriber();
+
+    ImGui::Spacing();
+    ImGui::Text("Broadcasting Status:");
+    ImGui::Indent();
+
+    // Connection status
+    ImGui::Text("Connected: %s",
+      subscriber->IsCameraConnected() ? "Yes" : "No");
+
+    // Grabbing status  
+    ImGui::Text("Grabbing: %s",
+      subscriber->IsCameraGrabbing() ? "Yes" : "No");
+
+    // Frame statistics
+    ImGui::Text("Total Frames: %llu",
+      subscriber->GetTotalFramesReceived());
+
+    // Current camera
+    ImGui::Text("Target Camera: %s",
+      subscriber->GetTargetCamera().c_str());
+
+    // Live feed status
+    ImGui::Text("Feed Status: %s",
+      m_cameraHandler->GetStatusText().c_str());
+
+    ImGui::Unindent();
+  }
 }
 
 
@@ -308,12 +381,13 @@ void MacroPanelUI::RenderMacroProperties() {
 }
 
 
+
 // ============================================================================
-// UPDATED EXECUTION STATUS RENDERING WITH PROPER PROGRESS
+// UPDATED EXECUTION STATUS RENDERING WITH PROPER PROGRESS (unchanged)
 // ============================================================================
 
 void MacroPanelUI::RenderExecutionStatus() {
-  // CRITICAL: Sync state with MacroManager first
+  // Sync state with MacroManager first
   SyncExecutionState();
 
   ImGui::Text("Execution Status:");
@@ -327,7 +401,7 @@ void MacroPanelUI::RenderExecutionStatus() {
       ImGui::Text("Macro: %s", currentMacro.c_str());
     }
 
-    // Calculate proper progress based on SELECTED programs, not total programs
+    // Calculate proper progress based on SELECTED programs
     int selectedCount = 0;
     int selectedCompleted = 0;
 
@@ -346,7 +420,7 @@ void MacroPanelUI::RenderExecutionStatus() {
         ImGui::Text("Current: %s", m_programItems[m_currentProgramIndex].name.c_str());
       }
 
-      // Calculate correct progress: completed programs / total selected programs
+      // Calculate correct progress
       float progress = static_cast<float>(selectedCompleted) / static_cast<float>(selectedCount);
 
       // If we're currently executing a program, add partial progress
@@ -361,7 +435,6 @@ void MacroPanelUI::RenderExecutionStatus() {
       ImGui::SameLine();
       ImGui::Text("%.0f%%", progress * 100.0f);
     }
-
   }
   else if (m_isPaused) {
     ImGui::TextColored(ImVec4(0.8f, 0.6f, 0.2f, 1.0f), "Paused");

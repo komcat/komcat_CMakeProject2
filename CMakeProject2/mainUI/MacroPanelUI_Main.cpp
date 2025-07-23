@@ -4,6 +4,7 @@
 #include "MachineBlockUI.h"
 #include "MacroPanelCameraHandler.h"
 #include "include/camera/CameraManager.h"
+#include "MacroPanelCameraHandler.h"  // UPDATED: New broadcasting-based handler
 #include <algorithm>
 #include <iostream>
 #include <filesystem>
@@ -13,24 +14,27 @@
 // CONSTRUCTOR & CORE METHODS
 // ============================================================================
 
+
 MacroPanelUI::MacroPanelUI(CameraManager* cameraManager) {
   RefreshMacroList();
   RefreshAvailablePrograms();
 
-  // Initialize camera handler
+  // UPDATED: Initialize camera handler with broadcasting support
   m_cameraHandler = std::make_unique<MacroPanelCameraHandler>(cameraManager);
 
-  // NEW: Initialize card renderer
+  // Initialize card renderer (unchanged)
   m_cardRenderer = std::make_unique<ProgramCardRenderer>();
 
-  // Configure card renderer
+  // Configure card renderer (unchanged)
   m_cardRenderer->SetCardHeight(85.0f);
   m_cardRenderer->SetCardSpacing(12.0f);
   m_cardRenderer->SetShowIcons(true);
   m_cardRenderer->SetShowConnectors(true);
+
+  std::cout << "[INFO] MacroPanelUI created with broadcasting camera support" << std::endl;
 }
 
-// Add explicit destructor for std::unique_ptr with forward declaration
+// Destructor remains unchanged - unique_ptr handles cleanup automatically
 MacroPanelUI::~MacroPanelUI() = default;
 
 void MacroPanelUI::SetMacroManager(MacroManager* macroManager) {
@@ -42,12 +46,30 @@ void MacroPanelUI::SetMachineBlockUI(MachineBlockUI* blockUI) {
   m_blockUI = blockUI;
 }
 
+
+// UPDATED: Enhanced camera manager setup for broadcasting
 void MacroPanelUI::SetCameraManager(CameraManager* cameraManager) {
   if (m_cameraHandler) {
     m_cameraHandler->SetCameraManager(cameraManager);
 
-    std::cout << "[DEBUG] Camera manager set, camera count: "
-      << (cameraManager ? cameraManager->GetCameraCount() : 0) << std::endl;
+    std::cout << "[INFO] MacroPanelUI camera manager updated for broadcasting" << std::endl;
+
+    if (cameraManager) {
+      std::cout << "[INFO] Camera count: " << cameraManager->GetCameraCount() << std::endl;
+      std::cout << "[INFO] Subscriber count: " << cameraManager->GetSubscriberCount() << std::endl;
+
+      // Log available cameras
+      auto cameraIds = cameraManager->GetCameraIds();
+      for (const auto& id : cameraIds) {
+        auto status = cameraManager->GetCameraStatus(id);
+        std::cout << "[INFO] Camera " << id << ": "
+          << (status.connected ? "Connected" : "Disconnected")
+          << ", " << (status.grabbing ? "Grabbing" : "Idle") << std::endl;
+      }
+    }
+  }
+  else {
+    std::cout << "[WARNING] MacroPanelUI camera handler not initialized" << std::endl;
   }
 }
 
