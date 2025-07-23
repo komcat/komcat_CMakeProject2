@@ -921,10 +921,24 @@ int main(int argc, char* argv[])
 						if (ImGui::Selectable(displayName.c_str(), isSelected)) {
 							selectedCameraId = cameraId;
 
-							PylonCameraTest* newCamera = cameraManager->GetCamera(selectedCameraId);
-							if (newCamera && raylibCameraFeed) {
-								raylibCameraFeed->SetPylonCameraSource(newCamera);
-								logger->LogInfo("Switched raylib camera feed to: " + selectedCameraId);
+							// ✅ Update the raylib camera feed to use subscriber mode for new camera
+							if (raylibCameraFeed) {
+								logger->LogInfo("Switching raylib camera feed from subscriber mode...");
+
+								// **CRITICAL: Switch raylibCameraFeed to new camera using subscriber mode**
+								raylibCameraFeed->SetTargetCamera(selectedCameraId);
+								logger->LogInfo("Raylib camera feed switched to: " + selectedCameraId);
+
+								// Make sure the camera is grabbing for the feed
+								PylonCameraTest* newCamera = cameraManager->GetCamera(selectedCameraId);
+								if (newCamera) {
+									auto& pylonCamera = newCamera->GetCamera();
+									if (pylonCamera.IsConnected() && !pylonCamera.IsGrabbing()) {
+										if (cameraManager->StartGrabbing(selectedCameraId)) {
+											logger->LogInfo("Started grabbing for raylib feed: " + selectedCameraId);
+										}
+									}
+								}
 							}
 						}
 

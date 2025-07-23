@@ -54,7 +54,7 @@
 
 CameraFeedDisplay::CameraFeedDisplay()
   : m_camera(nullptr)
-  , m_subscriberId("CameraFeedDisplay_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))
+  , m_subscriberId("CameraFeedDisplay_1")
   , m_targetCameraId("")
   , m_isSubscriberMode(false)
   , m_hasNewFrame(false)

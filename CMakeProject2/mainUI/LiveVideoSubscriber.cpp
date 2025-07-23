@@ -121,7 +121,6 @@ void LiveVideoSubscriber::ResetState() {
 }
 
 void LiveVideoSubscriber::UpdateSubscriberId() {
-  std::ostringstream oss;
-  oss << "UI_LiveVideo_" << m_targetCameraId << "_" << this; // Add pointer for uniqueness
-  m_subscriberId = oss.str();
+  // Use a consistent ID format without pointer address for uniqueness
+  m_subscriberId = "UI_LiveVideo_" + m_targetCameraId;
 }
