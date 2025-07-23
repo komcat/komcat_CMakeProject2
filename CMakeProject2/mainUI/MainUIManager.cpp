@@ -138,6 +138,9 @@ void MainUIManager::RenderUI() {
 
 // Update RenderBackButton() to handle Programming sub-pages:
 void MainUIManager::RenderBackButton() {
+	// Add 10 pixels of vertical spacing at the top
+	ImGui::Dummy(ImVec2(0.0f, 15.0f));
+
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(15, 8));
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
@@ -164,12 +167,14 @@ void MainUIManager::RenderBackButton() {
 	ImGui::PopStyleVar();
 }
 
-// Update RenderTopMenuBar() to add Programming button:
+// Update RenderTopMenuBar() to add 10px spacing at the top:
 void MainUIManager::RenderTopMenuBar() {
+	// Add 10 pixels of vertical spacing at the top
+	ImGui::Dummy(ImVec2(0.0f, 12.0f));
+
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(20, 10));
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.3f, 0.8f, 1.0f));
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.4f, 0.9f, 1.0f));
-
 	if (ImGui::Button("Manual", ImVec2(120, 40))) {
 		currentMainPage = MainPage::MANUAL;
 		currentManualSubPage = ManualSubPage::NONE;
@@ -177,7 +182,6 @@ void MainUIManager::RenderTopMenuBar() {
 		currentConfigSubPage = ConfigSubPage::NONE;
 		currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
 	}
-
 	ImGui::SameLine();
 	if (ImGui::Button("Data & Instrument", ImVec2(150, 40))) {
 		currentMainPage = MainPage::DATA_INSTRUMENT;
@@ -186,7 +190,6 @@ void MainUIManager::RenderTopMenuBar() {
 		currentConfigSubPage = ConfigSubPage::NONE;
 		currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
 	}
-
 	ImGui::SameLine();
 	if (ImGui::Button("Run Program", ImVec2(120, 40))) {
 		currentMainPage = MainPage::RUN_PROGRAM;
@@ -195,7 +198,6 @@ void MainUIManager::RenderTopMenuBar() {
 		currentConfigSubPage = ConfigSubPage::NONE;
 		currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
 	}
-
 	ImGui::SameLine();
 	if (ImGui::Button("Config", ImVec2(120, 40))) {
 		currentMainPage = MainPage::CONFIG;
@@ -204,7 +206,6 @@ void MainUIManager::RenderTopMenuBar() {
 		currentConfigSubPage = ConfigSubPage::NONE;
 		currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
 	}
-
 	ImGui::SameLine();
 	if (ImGui::Button("Vision", ImVec2(120, 40))) {
 		currentMainPage = MainPage::VISION;
@@ -213,7 +214,6 @@ void MainUIManager::RenderTopMenuBar() {
 		currentConfigSubPage = ConfigSubPage::NONE;
 		currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
 	}
-
 	ImGui::SameLine();
 	if (ImGui::Button("Programming", ImVec2(130, 40))) {
 		currentMainPage = MainPage::PROGRAMMING;
@@ -222,14 +222,13 @@ void MainUIManager::RenderTopMenuBar() {
 		currentConfigSubPage = ConfigSubPage::NONE;
 		currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
 	}
-
 	ImGui::PopStyleColor(2);
 	ImGui::PopStyleVar();
 }
 
-
 // In RenderDateTime method - UPDATE the JOG button logic:
 void MainUIManager::RenderDateTime() {
+
 	// Get date/time strings
 	time_t rawtime;
 	struct tm timeinfo;
@@ -256,7 +255,7 @@ void MainUIManager::RenderDateTime() {
 
 	// Position for JOG button (left of date/time)
 	ImGui::SameLine(ImGui::GetWindowWidth() - textSize.x - buttonWidth - spacing - 20);
-	ImGui::SetCursorPosY(10);
+	ImGui::SetCursorPosY(30);
 
 	// Check if jog window is available
 	bool jogAvailable = (m_uiJogWindow != nullptr);

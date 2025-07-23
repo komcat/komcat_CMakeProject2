@@ -10,10 +10,10 @@ MenuManagerUaa3::~MenuManagerUaa3() {
 
 void MenuManagerUaa3::RenderMainMenuBar() {
   if (ImGui::BeginMainMenuBar()) {
-    RenderFileMenu();
+    //RenderFileMenu();
     RenderRaylibMenu();
-    RenderDebugMenu();
-    RenderHelpMenu();
+    //RenderDebugMenu();
+    //RenderHelpMenu();
 
     ImGui::EndMainMenuBar();
   }
@@ -48,15 +48,15 @@ void MenuManagerUaa3::RenderRaylibMenu() {
   if (ImGui::BeginMenu("Raylib")) {
     ImGui::MenuItem("Live Feed Debug", nullptr, &m_showRaylibDebug);
 
-    ImGui::Separator();
+    //ImGui::Separator();
 
-    if (ImGui::MenuItem("Show 3D Window")) {
-      // TODO: Show/focus raylib window
-    }
+    //if (ImGui::MenuItem("Show 3D Window")) {
+    //  // TODO: Show/focus raylib window
+    //}
 
-    if (ImGui::MenuItem("Hide 3D Window")) {
-      // TODO: Hide raylib window
-    }
+    //if (ImGui::MenuItem("Hide 3D Window")) {
+    //  // TODO: Hide raylib window
+    //}
 
     ImGui::EndMenu();
   }
