@@ -474,7 +474,7 @@ add_executable(CMakeProject2
  "mainUI/MenuManager_uaa3.cpp"
  "mainUI/RaylibDebugWindow.h" 
  "mainUI/RaylibDebugWindow.cpp"
- )
+  "mainUI/LiveVideoSubscriber.h" "mainUI/LiveVideoSubscriber.cpp" "include/camera/CameraFrameData.h")
 
 
 
@@ -812,7 +812,7 @@ add_executable(uaa3App
   "mainUI/MenuManager_uaa3.h" 
   "mainUI/MenuManager_uaa3.cpp"
   "mainUI/RaylibDebugWindow.h" 
-  "mainUI/RaylibDebugWindow.cpp")
+  "mainUI/RaylibDebugWindow.cpp" "mainUI/LiveVideoSubscriber.h" "mainUI/LiveVideoSubscriber.cpp" "include/camera/CameraFrameData.h")
 
 
 

@@ -2,14 +2,22 @@
 
 #include "pylon_camera_test.h"
 #include "CameraExposureManager.h"
+#include "CameraFrameData.h"  // Include your new header
 #include <vector>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <functional>
+#include <thread>
+#include <queue>
+#include <condition_variable>
+#include <atomic>
+#include <chrono>
+#include <set>
+#include <mutex>
 
-// Step 2.1: Update CameraManager.h - Enhanced CameraInfo structure
-
-// REPLACE your existing CameraInfo struct in CameraManager.h with this enhanced version:
+// Forward declaration
+class CameraFrameSubscriber;
 
 // Enhanced structure to identify cameras
 struct CameraInfo {
@@ -132,6 +140,9 @@ public:
   // Stop grabbing on specific camera
   bool StopGrabbing(const std::string& cameraId);
 
+  // **NEW: Enhanced StartGrabbing with broadcasting**
+  bool StartGrabbingWithBroadcast(const std::string& cameraId);
+
   // Apply exposure settings to specific camera using node ID
   bool ApplyExposureForNode(const std::string& cameraId, const std::string& nodeId);
 
@@ -160,6 +171,15 @@ public:
   CameraStatus GetCameraStatus(const std::string& cameraId) const;
   std::vector<CameraStatus> GetAllCameraStatus() const;
 
+  // **NEW: Broadcasting system methods**
+  void StartBroadcastSystem();
+  void StopBroadcastSystem();
+  void SubscribeToFrames(std::shared_ptr<CameraFrameSubscriber> subscriber);
+  void UnsubscribeFromFrames(const std::string& subscriberId);
+  void SetGlobalBroadcastRate(float fps);
+  size_t GetSubscriberCount() const;
+  std::vector<std::string> GetSubscriberIds() const;
+
   // UI rendering for all cameras
   void RenderUI();
 
@@ -178,12 +198,43 @@ private:
     }
   };
 
+  // **NEW: Subscriber tracking structure**
+  struct SubscriberInfo {
+    std::shared_ptr<CameraFrameSubscriber> subscriber;
+    std::chrono::steady_clock::time_point lastBroadcast;
+    std::set<std::string> interestedCameras;
+
+    SubscriberInfo(std::shared_ptr<CameraFrameSubscriber> sub)
+      : subscriber(sub), lastBroadcast(std::chrono::steady_clock::now()) {
+    }
+
+    // Helper method to check if subscriber wants frames from a camera
+    bool WantsFramesFrom(const std::string& cameraId) const {
+      return subscriber && subscriber->WantsFramesFromCamera(cameraId);
+    }
+  };
+
   // Container for managed cameras
   std::unordered_map<std::string, std::unique_ptr<ManagedCamera>> m_cameras;
 
   // UI state
   bool m_showUI = true;
   std::string m_selectedCameraId;
+
+  // **NEW: Broadcasting system members**
+  mutable std::mutex m_subscribersMutex;
+  std::vector<SubscriberInfo> m_subscribers;
+
+  // Frame processing thread
+  std::unique_ptr<std::thread> m_broadcastThread;
+  std::atomic<bool> m_broadcastActive{ false };
+  std::queue<CameraFrameData> m_frameQueue;
+  std::mutex m_frameQueueMutex;
+  std::condition_variable m_frameQueueCV;
+
+  // Performance settings
+  std::atomic<int> m_globalMinFrameInterval{ 33 }; // 30fps default
+  std::atomic<size_t> m_maxQueueSize{ 10 }; // Prevent memory buildup
 
   // Helper methods
   ManagedCamera* FindCamera(const std::string& cameraId);
@@ -195,10 +246,14 @@ private:
   void RenderCameraStatusTable();
   void RenderBulkOperations();
 
-
-
   // NEW: Enhanced UI rendering methods
   void RenderEnhancedCameraList();         // Enhanced camera list with connection info
   void RenderEnhancedCameraStatusTable();  // Enhanced status table with network info
 
+  // **NEW: Broadcasting helper methods**
+  void BroadcastThreadFunction();
+  void EnqueueFrame(const CameraFrameData& frameData);
+  void OnCameraFrameReceived(const std::string& cameraId, const Pylon::CGrabResultPtr& grabResult);
+  void CleanupExpiredSubscribers();
+  bool RestartGrabbingWithBroadcast(const std::string& cameraId);
 };

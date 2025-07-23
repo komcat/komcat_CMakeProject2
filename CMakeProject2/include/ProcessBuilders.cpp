@@ -136,7 +136,7 @@ namespace ProcessBuilders {
 
 		// 5. Move back to safe position
 		sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-			"gantry-main", "Process_Flow", "node_4027"));
+			"gantry-main", "Process_Flow", "node_4027")); //safe
 
 		return sequence;
 	}

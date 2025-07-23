@@ -2,16 +2,33 @@
 #include "imgui.h"
 #include <iostream>
 #include <algorithm>
+#include "CameraFrameData.h"
+#include <pylon/PylonIncludes.h>
+#include <pylon/ImageFormatConverter.h>
+
 
 CameraManager::CameraManager()
   : m_showUI(true), m_selectedCameraId("") {
   std::cout << "CameraManager initialized" << std::endl;
 }
 
+
 CameraManager::~CameraManager() {
+  // Stop broadcasting system first (this will stop the thread safely)
+  StopBroadcastSystem();
+
+  // Clear all subscribers
+  {
+    std::lock_guard<std::mutex> lock(m_subscribersMutex);
+    m_subscribers.clear();
+  }
+
   // Stop all cameras before cleanup
   StopGrabbingAll();
+
+  // Clear cameras
   m_cameras.clear();
+
   std::cout << "CameraManager destroyed" << std::endl;
 }
 
@@ -34,29 +51,29 @@ bool CameraManager::StopGrabbingAll() {
   return allSuccess;
 }
 
-bool CameraManager::StartGrabbing(const std::string& cameraId) {
-  auto* managedCamera = FindCamera(cameraId);
-  if (!managedCamera) {
-    std::cerr << "Camera '" << cameraId << "' not found" << std::endl;
-    return false;
-  }
-
-  auto& camera = managedCamera->camera->GetCamera();
-
-  if (!camera.IsConnected()) {
-    std::cerr << "Camera '" << cameraId << "' is not connected" << std::endl;
-    return false;
-  }
-
-  if (camera.StartGrabbing()) {
-    std::cout << "Started grabbing on camera: " << cameraId << std::endl;
-    return true;
-  }
-  else {
-    std::cerr << "Failed to start grabbing on camera: " << cameraId << std::endl;
-    return false;
-  }
-}
+//bool CameraManager::StartGrabbing(const std::string& cameraId) {
+//  auto* managedCamera = FindCamera(cameraId);
+//  if (!managedCamera) {
+//    std::cerr << "Camera '" << cameraId << "' not found" << std::endl;
+//    return false;
+//  }
+//
+//  auto& camera = managedCamera->camera->GetCamera();
+//
+//  if (!camera.IsConnected()) {
+//    std::cerr << "Camera '" << cameraId << "' is not connected" << std::endl;
+//    return false;
+//  }
+//
+//  if (camera.StartGrabbing()) {
+//    std::cout << "Started grabbing on camera: " << cameraId << std::endl;
+//    return true;
+//  }
+//  else {
+//    std::cerr << "Failed to start grabbing on camera: " << cameraId << std::endl;
+//    return false;
+//  }
+//}
 
 bool CameraManager::StopGrabbing(const std::string& cameraId) {
   auto* managedCamera = FindCamera(cameraId);
@@ -771,5 +788,512 @@ void CameraManager::RenderEnhancedCameraList() {
     else {
       ImGui::TextColored(ImVec4(0.8f, 0, 0, 1), "[DISC]");
     }
+  }
+}
+
+
+
+// Add these methods to your existing CameraManager.cpp file
+
+// **NEW: Broadcasting system implementation**
+void CameraManager::StartBroadcastSystem() {
+  if (m_broadcastActive.load()) return;
+
+  m_broadcastActive = true;
+  m_broadcastThread = std::make_unique<std::thread>(&CameraManager::BroadcastThreadFunction, this);
+  std::cout << "Camera broadcasting system started" << std::endl;
+}
+
+void CameraManager::StopBroadcastSystem() {
+  if (!m_broadcastActive.load()) return;
+
+  m_broadcastActive = false;
+  m_frameQueueCV.notify_all();
+
+  if (m_broadcastThread && m_broadcastThread->joinable()) {
+    m_broadcastThread->join();
+  }
+
+  std::cout << "Camera broadcasting system stopped" << std::endl;
+}
+
+
+
+// **ENHANCED: Debug version of BroadcastThreadFunction**
+void CameraManager::BroadcastThreadFunction() {
+  std::cout << "[DEBUG] Broadcast thread started" << std::endl;
+
+  int broadcastCounter = 0;
+
+  while (m_broadcastActive.load()) {
+    std::unique_lock<std::mutex> lock(m_frameQueueMutex);
+
+    // Wait for frames or shutdown signal
+    m_frameQueueCV.wait(lock, [this]() {
+      return !m_frameQueue.empty() || !m_broadcastActive.load();
+    });
+
+    // Process all queued frames
+    while (!m_frameQueue.empty() && m_broadcastActive.load()) {
+      auto frameData = std::move(m_frameQueue.front());
+      m_frameQueue.pop();
+      lock.unlock();
+
+      broadcastCounter++;
+
+      if ((broadcastCounter % 30) == 1) {
+        std::cout << "[DEBUG] Broadcasting frame #" << broadcastCounter
+          << " from camera: " << frameData.cameraId << std::endl;
+      }
+
+      // Broadcast to subscribers (with enhanced debugging)
+      {
+        std::lock_guard<std::mutex> subLock(m_subscribersMutex);
+        CleanupExpiredSubscribers();
+
+        auto now = std::chrono::steady_clock::now();
+
+        if ((broadcastCounter % 30) == 1) {
+          std::cout << "[DEBUG] Broadcasting to " << m_subscribers.size() << " subscribers" << std::endl;
+        }
+
+        for (auto& subInfo : m_subscribers) {
+          auto subscriber = subInfo.subscriber;
+          if (!subscriber) continue;
+
+          // Check if this subscriber wants frames from this camera
+          if (!subscriber->WantsFramesFromCamera(frameData.cameraId)) {
+            if ((broadcastCounter % 30) == 1) {
+              std::cout << "[DEBUG] Subscriber " << subscriber->GetSubscriberId()
+                << " doesn't want frames from " << frameData.cameraId << std::endl;
+            }
+            continue;
+          }
+
+          // Rate limiting check
+          auto timeSinceLastBroadcast = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - subInfo.lastBroadcast).count();
+
+          int minInterval = (std::max)(subscriber->GetMinFrameIntervalMs(),
+            m_globalMinFrameInterval.load());
+
+          if (timeSinceLastBroadcast < minInterval) {
+            if ((broadcastCounter % 30) == 1) {
+              std::cout << "[DEBUG] Rate limiting subscriber " << subscriber->GetSubscriberId()
+                << " (last: " << timeSinceLastBroadcast << "ms, min: " << minInterval << "ms)" << std::endl;
+            }
+            continue;
+          }
+
+          // Broadcast frame
+          try {
+            if ((broadcastCounter % 30) == 1) {
+              std::cout << "[DEBUG] Sending frame to subscriber: " << subscriber->GetSubscriberId() << std::endl;
+            }
+
+            subscriber->OnNewFrame(frameData);
+            subInfo.lastBroadcast = now;
+
+            if ((broadcastCounter % 30) == 1) {
+              std::cout << "[DEBUG] Frame sent successfully to: " << subscriber->GetSubscriberId() << std::endl;
+            }
+          }
+          catch (const std::exception& e) {
+            std::cerr << "[ERROR] Error broadcasting to subscriber "
+              << subscriber->GetSubscriberId() << ": " << e.what() << std::endl;
+          }
+          catch (...) {
+            std::cerr << "[ERROR] Unknown error broadcasting to subscriber "
+              << subscriber->GetSubscriberId() << std::endl;
+          }
+        }
+      }
+
+      lock.lock();
+    }
+  }
+
+  std::cout << "[DEBUG] Broadcast thread ended" << std::endl;
+}
+
+
+// **ENHANCED: Debug version of EnqueueFrame**
+void CameraManager::EnqueueFrame(const CameraFrameData& frameData) {
+  static int enqueueCounter = 0;
+  enqueueCounter++;
+
+  {
+    std::lock_guard<std::mutex> lock(m_frameQueueMutex);
+
+    // Prevent queue overflow
+    if (m_frameQueue.size() >= m_maxQueueSize.load()) {
+      m_frameQueue.pop(); // Remove oldest frame
+      if ((enqueueCounter % 30) == 1) {
+        std::cout << "[DEBUG] Queue overflow - removed oldest frame" << std::endl;
+      }
+    }
+
+    m_frameQueue.push(frameData);
+
+    if ((enqueueCounter % 30) == 1) {
+      std::cout << "[DEBUG] Frame enqueued - Queue size: " << m_frameQueue.size()
+        << " Frame: " << frameData.width << "x" << frameData.height << std::endl;
+    }
+  }
+
+  m_frameQueueCV.notify_one();
+
+  if ((enqueueCounter % 30) == 1) {
+    std::cout << "[DEBUG] Broadcast thread notified" << std::endl;
+  }
+}
+
+
+
+// **FINAL VERSION: Clean up the excessive debug logging for better performance**
+
+void CameraManager::OnCameraFrameReceived(const std::string& cameraId,
+  const Pylon::CGrabResultPtr& grabResult) {
+
+  static int frameCallbackCounter = 0;
+  frameCallbackCounter++;
+
+  // **REDUCED LOGGING: Only log every 300 frames (every 10 seconds at 30fps)**
+  bool shouldLog = (frameCallbackCounter % 300) == 1;
+
+  if (shouldLog) {
+    std::cout << "[INFO] Camera " << cameraId << " frame #" << frameCallbackCounter
+      << " - System working normally" << std::endl;
+  }
+
+  if (!grabResult || !grabResult->GrabSucceeded()) {
+    return; // Skip failed frames silently
+  }
+
+  // Quick subscriber check
+  {
+    std::lock_guard<std::mutex> lock(m_subscribersMutex);
+    if (m_subscribers.empty()) return;
+  }
+
+  try {
+    // Create frame data with real camera dimensions
+    CameraFrameData frameData;
+    frameData.cameraId = cameraId;
+    frameData.width = grabResult->GetWidth();
+    frameData.height = grabResult->GetHeight();
+    frameData.channels = 3;
+    frameData.timestamp = grabResult->GetTimeStamp();
+    frameData.frameNumber = grabResult->GetID();
+
+    // Get camera metadata
+    auto* managedCamera = FindCamera(cameraId);
+    if (managedCamera) {
+      auto& camera = managedCamera->camera->GetCamera();
+      frameData.exposureTime = camera.GetExposureTime();
+      frameData.gain = camera.GetGain();
+    }
+
+    // Convert camera image to RGB
+    try {
+      Pylon::CImageFormatConverter converter;
+      converter.OutputPixelFormat = Pylon::PixelType_RGB8packed;
+      converter.OutputBitAlignment = Pylon::OutputBitAlignment_MsbAligned;
+
+      Pylon::CPylonImage pylonImage;
+      pylonImage.AttachGrabResultBuffer(grabResult);
+
+      Pylon::CPylonImage convertedImage;
+      converter.Convert(convertedImage, pylonImage);
+
+      // Copy image data
+      const uint8_t* imageBuffer = static_cast<const uint8_t*>(convertedImage.GetBuffer());
+      size_t dataSize = frameData.GetDataSize();
+      frameData.imageData.assign(imageBuffer, imageBuffer + dataSize);
+
+    }
+    catch (...) {
+      // Silent fallback - create a simple test pattern
+      size_t dataSize = frameData.GetDataSize();
+      frameData.imageData.resize(dataSize);
+
+      // Simple gray pattern for fallback
+      uint8_t grayValue = (frameCallbackCounter % 256);
+      for (size_t i = 0; i < dataSize; i += 3) {
+        frameData.imageData[i] = grayValue;     // R
+        frameData.imageData[i + 1] = grayValue;   // G
+        frameData.imageData[i + 2] = grayValue;   // B
+      }
+    }
+
+    // Deliver to subscribers
+    {
+      std::lock_guard<std::mutex> lock(m_subscribersMutex);
+
+      for (auto& subInfo : m_subscribers) {
+        auto subscriber = subInfo.subscriber;
+        if (subscriber && subscriber->WantsFramesFromCamera(cameraId)) {
+          try {
+            subscriber->OnNewFrame(frameData);
+          }
+          catch (...) {
+            // Silent error handling for better performance
+          }
+        }
+      }
+    }
+
+  }
+  catch (...) {
+    // Silent error handling - don't spam logs
+  }
+}
+
+// **FIXED: Subscription management without deadlock**
+
+// **FIXED: Replace your SubscribeToFrames method with this safe version**
+
+void CameraManager::SubscribeToFrames(std::shared_ptr<CameraFrameSubscriber> subscriber) {
+  std::string subscriberId = subscriber->GetSubscriberId();
+  std::vector<std::string> grabbingCameras;
+
+  // **STEP 1: Handle subscription in a limited scope**
+  {
+    std::lock_guard<std::mutex> lock(m_subscribersMutex);
+
+    // Remove existing subscription directly
+    auto it = std::remove_if(m_subscribers.begin(), m_subscribers.end(),
+      [&subscriberId](const SubscriberInfo& info) {
+      auto sub = info.subscriber;
+      return !sub || sub->GetSubscriberId() == subscriberId;
+    });
+
+    bool wasRemoved = (it != m_subscribers.end());
+    m_subscribers.erase(it, m_subscribers.end());
+
+    if (wasRemoved) {
+      std::cout << "Removed existing subscription: " << subscriberId << std::endl;
+    }
+
+    // Add new subscription
+    m_subscribers.emplace_back(subscriber);
+
+    std::cout << "Subscribed: " << subscriber->GetSubscriberId()
+      << " (Total subscribers: " << m_subscribers.size() << ")" << std::endl;
+
+    // **STEP 2: Find grabbing cameras while still holding the lock**
+    for (const auto& [cameraId, managedCamera] : m_cameras) {
+      auto& camera = managedCamera->camera->GetCamera();
+      if (camera.IsGrabbing()) {
+        grabbingCameras.push_back(cameraId);
+      }
+    }
+  } // **SAFE: Lock is automatically released here**
+
+  // **STEP 3: Restart grabbing cameras (outside the lock)**
+  if (!grabbingCameras.empty()) {
+    std::cout << "[INFO] Found " << grabbingCameras.size()
+      << " grabbing cameras - restarting with broadcasting..." << std::endl;
+
+    for (const std::string& cameraId : grabbingCameras) {
+      RestartGrabbingWithBroadcast(cameraId);
+    }
+
+    std::cout << "[INFO] All grabbing cameras restarted with broadcasting" << std::endl;
+  }
+}
+
+
+
+void CameraManager::UnsubscribeFromFrames(const std::string& subscriberId) {
+  std::lock_guard<std::mutex> lock(m_subscribersMutex);
+
+  auto it = std::remove_if(m_subscribers.begin(), m_subscribers.end(),
+    [&subscriberId](const SubscriberInfo& info) {
+    auto sub = info.subscriber;
+    return !sub || sub->GetSubscriberId() == subscriberId;
+  });
+
+  bool removed = (it != m_subscribers.end());
+  m_subscribers.erase(it, m_subscribers.end());
+
+  if (removed) {
+    std::cout << "Unsubscribed: " << subscriberId
+      << " (Remaining subscribers: " << m_subscribers.size() << ")" << std::endl;
+  }
+}
+
+
+void CameraManager::SetGlobalBroadcastRate(float fps) {
+  int intervalMs = (fps > 0) ? (1000 / fps) : 0;
+  m_globalMinFrameInterval = intervalMs;
+  std::cout << "Global broadcast rate set to " << fps << " fps (min interval: "
+    << intervalMs << "ms)" << std::endl;
+}
+
+size_t CameraManager::GetSubscriberCount() const {
+  std::lock_guard<std::mutex> lock(m_subscribersMutex);
+  return m_subscribers.size();
+}
+
+std::vector<std::string> CameraManager::GetSubscriberIds() const {
+  std::lock_guard<std::mutex> lock(m_subscribersMutex);
+  std::vector<std::string> ids;
+
+  for (const auto& info : m_subscribers) {
+    if (auto sub = info.subscriber) {
+      ids.push_back(sub->GetSubscriberId());
+    }
+  }
+
+  return ids;
+}
+
+// **NEW: Enhanced StartGrabbing with broadcasting support**
+bool CameraManager::StartGrabbingWithBroadcast(const std::string& cameraId) {
+  auto* managedCamera = FindCamera(cameraId);
+  if (!managedCamera) {
+    std::cerr << "Camera '" << cameraId << "' not found" << std::endl;
+    return false;
+  }
+
+  auto& camera = managedCamera->camera->GetCamera();
+
+  if (!camera.IsConnected()) {
+    std::cerr << "Camera '" << cameraId << "' is not connected" << std::endl;
+    return false;
+  }
+
+  // Set up frame callback for broadcasting
+  camera.SetNewFrameCallback([this, cameraId](const Pylon::CGrabResultPtr& grabResult) {
+    OnCameraFrameReceived(cameraId, grabResult);
+  });
+
+  if (camera.StartGrabbing()) {
+    std::cout << "Started grabbing with broadcasting on camera: " << cameraId << std::endl;
+
+
+    // **ADD THIS: Broadcast status change to subscribers**
+    {
+      std::lock_guard<std::mutex> lock(m_subscribersMutex);
+      for (const auto& info : m_subscribers) {
+        if (auto sub = info.subscriber) {
+          try {
+            sub->OnCameraStatusChanged(cameraId, true, true);  // connected=true, grabbing=true
+          }
+          catch (...) {
+            // Ignore subscriber errors for status updates
+          }
+        }
+      }
+    }
+
+
+    return true;
+  }
+  else {
+    std::cerr << "Failed to start grabbing on camera: " << cameraId << std::endl;
+    return false;
+  }
+}
+
+void CameraManager::CleanupExpiredSubscribers() {
+  // Remove any expired weak pointers or null subscribers
+  auto it = std::remove_if(m_subscribers.begin(), m_subscribers.end(),
+    [](const SubscriberInfo& info) {
+    return !info.subscriber;
+  });
+
+  if (it != m_subscribers.end()) {
+    size_t removedCount = std::distance(it, m_subscribers.end());
+    m_subscribers.erase(it, m_subscribers.end());
+    std::cout << "Cleaned up " << removedCount << " expired subscribers" << std::endl;
+  }
+}
+
+// **MODIFY: Update your existing StartGrabbing to use broadcasting**
+// Replace your existing StartGrabbing method with this enhanced version:
+bool CameraManager::StartGrabbing(const std::string& cameraId) {
+  // **FIX: Always start broadcast system first**
+  if (!m_broadcastActive.load()) {
+    StartBroadcastSystem();
+  }
+
+  // **FIX: Always use the broadcast version**
+  return StartGrabbingWithBroadcast(cameraId);
+}
+
+
+// **MODIFY: Update destructor to stop broadcasting**
+// Add this to your existing destructor:
+/*
+CameraManager::~CameraManager() {
+  // Stop broadcasting system first
+  StopBroadcastSystem();
+
+  // Stop all cameras before cleanup
+  StopGrabbingAll();
+  m_cameras.clear();
+  std::cout << "CameraManager destroyed" << std::endl;
+}
+*/
+
+
+// **ALSO ADD: Make sure you have the RestartGrabbingWithBroadcast method**
+bool CameraManager::RestartGrabbingWithBroadcast(const std::string& cameraId) {
+  auto* managedCamera = FindCamera(cameraId);
+  if (!managedCamera) {
+    std::cerr << "Camera '" << cameraId << "' not found" << std::endl;
+    return false;
+  }
+
+  auto& camera = managedCamera->camera->GetCamera();
+
+  if (!camera.IsConnected()) {
+    std::cerr << "Camera '" << cameraId << "' is not connected" << std::endl;
+    return false;
+  }
+
+  std::cout << "[DEBUG] Restarting grabbing with broadcasting for: " << cameraId << std::endl;
+
+  // Stop current grabbing
+  if (camera.IsGrabbing()) {
+    camera.StopGrabbing();
+    std::cout << "[DEBUG] Stopped existing grabbing" << std::endl;
+    // Small delay to ensure clean stop
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+
+  // Set up frame callback for broadcasting
+  std::cout << "[DEBUG] Setting frame callback for: " << cameraId << std::endl;
+  camera.SetNewFrameCallback([this, cameraId](const Pylon::CGrabResultPtr& grabResult) {
+    std::cout << "[DEBUG] Frame callback triggered for: " << cameraId << std::endl;
+    OnCameraFrameReceived(cameraId, grabResult);
+  });
+
+  // Start grabbing again
+  if (camera.StartGrabbing()) {
+    std::cout << "[DEBUG] Restarted grabbing with broadcasting on camera: " << cameraId << std::endl;
+
+    // Broadcast status change to subscribers
+    {
+      std::lock_guard<std::mutex> lock(m_subscribersMutex);
+      for (const auto& info : m_subscribers) {
+        if (auto sub = info.subscriber) {
+          try {
+            sub->OnCameraStatusChanged(cameraId, true, true);
+          }
+          catch (...) {
+            // Ignore subscriber errors for status updates
+          }
+        }
+      }
+    }
+
+    return true;
+  }
+  else {
+    std::cerr << "[ERROR] Failed to restart grabbing on camera: " << cameraId << std::endl;
+    return false;
   }
 }

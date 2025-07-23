@@ -47,6 +47,13 @@
 #include "CameraFeedDisplay.h"
 #include "MenuManager_uaa3.h"
 #include "RaylibDebugWindow.h"
+#include "LiveVideoSubscriber.h"
+
+
+
+
+
+
 
 bool g_deugMode = false; // Global debug mode flag
 
@@ -924,25 +931,458 @@ int main(int argc, char* argv[])
 				}
 
 
-				// Add this right after the "Quick Start" button in your debug window:
+				// Fixed version with proper variable scope
+
 				ImGui::Separator();
 				ImGui::Text("Live Preview:");
 
 				if (!selectedCameraId.empty()) {
 					PylonCameraTest* camera = cameraManager->GetCamera(selectedCameraId);
-					if (camera && camera->HasValidTexture()) {
-						ImTextureID texID = (ImTextureID)(intptr_t)camera->GetTextureID();
-						ImGui::Image(texID, ImVec2(300, 200)); // Small preview
+					if (camera) {
+						auto& pylonCamera = camera->GetCamera();
+
+						// **MOVE STATIC VARIABLES TO TOP LEVEL - OUTSIDE ALL BLOCKS**
+						static std::shared_ptr<LiveVideoSubscriber> debugSubscriber = nullptr;
+						static unsigned int debugTextureID = 0;
+						static bool subscriberCreated = false;
+						static std::string lastSelectedCamera = "";
+						static int frameCheckCounter = 0;
+
+						frameCheckCounter++;
+
+						// **ENHANCED DEBUG: Show detailed camera status**
+						ImGui::Text("=== CAMERA DEBUG INFO ===");
+						ImGui::Text("Selected Camera: %s", selectedCameraId.c_str());
+						ImGui::Text("Camera Connected: %s", pylonCamera.IsConnected() ? "YES" : "NO");
+						ImGui::Text("Camera Grabbing: %s", pylonCamera.IsGrabbing() ? "YES" : "NO");
+						ImGui::Text("Camera Has Valid Texture: %s", camera->HasValidTexture() ? "YES" : "NO");
+						ImGui::Text("Camera Texture ID: %u", camera->GetTextureID());
+
+						// **ENHANCED DEBUG: Show broadcast system status**
+						ImGui::Text("=== BROADCAST SYSTEM DEBUG ===");
+						ImGui::Text("Total Subscribers: %zu", cameraManager->GetSubscriberCount());
+						auto subscriberIds = cameraManager->GetSubscriberIds();
+						for (size_t i = 0; i < subscriberIds.size(); ++i) {
+							ImGui::Text("  Subscriber %zu: %s", i + 1, subscriberIds[i].c_str());
+						}
+
+						ImGui::Separator();
+
+						// Reset if camera changed
+						if (lastSelectedCamera != selectedCameraId) {
+							logger->LogInfo("=== CAMERA CHANGED DEBUG ===");
+							logger->LogInfo("Old camera: " + lastSelectedCamera);
+							logger->LogInfo("New camera: " + selectedCameraId);
+
+							debugSubscriber = nullptr;
+							subscriberCreated = false;
+							lastSelectedCamera = selectedCameraId;
+
+							// Clean up old texture
+							if (debugTextureID != 0) {
+								glDeleteTextures(1, &debugTextureID);
+								debugTextureID = 0;
+								logger->LogInfo("Cleaned up old texture");
+							}
+							logger->LogInfo("=== END CAMERA CHANGED DEBUG ===");
+						}
+
+						// **FIX 1: Check and start grabbing**
+						if (pylonCamera.IsConnected() && !pylonCamera.IsGrabbing()) {
+							ImGui::TextColored(ImVec4(1, 1, 0, 1), "Camera connected but not grabbing");
+							if (ImGui::Button("Start Grabbing for Preview")) {
+								try {
+									logger->LogInfo("=== STARTING GRABBING DEBUG ===");
+									logger->LogInfo("Camera ID: " + selectedCameraId);
+									logger->LogInfo("Camera connected: " + std::string(pylonCamera.IsConnected() ? "YES" : "NO"));
+
+									if (cameraManager->StartGrabbing(selectedCameraId)) {
+										logger->LogInfo("StartGrabbing returned SUCCESS");
+										logger->LogInfo("Camera now grabbing: " + std::string(pylonCamera.IsGrabbing() ? "YES" : "NO"));
+
+										// **DEBUG: Force start broadcast system**
+										cameraManager->StartBroadcastSystem();
+										logger->LogInfo("Broadcast system started");
+										logger->LogInfo("Subscriber count: " + std::to_string(cameraManager->GetSubscriberCount()));
+
+									}
+									else {
+										logger->LogError("StartGrabbing returned FAILURE");
+									}
+									logger->LogInfo("=== END STARTING GRABBING DEBUG ===");
+								}
+								catch (const std::exception& e) {
+									logger->LogError("Exception starting grabbing: " + std::string(e.what()));
+								}
+								catch (...) {
+									logger->LogError("Unknown exception starting grabbing");
+								}
+							}
+						}
+
+						// **CREATE SUBSCRIBER (regardless of grabbing status)**
+						if (!subscriberCreated) {
+							try {
+								logger->LogInfo("=== CREATING SUBSCRIBER DEBUG ===");
+								logger->LogInfo("Creating subscriber for: " + selectedCameraId);
+
+								debugSubscriber = std::make_shared<LiveVideoSubscriber>(selectedCameraId);
+								logger->LogInfo("Subscriber created with ID: " + debugSubscriber->GetSubscriberId());
+
+								logger->LogInfo("Subscribing to CameraManager...");
+								cameraManager->SubscribeToFrames(debugSubscriber);
+								logger->LogInfo("Subscription successful");
+								logger->LogInfo("Total subscribers now: " + std::to_string(cameraManager->GetSubscriberCount()));
+
+								subscriberCreated = true;
+								logger->LogInfo("=== END CREATING SUBSCRIBER DEBUG ===");
+							}
+							catch (const std::exception& e) {
+								logger->LogError("Exception creating subscriber: " + std::string(e.what()));
+								debugSubscriber = nullptr;
+							}
+							catch (...) {
+								logger->LogError("Unknown exception creating subscriber");
+								debugSubscriber = nullptr;
+							}
+						}
+
+						// **ENHANCED DEBUG: Show detailed subscriber status**
+
+						if (debugSubscriber) {
+							ImGui::Text("=== SUBSCRIBER STATS ===");
+							ImGui::Text("Connected: %s", debugSubscriber->IsCameraConnected() ? "Yes" : "No");
+							ImGui::Text("Grabbing: %s", debugSubscriber->IsCameraGrabbing() ? "Yes" : "No");
+							ImGui::Text("Frames RX: %llu", debugSubscriber->GetTotalFramesReceived());
+							ImGui::Text("Last Frame Timestamp: %llu", debugSubscriber->GetLastFrameTimestamp());
+
+							// **NEW: Frame buffering system**
+							static CameraFrameData lastValidFrame;
+							static bool hasBufferedFrame = false;
+							static auto lastFrameUpdate = std::chrono::steady_clock::now();
+
+							// **Check for new frames and buffer them**
+							if (debugSubscriber->HasNewFrame()) {
+								auto newFrame = debugSubscriber->GetLatestFrame();
+								debugSubscriber->MarkFrameConsumed();
+
+								if (newFrame.IsValid() && newFrame.channels == 3) {
+									lastValidFrame = std::move(newFrame);  // Store the frame
+									hasBufferedFrame = true;
+									lastFrameUpdate = std::chrono::steady_clock::now();
+								}
+							}
+
+							// **ALWAYS display the buffered frame if we have one**
+							if (hasBufferedFrame) {
+								// Update texture with buffered frame
+								if (debugTextureID == 0) {
+									glGenTextures(1, &debugTextureID);
+								}
+
+								glBindTexture(GL_TEXTURE_2D, debugTextureID);
+								glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+								glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+								glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB,
+									lastValidFrame.width, lastValidFrame.height, 0,
+									GL_RGB, GL_UNSIGNED_BYTE, lastValidFrame.imageData.data());
+
+								glBindTexture(GL_TEXTURE_2D, 0);
+
+								// Display the texture
+								ImTextureID texID = (ImTextureID)(intptr_t)debugTextureID;
+								ImGui::Image(texID, ImVec2(300, 200));
+
+								// Show frame info and freshness
+								auto timeSinceUpdate = std::chrono::steady_clock::now() - lastFrameUpdate;
+								auto millisSinceUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(timeSinceUpdate).count();
+
+								if (ImGui::IsItemHovered()) {
+									ImGui::SetTooltip("Live Camera Feed\nFrame: %dx%d\nTotal Frames: %llu\nLast Update: %lld ms ago",
+										lastValidFrame.width, lastValidFrame.height,
+										debugSubscriber->GetTotalFramesReceived(),
+										millisSinceUpdate);
+								}
+
+								// **Show freshness indicator**
+								if (millisSinceUpdate < 100) {
+									ImGui::TextColored(ImVec4(0, 1, 0, 1), "LIVE (updated %lld ms ago)", millisSinceUpdate);
+								}
+								else if (millisSinceUpdate < 1000) {
+									ImGui::TextColored(ImVec4(1, 1, 0, 1), "Recent (updated %lld ms ago)", millisSinceUpdate);
+								}
+								else {
+									ImGui::TextColored(ImVec4(1, 0, 0, 1), "Stale (updated %lld ms ago)", millisSinceUpdate);
+								}
+
+							}
+							else {
+								// Only show "waiting" if we truly have no frames yet
+								ImGui::Button("Waiting for first frame...", ImVec2(300, 200));
+								ImGui::Text("No frames received yet");
+							}
+						}
+
+						// **FIX: Replace your debug window subscriber management with this leak-free version**
+
+// Replace the subscriber section in your debug window with this:
+
+						if (debugSubscriber) {
+							// **CLEANUP CHECK: Remove subscriber if camera changed**
+							if (debugSubscriber->GetTargetCamera() != selectedCameraId) {
+								logger->LogInfo("=== CLEANING UP OLD SUBSCRIBER ===");
+								logger->LogInfo("Old camera: " + debugSubscriber->GetTargetCamera());
+								logger->LogInfo("New camera: " + selectedCameraId);
+
+								// Unsubscribe the old subscriber
+								cameraManager->UnsubscribeFromFrames(debugSubscriber->GetSubscriberId());
+								logger->LogInfo("Unsubscribed old subscriber: " + debugSubscriber->GetSubscriberId());
+
+								// Clear old subscriber
+								debugSubscriber = nullptr;
+								subscriberCreated = false;
+
+								// Clean up old texture
+								if (debugTextureID != 0) {
+									glDeleteTextures(1, &debugTextureID);
+									debugTextureID = 0;
+									logger->LogInfo("Cleaned up old texture");
+								}
+								logger->LogInfo("=== END CLEANUP OLD SUBSCRIBER ===");
+							}
+						}
+
+						// **CREATE NEW SUBSCRIBER only if needed**
+						if (!subscriberCreated || !debugSubscriber) {
+							try {
+								logger->LogInfo("=== CREATING NEW SUBSCRIBER DEBUG ===");
+								logger->LogInfo("Creating subscriber for: " + selectedCameraId);
+
+								debugSubscriber = std::make_shared<LiveVideoSubscriber>(selectedCameraId);
+								logger->LogInfo("Subscriber created with ID: " + debugSubscriber->GetSubscriberId());
+
+								logger->LogInfo("Subscribing to CameraManager...");
+								cameraManager->SubscribeToFrames(debugSubscriber);
+								logger->LogInfo("Subscription successful");
+								logger->LogInfo("Total subscribers now: " + std::to_string(cameraManager->GetSubscriberCount()));
+
+								subscriberCreated = true;
+								logger->LogInfo("=== END CREATING NEW SUBSCRIBER DEBUG ===");
+							}
+							catch (const std::exception& e) {
+								logger->LogError("Exception creating subscriber: " + std::string(e.what()));
+								debugSubscriber = nullptr;
+								subscriberCreated = false;
+							}
+							catch (...) {
+								logger->LogError("Unknown exception creating subscriber");
+								debugSubscriber = nullptr;
+								subscriberCreated = false;
+							}
+						}
+
+						// **ALSO: Add a manual cleanup button**
+						// Add this button to your manual debug controls:
+
+						if (ImGui::Button("Cleanup All Subscribers")) {
+							logger->LogInfo("=== MANUAL SUBSCRIBER CLEANUP ===");
+							logger->LogInfo("Current subscriber count: " + std::to_string(cameraManager->GetSubscriberCount()));
+
+							// Get all subscriber IDs
+							auto subscriberIds = cameraManager->GetSubscriberIds();
+							for (const auto& id : subscriberIds) {
+								logger->LogInfo("Found subscriber: " + id);
+							}
+
+							// Clear our debug subscriber
+							if (debugSubscriber) {
+								cameraManager->UnsubscribeFromFrames(debugSubscriber->GetSubscriberId());
+								logger->LogInfo("Unsubscribed debug subscriber: " + debugSubscriber->GetSubscriberId());
+								debugSubscriber = nullptr;
+							}
+
+							subscriberCreated = false;
+
+							// Clean up texture
+							if (debugTextureID != 0) {
+								glDeleteTextures(1, &debugTextureID);
+								debugTextureID = 0;
+								logger->LogInfo("Cleaned up debug texture");
+							}
+
+							logger->LogInfo("Final subscriber count: " + std::to_string(cameraManager->GetSubscriberCount()));
+							logger->LogInfo("=== END MANUAL CLEANUP ===");
+						}
+
+						// **IMPROVED: Better camera change detection**
+						// Replace your camera change detection with this more robust version:
+
+						// Reset if camera changed
+						if (lastSelectedCamera != selectedCameraId) {
+							logger->LogInfo("=== CAMERA CHANGED DEBUG ===");
+							logger->LogInfo("Old camera: " + lastSelectedCamera);
+							logger->LogInfo("New camera: " + selectedCameraId);
+
+							// **IMPORTANT: Clean up subscriber for old camera**
+							if (debugSubscriber && debugSubscriber->GetTargetCamera() != selectedCameraId) {
+								logger->LogInfo("Unsubscribing from old camera: " + debugSubscriber->GetTargetCamera());
+								cameraManager->UnsubscribeFromFrames(debugSubscriber->GetSubscriberId());
+								debugSubscriber = nullptr;
+							}
+
+							subscriberCreated = false;
+							lastSelectedCamera = selectedCameraId;
+
+							// Clean up old texture
+							if (debugTextureID != 0) {
+								glDeleteTextures(1, &debugTextureID);
+								debugTextureID = 0;
+								logger->LogInfo("Cleaned up old texture");
+							}
+							logger->LogInfo("=== END CAMERA CHANGED DEBUG ===");
+						}
 
 						if (ImGui::Button("Copy to Main Camera UI")) {
-							// This could trigger showing the same feed in your main camera window
 							logger->LogInfo("Camera feed copied to main UI");
 						}
+
+						// **MANUAL DEBUG BUTTONS - NOW debugSubscriber IS IN SCOPE**
+						ImGui::Separator();
+						ImGui::Text("Manual Debug Controls:");
+
+						if (ImGui::Button("Force Camera Status Update")) {
+							if (debugSubscriber) {
+								debugSubscriber->OnCameraStatusChanged(selectedCameraId, pylonCamera.IsConnected(), pylonCamera.IsGrabbing());
+								logger->LogInfo("Manually triggered camera status update");
+							}
+							else {
+								logger->LogWarning("Cannot update status - debugSubscriber is null");
+							}
+						}
+
+						ImGui::SameLine();
+						if (ImGui::Button("Log All Debug Info")) {
+							logger->LogInfo("=== MANUAL DEBUG DUMP ===");
+							logger->LogInfo("Selected camera: " + selectedCameraId);
+							logger->LogInfo("Camera connected: " + std::string(pylonCamera.IsConnected() ? "YES" : "NO"));
+							logger->LogInfo("Camera grabbing: " + std::string(pylonCamera.IsGrabbing() ? "YES" : "NO"));
+							logger->LogInfo("Subscriber count: " + std::to_string(cameraManager->GetSubscriberCount()));
+							if (debugSubscriber) {
+								logger->LogInfo("Subscriber ID: " + debugSubscriber->GetSubscriberId());
+								logger->LogInfo("Subscriber total frames: " + std::to_string(debugSubscriber->GetTotalFramesReceived()));
+								logger->LogInfo("Subscriber connected: " + std::string(debugSubscriber->IsCameraConnected() ? "YES" : "NO"));
+								logger->LogInfo("Subscriber grabbing: " + std::string(debugSubscriber->IsCameraGrabbing() ? "YES" : "NO"));
+							}
+							else {
+								logger->LogWarning("debugSubscriber is null");
+							}
+							logger->LogInfo("=== END MANUAL DEBUG DUMP ===");
+						}
+
+
+
+						ImGui::SameLine();
+						if (ImGui::Button("Restart Camera With Broadcasting")) {
+							if (pylonCamera.IsConnected()) {
+								logger->LogInfo("=== RESTARTING CAMERA WITH BROADCASTING ===");
+								logger->LogInfo("Camera: " + selectedCameraId);
+								logger->LogInfo("Currently grabbing: " + std::string(pylonCamera.IsGrabbing() ? "YES" : "NO"));
+
+								// Stop current grabbing
+								if (pylonCamera.IsGrabbing()) {
+									cameraManager->StopGrabbing(selectedCameraId);
+									logger->LogInfo("Stopped current grabbing");
+									std::this_thread::sleep_for(std::chrono::milliseconds(200));
+								}
+
+								// Start grabbing with broadcasting (this should set the callback)
+								if (cameraManager->StartGrabbing(selectedCameraId)) {
+									logger->LogInfo("Restarted grabbing with broadcasting");
+									logger->LogInfo("Now grabbing: " + std::string(pylonCamera.IsGrabbing() ? "YES" : "NO"));
+								}
+								else {
+									logger->LogError("Failed to restart grabbing");
+								}
+
+								logger->LogInfo("=== END RESTART CAMERA ===");
+							}
+							else {
+								logger->LogWarning("Camera not connected - cannot restart");
+							}
+						}
+
+						if (ImGui::Button("Test Frame Callback")) {
+							logger->LogInfo("=== TESTING FRAME CALLBACK ===");
+							if (pylonCamera.IsConnected() && pylonCamera.IsGrabbing()) {
+								// This should trigger the callback if it's set up correctly
+								logger->LogInfo("Camera is grabbing - callbacks should be firing");
+								logger->LogInfo("Check console for '[DEBUG] OnCameraFrameReceived called' messages");
+							}
+							else {
+								logger->LogWarning("Camera not grabbing - no callbacks expected");
+							}
+							logger->LogInfo("=== END TEST FRAME CALLBACK ===");
+						}
+
+
+						// **ALSO: Add this debug button to manually trigger a test frame**
+						// Add this to your debug window:
+
+						if (ImGui::Button("Send Test Frame")) {
+							logger->LogInfo("=== SENDING TEST FRAME ===");
+
+							if (debugSubscriber) {
+								// Create a test frame manually
+								CameraFrameData testFrame;
+								testFrame.cameraId = selectedCameraId;
+								testFrame.width = 320;
+								testFrame.height = 240;
+								testFrame.channels = 3;
+								testFrame.timestamp = 12345;
+								testFrame.frameNumber = 999;
+
+								// Create blue test image
+								size_t dataSize = testFrame.width * testFrame.height * 3;
+								testFrame.imageData.resize(dataSize);
+
+								for (size_t i = 0; i < dataSize; i += 3) {
+									testFrame.imageData[i] = 0;       // R
+									testFrame.imageData[i + 1] = 0;     // G  
+									testFrame.imageData[i + 2] = 255;   // B (blue)
+								}
+
+								logger->LogInfo("Created test frame: " + std::to_string(testFrame.width) + "x" + std::to_string(testFrame.height));
+								logger->LogInfo("Sending to subscriber: " + debugSubscriber->GetSubscriberId());
+
+								try {
+									debugSubscriber->OnNewFrame(testFrame);
+									logger->LogInfo("Test frame sent successfully!");
+								}
+								catch (const std::exception& e) {
+									logger->LogError("Exception sending test frame: " + std::string(e.what()));
+								}
+							}
+							else {
+								logger->LogWarning("No subscriber available for test");
+							}
+
+							logger->LogInfo("=== END SEND TEST FRAME ===");
+						}
+
 					}
 					else {
-						ImGui::Button("No Feed Available", ImVec2(300, 200));
+						ImGui::Button("Camera not found", ImVec2(300, 200));
+						ImGui::Text("ERROR: Camera pointer is null");
 					}
 				}
+				else {
+					ImGui::Button("No camera selected", ImVec2(300, 200));
+					ImGui::Text("ERROR: selectedCameraId is empty");
+				}
+
+
+
 			}
 			else {
 				ImGui::Text("No cameras available");
