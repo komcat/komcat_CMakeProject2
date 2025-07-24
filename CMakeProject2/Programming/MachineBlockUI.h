@@ -410,4 +410,6 @@ private:
 
   // Dialog rendering
   void RenderCannotSaveDialog();
+
+  ImVec2 GetCanvasCenterPosition() const;
 };

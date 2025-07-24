@@ -969,9 +969,8 @@ void MachineBlockUI::RenderPaletteBlock(const MachineBlock& block, int index) {
 	std::string buttonLabel = block.label + "##palette" + std::to_string(index);
 
 	if (ImGui::Button(buttonLabel.c_str(), buttonSize)) {
-		// Add block to program at fixed position x=-20, y=0
-		ImVec2 centerPos(-20, 0);
-		AddBlockToProgram(block.type, centerPos);
+		// NEW CODE: Position parameter is ignored anyway, so we can pass anything
+		AddBlockToProgram(block.type, ImVec2(0, 0)); // Position will be calculated internally
 	}
 
 	// Handle drag from palette
@@ -1516,7 +1515,8 @@ ImVec2 MachineBlockUI::CanvasToWorld(const ImVec2& canvasPos, const ImVec2& canv
 	);
 }
 
-// IMPROVED: Prevent multiple START blocks and limit END blocks
+
+// IMPROVED: Place new blocks at canvas center with smart stacking
 void MachineBlockUI::AddBlockToProgram(BlockType type, const ImVec2& position) {
 	// Prevent multiple START blocks
 	if (type == BlockType::START && CountBlocksOfType(BlockType::START) > 0) {
@@ -1525,21 +1525,49 @@ void MachineBlockUI::AddBlockToProgram(BlockType type, const ImVec2& position) {
 		return;
 	}
 
-	// OPTIONAL: Limit to one END block (uncomment if you want this restriction)
-	// if (type == BlockType::END && CountBlocksOfType(BlockType::END) > 0) {
-	//   printf("[STOP] Only one END block allowed per program!\n");
-	//   printf("   A program can have exactly one END block.\n");
-	//   return;
-	// }
+	// OPTION 1: Use canvas center instead of fixed position
+	ImVec2 spawnPosition = GetCanvasCenterPosition();
 
-	auto newBlock = std::make_unique<MachineBlock>(m_nextBlockId++, type, BlockTypeToString(type), GetBlockColor(type));
-	printf("DEBUG: Created block with type %d, string: %s\n", static_cast<int>(type), BlockTypeToString(type).c_str());
+	// OPTION 2: Smart stacking - offset if blocks exist at center
+	// Check if there are existing blocks near the center position
+	int blocksNearCenter = 0;
+	const float NEAR_DISTANCE = 30.0f; // Distance threshold
 
-	newBlock->position = position;
+	for (const auto& existingBlock : m_programBlocks) {
+		float dx = existingBlock->position.x - spawnPosition.x;
+		float dy = existingBlock->position.y - spawnPosition.y;
+		float distance = sqrt(dx * dx + dy * dy);
+
+		if (distance < NEAR_DISTANCE) {
+			blocksNearCenter++;
+		}
+	}
+
+	// Apply offset for overlapping blocks
+	if (blocksNearCenter > 0) {
+		float offsetAngle = (blocksNearCenter * 0.5f); // Spiral pattern
+		float offsetRadius = blocksNearCenter * 25.0f; // Increasing radius
+
+		spawnPosition.x += cos(offsetAngle) * offsetRadius;
+		spawnPosition.y += sin(offsetAngle) * offsetRadius;
+	}
+
+	// Create the new block
+	auto newBlock = std::make_unique<MachineBlock>(m_nextBlockId++, type,
+		BlockTypeToString(type),
+		GetBlockColor(type));
+	printf("DEBUG: Created block with type %d, string: %s\n",
+		static_cast<int>(type), BlockTypeToString(type).c_str());
+
+	// Use calculated spawn position instead of fixed position
+	newBlock->position = spawnPosition;
 
 	InitializeBlockParameters(*newBlock);
+
 	// DEBUG: Print parameter addresses to verify independence
-	printf("DEBUG: Block ID %d (%s) created with parameters:\n", newBlock->id, BlockTypeToString(type).c_str());
+	printf("DEBUG: Block ID %d (%s) created at position (%.1f, %.1f) with parameters:\n",
+		newBlock->id, BlockTypeToString(type).c_str(),
+		spawnPosition.x, spawnPosition.y);
 	for (const auto& param : newBlock->parameters) {
 		printf("  %s = %s (address: %p)\n", param.name.c_str(), param.value.c_str(), &param);
 	}
@@ -1547,7 +1575,9 @@ void MachineBlockUI::AddBlockToProgram(BlockType type, const ImVec2& position) {
 
 	m_programBlocks.push_back(std::move(newBlock));
 
-	printf("[Success] Added %s block (ID: %d)\n", BlockTypeToString(type).c_str(), m_nextBlockId - 1);
+	printf("[Success] Added %s block (ID: %d) at canvas center (%.1f, %.1f)\n",
+		BlockTypeToString(type).c_str(), m_nextBlockId - 1,
+		spawnPosition.x, spawnPosition.y);
 }
 
 void MachineBlockUI::InitializeBlockParameters(MachineBlock& block) {
@@ -3687,4 +3717,36 @@ void MachineBlockUI::RenderEnhancedSaveAsDialog() {
 
 		ImGui::CloseCurrentPopup();
 	}
+}
+
+
+// NEW METHOD: Calculate the center position of the canvas in world coordinates
+ImVec2 MachineBlockUI::GetCanvasCenterPosition() const {
+	// Calculate the current canvas size (this matches what RenderCanvas() uses)
+	ImVec2 windowSize = ImGui::GetContentRegionAvail();
+	float leftPanelWidth = 250.0f;   // Block palette width
+	float rightPanelWidth = 300.0f;  // Properties panel width
+	float middlePanelWidth = windowSize.x - leftPanelWidth - rightPanelWidth - 20.0f;
+
+	// Canvas dimensions (subtract space for headers/controls)
+	ImVec2 canvasSize;
+	canvasSize.x = middlePanelWidth;
+	canvasSize.y = windowSize.y - 60.0f; // Approximate space for canvas header/controls
+
+	// Ensure minimum canvas size
+	if (canvasSize.x < 50.0f) canvasSize.x = 50.0f;
+	if (canvasSize.y < 50.0f) canvasSize.y = 50.0f;
+
+	// Calculate screen center of canvas
+	ImVec2 canvasScreenCenter;
+	canvasScreenCenter.x = canvasSize.x * 0.5f;
+	canvasScreenCenter.y = canvasSize.y * 0.5f;
+
+	// Convert from canvas screen coordinates to world coordinates
+	// This reverses the WorldToCanvas transformation
+	ImVec2 worldCenter;
+	worldCenter.x = (canvasScreenCenter.x / m_canvasZoom) - m_canvasOffset.x;
+	worldCenter.y = (canvasScreenCenter.y / m_canvasZoom) - m_canvasOffset.y;
+
+	return worldCenter;
 }
