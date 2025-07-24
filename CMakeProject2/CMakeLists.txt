@@ -195,8 +195,8 @@ set(MAINUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mainUI")
 set(INCL_CAMERA "${CMAKE_CURRENT_SOURCE_DIR}/include/camera")
 set(INCL_OPS "${CMAKE_CURRENT_SOURCE_DIR}/include/ops")
 set(INCL_PROGRAM "${CMAKE_CURRENT_SOURCE_DIR}/Programming")
-
-
+set(INCL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
+set(INCL_PROCESSES "${CMAKE_CURRENT_SOURCE_DIR}/Processes")
 
 
 
@@ -474,7 +474,7 @@ add_executable(CMakeProject2
  "mainUI/MenuManager_uaa3.cpp"
  "mainUI/RaylibDebugWindow.h" 
  "mainUI/RaylibDebugWindow.cpp"
-  "mainUI/LiveVideoSubscriber.h" "mainUI/LiveVideoSubscriber.cpp" "include/camera/CameraFrameData.h")
+  "mainUI/LiveVideoSubscriber.h" "mainUI/LiveVideoSubscriber.cpp" "include/camera/CameraFrameData.h" "mainUI/RunPageUI.h" "mainUI/RunPageUI.cpp" "Processes/uaa3ProcessBuilders.h" "Processes/uaa3ProcessBuilders.cpp")
 
 
 
@@ -513,6 +513,8 @@ target_include_directories(CMakeProject2 PRIVATE
      ${STB_IMAGE_DIR}  # Add this line
      ${INCL_OPS}
      ${INCL_PROGRAM}
+     ${INCL_DIR}
+     ${INCL_PROCESSES}
 )
 
 # Link libraries - directly reference libraries
@@ -812,48 +814,50 @@ add_executable(uaa3App
   "mainUI/MenuManager_uaa3.h" 
   "mainUI/MenuManager_uaa3.cpp"
   "mainUI/RaylibDebugWindow.h" 
-  "mainUI/RaylibDebugWindow.cpp" "mainUI/LiveVideoSubscriber.h" "mainUI/LiveVideoSubscriber.cpp" "include/camera/CameraFrameData.h")
+  "mainUI/RaylibDebugWindow.cpp" "mainUI/LiveVideoSubscriber.h" "mainUI/LiveVideoSubscriber.cpp" "include/camera/CameraFrameData.h" "mainUI/RunPageUI.h" "mainUI/RunPageUI.cpp" "Processes/uaa3ProcessBuilders.h" "Processes/uaa3ProcessBuilders.cpp")
 
 
 
 # Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
 target_include_directories(uaa3App PRIVATE
-    ${SDL2_INCLUDE_DIR}
-    ${IMGUI_DIR}
-    ${ACSC_DIR}  # Added to include the directory with ACSC.h
-    ${PYLON_INCLUDE_DIR}  # Added Pylon include directory
-    ${PI_INCLUDE_DIR}  # Added PI GCS2 include directory
-    ${EZIIO_DIR_INCLUDE}
-    ${EZIIO_DIR_INCLUDE_x64}
-    ${SDL2_TTF_INCLUDE_DIR}
-    ${SQLITE_INCLUDE_DIR}  # Add SQLite include
-    ${RAYLIB_INCLUDE_DIR}  # Add this line
-    ${HALCON_INCLUDE_DIR}  # Add this line for HALCON
-    ${STB_IMAGE_DIR}  # Add this line
-    ${MAINUI_DIR}
-    ${INCL_CAMERA}
-    ${INCL_OPS}
-    ${INCL_PROGRAM}
+  ${SDL2_INCLUDE_DIR}
+  ${IMGUI_DIR}
+  ${ACSC_DIR}  # Added to include the directory with ACSC.h
+  ${PYLON_INCLUDE_DIR}  # Added Pylon include directory
+  ${PI_INCLUDE_DIR}  # Added PI GCS2 include directory
+  ${EZIIO_DIR_INCLUDE}
+  ${EZIIO_DIR_INCLUDE_x64}
+  ${SDL2_TTF_INCLUDE_DIR}
+  ${SQLITE_INCLUDE_DIR}  # Add SQLite include
+  ${RAYLIB_INCLUDE_DIR}  # Add this line
+  ${HALCON_INCLUDE_DIR}  # Add this line for HALCON
+  ${STB_IMAGE_DIR}  # Add this line
+  ${MAINUI_DIR}
+  ${INCL_CAMERA}
+  ${INCL_OPS}
+  ${INCL_PROGRAM}
+  ${INCL_DIR}
+  ${INCL_PROCESSES}
 )
 
 # Link libraries - directly reference libraries
 target_link_libraries(uaa3App PRIVATE
-    ${SDL2MAIN_LIBRARY}
-    ${SDL2_LIBRARY}
-    ${OPENGL_LIBRARIES}
-    ${ACSC_LIBRARY}  # ACSC library
-    ${PYLON_LIBRARIES}  # Added Pylon libraries
-    ${PI_LIBRARY}  # Added PI GCS2 library
-    ${EZIIO_LIBRARY}  # Added EziMOTIONPlusE library
-    ${SDL2_TTF_LIBRARY}  # Added SDL2_ttf library
-    nlohmann_json::nlohmann_json
-    ${HALCON_LIBRARIES}  # Add this line for HALCON
-    ${RAYLIB_LIBRARY}  # Add this line
-        # Raylib Windows dependencies
-    winmm     # For timeBeginPeriod/timeEndPeriod
-    gdi32     # For Windows GDI
-    user32    # For Windows user interface
-    shell32   # For Windows shell
+  ${SDL2MAIN_LIBRARY}
+  ${SDL2_LIBRARY}
+  ${OPENGL_LIBRARIES}
+  ${ACSC_LIBRARY}  # ACSC library
+  ${PYLON_LIBRARIES}  # Added Pylon libraries
+  ${PI_LIBRARY}  # Added PI GCS2 library
+  ${EZIIO_LIBRARY}  # Added EziMOTIONPlusE library
+  ${SDL2_TTF_LIBRARY}  # Added SDL2_ttf library
+  nlohmann_json::nlohmann_json
+  ${HALCON_LIBRARIES}  # Add this line for HALCON
+  ${RAYLIB_LIBRARY}  # Add this line
+      # Raylib Windows dependencies
+  winmm     # For timeBeginPeriod/timeEndPeriod
+  gdi32     # For Windows GDI
+  user32    # For Windows user interface
+  shell32   # For Windows shell
 )
 
 

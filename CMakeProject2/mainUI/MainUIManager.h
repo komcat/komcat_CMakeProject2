@@ -15,6 +15,7 @@
 #include "Programming/MachineBlockUI.h"
 #include "Programming/MacroManager.h"
 #include "MacroPanelUI.h"
+#include "RunPageUI.h"
 
 // Forward declarations
 class MotionConfigManager;
@@ -98,6 +99,11 @@ public:
   void SetMachineOperations(MachineOperations* machineOps);
   MachineOperations* GetMachineOperations();
 
+  // NEW: Add getter for RunPageUI
+  RunPageUI* GetRunPageUI() const { return m_runPageUI.get(); }
+
+  // NEW: Add getter for UserPromptUI (optional, for debugging)
+  UserPromptUI* GetUserPromptUI() const { return m_userPromptUI.get(); }
 
 
 private:
@@ -203,4 +209,10 @@ private:
 
 
   void RenderMacroManagerPage();
+
+  // NEW: Add these members if not already present
+  std::unique_ptr<RunPageUI> m_runPageUI;
+  std::unique_ptr<UserPromptUI> m_userPromptUI;
+
+
 };

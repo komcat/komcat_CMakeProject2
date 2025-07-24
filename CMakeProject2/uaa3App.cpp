@@ -656,6 +656,8 @@ int main(int argc, char* argv[])
 	// Create the main UI manager
 	MainUIManager uiManager(*motionConfigManager);
 	logger->LogInfo("MainUIManager created with MotionConfigManager");
+	// NEW: Setup UserPromptUI and connect to RunPageUI
+	std::unique_ptr<UserPromptUI> userPromptUI = std::make_unique<UserPromptUI>();
 
 	// Set all managers in UI
 	if (piControllerManager) {
@@ -686,7 +688,14 @@ int main(int argc, char* argv[])
 		uiManager.SetMachineOperations(machineOps.get());
 		logger->LogInfo("MachineOperations set in MainUIManager");
 	}
-
+	// Connect UserPromptUI to RunPageUI
+	// Verify it worked
+	if (auto* runPageUI = uiManager.GetRunPageUI()) {
+		std::cout << "✓ RunPageUI accessible - UAA3 sequences enabled!" << std::endl;
+	}
+	else {
+		std::cout << "✗ RunPageUI not accessible - check setup" << std::endl;
+	}
 
 
 	// In your uaa3App.cpp, replace the camera feed setup section with this:
@@ -883,7 +892,10 @@ int main(int argc, char* argv[])
 		// Render the main UI
 		uiManager.RenderUI();
 
-
+		// IMPORTANT: Render UserPromptUI to handle UAA3 prompts
+		if (userPromptUI) {
+			userPromptUI->Render();
+		}
 
 #pragma region rayLibwindow
 		// RENDER RAYLIB DEBUG WINDOW (controlled by menu)

@@ -15,7 +15,8 @@
 #include "UIPneumaticPanel.h"
 // Add this include at the top with other includes:
 #include "UISMUPanel.h"
-#include "UserPromptUI.h"  // ADD THIS LINE
+#include "RunPageUI.h"            // NEW: Add this include
+#include "Programming/UserPromptUI.h"  // NEW: Add this include
 
 #include "include/data/global_data_store.h" // Add this with your other includes
 #include "include/machine_operations.h"  // Add this include at the top
@@ -86,13 +87,8 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 	// Initialize Global Data Store Viewer UI
 	m_globalDataStoreViewerUI = std::make_unique<GlobalDataStoreViewerUI>();
 
-	//try {
-	//	m_cld101xEquipmentUI = std::make_unique<CLD101xEquipmentUI>();
-	//}
-	//catch (const std::exception& e) {
-	//	// Handle initialization error if needed
-	//	m_cld101xEquipmentUI = nullptr;
-	//}
+	// Initialize RunPageUI as nullptr - will be created when MachineOperations is set
+	m_runPageUI = nullptr;
 }
 
 
@@ -131,6 +127,11 @@ void MainUIManager::RenderUI() {
 
 	// Always render jog window (it handles its own visibility internally)
 	RenderGlobalJogWindow();
+
+	// Render UserPromptUI (handles prompts from UAA3 sequences)
+	if (m_userPromptUI) {
+		m_userPromptUI->Render();
+	}
 }
 
 // Update RenderBackButton() to handle Data Instrument sub-pages
@@ -863,13 +864,24 @@ void MainUIManager::RenderSmuManagerPage() {
 
 
 
-void MainUIManager::RenderRunProgramPage() {
-	ImGui::SetWindowFontScale(1.5f);
-	ImGui::Text("Run Program");
-	ImGui::SetWindowFontScale(1.0f);
 
-	ImGui::Spacing();
-	ImGui::Text("Program execution interface will be implemented here");
+void MainUIManager::RenderRunProgramPage() {
+	if (m_runPageUI) {
+		m_runPageUI->RenderUI();
+	}
+	else {
+		// Fallback if RunPageUI is not initialized
+		ImGui::Text("Run Program");
+		ImGui::Separator();
+		ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f),
+			"Machine Operations not initialized. RunPageUI unavailable.");
+		ImGui::Text("Please ensure the machine system is properly configured.");
+
+		// NEW: Add button to try setup if MachineOperations is available
+		if (m_machineOperations && ImGui::Button("Initialize RunPageUI")) {
+			SetMachineOperations(m_machineOperations);
+		}
+	}
 }
 
 void MainUIManager::RenderConfigPage() {
@@ -1109,36 +1121,29 @@ void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
 			std::cout << "MainUIManager: MacroPanelUI reconnected with initialized components" << std::endl;
 		}
 
-		// Optionally, you can create any UI components that depend on MachineOperations here
-		// For example, if you had a MachineOperationsUI panel:
-		// m_machineOpsPanelUI = std::make_unique<MachineOperationsPanelUI>(*m_machineOperations);
 
-		// You could also pass the MachineOperations to existing UI components that need it
-		// For example, if UIJogWindow needs MachineOperations:
-		if (m_uiJogWindow) {
-			// m_uiJogWindow->SetMachineOperations(m_machineOperations);
+		// Create RunPageUI when MachineOperations is available
+		if (m_machineOperations) {
+			m_runPageUI = std::make_unique<RunPageUI>(*m_machineOperations);
 		}
 
-		// Or pass it to other panel UIs that might need access to high-level operations
-		if (m_piPanelUI) {
-			// m_piPanelUI->SetMachineOperations(m_machineOperations);
-		}
-
-		if (m_acsPanelUI) {
-			// m_acsPanelUI->SetMachineOperations(m_machineOperations);
-		}
-
-		if (m_pneumaticPanelUI) {
-			// m_pneumaticPanelUI->SetMachineOperations(m_machineOperations);
-		}
-
-		if (m_cameraPanelUI) {
-			// m_cameraPanelUI->SetMachineOperations(m_machineOperations);
-		}
 	}
 	else {
 		std::cout << "MainUIManager: MachineOperations cleared" << std::endl;
 	}
+
+	// Create UserPromptUI when MachineOperations is available
+	if (m_machineOperations) {
+		// 1. Create UserPromptUI
+		m_userPromptUI = std::make_unique<UserPromptUI>();
+
+		// 2. Create RunPageUI
+		m_runPageUI = std::make_unique<RunPageUI>(*m_machineOperations);
+
+		// 3. Connect UserPromptUI to RunPageUI
+		m_runPageUI->SetUserPromptUI(m_userPromptUI.get());
+	}
+
 }
 
 // Optionally, add a getter method as well

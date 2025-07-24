@@ -1,30 +1,38 @@
-﻿// ═══════════════════════════════════════════════════════════════════════════════════════
-// STEP 2: Create UserPromptUI.cpp - Implementation
-// ═══════════════════════════════════════════════════════════════════════════════════════
-
-// UserPromptUI.cpp
+﻿// UserPromptUI.cpp
 #include "UserPromptUI.h"
 #include <algorithm>
-
+#include <chrono>
 
 UserPromptUI::UserPromptUI()
   : m_isVisible(false)
   , m_isPromptActive(false)
-  , m_promptRequested(false)  // NEW
+  , m_promptRequested(false)
   , m_title("User Confirmation")
   , m_message("")
-  , m_result(PromptResult::PENDING) {
+  , m_result(PromptResult::PENDING)
+  , m_autoConfirm(false)           // NEW: Default auto-confirm off
+  , m_autoConfirmDelay(3.0f)       // NEW: Default 3 seconds
+  , m_promptStartTime(0.0f)        // NEW: Track when prompt started
+  , m_autoConfirmTriggered(false)  // NEW: Prevent multiple triggers
+{
 }
 
-// NEW: Thread-safe method that just sets flags
-// ===================================================================
-// DEBUG: Add logging to see if RequestPrompt is called
-// ===================================================================
+UserPromptUI::~UserPromptUI() {
+}
 
+// NEW: Get current time helper
+float UserPromptUI::GetCurrentTime() const {
+  auto now = std::chrono::steady_clock::now();
+  auto duration = now.time_since_epoch();
+  return std::chrono::duration<float>(duration).count();
+}
+
+// Thread-safe method that just sets flags
 void UserPromptUI::RequestPrompt(const std::string& title, const std::string& message,
   std::function<void(PromptResult)> callback) {
 
-  printf("[DEBUG] RequestPrompt called: title='%s', message='%s'\n", title.c_str(), message.c_str());
+  printf("[DEBUG] RequestPrompt called: title='%s', message='%s', auto-confirm=%s\n",
+    title.c_str(), message.c_str(), m_autoConfirm ? "enabled" : "disabled");
 
   std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -35,13 +43,16 @@ void UserPromptUI::RequestPrompt(const std::string& title, const std::string& me
   m_promptRequested = true;
   m_isVisible = true;
 
-  printf("[DEBUG] RequestPrompt: m_promptRequested set to true, m_isVisible set to true\n");
+  // NEW: Reset auto-confirm state for new prompt
+  m_autoConfirmTriggered = false;
+  m_promptStartTime = GetCurrentTime();
+
+  printf("[DEBUG] RequestPrompt: Auto-confirm will trigger in %.1f seconds\n", m_autoConfirmDelay);
 }
 
 // Keep the old ShowPrompt method for backward compatibility
 void UserPromptUI::ShowPrompt(const std::string& title, const std::string& message,
   std::function<void(PromptResult)> callback) {
-  // This should only be called from the main thread
   std::lock_guard<std::mutex> lock(m_mutex);
 
   m_title = title;
@@ -51,35 +62,31 @@ void UserPromptUI::ShowPrompt(const std::string& title, const std::string& messa
   m_isPromptActive = true;
   m_isVisible = true;
 
-  ImGui::OpenPopup(m_title.c_str());  // Direct call - main thread only
+  // NEW: Reset auto-confirm state
+  m_autoConfirmTriggered = false;
+  m_promptStartTime = GetCurrentTime();
+
+  ImGui::OpenPopup(m_title.c_str());
 }
 
-UserPromptUI::~UserPromptUI() {
-}
-
-
+// Update UserPromptUI.cpp Render() method with better layout handling
 
 void UserPromptUI::Render() {
-  //printf("[DEBUG] Render() called - m_isVisible=%d, m_isPromptActive=%d, m_promptRequested=%d\n",    m_isVisible, m_isPromptActive, m_promptRequested);
-
   // Check if we need to open a new prompt (thread-safe)
   {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_promptRequested && !m_isPromptActive) {
-      //printf("[DEBUG] Activating prompt in Render()\n");
       m_isPromptActive = true;
       m_promptRequested = false;
     }
   }
 
-  //printf("[DEBUG] After check - m_isVisible=%d, m_isPromptActive=%d\n", m_isVisible, m_isPromptActive);
-
   if (!m_isVisible || !m_isPromptActive) {
-    //printf("[DEBUG] Early return from Render()\n");
     return;
   }
 
-  //printf("[DEBUG] Proceeding to render ImGui window\n");
+  // Check auto-confirm before rendering
+  CheckAutoConfirm();
 
   // Force focus on the next window if prompt just became active
   static bool needsFocus = false;
@@ -91,54 +98,82 @@ void UserPromptUI::Render() {
     }
   }
 
-  // UPDATED: Center window only when it first appears, then let user move it
+  // IMPROVED: Dynamic window sizing based on content
   ImVec2 center = ImGui::GetMainViewport()->GetCenter();
   ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-  ImGui::SetNextWindowSize(ImVec2(600, 350), ImGuiCond_Appearing);
 
-  // Enhanced flags to make window more prominent and stay on top
-  ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize |
-    ImGuiWindowFlags_NoCollapse |
+  // Calculate content-based window size
+  ImVec2 minSize = ImVec2(500, 300);
+  ImVec2 maxSize = ImVec2(800, 600);
+
+  // Estimate content height
+  float estimatedHeight = 120;  // Base height for header and buttons
+
+  // Add height for title
+  if (!m_title.empty() && m_title != "User Confirmation") {
+    estimatedHeight += 30;
+  }
+
+  // Add height for message (rough estimate based on text length)
+  float messageLines = (float)m_message.length() / 80.0f;  // Estimate characters per line
+  if (messageLines < 1.0f) messageLines = 1.0f;
+  estimatedHeight += messageLines * 20.0f + 40;  // Line height + spacing
+
+  // Add height for auto-confirm display
+  if (m_autoConfirm && !m_autoConfirmTriggered) {
+    estimatedHeight += 60;  // Progress bar and countdown text
+  }
+
+  // Clamp to min/max
+  estimatedHeight = std::max(minSize.y, std::min(estimatedHeight, maxSize.y));
+
+  ImVec2 windowSize = ImVec2(minSize.x, estimatedHeight);
+  ImGui::SetNextWindowSize(windowSize, ImGuiCond_Appearing);
+  ImGui::SetNextWindowSizeConstraints(minSize, maxSize);
+
+  // IMPROVED: Better window flags for resizing
+  ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse |
     ImGuiWindowFlags_NoDocking |
-    ImGuiWindowFlags_NoScrollbar;
+    ImGuiWindowFlags_AlwaysAutoResize;  // NEW: Auto-resize to content
 
   SetupPromptStyling();
 
   bool isOpen = true;
-
-  // CRITICAL: Use unique window ID with object pointer
   std::string windowID = "User Confirmation Required##prompt_" + std::to_string((uintptr_t)this);
 
   if (ImGui::Begin(windowID.c_str(), &isOpen, flags)) {
 
-    // Make window focused and bring to front when it appears or when not focused
+    // Make window focused
     if (ImGui::IsWindowAppearing()) {
-      printf("[DEBUG] Window appearing - setting focus\n");
       ImGui::SetWindowFocus();
       needsFocus = false;
     }
     else if (m_isPromptActive && !ImGui::IsWindowFocused()) {
-      printf("[DEBUG] Window not focused - setting focus\n");
       ImGui::SetWindowFocus();
     }
     else if (ImGui::IsWindowFocused() && needsFocus) {
       needsFocus = false;
     }
 
-    // Keep trying to focus if still needed
     if (needsFocus) {
       ImGui::SetWindowFocus();
     }
 
-    // Header
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.0f, 1.0f));
-    ImGui::Text("USER CONFIRMATION REQUIRED");
+    // Header with auto-confirm indicator
+    if (m_autoConfirm) {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.6f, 0.0f, 1.0f));
+      ImGui::Text("USER CONFIRMATION REQUIRED (AUTO-CONFIRM)");
+    }
+    else {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.0f, 1.0f));
+      ImGui::Text("USER CONFIRMATION REQUIRED");
+    }
     ImGui::PopStyleColor();
 
     ImGui::Separator();
     ImGui::Spacing();
 
-    // Title
+    // Title (if different from default)
     if (!m_title.empty() && m_title != "User Confirmation") {
       ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.1f, 0.1f, 0.1f, 1.0f));
       ImGui::Text("Title: %s", m_title.c_str());
@@ -146,51 +181,114 @@ void UserPromptUI::Render() {
       ImGui::Spacing();
     }
 
-    // Message
+    // IMPROVED: Message with scrollable area for long content
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
-    ImGui::TextWrapped("Message: %s", m_message.c_str());
+
+    // Calculate available space for message
+    float availableHeight = ImGui::GetContentRegionAvail().y - 150; // Reserve space for buttons and status
+    if (availableHeight < 50) availableHeight = 50; // Minimum message area
+
+    // Create scrollable region for message if content is long
+    if (m_message.length() > 200 || availableHeight < 100) {  // Use scrolling for long messages
+      ImGui::Text("Message:");
+      ImGui::BeginChild("MessageScroll", ImVec2(0, availableHeight), true,
+        ImGuiWindowFlags_HorizontalScrollbar);
+      ImGui::TextWrapped("%s", m_message.c_str());
+      ImGui::EndChild();
+    }
+    else {
+      // Short message - no scrolling needed
+      ImGui::Text("Message:");
+      ImGui::TextWrapped("%s", m_message.c_str());
+    }
+
     ImGui::PopStyleColor();
 
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
 
-    // Status
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.3f, 0.0f, 1.0f));
-    ImGui::Text("Program execution is PAUSED - Waiting for your decision...");
-    ImGui::PopStyleColor();
+    // Auto-confirm countdown display (if enabled)
+    if (m_autoConfirm && !m_autoConfirmTriggered) {
+      float elapsed = GetCurrentTime() - m_promptStartTime;
+      float remaining = m_autoConfirmDelay - elapsed;
 
-    ImGui::Spacing();
-    ImGui::Spacing();
+      if (remaining > 0) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.6f, 0.0f, 1.0f));
+        ImGui::Text("Auto-confirming in %.1f seconds...", remaining);
+        ImGui::PopStyleColor();
 
-    // FIXED: Use ## syntax for absolutely unique button IDs
-    float buttonWidth = 150.0f;
-    float buttonHeight = 50.0f;
+        // Progress bar showing countdown
+        float progress = elapsed / m_autoConfirmDelay;
+        ImGui::ProgressBar(progress, ImVec2(-1, 0), "");
+      }
+      else {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+        ImGui::Text("Auto-confirming NOW...");
+        ImGui::PopStyleColor();
+      }
+      ImGui::Spacing();
+    }
+    else {
+      // Normal status message
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.3f, 0.0f, 1.0f));
+      ImGui::Text("Program execution is PAUSED - Waiting for your decision...");
+      ImGui::PopStyleColor();
+      ImGui::Spacing();
+    }
 
-    // Center buttons
+    // IMPROVED: Responsive button layout
+    float buttonWidth = 120.0f;
+    float buttonHeight = 40.0f;
+    float buttonSpacing = 15.0f;
+
+    // Calculate button layout
     float availableWidth = ImGui::GetContentRegionAvail().x;
-    float totalWidth = buttonWidth * 3 + 20.0f * 2;
-    float startX = (availableWidth - totalWidth) * 0.5f;
-    if (startX > 0) {
+    float totalButtonWidth = buttonWidth * 3 + buttonSpacing * 2;
+
+    // Adjust button size if window is too narrow
+    if (totalButtonWidth > availableWidth) {
+      buttonWidth = (availableWidth - buttonSpacing * 2) / 3.0f;
+      if (buttonWidth < 80) {
+        // Stack buttons vertically if too narrow
+        buttonWidth = availableWidth * 0.8f;
+        buttonSpacing = 5.0f;
+      }
+    }
+
+    // Center buttons horizontally
+    float startX = (availableWidth - (buttonWidth * 3 + buttonSpacing * 2)) * 0.5f;
+    if (startX > 0 && totalButtonWidth <= availableWidth) {
       ImGui::SetCursorPosX(ImGui::GetCursorPosX() + startX);
     }
 
-    // YES button - GUARANTEED unique ID using object pointer
+    // YES button - highlight if auto-confirm is active
     std::string yesID = "YES##prompt_yes_" + std::to_string((uintptr_t)this);
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.6f, 0.1f, 1.0f));
+    if (m_autoConfirm && !m_autoConfirmTriggered) {
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.9f, 0.4f, 1.0f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2f, 0.7f, 0.2f, 1.0f));
+    }
+    else {
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 1.0f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.6f, 0.1f, 1.0f));
+    }
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
 
     if (ImGui::Button(yesID.c_str(), ImVec2(buttonWidth, buttonHeight))) {
-      printf("[DEBUG] YES button clicked!\n");
       OnYesClicked();
     }
-
     ImGui::PopStyleColor(4);
-    ImGui::SameLine(0, 20.0f);
 
-    // NO button - GUARANTEED unique ID
+    // Check if we should stack buttons vertically
+    bool stackVertically = (buttonWidth >= availableWidth * 0.7f);
+
+    if (!stackVertically) {
+      ImGui::SameLine(0, buttonSpacing);
+    }
+
+    // NO button
     std::string noID = "NO##prompt_no_" + std::to_string((uintptr_t)this);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
@@ -198,14 +296,15 @@ void UserPromptUI::Render() {
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
 
     if (ImGui::Button(noID.c_str(), ImVec2(buttonWidth, buttonHeight))) {
-      printf("[DEBUG] NO button clicked!\n");
       OnNoClicked();
     }
-
     ImGui::PopStyleColor(4);
-    ImGui::SameLine(0, 20.0f);
 
-    // CANCEL button - GUARANTEED unique ID
+    if (!stackVertically) {
+      ImGui::SameLine(0, buttonSpacing);
+    }
+
+    // CANCEL button
     std::string cancelID = "CANCEL##prompt_cancel_" + std::to_string((uintptr_t)this);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
@@ -213,18 +312,20 @@ void UserPromptUI::Render() {
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
 
     if (ImGui::Button(cancelID.c_str(), ImVec2(buttonWidth, buttonHeight))) {
-      printf("[DEBUG] CANCEL button clicked!\n");
       OnCancelClicked();
     }
-
     ImGui::PopStyleColor(4);
 
     ImGui::Spacing();
-    ImGui::Spacing();
 
-    // Help text
+    // Help text with auto-confirm info
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
-    ImGui::TextWrapped("YES = Continue program execution | NO/CANCEL = Stop program");
+    if (m_autoConfirm) {
+      ImGui::TextWrapped("YES = Continue | NO/CANCEL = Stop | Auto-confirm: %.1fs", m_autoConfirmDelay);
+    }
+    else {
+      ImGui::TextWrapped("YES = Continue | NO/CANCEL = Stop program");
+    }
     ImGui::PopStyleColor();
 
     ImGui::End();
@@ -235,6 +336,22 @@ void UserPromptUI::Render() {
   // Handle window close
   if (!isOpen) {
     OnCancelClicked();
+  }
+}
+
+
+// NEW: Check and handle auto-confirm
+void UserPromptUI::CheckAutoConfirm() {
+  if (!m_autoConfirm || m_autoConfirmTriggered || !m_isPromptActive) {
+    return;
+  }
+
+  float elapsed = GetCurrentTime() - m_promptStartTime;
+
+  if (elapsed >= m_autoConfirmDelay) {
+    printf("[DEBUG] Auto-confirm triggered after %.1f seconds\n", elapsed);
+    m_autoConfirmTriggered = true;
+    OnYesClicked();  // Auto-confirm always selects YES
   }
 }
 
@@ -249,16 +366,12 @@ void UserPromptUI::Reset() {
   m_isPromptActive = false;
   m_result = PromptResult::PENDING;
   m_callback = nullptr;
+  m_autoConfirmTriggered = false;  // NEW: Reset auto-confirm state
 }
 
-
-
-// ===================================================================
-// ADD DEBUG to button handlers
-// ===================================================================
-
+// Button handlers
 void UserPromptUI::OnYesClicked() {
-  printf("[DEBUG] OnYesClicked() called\n");
+  printf("[DEBUG] OnYesClicked() called%s\n", m_autoConfirmTriggered ? " (auto-confirmed)" : "");
 
   std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -266,14 +379,8 @@ void UserPromptUI::OnYesClicked() {
   m_isPromptActive = false;
   m_isVisible = false;
 
-  printf("[DEBUG] Set result to YES, closing prompt\n");
-
   if (m_callback) {
-    printf("[DEBUG] Calling callback with YES\n");
     m_callback(PromptResult::YES);
-  }
-  else {
-    printf("[DEBUG] ERROR: No callback set!\n");
   }
 }
 
@@ -285,15 +392,10 @@ void UserPromptUI::OnNoClicked() {
   m_result = PromptResult::NO;
   m_isPromptActive = false;
   m_isVisible = false;
-
-  printf("[DEBUG] Set result to NO, closing prompt\n");
+  m_autoConfirmTriggered = true;  // NEW: Stop auto-confirm
 
   if (m_callback) {
-    printf("[DEBUG] Calling callback with NO\n");
     m_callback(PromptResult::NO);
-  }
-  else {
-    printf("[DEBUG] ERROR: No callback set!\n");
   }
 }
 
@@ -305,32 +407,20 @@ void UserPromptUI::OnCancelClicked() {
   m_result = PromptResult::CANCELLED;
   m_isPromptActive = false;
   m_isVisible = false;
-
-  printf("[DEBUG] Set result to CANCELLED, closing prompt\n");
+  m_autoConfirmTriggered = true;  // NEW: Stop auto-confirm
 
   if (m_callback) {
-    printf("[DEBUG] Calling callback with CANCELLED\n");
     m_callback(PromptResult::CANCELLED);
-  }
-  else {
-    printf("[DEBUG] ERROR: No callback set!\n");
   }
 }
 
-
-
-// ===================================================================
-// ENHANCED SetupPromptStyling() for better window appearance
-// ===================================================================
-
+// UI styling methods (unchanged)
 void UserPromptUI::SetupPromptStyling() {
-  // Make the window more prominent with better styling
   ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20, 20));
   ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
 
-  // IMPROVED: Better window background color
-  ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.95f, 0.95f, 0.95f, 1.0f)); // Light gray background
+  ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.95f, 0.95f, 0.95f, 1.0f));
   ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
   ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
 }
@@ -340,18 +430,12 @@ void UserPromptUI::RestoreDefaultStyling() {
   ImGui::PopStyleColor(3);
 }
 
-// ===================================================================
-// ALTERNATIVE: Dark Theme Version (if you prefer dark background)
-// ===================================================================
-
 void UserPromptUI::SetupPromptStylingDark() {
-  // Dark theme version for better contrast
   ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20, 20));
   ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
 
-  // Dark background
-  ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f)); // Dark background
+  ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
   ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
   ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
 }
