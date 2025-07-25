@@ -191,6 +191,8 @@ void RunPageUI::StartProcess(const std::string& processName) {
 }
 
 // UPDATE: RenderColumn2 - Add completed steps section
+// UPDATE: RenderColumn2 - Add completed steps section
+// UPDATE: RenderColumn2 - Add completed steps section
 void RunPageUI::RenderColumn2() {
   ImGui::Text("Process Filters");
   ImGui::Separator();
@@ -218,22 +220,6 @@ void RunPageUI::RenderColumn2() {
 
   ImGui::Separator();
 
-  // UAA3 system status
-  ImGui::Text("UAA3 System Status:");
-  ImGui::Indent();
-
-  if (m_promptUI) {
-    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Modern UserPromptUI Available");
-    ImGui::Text("  - UAA3 sequences enabled");
-    ImGui::Text("  - Enhanced user prompts");
-  }
-  else {
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "⚠ UserPromptUI Not Available");
-    ImGui::Text("  - Using legacy sequences only");
-  }
-
-  ImGui::Unindent();
-  ImGui::Separator();
 
   // Auto-confirm checkbox with UserPromptUI integration
   bool autoConfirmValue = m_autoConfirm;
@@ -262,13 +248,23 @@ void RunPageUI::RenderColumn2() {
   RenderCompletedSteps();
 }
 
-// NEW: Render completed steps list with date/time/duration
+
+
+
+// NEW: Render completed steps list with success/failure indication
 void RunPageUI::RenderCompletedSteps() {
   ImGui::Text("Completed Steps");
   ImGui::Separator();
 
-  // Show count
-  ImGui::Text("Total completed: %zu", m_completedSteps.size());
+  // Show count with success/failure breakdown
+  size_t successCount = 0;
+  size_t failureCount = 0;
+  for (const auto& step : m_completedSteps) {
+    if (step.isSuccess) successCount++;
+    else failureCount++;
+  }
+
+  ImGui::Text("Total: %zu (Success: %zu, Failed: %zu)", m_completedSteps.size(), successCount, failureCount);
 
   // Clear button
   if (ImGui::Button("Clear History", ImVec2(-1, 25))) {
@@ -288,19 +284,34 @@ void RunPageUI::RenderCompletedSteps() {
     // Show most recent first
     for (int i = static_cast<int>(m_completedSteps.size()) - 1; i >= 0; i--) {
       const auto& completed = m_completedSteps[i];
-      ImGui::BulletText("Complete %s", completed.processName.c_str());
+
+      // Different colors for success vs failure
+      if (completed.isSuccess) {
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Complete %s", completed.processName.c_str());
+      }
+      else {
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "✗ Failed %s", completed.processName.c_str());
+      }
+
       ImGui::Indent();
       ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "%s (%s)", completed.dateTime.c_str(), completed.duration.c_str());
+
+      // Show idle time if not the first process (00:00.000 means no previous process)
+      if (completed.idleTime != "00:00.000") {
+        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Idle: %s", completed.idleTime.c_str());
+      }
+
       ImGui::Unindent();
       ImGui::Spacing();
     }
   }
 
   ImGui::EndChild();
-}
+}// NEW: Add completed step with date/time/duration
 
-// NEW: Add completed step with date/time/duration
-void RunPageUI::AddCompletedStep(const std::string& stepName, const std::string& duration) {
+
+// NEW: Add completed/failed step with date/time/duration/idle time/success status
+void RunPageUI::AddCompletedStep(const std::string& stepName, const std::string& duration, const std::string& idleTime, bool isSuccess) {
   std::lock_guard<std::mutex> lock(m_mutex);
 
   // Get current date/time
@@ -315,6 +326,8 @@ void RunPageUI::AddCompletedStep(const std::string& stepName, const std::string&
   completed.processName = stepName;
   completed.dateTime = std::string(dateTimeStr);
   completed.duration = duration;
+  completed.idleTime = idleTime;
+  completed.isSuccess = isSuccess;
 
   m_completedSteps.push_back(completed);
 
@@ -328,6 +341,7 @@ void RunPageUI::AddCompletedStep(const std::string& stepName, const std::string&
 void RunPageUI::ClearCompletedSteps() {
   std::lock_guard<std::mutex> lock(m_mutex);
   m_completedSteps.clear();
+  m_hasLastProcessEndTime = false;  // Reset idle time tracking
   UpdateStatus("Completed processes history cleared");
 }
 
@@ -336,6 +350,128 @@ void RunPageUI::ClearCompletedSteps() {
 std::vector<std::string> RunPageUI::GetCurrentProcessList() const {
   return m_filterManager->GetFilteredProcessList();
 }
+
+
+
+
+// UPDATE: ProcessThreadFunc to track both completed and failed processes
+void RunPageUI::ProcessThreadFunc(const std::string& processName) {
+  // Record start time and calculate idle time
+  m_processStartTime = std::chrono::steady_clock::now();
+
+  std::string idleTimeStr = "00:00.000";
+  if (m_hasLastProcessEndTime) {
+    auto idleDuration = std::chrono::duration_cast<std::chrono::milliseconds>(m_processStartTime - m_lastProcessEndTime);
+    auto totalMs = idleDuration.count();
+    auto minutes = totalMs / 60000;
+    auto seconds = (totalMs % 60000) / 1000;
+    auto ms = totalMs % 1000;
+
+    char idleStr[32];
+    std::sprintf(idleStr, "%02d:%02d.%03d", static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
+    idleTimeStr = std::string(idleStr);
+  }
+
+  try {
+    auto sequence = BuildSelectedProcess();
+    if (!sequence) {
+      UpdateStatus("Failed to build process sequence", true);
+      m_processRunning = false;
+      return;
+    }
+
+    const auto& operations = sequence->GetOperations();
+    size_t totalOps = operations.size();
+
+    UpdateStatus("Starting sequence with " + std::to_string(totalOps) + " operations");
+
+    bool processSuccess = true;
+    std::string failureReason = "";
+
+    for (size_t i = 0; i < totalOps && !m_stopRequested; ++i) {
+      // Handle pause
+      while (m_pauseRequested && !m_stopRequested) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+
+      if (m_stopRequested) break;
+
+      std::string stepDescription = operations[i]->GetDescription();
+      UpdateStatus("Step " + std::to_string(i + 1) + "/" + std::to_string(totalOps) +
+        ": " + stepDescription);
+
+      bool success = operations[i]->Execute(m_machineOps);
+      if (!success && !m_stopRequested) {
+        UpdateStatus("Operation failed: " + stepDescription, true);
+        processSuccess = false;
+        failureReason = "Failed at step " + std::to_string(i + 1) + ": " + stepDescription;
+        break;
+      }
+
+      m_progress = static_cast<float>(i + 1) / static_cast<float>(totalOps);
+    }
+
+    // Calculate final duration (for both success and failure)
+    auto endTime = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - m_processStartTime);
+
+    // Format duration as mm:ss.xxx
+    auto totalMs = duration.count();
+    auto minutes = totalMs / 60000;
+    auto seconds = (totalMs % 60000) / 1000;
+    auto ms = totalMs % 1000;
+
+    char durationStr[32];
+    std::sprintf(durationStr, "%02d:%02d.%03d", static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
+
+    if (m_stopRequested) {
+      UpdateStatus("Process stopped by user");
+      // NEW: Track stopped processes as failed
+      AddCompletedStep(processName, std::string(durationStr), idleTimeStr, false);
+    }
+    else if (processSuccess) {
+      UpdateStatus("Process completed successfully - " + std::to_string(totalOps) + " operations executed");
+      // NEW: Add completed process
+      AddCompletedStep(processName, std::string(durationStr), idleTimeStr, true);
+    }
+    else {
+      UpdateStatus("Process failed: " + failureReason, true);
+      // NEW: Add failed process
+      AddCompletedStep(processName, std::string(durationStr), idleTimeStr, false);
+    }
+
+    // Always record end time for next idle calculation (whether success or failure)
+    m_lastProcessEndTime = endTime;
+    m_hasLastProcessEndTime = true;
+
+  }
+  catch (const std::exception& e) {
+    UpdateStatus("Process error: " + std::string(e.what()), true);
+
+    // NEW: Track exception as failed process
+    auto endTime = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - m_processStartTime);
+    auto totalMs = duration.count();
+    auto minutes = totalMs / 60000;
+    auto seconds = (totalMs % 60000) / 1000;
+    auto ms = totalMs % 1000;
+
+    char durationStr[32];
+    std::sprintf(durationStr, "%02d:%02d.%03d", static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
+
+    AddCompletedStep(processName, std::string(durationStr), idleTimeStr, false);
+
+    m_lastProcessEndTime = endTime;
+    m_hasLastProcessEndTime = true;
+  }
+
+  m_processRunning = false;
+  m_processPaused = false;
+  m_progress = 0.0f;
+}
+
+
+
 
 // NEW: Handle filter changes
 void RunPageUI::OnFilterChanged() {
@@ -353,80 +489,6 @@ void RunPageUI::OnFilterChanged() {
     UpdateStatus("No processes visible with current filter settings");
   }
 }
-
-// UPDATE: ProcessThreadFunc to track completed processes with timing
-void RunPageUI::ProcessThreadFunc(const std::string& processName) {
-  // Record start time
-  m_processStartTime = std::chrono::steady_clock::now();
-
-  try {
-    auto sequence = BuildSelectedProcess();
-    if (!sequence) {
-      UpdateStatus("Failed to build process sequence", true);
-      m_processRunning = false;
-      return;
-    }
-
-    const auto& operations = sequence->GetOperations();
-    size_t totalOps = operations.size();
-
-    UpdateStatus("Starting sequence with " + std::to_string(totalOps) + " operations");
-
-    bool processSuccess = true;
-    for (size_t i = 0; i < totalOps && !m_stopRequested; ++i) {
-      // Handle pause
-      while (m_pauseRequested && !m_stopRequested) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      }
-
-      if (m_stopRequested) break;
-
-      std::string stepDescription = operations[i]->GetDescription();
-      UpdateStatus("Step " + std::to_string(i + 1) + "/" + std::to_string(totalOps) +
-        ": " + stepDescription);
-
-      bool success = operations[i]->Execute(m_machineOps);
-      if (!success && !m_stopRequested) {
-        UpdateStatus("Operation failed: " + stepDescription, true);
-        processSuccess = false;
-        break;
-      }
-
-      m_progress = static_cast<float>(i + 1) / static_cast<float>(totalOps);
-    }
-
-    if (m_stopRequested) {
-      UpdateStatus("Process stopped by user");
-    }
-    else if (processSuccess) {
-      // Calculate duration
-      auto endTime = std::chrono::steady_clock::now();
-      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - m_processStartTime);
-
-      // Format duration as mm:ss.xxx
-      auto totalMs = duration.count();
-      auto minutes = totalMs / 60000;
-      auto seconds = (totalMs % 60000) / 1000;
-      auto ms = totalMs % 1000;
-
-      char durationStr[32];
-      std::sprintf(durationStr, "%02d:%02d.%03d", static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
-
-      UpdateStatus("Process completed successfully - " + std::to_string(totalOps) + " operations executed");
-      // NEW: Add completed process name with duration when entire process succeeds
-      AddCompletedStep(processName, std::string(durationStr));
-    }
-
-  }
-  catch (const std::exception& e) {
-    UpdateStatus("Process error: " + std::string(e.what()), true);
-  }
-
-  m_processRunning = false;
-  m_processPaused = false;
-  m_progress = 0.0f;
-}
-
 
 
 void RunPageUI::RenderColumn3() {

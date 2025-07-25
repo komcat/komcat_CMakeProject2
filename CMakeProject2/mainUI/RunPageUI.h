@@ -64,10 +64,14 @@ private:
     std::string processName;
     std::string dateTime;
     std::string duration;
+    std::string idleTime;  // Time idle before this process started
+    bool isSuccess;        // true if completed successfully, false if failed
   };
   std::vector<CompletedProcess> m_completedSteps;
   static const size_t MAX_COMPLETED_STEPS = 50;
   std::chrono::steady_clock::time_point m_processStartTime;
+  std::chrono::steady_clock::time_point m_lastProcessEndTime;
+  bool m_hasLastProcessEndTime = false;
 
   // Filter integration methods
   void ShowFilterConfiguration() { m_showFilterWindow = true; }
@@ -86,7 +90,7 @@ private:
   void UpdateStatus(const std::string& message, bool isError = false);
 
   // NEW: Completed steps management
-  void AddCompletedStep(const std::string& stepName, const std::string& duration);
+  void AddCompletedStep(const std::string& stepName, const std::string& duration, const std::string& idleTime, bool isSuccess);
   void ClearCompletedSteps();
 
   // UI rendering methods
