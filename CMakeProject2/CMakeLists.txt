@@ -474,7 +474,7 @@ add_executable(CMakeProject2
  "mainUI/MenuManager_uaa3.cpp"
  "mainUI/RaylibDebugWindow.h" 
  "mainUI/RaylibDebugWindow.cpp"
-  "mainUI/LiveVideoSubscriber.h" "mainUI/LiveVideoSubscriber.cpp" "include/camera/CameraFrameData.h" "mainUI/RunPageUI.h" "mainUI/RunPageUI.cpp" "Processes/uaa3ProcessBuilders.h" "Processes/uaa3ProcessBuilders.cpp")
+  "mainUI/LiveVideoSubscriber.h" "mainUI/LiveVideoSubscriber.cpp" "include/camera/CameraFrameData.h" "mainUI/RunPageUI.h" "mainUI/RunPageUI.cpp" "Processes/uaa3ProcessBuilders.h" "Processes/uaa3ProcessBuilders.cpp" "Processes/ProcessFilterManager.h" "Processes/ProcessFilterManager.cpp")
 
 
 
@@ -814,7 +814,7 @@ add_executable(uaa3App
   "mainUI/MenuManager_uaa3.h" 
   "mainUI/MenuManager_uaa3.cpp"
   "mainUI/RaylibDebugWindow.h" 
-  "mainUI/RaylibDebugWindow.cpp" "mainUI/LiveVideoSubscriber.h" "mainUI/LiveVideoSubscriber.cpp" "include/camera/CameraFrameData.h" "mainUI/RunPageUI.h" "mainUI/RunPageUI.cpp" "Processes/uaa3ProcessBuilders.h" "Processes/uaa3ProcessBuilders.cpp")
+  "mainUI/RaylibDebugWindow.cpp" "mainUI/LiveVideoSubscriber.h" "mainUI/LiveVideoSubscriber.cpp" "include/camera/CameraFrameData.h" "mainUI/RunPageUI.h" "mainUI/RunPageUI.cpp" "Processes/uaa3ProcessBuilders.h" "Processes/uaa3ProcessBuilders.cpp" "Processes/ProcessFilterManager.h" "Processes/ProcessFilterManager.cpp")
 
 
 

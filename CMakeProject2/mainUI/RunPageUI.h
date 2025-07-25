@@ -1,10 +1,11 @@
 #pragma once
 
 #include "ProcessBuilders.h"
-#include "uaa3ProcessBuilders.h"  // NEW: Include UAA3 modern sequences
+#include "uaa3ProcessBuilders.h"  // Include UAA3 modern sequences
 #include "machine_operations.h"
 #include "MockUserInteractionManager.h"
-#include "Programming/UserPromptUI.h"  // NEW: Include UserPromptUI
+#include "Programming/UserPromptUI.h"  // Include UserPromptUI
+#include "ProcessFilterManager.h"  // Simple custom preset filter manager
 #include "logger.h"
 #include <string>
 #include <vector>
@@ -21,8 +22,6 @@ public:
 
   // Render the run page UI
   void RenderUI();
-
-  // NEW: Add UserPromptUI support for modern UAA3 sequences
   void SetUserPromptUI(UserPromptUI* promptUI) { m_promptUI = promptUI; }
 
 private:
@@ -31,7 +30,7 @@ private:
   std::unique_ptr<MockUserInteractionManager> m_uiManager;
   Logger* m_logger;
 
-  // NEW: UserPromptUI for modern sequences
+  // UserPromptUI for modern sequences
   UserPromptUI* m_promptUI = nullptr;
 
   // UI state
@@ -48,30 +47,14 @@ private:
   std::mutex m_mutex;
   std::atomic<bool> m_autoConfirm;
 
-  // UPDATED: Available processes list with UAA3 modern sequences
-  std::vector<std::string> m_availableProcesses = {
-      "Initialization",
-      "InitializationParallel",
+  // Simple filter management
+  std::unique_ptr<ProcessFilterManager> m_filterManager;
+  bool m_showFilterWindow = false;
 
-      // Legacy sequences (using MockUserInteractionManager)
-      "Probing",                    // Legacy version
-      "PickPlaceLeftLens",
-      "PickPlaceRightLens",
-      "UVCuring",
-      "RejectLeftLens",
-      "RejectRightLens",
-      "NeedleCalibration",          // Legacy version
-      "DispenseCalibration1",
-      "DispenseCalibration2",
-      "DispenseEpoxy1",
-      "DispenseEpoxy2",
-
-      // NEW: UAA3 Modern sequences (using UserPromptUI)
-      "UAA3_ModernProbing",         // Clean modern probing
-      "UAA3_EnhancedProbing",       // Detailed probing with safety checks
-      "UAA3_QuickProbing",          // Minimal interaction probing
-      "UAA3_ModernNeedleCalib"      // Modern needle calibration
-  };
+  // Filter integration methods
+  void ShowFilterConfiguration() { m_showFilterWindow = true; }
+  std::vector<std::string> GetCurrentProcessList() const;
+  void OnFilterChanged();
 
   // Status messages for scrolling display
   std::vector<std::string> m_statusHistory;
@@ -80,6 +63,7 @@ private:
   // Methods
   void StartProcess(const std::string& processName);
   void PauseProcess();
+  void ResumeProcess();
   void StopProcess();
   void UpdateStatus(const std::string& message, bool isError = false);
 
@@ -90,6 +74,7 @@ private:
   void RenderControlButtons();
   void RenderStatusArea();
   void RenderProcessButtons();
+  void RenderRunningStatus();
 
   // Process management
   std::unique_ptr<SequenceStep> BuildSelectedProcess();

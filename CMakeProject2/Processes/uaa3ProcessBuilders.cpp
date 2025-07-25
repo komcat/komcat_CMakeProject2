@@ -5,9 +5,185 @@
 
 namespace UAA3ProcessBuilders {
 
-  // ============================================================================
-  // MODERN PROBING SEQUENCES
-  // ============================================================================
+
+
+  std::unique_ptr<SequenceStep> BuildInitializationSequence_uaa3(MachineOperations& machineOps) {
+    auto sequence = std::make_unique<SequenceStep>("Initialization", machineOps);
+
+   
+
+    // 1. Move gantry-main to safe position
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "gantry-main", "Process_Flow", "node_4027"));
+
+    // 2. Move hex-left to home position
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "hex-left", "Process_Flow", "node_5480"));
+
+    // 3. Move hex-right to home position
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "hex-right", "Process_Flow", "node_5136"));
+
+    // 4. Clear output L_Gripper (pin 0)
+    sequence->AddOperation(std::make_shared<SetOutputOperation>(
+      "IOBottom", 0, false));
+
+    // 5. Clear output R_Gripper (pin 2)
+    sequence->AddOperation(std::make_shared<SetOutputOperation>(
+      "IOBottom", 2, false));
+
+    // 6. Retract UV_Head pneumatic
+    sequence->AddOperation(std::make_shared<RetractSlideOperation>(
+      "UV_Head"));
+
+    // 7. Retract Dispenser_Head pneumatic
+    sequence->AddOperation(std::make_shared<RetractSlideOperation>(
+      "Dispenser_Head"));
+
+    // 8. Retract Pick_Up_Tool pneumatic
+    sequence->AddOperation(std::make_shared<RetractSlideOperation>(
+      "Pick_Up_Tool"));
+
+    sequence->AddOperation(std::make_shared<ClearOutputOperationDedicated>(
+      "IOBottom", 10));  // Clear L_Gripper (pin 0)
+
+    //// 9. Set output Vacuum_Base (pin 10)
+    //sequence->AddOperation(std::make_shared<SetOutputOperation>(
+    //	"IOBottom", 10, true));
+
+    return sequence;
+  }
+
+  std::unique_ptr<SequenceStep> PickPlaceLeftLens_uaa3(
+    MachineOperations& machineOps, UserPromptUI& promptUI) {
+		auto sequence = std::make_unique<SequenceStep>("UAA3 Pick Place Left Lens", machineOps);
+
+
+
+    // 2. Move hex-left to pick lens position
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "hex-left", "Process_Flow", "node_5647"));
+
+
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "gantry-main", "Process_Flow", "node_4186"));	//see pick collimate lens
+
+
+    sequence->AddOperation(UserPromptOperation::CreateBasic(
+      "Check lens is ok",
+      "Please check if the lens is placed at correct position.",
+      promptUI));
+
+
+
+    // 3. Set output L-gripper (pin 0) to grab the lens
+    sequence->AddOperation(std::make_shared<SetOutputOperation>(
+      "IOBottom", 0, true));
+
+    // 4. Start camera grabbing
+    sequence->AddOperation(std::make_shared<StartCameraGrabbingOperation>());
+
+    // 5. Wait for camera to stabilize
+    sequence->AddOperation(std::make_shared<WaitOperation>(500));  // 500ms delay
+
+    // 6. Capture image
+    sequence->AddOperation(std::make_shared<CaptureImageOperation>());
+
+
+
+
+    // 5. Release the lens temporarily (clear output)
+    sequence->AddOperation(std::make_shared<SetOutputOperation>(
+      "IOBottom", 0, false));
+
+    // 6. Wait 1.5 seconds
+    sequence->AddOperation(std::make_shared<WaitOperation>(1500));
+
+    // 7. Grip the lens again (set output)
+    sequence->AddOperation(std::make_shared<SetOutputOperation>(
+      "IOBottom", 0, true, 500));
+
+
+    sequence->AddOperation(UserPromptOperation::CreateBasic(
+      "Check if lens is gripped OK?",
+      "Please check if the lens is gripped and not tilted.",
+      promptUI));
+
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "gantry-main", "Process_Flow", "node_4137"));	//see collimate lens
+
+
+
+    // 10. Move to placement position
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "hex-left", "Process_Flow", "node_5662"));
+
+    return sequence;
+  }
+
+
+
+  std::unique_ptr<SequenceStep> PickPlaceRightLens_uaa3(
+    MachineOperations& machineOps, UserPromptUI& promptUI) {
+    auto sequence = std::make_unique<SequenceStep>("UAA3 Pick Place Right Lens", machineOps);
+
+
+    // Move hex-right to pick lens position (verify this is correct for RIGHT lens)
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "hex-right", "Process_Flow", "node_5245"));
+
+    // Move gantry to see the RIGHT lens pick position
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "gantry-main", "Process_Flow", "node_4209"));  // Verify this is correct for focus lens
+
+
+    sequence->AddOperation(UserPromptOperation::CreateBasic(
+      "Check lens is ok",
+      "Please check if the lens is placed at correct position.",
+      promptUI));
+
+    // Use R-gripper (pin 2) for RIGHT lens
+    sequence->AddOperation(std::make_shared<SetOutputOperation>(
+      "IOBottom", 2, true));  // Set RIGHT gripper
+
+    // 4. Start camera grabbing
+    sequence->AddOperation(std::make_shared<StartCameraGrabbingOperation>());
+
+    // 5. Wait for camera to stabilize
+    sequence->AddOperation(std::make_shared<WaitOperation>(500));  // 500ms delay
+
+    // 6. Capture image
+    sequence->AddOperation(std::make_shared<CaptureImageOperation>());
+
+    // Release and re-grip cycle for the RIGHT lens
+    sequence->AddOperation(std::make_shared<SetOutputOperation>(
+      "IOBottom", 2, false));  // Release RIGHT gripper
+    sequence->AddOperation(std::make_shared<WaitOperation>(1500));
+
+
+
+    sequence->AddOperation(std::make_shared<SetOutputOperation>(
+      "IOBottom", 2, true, 500));  // Re-grip RIGHT lens
+
+
+    sequence->AddOperation(UserPromptOperation::CreateBasic(
+      "Check if lens is gripped OK?",
+      "Please check if the lens is gripped and not tilted.",
+      promptUI));
+
+    // Move gantry to see the RIGHT lens
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "gantry-main", "Process_Flow", "node_4156"));  // Verify this is for focus lens
+
+    // Move to RIGHT lens placement position
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "hex-right", "Process_Flow", "node_5263"));  // Verify this is correct for RIGHT placement
+
+
+    return sequence;
+  }
+
+
 
   std::unique_ptr<SequenceStep> BuildModernProbingSequence(
     MachineOperations& machineOps, UserPromptUI& promptUI) {
@@ -92,202 +268,6 @@ namespace UAA3ProcessBuilders {
     return sequence;
   }
 
-  std::unique_ptr<SequenceStep> BuildEnhancedProbingSequence(
-    MachineOperations& machineOps, UserPromptUI& promptUI) {
-
-    auto sequence = std::make_unique<SequenceStep>("UAA3 Enhanced Probing", machineOps);
-
-    // Pre-sequence safety check
-    sequence->AddOperation(UserPromptOperation::CreateWithTimeout(
-      "UAA3 Probing Sequence Start",
-      "🔬 UAA3 PROBING SEQUENCE\n\n"
-      "This sequence will perform:\n"
-      "1. Sled position verification\n"
-      "2. Laser and TEC activation (25°C, 250mA)\n"
-      "3. PIC position verification\n"
-      "4. Optical measurements\n"
-      "5. System shutdown and safe return\n\n"
-      "⚠️ SAFETY REQUIREMENTS ⚠️\n"
-      "• Ensure work area is clear\n"
-      "• Verify laser safety protocols\n"
-      "• Confirm all components are properly seated\n\n"
-      "Estimated time: 2-3 minutes",
-      promptUI, 60)); // 60 second timeout
-
-    // Set vacuum base
-    sequence->AddOperation(std::make_shared<SetOutputOperation>(
-      "IOBottom", 10, true));
-
-    // Move to sled check position
-    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-      "gantry-main", "Process_Flow", "node_4083"));
-
-    // Enhanced sled position check
-    sequence->AddOperation(UserPromptOperation::CreateWithTimeout(
-      "Sled Position Verification",
-      "📍 SLED POSITION CHECK\n\n"
-      "Camera is positioned to view the sled component.\n\n"
-      "Verification Checklist:\n"
-      "✓ Sled is properly seated in fixture\n"
-      "✓ No foreign objects or debris visible\n"
-      "✓ Component alignment appears correct\n"
-      "✓ Camera view is clear and unobstructed\n\n"
-      "💡 TIP: Manual adjustments can be made if needed.\n"
-      "Take time to ensure proper positioning.\n\n"
-      "Click YES when ready to proceed with laser activation.",
-      promptUI, 120)); // 2 minute timeout for manual adjustments
-
-    // Laser activation warning and setup
-    sequence->AddOperation(CreateLaserSafetyPrompt(promptUI, 0.250f, 25.0f, 500));
-
-    // Activate TEC and laser
-    sequence->AddOperation(std::make_shared<TECOnOperation>());
-    sequence->AddOperation(std::make_shared<SetTECTemperatureOperation>(25.0f));
-
-    sequence->AddOperation(std::make_shared<WaitForLaserTemperatureOperation>(
-      25.0f, 1.0f, 5000));
-
-    sequence->AddOperation(std::make_shared<SetLaserCurrentOperation>(0.250f));
-    sequence->AddOperation(std::make_shared<LaserOnOperation>());
-
-    sequence->AddOperation(std::make_shared<WaitOperation>(500));
-
-    // Move to PIC position
-    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-      "gantry-main", "Process_Flow", "node_4107"));
-    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-      "hex-right", "Process_Flow", "node_5211"));
-
-    // Enhanced PIC position check
-    sequence->AddOperation(UserPromptOperation::CreateWithTimeout(
-      "PIC Position Verification",
-      "🔍 PIC COMPONENT CHECK\n\n"
-      "Camera is now positioned to view the PIC (Photonic Integrated Circuit).\n\n"
-      "Critical Verification Points:\n"
-      "✓ PIC is visible and properly centered\n"
-      "✓ No physical damage or contamination\n"
-      "✓ Alignment with mounting fixture is correct\n"
-      "✓ Optical connections appear intact\n"
-      "✓ No loose particles or debris\n\n"
-      "🎯 This is the final visual check before measurements.\n"
-      "Ensure everything looks correct before proceeding.\n\n"
-      "Click YES to proceed with optical data collection.",
-      promptUI, 120));
-
-    // Data collection with progress indication
-    sequence->AddOperation(UserPromptOperation::CreateWithTimeout(
-      "Data Collection in Progress",
-      "📊 COLLECTING OPTICAL DATA\n\n"
-      "The system is now collecting measurements:\n"
-      "• Laser current readings\n"
-      "• Temperature monitoring\n"
-      "• GPIB current measurements\n\n"
-      "⏱️ Please wait while data is collected...\n"
-      "This process will complete automatically.\n\n"
-      "Click YES to acknowledge.",
-      promptUI, 15));
-
-    sequence->AddOperation(std::make_shared<ReadAndLogLaserCurrentOperation>(
-      "", "UAA3 Probing: Laser current measurement"));
-    sequence->AddOperation(std::make_shared<ReadAndLogLaserTemperatureOperation>(
-      "", "UAA3 Probing: Laser temperature measurement"));
-    sequence->AddOperation(std::make_shared<ReadAndLogDataValueOperation>(
-      "GPIB-Current", "UAA3 Probing: GPIB current measurement"));
-
-    // Completion notification with results summary
-    sequence->AddOperation(CreateCompletionPrompt(
-      "UAA3 Probing",
-      "Data collection completed successfully.\n"
-      "Laser and TEC systems will now be safely shut down.",
-      promptUI));
-
-    // Shutdown and return to safe positions
-    sequence->AddOperation(std::make_shared<LaserOffOperation>());
-    sequence->AddOperation(std::make_shared<TECOffOperation>());
-
-    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-      "gantry-main", "Process_Flow", "node_4027"));
-    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-      "hex-right", "Process_Flow", "node_5136"));
-
-    sequence->AddOperation(std::make_shared<SetOutputOperation>(
-      "IOBottom", 10, false));
-
-    return sequence;
-  }
-
-  std::unique_ptr<SequenceStep> BuildQuickProbingSequence(
-    MachineOperations& machineOps, UserPromptUI& promptUI) {
-
-    auto sequence = std::make_unique<SequenceStep>("UAA3 Quick Probing", machineOps);
-
-    // Minimal startup prompt
-    sequence->AddOperation(UserPromptOperation::CreateWithTimeout(
-      "Quick Probing Start",
-      "🚀 QUICK PROBING MODE\n\n"
-      "Minimal user interaction mode.\n"
-      "Automated positioning and measurements.\n\n"
-      "Click YES to start automated sequence.",
-      promptUI, 30));
-
-    // Quick sequence execution
-    sequence->AddOperation(std::make_shared<SetOutputOperation>("IOBottom", 10, true));
-    sequence->AddOperation(std::make_shared<MoveToNodeOperation>("gantry-main", "Process_Flow", "node_4083"));
-
-    // Quick position check
-    sequence->AddOperation(UserPromptOperation::CreateWithTimeout(
-      "Position Check",
-      "Verify sled position - Click YES to continue.",
-      promptUI, 15));
-
-    sequence->AddOperation(std::make_shared<TECOnOperation>());
-    sequence->AddOperation(std::make_shared<SetTECTemperatureOperation>(25.0f));
-    sequence->AddOperation(std::make_shared<WaitForLaserTemperatureOperation>(25.0f, 1.0f, 5000));
-    sequence->AddOperation(std::make_shared<SetLaserCurrentOperation>(0.250f));
-    sequence->AddOperation(std::make_shared<LaserOnOperation>());
-    sequence->AddOperation(std::make_shared<WaitOperation>(500));
-
-    sequence->AddOperation(std::make_shared<MoveToNodeOperation>("gantry-main", "Process_Flow", "node_4107"));
-    sequence->AddOperation(std::make_shared<MoveToNodeOperation>("hex-right", "Process_Flow", "node_5211"));
-
-    // Quick measurements
-    sequence->AddOperation(std::make_shared<ReadAndLogLaserCurrentOperation>("", "Quick probing: Current"));
-    sequence->AddOperation(std::make_shared<ReadAndLogLaserTemperatureOperation>("", "Quick probing: Temperature"));
-    sequence->AddOperation(std::make_shared<ReadAndLogDataValueOperation>("GPIB-Current", "Quick probing: GPIB"));
-
-    // Quick shutdown
-    sequence->AddOperation(std::make_shared<LaserOffOperation>());
-    sequence->AddOperation(std::make_shared<TECOffOperation>());
-    sequence->AddOperation(std::make_shared<MoveToNodeOperation>("gantry-main", "Process_Flow", "node_4027"));
-    sequence->AddOperation(std::make_shared<MoveToNodeOperation>("hex-right", "Process_Flow", "node_5136"));
-    sequence->AddOperation(std::make_shared<SetOutputOperation>("IOBottom", 10, false));
-
-    return sequence;
-  }
-
-  // ============================================================================
-  // MODERN CALIBRATION SEQUENCES
-  // ============================================================================
-
-  std::unique_ptr<SequenceStep> BuildModernNeedleCalibrationSequence(
-    MachineOperations& machineOps, UserPromptUI& promptUI) {
-
-    auto sequence = std::make_unique<SequenceStep>("UAA3 Modern Needle Calibration", machineOps);
-
-    // Implementation placeholder - can be expanded based on existing needle calibration
-    sequence->AddOperation(UserPromptOperation::CreateBasic(
-      "Needle Calibration Start",
-      "🎯 NEEDLE CALIBRATION SEQUENCE\n\n"
-      "This sequence will calibrate needle positioning.\n"
-      "Please ensure the calibration target is properly positioned.\n\n"
-      "Click YES to begin calibration.",
-      promptUI));
-
-    // Add needle calibration operations here
-    // (This would be implemented based on your existing needle calibration logic)
-
-    return sequence;
-  }
 
   // ============================================================================
   // UTILITY FUNCTIONS
