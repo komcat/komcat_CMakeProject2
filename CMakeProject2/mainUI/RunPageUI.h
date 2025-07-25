@@ -14,6 +14,7 @@
 #include <atomic>
 #include <mutex>
 #include <memory>
+#include <chrono>
 
 // Run page UI class for 3-column layout
 class RunPageUI {
@@ -58,6 +59,16 @@ private:
   std::unique_ptr<ProcessFilterManager> m_filterManager;
   bool m_showFilterWindow = false;
 
+  // NEW: Completed steps tracking
+  struct CompletedProcess {
+    std::string processName;
+    std::string dateTime;
+    std::string duration;
+  };
+  std::vector<CompletedProcess> m_completedSteps;
+  static const size_t MAX_COMPLETED_STEPS = 50;
+  std::chrono::steady_clock::time_point m_processStartTime;
+
   // Filter integration methods
   void ShowFilterConfiguration() { m_showFilterWindow = true; }
   std::vector<std::string> GetCurrentProcessList() const;
@@ -74,6 +85,10 @@ private:
   void StopProcess();
   void UpdateStatus(const std::string& message, bool isError = false);
 
+  // NEW: Completed steps management
+  void AddCompletedStep(const std::string& stepName, const std::string& duration);
+  void ClearCompletedSteps();
+
   // UI rendering methods
   void RenderColumn1();
   void RenderColumn2();
@@ -84,6 +99,7 @@ private:
   void RenderStatusArea();
   void RenderProcessButtons();
   void RenderRunningStatus();
+  void RenderCompletedSteps();     // NEW: Render completed steps list
 
   // Process management
   std::unique_ptr<SequenceStep> BuildSelectedProcess();

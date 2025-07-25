@@ -190,7 +190,7 @@ void RunPageUI::StartProcess(const std::string& processName) {
   m_processThread.detach();
 }
 
-// UPDATE: RenderColumn2 - Simplified for custom presets only
+// UPDATE: RenderColumn2 - Add completed steps section
 void RunPageUI::RenderColumn2() {
   ImGui::Text("Process Filters");
   ImGui::Separator();
@@ -252,73 +252,182 @@ void RunPageUI::RenderColumn2() {
       m_uiManager->SetAutoConfirm(autoConfirmValue);
     }
 
-    std::string status = autoConfirmValue ? "enabled" : "disabled";
-    UpdateStatus("Auto-confirm " + status + " for all sequences");
-  }
-
-  // Enhanced tooltip
-  if (ImGui::IsItemHovered()) {
-    ImGui::BeginTooltip();
-    ImGui::Text("Auto-confirm affects:");
-    if (m_promptUI) {
-      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "✓ UAA3 sequences (UserPromptUI)");
-      ImGui::Text("  - 3 second auto-confirm delay");
-    }
-    ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "✓ Legacy sequences");
-    ImGui::EndTooltip();
-  }
-
-  // Auto-confirm delay setting
-  if (m_autoConfirm && m_promptUI) {
-    ImGui::Spacing();
-    ImGui::Text("Auto-confirm Settings:");
-    ImGui::Indent();
-
-    float delay = m_promptUI->GetAutoConfirmDelay();
-    if (ImGui::SliderFloat("Delay (seconds)", &delay, 1.0f, 10.0f, "%.1f")) {
-      m_promptUI->SetAutoConfirmDelay(delay);
-      UpdateStatus("Auto-confirm delay set to " + std::to_string(delay) + " seconds");
-    }
-
-    ImGui::Unindent();
+    std::string status = autoConfirmValue ? "Auto-confirm enabled" : "Auto-confirm disabled";
+    UpdateStatus(status);
   }
 
   ImGui::Separator();
 
-  // Device connection status
-  if (ImGui::CollapsingHeader("Device Status")) {
-    std::vector<std::string> devices = { "gantry-main", "hex-left", "hex-right" };
+  // NEW: Completed Steps Section
+  RenderCompletedSteps();
+}
 
-    for (const auto& deviceName : devices) {
-      bool isConnected = m_machineOps.IsDeviceConnected(deviceName);
-      ImGui::Text("%s: %s", deviceName.c_str(),
-        isConnected ? "Connected" : "Not Connected");
+// NEW: Render completed steps list with date/time/duration
+void RunPageUI::RenderCompletedSteps() {
+  ImGui::Text("Completed Steps");
+  ImGui::Separator();
+
+  // Show count
+  ImGui::Text("Total completed: %zu", m_completedSteps.size());
+
+  // Clear button
+  if (ImGui::Button("Clear History", ImVec2(-1, 25))) {
+    ClearCompletedSteps();
+  }
+
+  ImGui::Spacing();
+
+  // Scrollable list of completed steps
+  float remainingHeight = ImGui::GetContentRegionAvail().y;
+  ImGui::BeginChild("CompletedStepsList", ImVec2(0, remainingHeight), true);
+
+  if (m_completedSteps.empty()) {
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No processes completed yet");
+  }
+  else {
+    // Show most recent first
+    for (int i = static_cast<int>(m_completedSteps.size()) - 1; i >= 0; i--) {
+      const auto& completed = m_completedSteps[i];
+      ImGui::BulletText("Complete %s", completed.processName.c_str());
+      ImGui::Indent();
+      ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "%s (%s)", completed.dateTime.c_str(), completed.duration.c_str());
+      ImGui::Unindent();
+      ImGui::Spacing();
     }
   }
 
-  // Process type information
-  if (ImGui::CollapsingHeader("Process Information")) {
-    if (!m_selectedProcess.empty()) {
-      ImGui::Text("Selected: %s", m_selectedProcess.c_str());
+  ImGui::EndChild();
+}
 
-      if (m_selectedProcess.find("UAA3_") == 0) {
-        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "Type: UAA3 Modern");
-        ImGui::Text("• Uses UserPromptUI");
-        ImGui::Text("• Enhanced safety checks");
-        if (m_autoConfirm) {
-          ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "• Auto-confirm enabled");
-        }
-      }
-      else {
-        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Type: Legacy");
-        ImGui::Text("• Uses MockUserInteractionManager");
-        if (m_autoConfirm) {
-          ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "• Auto-confirm enabled");
-        }
-      }
-    }
+// NEW: Add completed step with date/time/duration
+void RunPageUI::AddCompletedStep(const std::string& stepName, const std::string& duration) {
+  std::lock_guard<std::mutex> lock(m_mutex);
+
+  // Get current date/time
+  auto now = std::chrono::system_clock::now();
+  auto time_t = std::chrono::system_clock::to_time_t(now);
+  auto tm = *std::localtime(&time_t);
+
+  char dateTimeStr[100];
+  std::strftime(dateTimeStr, sizeof(dateTimeStr), "%Y-%m-%d %H:%M:%S", &tm);
+
+  CompletedProcess completed;
+  completed.processName = stepName;
+  completed.dateTime = std::string(dateTimeStr);
+  completed.duration = duration;
+
+  m_completedSteps.push_back(completed);
+
+  // Limit history size
+  if (m_completedSteps.size() > MAX_COMPLETED_STEPS) {
+    m_completedSteps.erase(m_completedSteps.begin());
   }
 }
+
+// NEW: Clear completed steps
+void RunPageUI::ClearCompletedSteps() {
+  std::lock_guard<std::mutex> lock(m_mutex);
+  m_completedSteps.clear();
+  UpdateStatus("Completed processes history cleared");
+}
+
+
+// NEW: Get current filtered process list
+std::vector<std::string> RunPageUI::GetCurrentProcessList() const {
+  return m_filterManager->GetFilteredProcessList();
+}
+
+// NEW: Handle filter changes
+void RunPageUI::OnFilterChanged() {
+  // Update selected process if it's no longer visible
+  auto currentList = GetCurrentProcessList();
+  auto it = std::find(currentList.begin(), currentList.end(), m_selectedProcess);
+
+  if (it == currentList.end() && !currentList.empty()) {
+    // Selected process is no longer visible, select first available
+    m_selectedProcess = currentList[0];
+    UpdateStatus("Process selection changed due to filter update");
+  }
+  else if (currentList.empty()) {
+    // No processes visible, keep current selection but warn user
+    UpdateStatus("No processes visible with current filter settings");
+  }
+}
+
+// UPDATE: ProcessThreadFunc to track completed processes with timing
+void RunPageUI::ProcessThreadFunc(const std::string& processName) {
+  // Record start time
+  m_processStartTime = std::chrono::steady_clock::now();
+
+  try {
+    auto sequence = BuildSelectedProcess();
+    if (!sequence) {
+      UpdateStatus("Failed to build process sequence", true);
+      m_processRunning = false;
+      return;
+    }
+
+    const auto& operations = sequence->GetOperations();
+    size_t totalOps = operations.size();
+
+    UpdateStatus("Starting sequence with " + std::to_string(totalOps) + " operations");
+
+    bool processSuccess = true;
+    for (size_t i = 0; i < totalOps && !m_stopRequested; ++i) {
+      // Handle pause
+      while (m_pauseRequested && !m_stopRequested) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+
+      if (m_stopRequested) break;
+
+      std::string stepDescription = operations[i]->GetDescription();
+      UpdateStatus("Step " + std::to_string(i + 1) + "/" + std::to_string(totalOps) +
+        ": " + stepDescription);
+
+      bool success = operations[i]->Execute(m_machineOps);
+      if (!success && !m_stopRequested) {
+        UpdateStatus("Operation failed: " + stepDescription, true);
+        processSuccess = false;
+        break;
+      }
+
+      m_progress = static_cast<float>(i + 1) / static_cast<float>(totalOps);
+    }
+
+    if (m_stopRequested) {
+      UpdateStatus("Process stopped by user");
+    }
+    else if (processSuccess) {
+      // Calculate duration
+      auto endTime = std::chrono::steady_clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - m_processStartTime);
+
+      // Format duration as mm:ss.xxx
+      auto totalMs = duration.count();
+      auto minutes = totalMs / 60000;
+      auto seconds = (totalMs % 60000) / 1000;
+      auto ms = totalMs % 1000;
+
+      char durationStr[32];
+      std::sprintf(durationStr, "%02d:%02d.%03d", static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
+
+      UpdateStatus("Process completed successfully - " + std::to_string(totalOps) + " operations executed");
+      // NEW: Add completed process name with duration when entire process succeeds
+      AddCompletedStep(processName, std::string(durationStr));
+    }
+
+  }
+  catch (const std::exception& e) {
+    UpdateStatus("Process error: " + std::string(e.what()), true);
+  }
+
+  m_processRunning = false;
+  m_processPaused = false;
+  m_progress = 0.0f;
+}
+
+
 
 void RunPageUI::RenderColumn3() {
   // Create tab bar for Column3
@@ -875,77 +984,3 @@ std::unique_ptr<SequenceStep> RunPageUI::BuildSelectedProcess() {
 }
 
 
-
-
-void RunPageUI::ProcessThreadFunc(const std::string& processName) {
-  try {
-    auto sequence = BuildSelectedProcess();
-    if (!sequence) {
-      UpdateStatus("Failed to build process sequence", true);
-      m_processRunning = false;
-      return;
-    }
-
-    const auto& operations = sequence->GetOperations();
-    size_t totalOps = operations.size();
-
-    UpdateStatus("Starting sequence with " + std::to_string(totalOps) + " operations");
-
-    for (size_t i = 0; i < totalOps && !m_stopRequested; ++i) {
-      // Handle pause
-      while (m_pauseRequested && !m_stopRequested) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      }
-
-      if (m_stopRequested) break;
-
-      UpdateStatus("Step " + std::to_string(i + 1) + "/" + std::to_string(totalOps) +
-        ": " + operations[i]->GetDescription());
-
-      bool success = operations[i]->Execute(m_machineOps);
-      if (!success && !m_stopRequested) {
-        UpdateStatus("Operation failed: " + operations[i]->GetDescription(), true);
-        break;
-      }
-
-      m_progress = static_cast<float>(i + 1) / static_cast<float>(totalOps);
-    }
-
-    if (m_stopRequested) {
-      UpdateStatus("Process stopped by user");
-    }
-    else {
-      UpdateStatus("Process completed successfully - " + std::to_string(totalOps) + " operations executed");
-    }
-
-  }
-  catch (const std::exception& e) {
-    UpdateStatus("Process error: " + std::string(e.what()), true);
-  }
-
-  m_processRunning = false;
-  m_processPaused = false;
-  m_progress = 0.0f;
-}
-
-// NEW: Get current filtered process list
-std::vector<std::string> RunPageUI::GetCurrentProcessList() const {
-  return m_filterManager->GetFilteredProcessList();
-}
-
-// NEW: Handle filter changes
-void RunPageUI::OnFilterChanged() {
-  // Update selected process if it's no longer visible
-  auto currentList = GetCurrentProcessList();
-  auto it = std::find(currentList.begin(), currentList.end(), m_selectedProcess);
-
-  if (it == currentList.end() && !currentList.empty()) {
-    // Selected process is no longer visible, select first available
-    m_selectedProcess = currentList[0];
-    UpdateStatus("Process selection changed due to filter update");
-  }
-  else if (currentList.empty()) {
-    // No processes visible, keep current selection but warn user
-    UpdateStatus("No processes visible with current filter settings");
-  }
-}
