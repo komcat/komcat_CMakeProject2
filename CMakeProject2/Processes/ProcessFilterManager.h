@@ -46,23 +46,27 @@ private:
 
   // Master list of all available processes
   std::vector<std::string> m_allProcesses = {
-      "Initialization",
-      "InitializationParallel",
-      "Probing",
-      "UAA3_ModernProbing",
-      "UAA3_EnhancedProbing",
-      "UAA3_QuickProbing",
-      "PickPlaceLeftLens",
-      "PickPlaceRightLens",
-      "UVCuring",
-      "RejectLeftLens",
-      "RejectRightLens",
-      "NeedleCalibration",
-      "UAA3_ModernNeedleCalib",
-      "DispenseCalibration1",
-      "DispenseCalibration2",
-      "DispenseEpoxy1",
-      "DispenseEpoxy2"
+
+
+    // UAA3 Core Processes (require UserPromptUI) - 5 processes
+    "UAA3_Initialization",
+    "UAA3_Probing",
+    "UAA3_PickPlaceLeftLens",
+    "UAA3_PickPlaceRightLens",
+    "UAA3_UVCuring",
+
+    // UAA3 Utility Sequences - 2 processes
+    "UAA3_RejectLeftLens",
+    "UAA3_RejectRightLens",
+
+    // UAA3 Calibration Sequences - 3 processes
+    "UAA3_NeedleCalibration",
+    "UAA3_DispenseCalibration1",
+    "UAA3_DispenseCalibration2",
+
+    // UAA3 Dispensing Sequences - 2 processes
+    "UAA3_DispenseEpoxy1",
+    "UAA3_DispenseEpoxy2"
   };
 
   // INI file path for last preset

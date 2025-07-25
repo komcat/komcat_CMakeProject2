@@ -3,6 +3,7 @@
 #include <chrono>
 #include <iostream>
 #include <algorithm>
+#include "uaa3_process_builders.h"
 
 // UPDATE RunPageUI.cpp - Constructor
 RunPageUI::RunPageUI(MachineOperations& machineOps)
@@ -720,65 +721,143 @@ void RunPageUI::UpdateStatus(const std::string& message, bool isError) {
   }
 }
 
-// UPDATED: BuildSelectedProcess with UAA3 support
+// UPDATED: BuildSelectedProcess with UAA3 sequences only
 std::unique_ptr<SequenceStep> RunPageUI::BuildSelectedProcess() {
-  // Legacy sequences (using MockUserInteractionManager)
-  if (m_selectedProcess == "Initialization") {
-    return ProcessBuilders::BuildInitializationSequence(m_machineOps);
-  }
-  else if (m_selectedProcess == "InitializationParallel") {
-    return ProcessBuilders::BuildInitializationSequenceParallel(m_machineOps);
-  }
-  else if (m_selectedProcess == "Probing") {
-    return ProcessBuilders::BuildProbingSequence(m_machineOps, *m_uiManager);
-  }
-  else if (m_selectedProcess == "PickPlaceLeftLens") {
-    return ProcessBuilders::BuildPickPlaceLeftLensSequence(m_machineOps, *m_uiManager);
-  }
-  else if (m_selectedProcess == "PickPlaceRightLens") {
-    return ProcessBuilders::BuildPickPlaceRightLensSequence(m_machineOps, *m_uiManager);
-  }
-  else if (m_selectedProcess == "UVCuring") {
-    return ProcessBuilders::BuildUVCuringSequence(m_machineOps, *m_uiManager);
-  }
-  else if (m_selectedProcess == "RejectLeftLens") {
-    return ProcessBuilders::RejectLeftLensSequence(m_machineOps, *m_uiManager);
-  }
-  else if (m_selectedProcess == "RejectRightLens") {
-    return ProcessBuilders::RejectRightLensSequence(m_machineOps, *m_uiManager);
-  }
-  else if (m_selectedProcess == "NeedleCalibration") {
-    return ProcessBuilders::BuildNeedleXYCalibrationSequenceEnhanced(m_machineOps, *m_uiManager);
-  }
-  else if (m_selectedProcess == "DispenseCalibration1") {
-    return ProcessBuilders::BuildDispenseCalibrationSequence(m_machineOps, *m_uiManager);
-  }
-  else if (m_selectedProcess == "DispenseCalibration2") {
-    return ProcessBuilders::BuildDispenseCalibration2Sequence(m_machineOps, *m_uiManager);
-  }
-  else if (m_selectedProcess == "DispenseEpoxy1") {
-    return ProcessBuilders::BuildDispenseEpoxy1Sequence(m_machineOps, *m_uiManager);
-  }
-  else if (m_selectedProcess == "DispenseEpoxy2") {
-    return ProcessBuilders::BuildDispenseEpoxy2Sequence(m_machineOps, *m_uiManager);
-  }
 
-  // NEW: UAA3 Modern sequences (using UserPromptUI)
-  else if (m_selectedProcess == "UAA3_ModernProbing") {
+  // ============================================================================
+  // UAA3 CORE PROCESSES
+  // ============================================================================
+
+  if (m_selectedProcess == "UAA3_Initialization") {
+    return UAA3ProcessBuilders::BuildInitializationSequence_uaa3(m_machineOps, *m_promptUI);
+  }
+  else if (m_selectedProcess == "UAA3_Probing") {
     if (m_promptUI) {
-      return UAA3ProcessBuilders::BuildModernProbingSequence(m_machineOps, *m_promptUI);
+      return UAA3ProcessBuilders::BuildProbingSequence_uaa3(m_machineOps, *m_promptUI);
     }
     else {
-      // Fallback to legacy if UserPromptUI not available
-      UpdateStatus("UserPromptUI not available, using legacy probing", true);
-      return ProcessBuilders::BuildProbingSequence(m_machineOps, *m_uiManager);
+      UpdateStatus("UserPromptUI not available for UAA3_Probing", true);
+      return nullptr;
     }
   }
-  
+  else if (m_selectedProcess == "UAA3_PickPlaceLeftLens") {
+    if (m_promptUI) {
+      return UAA3ProcessBuilders::BuildPickPlaceLeftLensSequence_uaa3(m_machineOps, *m_promptUI);
+    }
+    else {
+      UpdateStatus("UserPromptUI not available for UAA3_PickPlaceLeftLens", true);
+      return nullptr;
+    }
+  }
+  else if (m_selectedProcess == "UAA3_PickPlaceRightLens") {
+    if (m_promptUI) {
+      return UAA3ProcessBuilders::BuildPickPlaceRightLensSequence_uaa3(m_machineOps, *m_promptUI);
+    }
+    else {
+      UpdateStatus("UserPromptUI not available for UAA3_PickPlaceRightLens", true);
+      return nullptr;
+    }
+  }
+  else if (m_selectedProcess == "UAA3_UVCuring") {
+    if (m_promptUI) {
+      return UAA3ProcessBuilders::BuildUVCuringSequence_uaa3(m_machineOps, *m_promptUI);
+    }
+    else {
+      UpdateStatus("UserPromptUI not available for UAA3_UVCuring", true);
+      return nullptr;
+    }
+  }
 
-  // Default fallback
-  return ProcessBuilders::BuildInitializationSequence(m_machineOps);
+  // ============================================================================
+  // UAA3 UTILITY SEQUENCES
+  // ============================================================================
+
+  else if (m_selectedProcess == "UAA3_RejectLeftLens") {
+    if (m_promptUI) {
+      return UAA3ProcessBuilders::RejectLeftLensSequence_uaa3(m_machineOps, *m_promptUI);
+    }
+    else {
+      UpdateStatus("UserPromptUI not available for UAA3_RejectLeftLens", true);
+      return nullptr;
+    }
+  }
+  else if (m_selectedProcess == "UAA3_RejectRightLens") {
+    if (m_promptUI) {
+      return UAA3ProcessBuilders::RejectRightLensSequence_uaa3(m_machineOps, *m_promptUI);
+    }
+    else {
+      UpdateStatus("UserPromptUI not available for UAA3_RejectRightLens", true);
+      return nullptr;
+    }
+  }
+
+  // ============================================================================
+  // UAA3 CALIBRATION SEQUENCES
+  // ============================================================================
+
+  else if (m_selectedProcess == "UAA3_NeedleCalibration") {
+    if (m_promptUI) {
+      return UAA3ProcessBuilders::BuildNeedleXYCalibrationSequenceEnhanced_uaa3(m_machineOps, *m_promptUI);
+    }
+    else {
+      UpdateStatus("UserPromptUI not available for UAA3_NeedleCalibration", true);
+      return nullptr;
+    }
+  }
+  else if (m_selectedProcess == "UAA3_DispenseCalibration1") {
+    if (m_promptUI) {
+      return UAA3ProcessBuilders::BuildDispenseCalibrationSequence_uaa3(m_machineOps, *m_promptUI);
+    }
+    else {
+      UpdateStatus("UserPromptUI not available for UAA3_DispenseCalibration1", true);
+      return nullptr;
+    }
+  }
+  else if (m_selectedProcess == "UAA3_DispenseCalibration2") {
+    if (m_promptUI) {
+      return UAA3ProcessBuilders::BuildDispenseCalibration2Sequence_uaa3(m_machineOps, *m_promptUI);
+    }
+    else {
+      UpdateStatus("UserPromptUI not available for UAA3_DispenseCalibration2", true);
+      return nullptr;
+    }
+  }
+
+  // ============================================================================
+  // UAA3 DISPENSING SEQUENCES
+  // ============================================================================
+
+  else if (m_selectedProcess == "UAA3_DispenseEpoxy1") {
+    if (m_promptUI) {
+      return UAA3ProcessBuilders::BuildDispenseEpoxy1Sequence_uaa3(m_machineOps, *m_promptUI);
+    }
+    else {
+      UpdateStatus("UserPromptUI not available for UAA3_DispenseEpoxy1", true);
+      return nullptr;
+    }
+  }
+  else if (m_selectedProcess == "UAA3_DispenseEpoxy2") {
+    if (m_promptUI) {
+      return UAA3ProcessBuilders::BuildDispenseEpoxy2Sequence_uaa3(m_machineOps, *m_promptUI);
+    }
+    else {
+      UpdateStatus("UserPromptUI not available for UAA3_DispenseEpoxy2", true);
+      return nullptr;
+    }
+  }
+
+  // ============================================================================
+  // DEFAULT FALLBACK
+  // ============================================================================
+
+  else {
+    UpdateStatus("Unknown process selected: " + m_selectedProcess, true);
+    return nullptr;
+  }
 }
+
+
+
 
 void RunPageUI::ProcessThreadFunc(const std::string& processName) {
   try {
@@ -792,6 +871,8 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
     const auto& operations = sequence->GetOperations();
     size_t totalOps = operations.size();
 
+    UpdateStatus("Starting sequence with " + std::to_string(totalOps) + " operations");
+
     for (size_t i = 0; i < totalOps && !m_stopRequested; ++i) {
       // Handle pause
       while (m_pauseRequested && !m_stopRequested) {
@@ -800,7 +881,8 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
 
       if (m_stopRequested) break;
 
-      UpdateStatus("Executing: " + operations[i]->GetDescription());
+      UpdateStatus("Step " + std::to_string(i + 1) + "/" + std::to_string(totalOps) +
+        ": " + operations[i]->GetDescription());
 
       bool success = operations[i]->Execute(m_machineOps);
       if (!success && !m_stopRequested) {
@@ -815,7 +897,7 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
       UpdateStatus("Process stopped by user");
     }
     else {
-      UpdateStatus("Process completed successfully");
+      UpdateStatus("Process completed successfully - " + std::to_string(totalOps) + " operations executed");
     }
 
   }
