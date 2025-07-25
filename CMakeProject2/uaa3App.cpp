@@ -48,7 +48,7 @@
 #include "MenuManager_uaa3.h"
 #include "RaylibDebugWindow.h"
 #include "LiveVideoSubscriber.h"
-
+#include "CameraConfigManager.h"
 
 
 
@@ -379,23 +379,65 @@ int main(int argc, char* argv[])
 		logger->LogInfo("Pneumatic system initialized");
 	}
 
-	// Camera initialization
+	// Camera initialization with configuration manager
 	std::unique_ptr<CameraManager> cameraManager = std::make_unique<CameraManager>();
+	std::unique_ptr<CameraConfigManager> cameraConfigManager;
 
-	//// Camera 1 - Auto-connect to first available
-	//CameraInfo camera1("main_camera", "Top view camera");
-	//cameraManager->AddCamera(camera1);
+	// Create and initialize camera configuration manager
+	try {
+		cameraConfigManager = std::make_unique<CameraConfigManager>("camera_config.json");
+		cameraConfigManager->SetLogger(logger);
 
-	//// Initialize all cameras with auto-connect enabled
-	//cameraManager->InitializeAllCameras();
+		if (cameraConfigManager->LoadConfig()) {
+			logger->LogInfo("Camera configuration loaded successfully");
 
-	// In your main application, try this:
-	auto camera1 = CameraInfo::CreateByIP("main_camera", "192.168.0.68", "Top view camera");
-	cameraManager->AddCamera(camera1);
-	auto camera2 = CameraInfo::CreateByIP("aux_camera", "192.168.0.69", "Auxilary Camera");
-	cameraManager->AddCamera(camera2);
+			// Initialize CameraManager with the loaded configuration
+			if (cameraConfigManager->InitializeCameraManager(*cameraManager)) {
+				logger->LogInfo("CameraManager initialized from configuration");
 
-	cameraManager->InitializeAllCameras();
+				// Log summary of loaded cameras
+				auto enabledCameras = cameraConfigManager->GetEnabledCameraIds();
+				logger->LogInfo("Enabled cameras from config: " + std::to_string(enabledCameras.size()));
+				for (const auto& cameraId : enabledCameras) {
+					logger->LogInfo("  - " + cameraId);
+				}
+			}
+			else {
+				logger->LogWarning("Failed to initialize CameraManager from configuration");
+			}
+		}
+		else {
+			logger->LogWarning("Failed to load camera configuration, using fallback setup");
+
+			// Fallback to original hardcoded setup
+			auto camera1 = CameraInfo::CreateByIP("main_camera", "192.168.0.68", "Top view camera");
+			cameraManager->AddCamera(camera1);
+			auto camera2 = CameraInfo::CreateByIP("aux_camera", "192.168.0.69", "Auxilary Camera");
+			cameraManager->AddCamera(camera2);
+
+			cameraManager->InitializeAllCameras();
+			logger->LogInfo("Cameras initialized with fallback configuration");
+		}
+
+		// Check camera status regardless of configuration source
+		CheckCameraStatus(*cameraManager);
+
+	}
+	catch (const std::exception& e) {
+		logger->LogError("Exception during camera initialization: " + std::string(e.what()));
+		logger->LogInfo("Attempting fallback camera setup");
+
+		// Emergency fallback
+		try {
+			auto camera1 = CameraInfo::CreateByIP("main_camera", "192.168.0.68", "Top view camera");
+			cameraManager->AddCamera(camera1);
+			cameraManager->InitializeAllCameras();
+			logger->LogInfo("Emergency fallback camera setup completed");
+		}
+		catch (const std::exception& fallbackEx) {
+			logger->LogError("Emergency fallback also failed: " + std::string(fallbackEx.what()));
+		}
+	}
 
 
 
@@ -1599,7 +1641,18 @@ int main(int argc, char* argv[])
 	cameraManager->StopGrabbingAll();
 	std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-	cameraManager->DisconnectCamera(camera1.id);
+	// Get the camera IDs from the config manager
+	auto enabledCameraIds = cameraConfigManager->GetEnabledCameraIds();
+
+	// Disconnect all enabled cameras
+	for (const auto& cameraId : enabledCameraIds) {
+		if (cameraManager->DisconnectCamera(cameraId)) {
+			logger->LogInfo("Disconnected camera: " + cameraId);
+		}
+		else {
+			logger->LogWarning("Failed to disconnect camera: " + cameraId);
+		}
+	}
 
 	piControllerManager.get()->DisconnectAll();
 	std::this_thread::sleep_for(std::chrono::milliseconds(500));

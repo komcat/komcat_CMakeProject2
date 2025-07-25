@@ -1,0 +1,62 @@
+{
+  "manager_settings": {
+    "auto_connect": true,
+    "default_exposure_time": 1000,
+    "default_gain": 1.0,
+    "broadcast_enabled": true,
+    "max_subscribers": 10,
+    "default_width": 0,
+    "default_height": 0,
+    "log_level": "INFO"
+  },
+  "cameras": [
+    {
+      "id": "main_camera",
+      "display_name": "Top view camera",
+      "connection_type": "ip",
+      "ip_address": "192.168.0.68",
+      "port": 0,
+      "enabled": true,
+      "auto_connect": true,
+      "description": "Primary overhead camera for top-down imaging",
+      "exposure_time": 1000,
+      "gain": 1.0
+    },
+    {
+      "id": "aux_camera",
+      "display_name": "Auxiliary Camera",
+      "connection_type": "ip",
+      "ip_address": "192.168.0.69",
+      "port": 0,
+      "enabled": false,
+      "auto_connect": true,
+      "description": "Secondary camera for auxiliary imaging",
+      "exposure_time": 1200,
+      "gain": 1.2
+    },
+    {
+      "id": "side_camera",
+      "display_name": "Side View Camera",
+      "connection_type": "ip",
+      "ip_address": "192.168.0.70",
+      "port": 0,
+      "enabled": false,
+      "auto_connect": false,
+      "description": "Optional side-view camera (disabled by default)",
+      "exposure_time": 800,
+      "gain": 0.8
+    },
+    {
+      "id": "inspection_camera",
+      "display_name": "Quality Inspection Camera",
+      "connection_type": "auto",
+      "ip_address": "",
+      "port": 0,
+      "enabled": false,
+      "auto_connect": false,
+      "description": "Auto-detect camera for quality inspection",
+      "exposure_time": 1500,
+      "gain": 1.5
+    }
+  ]
+}

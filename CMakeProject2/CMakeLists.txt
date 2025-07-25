@@ -474,7 +474,7 @@ add_executable(CMakeProject2
  "mainUI/MenuManager_uaa3.cpp"
  "mainUI/RaylibDebugWindow.h" 
  "mainUI/RaylibDebugWindow.cpp"
-  "mainUI/LiveVideoSubscriber.h" "mainUI/LiveVideoSubscriber.cpp" "include/camera/CameraFrameData.h" "mainUI/RunPageUI.h" "mainUI/RunPageUI.cpp"   "Processes/ProcessFilterManager.h" "Processes/ProcessFilterManager.cpp" "Processes/UAA3ProcessBuilders/uaa3_process_builders.h" "Processes/UAA3ProcessBuilders/Core/uaa3_probing_sequence.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_pick_place_sequences.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_uv_curing_sequence.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_reject_sequences.cpp" "Processes/UAA3ProcessBuilders/Calibration/uaa3_needle_calibration.cpp" "Processes/UAA3ProcessBuilders/Calibration/uaa3_dispense_calibration.cpp" "Processes/UAA3ProcessBuilders/Dispensing/uaa3_dispense_epoxy.cpp" "Processes/UAA3ProcessBuilders/uaa3_utility_functions.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_initialzation_sequences.cpp")
+  "mainUI/LiveVideoSubscriber.h" "mainUI/LiveVideoSubscriber.cpp" "include/camera/CameraFrameData.h" "mainUI/RunPageUI.h" "mainUI/RunPageUI.cpp"   "Processes/ProcessFilterManager.h" "Processes/ProcessFilterManager.cpp" "Processes/UAA3ProcessBuilders/uaa3_process_builders.h" "Processes/UAA3ProcessBuilders/Core/uaa3_probing_sequence.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_pick_place_sequences.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_uv_curing_sequence.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_reject_sequences.cpp" "Processes/UAA3ProcessBuilders/Calibration/uaa3_needle_calibration.cpp" "Processes/UAA3ProcessBuilders/Calibration/uaa3_dispense_calibration.cpp" "Processes/UAA3ProcessBuilders/Dispensing/uaa3_dispense_epoxy.cpp" "Processes/UAA3ProcessBuilders/uaa3_utility_functions.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_initialzation_sequences.cpp" "include/camera/CameraConfigManager.h" "include/camera/CameraConfigManager.cpp")
 
 
 
@@ -815,7 +815,7 @@ add_executable(uaa3App
   "mainUI/MenuManager_uaa3.h" 
   "mainUI/MenuManager_uaa3.cpp"
   "mainUI/RaylibDebugWindow.h" 
-  "mainUI/RaylibDebugWindow.cpp" "mainUI/LiveVideoSubscriber.h" "mainUI/LiveVideoSubscriber.cpp" "include/camera/CameraFrameData.h" "mainUI/RunPageUI.h" "mainUI/RunPageUI.cpp"   "Processes/ProcessFilterManager.h" "Processes/ProcessFilterManager.cpp" "Processes/UAA3ProcessBuilders/uaa3_process_builders.h" "Processes/UAA3ProcessBuilders/Core/uaa3_probing_sequence.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_pick_place_sequences.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_uv_curing_sequence.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_reject_sequences.cpp" "Processes/UAA3ProcessBuilders/Calibration/uaa3_needle_calibration.cpp" "Processes/UAA3ProcessBuilders/Calibration/uaa3_dispense_calibration.cpp" "Processes/UAA3ProcessBuilders/Dispensing/uaa3_dispense_epoxy.cpp" "Processes/UAA3ProcessBuilders/uaa3_utility_functions.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_initialzation_sequences.cpp")
+  "mainUI/RaylibDebugWindow.cpp" "mainUI/LiveVideoSubscriber.h" "mainUI/LiveVideoSubscriber.cpp" "include/camera/CameraFrameData.h" "mainUI/RunPageUI.h" "mainUI/RunPageUI.cpp"   "Processes/ProcessFilterManager.h" "Processes/ProcessFilterManager.cpp" "Processes/UAA3ProcessBuilders/uaa3_process_builders.h" "Processes/UAA3ProcessBuilders/Core/uaa3_probing_sequence.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_pick_place_sequences.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_uv_curing_sequence.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_reject_sequences.cpp" "Processes/UAA3ProcessBuilders/Calibration/uaa3_needle_calibration.cpp" "Processes/UAA3ProcessBuilders/Calibration/uaa3_dispense_calibration.cpp" "Processes/UAA3ProcessBuilders/Dispensing/uaa3_dispense_epoxy.cpp" "Processes/UAA3ProcessBuilders/uaa3_utility_functions.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_initialzation_sequences.cpp" "include/camera/CameraConfigManager.h" "include/camera/CameraConfigManager.cpp")
 
 
 
@@ -1083,6 +1083,7 @@ set(CONFIG_FILES
     "smu_config.json"
     "toolbar_state.json"
     "transformation_matrix.json"
+    "camera_config.json"
 )
 
 # Function to copy config files for a target (copy if not exist or newer)
