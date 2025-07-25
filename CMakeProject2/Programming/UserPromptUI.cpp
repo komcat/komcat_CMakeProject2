@@ -10,24 +10,24 @@ UserPromptUI::UserPromptUI()
   , m_title("User Confirmation")
   , m_message("")
   , m_result(PromptResult::PENDING)
-  , m_autoConfirm(false)           // NEW: Default auto-confirm off
-  , m_autoConfirmDelay(3.0f)       // NEW: Default 3 seconds
-  , m_promptStartTime(0.0f)        // NEW: Track when prompt started
-  , m_autoConfirmTriggered(false)  // NEW: Prevent multiple triggers
+  , m_autoConfirm(false)
+  , m_autoConfirmDelay(3.0f)
+  , m_promptStartTime(0.0f)
+  , m_autoConfirmTriggered(false)
+  , m_windowSizeCalculated(false)  // NEW: Track if size was calculated
+  , m_calculatedWindowSize(ImVec2(500, 300))  // NEW: Store calculated size
 {
 }
 
 UserPromptUI::~UserPromptUI() {
 }
 
-// NEW: Get current time helper
 float UserPromptUI::GetCurrentTime() const {
   auto now = std::chrono::steady_clock::now();
   auto duration = now.time_since_epoch();
   return std::chrono::duration<float>(duration).count();
 }
 
-// Thread-safe method that just sets flags
 void UserPromptUI::RequestPrompt(const std::string& title, const std::string& message,
   std::function<void(PromptResult)> callback) {
 
@@ -43,14 +43,14 @@ void UserPromptUI::RequestPrompt(const std::string& title, const std::string& me
   m_promptRequested = true;
   m_isVisible = true;
 
-  // NEW: Reset auto-confirm state for new prompt
+  // NEW: Reset window sizing for new prompt
+  m_windowSizeCalculated = false;
   m_autoConfirmTriggered = false;
   m_promptStartTime = GetCurrentTime();
 
   printf("[DEBUG] RequestPrompt: Auto-confirm will trigger in %.1f seconds\n", m_autoConfirmDelay);
 }
 
-// Keep the old ShowPrompt method for backward compatibility
 void UserPromptUI::ShowPrompt(const std::string& title, const std::string& message,
   std::function<void(PromptResult)> callback) {
   std::lock_guard<std::mutex> lock(m_mutex);
@@ -62,14 +62,47 @@ void UserPromptUI::ShowPrompt(const std::string& title, const std::string& messa
   m_isPromptActive = true;
   m_isVisible = true;
 
-  // NEW: Reset auto-confirm state
+  // NEW: Reset window sizing for new prompt
+  m_windowSizeCalculated = false;
   m_autoConfirmTriggered = false;
   m_promptStartTime = GetCurrentTime();
 
   ImGui::OpenPopup(m_title.c_str());
 }
 
-// Update UserPromptUI.cpp Render() method with better layout handling
+// NEW: Calculate window size once on appearance
+void UserPromptUI::CalculateWindowSize() {
+  if (m_windowSizeCalculated) {
+    return;
+  }
+
+  ImVec2 minSize = ImVec2(500, 300);
+  ImVec2 maxSize = ImVec2(800, 600);
+
+  // Calculate content-based height estimation
+  float estimatedHeight = 120;  // Base height for header and buttons
+
+  // Add height for title
+  if (!m_title.empty() && m_title != "User Confirmation") {
+    estimatedHeight += 30;
+  }
+
+  // Add height for message (rough estimate based on text length)
+  float messageLines = (float)m_message.length() / 80.0f;
+  if (messageLines < 1.0f) messageLines = 1.0f;
+  estimatedHeight += messageLines * 20.0f + 40;
+
+  // Add height for auto-confirm display
+  if (m_autoConfirm) {
+    estimatedHeight += 60;
+  }
+
+  // Clamp to min/max
+  estimatedHeight = (std::max)(minSize.y, (std::min)(estimatedHeight, maxSize.y));
+
+  m_calculatedWindowSize = ImVec2(minSize.x, estimatedHeight);
+  m_windowSizeCalculated = true;
+}
 
 void UserPromptUI::Render() {
   // Check if we need to open a new prompt (thread-safe)
@@ -88,6 +121,9 @@ void UserPromptUI::Render() {
   // Check auto-confirm before rendering
   CheckAutoConfirm();
 
+  // Calculate window size once on appearance
+  CalculateWindowSize();
+
   // Force focus on the next window if prompt just became active
   static bool needsFocus = false;
   {
@@ -98,43 +134,21 @@ void UserPromptUI::Render() {
     }
   }
 
-  // IMPROVED: Dynamic window sizing based on content
+  // Set window position and size
   ImVec2 center = ImGui::GetMainViewport()->GetCenter();
   ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-  // Calculate content-based window size
-  ImVec2 minSize = ImVec2(500, 300);
-  ImVec2 maxSize = ImVec2(800, 600);
+  // Use calculated size only on appearance
+  ImGui::SetNextWindowSize(m_calculatedWindowSize, ImGuiCond_Appearing);
 
-  // Estimate content height
-  float estimatedHeight = 120;  // Base height for header and buttons
-
-  // Add height for title
-  if (!m_title.empty() && m_title != "User Confirmation") {
-    estimatedHeight += 30;
-  }
-
-  // Add height for message (rough estimate based on text length)
-  float messageLines = (float)m_message.length() / 80.0f;  // Estimate characters per line
-  if (messageLines < 1.0f) messageLines = 1.0f;
-  estimatedHeight += messageLines * 20.0f + 40;  // Line height + spacing
-
-  // Add height for auto-confirm display
-  if (m_autoConfirm && !m_autoConfirmTriggered) {
-    estimatedHeight += 60;  // Progress bar and countdown text
-  }
-
-  // Clamp to min/max
-  estimatedHeight = std::max(minSize.y, std::min(estimatedHeight, maxSize.y));
-
-  ImVec2 windowSize = ImVec2(minSize.x, estimatedHeight);
-  ImGui::SetNextWindowSize(windowSize, ImGuiCond_Appearing);
+  // Set size constraints for manual resizing
+  ImVec2 minSize = ImVec2(400, 250);
+  ImVec2 maxSize = ImVec2(900, 700);
   ImGui::SetNextWindowSizeConstraints(minSize, maxSize);
 
-  // IMPROVED: Better window flags for resizing
+  // Window flags - removed AlwaysAutoResize to prevent flickering
   ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse |
-    ImGuiWindowFlags_NoDocking |
-    ImGuiWindowFlags_AlwaysAutoResize;  // NEW: Auto-resize to content
+    ImGuiWindowFlags_NoDocking;
 
   SetupPromptStyling();
 
@@ -143,7 +157,7 @@ void UserPromptUI::Render() {
 
   if (ImGui::Begin(windowID.c_str(), &isOpen, flags)) {
 
-    // Make window focused
+    // Handle window focus
     if (ImGui::IsWindowAppearing()) {
       ImGui::SetWindowFocus();
       needsFocus = false;
@@ -181,26 +195,23 @@ void UserPromptUI::Render() {
       ImGui::Spacing();
     }
 
-    // IMPROVED: Message with scrollable area for long content
+    // Message with fixed scrollable area
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
 
-    // Calculate available space for message
-    float availableHeight = ImGui::GetContentRegionAvail().y - 150; // Reserve space for buttons and status
-    if (availableHeight < 50) availableHeight = 50; // Minimum message area
+    // Calculate fixed available space for message
+    float reservedHeight = 200; // Reserve space for buttons and status
+    float availableHeight = ImGui::GetContentRegionAvail().y - reservedHeight;
 
-    // Create scrollable region for message if content is long
-    if (m_message.length() > 200 || availableHeight < 100) {  // Use scrolling for long messages
-      ImGui::Text("Message:");
-      ImGui::BeginChild("MessageScroll", ImVec2(0, availableHeight), true,
-        ImGuiWindowFlags_HorizontalScrollbar);
-      ImGui::TextWrapped("%s", m_message.c_str());
-      ImGui::EndChild();
-    }
-    else {
-      // Short message - no scrolling needed
-      ImGui::Text("Message:");
-      ImGui::TextWrapped("%s", m_message.c_str());
-    }
+    // Ensure minimum message area
+    if (availableHeight < 60) availableHeight = 60;
+
+    ImGui::Text("Message:");
+
+    // Always use scrollable region for consistent sizing
+    ImGui::BeginChild("MessageScroll", ImVec2(0, availableHeight), true,
+      ImGuiWindowFlags_HorizontalScrollbar);
+    ImGui::TextWrapped("%s", m_message.c_str());
+    ImGui::EndChild();
 
     ImGui::PopStyleColor();
 
@@ -237,7 +248,7 @@ void UserPromptUI::Render() {
       ImGui::Spacing();
     }
 
-    // IMPROVED: Responsive button layout
+    // Fixed button layout
     float buttonWidth = 120.0f;
     float buttonHeight = 40.0f;
     float buttonSpacing = 15.0f;
@@ -246,19 +257,9 @@ void UserPromptUI::Render() {
     float availableWidth = ImGui::GetContentRegionAvail().x;
     float totalButtonWidth = buttonWidth * 3 + buttonSpacing * 2;
 
-    // Adjust button size if window is too narrow
-    if (totalButtonWidth > availableWidth) {
-      buttonWidth = (availableWidth - buttonSpacing * 2) / 3.0f;
-      if (buttonWidth < 80) {
-        // Stack buttons vertically if too narrow
-        buttonWidth = availableWidth * 0.8f;
-        buttonSpacing = 5.0f;
-      }
-    }
-
     // Center buttons horizontally
-    float startX = (availableWidth - (buttonWidth * 3 + buttonSpacing * 2)) * 0.5f;
-    if (startX > 0 && totalButtonWidth <= availableWidth) {
+    float startX = (availableWidth - totalButtonWidth) * 0.5f;
+    if (startX > 0) {
       ImGui::SetCursorPosX(ImGui::GetCursorPosX() + startX);
     }
 
@@ -281,12 +282,7 @@ void UserPromptUI::Render() {
     }
     ImGui::PopStyleColor(4);
 
-    // Check if we should stack buttons vertically
-    bool stackVertically = (buttonWidth >= availableWidth * 0.7f);
-
-    if (!stackVertically) {
-      ImGui::SameLine(0, buttonSpacing);
-    }
+    ImGui::SameLine(0, buttonSpacing);
 
     // NO button
     std::string noID = "NO##prompt_no_" + std::to_string((uintptr_t)this);
@@ -300,9 +296,7 @@ void UserPromptUI::Render() {
     }
     ImGui::PopStyleColor(4);
 
-    if (!stackVertically) {
-      ImGui::SameLine(0, buttonSpacing);
-    }
+    ImGui::SameLine(0, buttonSpacing);
 
     // CANCEL button
     std::string cancelID = "CANCEL##prompt_cancel_" + std::to_string((uintptr_t)this);
@@ -339,8 +333,6 @@ void UserPromptUI::Render() {
   }
 }
 
-
-// NEW: Check and handle auto-confirm
 void UserPromptUI::CheckAutoConfirm() {
   if (!m_autoConfirm || m_autoConfirmTriggered || !m_isPromptActive) {
     return;
@@ -351,7 +343,7 @@ void UserPromptUI::CheckAutoConfirm() {
   if (elapsed >= m_autoConfirmDelay) {
     printf("[DEBUG] Auto-confirm triggered after %.1f seconds\n", elapsed);
     m_autoConfirmTriggered = true;
-    OnYesClicked();  // Auto-confirm always selects YES
+    OnYesClicked();
   }
 }
 
@@ -366,7 +358,8 @@ void UserPromptUI::Reset() {
   m_isPromptActive = false;
   m_result = PromptResult::PENDING;
   m_callback = nullptr;
-  m_autoConfirmTriggered = false;  // NEW: Reset auto-confirm state
+  m_autoConfirmTriggered = false;
+  m_windowSizeCalculated = false;  // NEW: Reset for next prompt
 }
 
 // Button handlers
@@ -392,7 +385,7 @@ void UserPromptUI::OnNoClicked() {
   m_result = PromptResult::NO;
   m_isPromptActive = false;
   m_isVisible = false;
-  m_autoConfirmTriggered = true;  // NEW: Stop auto-confirm
+  m_autoConfirmTriggered = true;
 
   if (m_callback) {
     m_callback(PromptResult::NO);
@@ -407,14 +400,14 @@ void UserPromptUI::OnCancelClicked() {
   m_result = PromptResult::CANCELLED;
   m_isPromptActive = false;
   m_isVisible = false;
-  m_autoConfirmTriggered = true;  // NEW: Stop auto-confirm
+  m_autoConfirmTriggered = true;
 
   if (m_callback) {
     m_callback(PromptResult::CANCELLED);
   }
 }
 
-// UI styling methods (unchanged)
+// UI styling methods
 void UserPromptUI::SetupPromptStyling() {
   ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20, 20));

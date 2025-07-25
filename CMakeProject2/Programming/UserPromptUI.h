@@ -25,7 +25,8 @@ public:
   // Show prompt and wait for user response
   void ShowPrompt(const std::string& title, const std::string& message,
     std::function<void(PromptResult)> callback);
-  // REQUIRED: Add this method if it doesn't exist
+
+  // Thread-safe prompt request
   void RequestPrompt(const std::string& title, const std::string& message,
     std::function<void(PromptResult)> callback);
 
@@ -43,7 +44,7 @@ public:
   // Reset for new prompt
   void Reset();
 
-  // NEW: Auto-confirm functionality
+  // Auto-confirm functionality
   void SetAutoConfirm(bool autoConfirm) {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_autoConfirm = autoConfirm;
@@ -53,7 +54,7 @@ public:
     return m_autoConfirm;
   }
 
-  // NEW: Set auto-confirm delay (in seconds)
+  // Set auto-confirm delay (in seconds)
   void SetAutoConfirmDelay(float delaySeconds) {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_autoConfirmDelay = delaySeconds;
@@ -73,11 +74,15 @@ private:
   std::atomic<PromptResult> m_result;
   std::function<void(PromptResult)> m_callback;
 
-  // NEW: Auto-confirm members
+  // Auto-confirm members
   bool m_autoConfirm;
   float m_autoConfirmDelay;    // Delay in seconds before auto-confirm
   float m_promptStartTime;     // When the prompt was first shown
   bool m_autoConfirmTriggered; // Prevent multiple auto-confirms
+
+  // NEW: Window sizing members
+  bool m_windowSizeCalculated;  // Track if size was calculated
+  ImVec2 m_calculatedWindowSize; // Store calculated size
 
   // Thread safety
   mutable std::mutex m_mutex;
@@ -92,7 +97,10 @@ private:
   void OnNoClicked();
   void OnCancelClicked();
 
-  // NEW: Auto-confirm helpers
+  // Auto-confirm helpers
   void CheckAutoConfirm();
   float GetCurrentTime() const;
+
+  // NEW: Window sizing helper
+  void CalculateWindowSize();
 };

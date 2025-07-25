@@ -25,14 +25,6 @@ namespace UAA3ProcessBuilders {
     sequence->AddOperation(std::make_shared<SetOutputOperation>(
       "IOBottom", 0, true));
 
-    // 4. Start camera grabbing
-    sequence->AddOperation(std::make_shared<StartCameraGrabbingOperation>());
-
-    // 5. Wait for camera to stabilize
-    sequence->AddOperation(std::make_shared<WaitOperation>(500));  // 500ms delay
-
-    // 6. Capture image
-    sequence->AddOperation(std::make_shared<CaptureImageOperation>());
 
     // 5. Release the lens temporarily (clear output)
     sequence->AddOperation(std::make_shared<SetOutputOperation>(
@@ -58,10 +50,7 @@ namespace UAA3ProcessBuilders {
     sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
       "hex-left", "Process_Flow", "node_5662"));
 
-    // 4. Start camera grabbing
-    sequence->AddOperation(std::make_shared<WaitForCameraReadyOperation>());
-    sequence->AddOperation(std::make_shared<StartCameraGrabbingOperation>());
-    sequence->AddOperation(std::make_shared<CaptureImageOperation>());
+
 
     return sequence;
   }
@@ -71,13 +60,7 @@ namespace UAA3ProcessBuilders {
 
     auto sequence = std::make_unique<SequenceStep>("Pick and Place Right Lens", machineOps);
 
-    // Read and log initial laser current and temperature
-    sequence->AddOperation(std::make_shared<ReadAndLogLaserCurrentOperation>(
-      "", "Initial laser current"));
-    sequence->AddOperation(std::make_shared<ReadAndLogLaserTemperatureOperation>(
-      "", "Initial laser temperature"));
-    sequence->AddOperation(std::make_shared<ReadAndLogDataValueOperation>(
-      "GPIB-Current", "(GPIB-Current) Dry (only collimate) reading"));
+
 
     // Move hex-right to pick lens position (verify this is correct for RIGHT lens)
     sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
@@ -97,14 +80,7 @@ namespace UAA3ProcessBuilders {
     sequence->AddOperation(std::make_shared<SetOutputOperation>(
       "IOBottom", 2, true));  // Set RIGHT gripper
 
-    // 4. Start camera grabbing
-    sequence->AddOperation(std::make_shared<StartCameraGrabbingOperation>());
 
-    // 5. Wait for camera to stabilize
-    sequence->AddOperation(std::make_shared<WaitOperation>(500));  // 500ms delay
-
-    // 6. Capture image
-    sequence->AddOperation(std::make_shared<CaptureImageOperation>());
 
     // Release and re-grip cycle for the RIGHT lens
     sequence->AddOperation(std::make_shared<SetOutputOperation>(

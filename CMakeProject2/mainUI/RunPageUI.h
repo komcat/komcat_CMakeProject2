@@ -6,6 +6,7 @@
 #include "MockUserInteractionManager.h"
 #include "Programming/UserPromptUI.h"  // Include UserPromptUI
 #include "ProcessFilterManager.h"  // Simple custom preset filter manager
+#include "include/ui/OperationsDisplayUI.h"  // Add OperationsDisplayUI
 #include "logger.h"
 #include <string>
 #include <vector>
@@ -33,12 +34,18 @@ private:
   // UserPromptUI for modern sequences
   UserPromptUI* m_promptUI = nullptr;
 
+  // Operations Display UI for detail results
+  std::unique_ptr<OperationsDisplayUI> m_operationsDisplayUI;
+
   // UI state
   std::string m_statusMessage = "Ready";
   std::string m_selectedProcess = "Initialization";
   bool m_processRunning = false;
   bool m_processPaused = false;
   float m_progress = 0.0f;
+
+  // Column3 tab state
+  int m_column3TabIndex = 0; // 0 = Status, 1 = Detail Results
 
   // Process handling
   std::thread m_processThread;
@@ -71,6 +78,8 @@ private:
   void RenderColumn1();
   void RenderColumn2();
   void RenderColumn3();
+  void RenderStatusTab();          // NEW: Status tab content
+  void RenderDetailResultsTab();   // NEW: Detail results tab content
   void RenderControlButtons();
   void RenderStatusArea();
   void RenderProcessButtons();

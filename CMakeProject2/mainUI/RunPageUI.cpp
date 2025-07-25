@@ -14,7 +14,7 @@ RunPageUI::RunPageUI(MachineOperations& machineOps)
 {
   m_logger = Logger::GetInstance();
 
-  // NEW: Initialize filter manager
+  // Initialize filter manager
   m_filterManager = std::make_unique<ProcessFilterManager>();
 
   // Set up callback for when filters change
@@ -22,7 +22,10 @@ RunPageUI::RunPageUI(MachineOperations& machineOps)
     OnFilterChanged();
   });
 
-  m_logger->LogInfo("RunPageUI: Initialized with process filtering support");
+  // Initialize operations display UI for detail results tab
+  m_operationsDisplayUI = std::make_unique<OperationsDisplayUI>(machineOps);
+
+  m_logger->LogInfo("RunPageUI: Initialized with process filtering and operations display support");
 }
 
 RunPageUI::~RunPageUI() {
@@ -80,11 +83,11 @@ void RunPageUI::RenderColumn1() {
   RenderProcessButtons();
 }
 
-// NEW: Render single-line running status
+// NEW: Render single-line running status with progress bar
 void RunPageUI::RenderRunningStatus() {
   // Calculate the available width for the status bar
   float availableWidth = ImGui::GetContentRegionAvail().x;
-  float statusHeight = 60.0f; // Height for the status bar
+  float statusHeight = 60.0f; // Back to original height since progress bar is outside
 
   // Get current cursor position
   ImVec2 cursorPos = ImGui::GetCursorScreenPos();
@@ -122,19 +125,33 @@ void RunPageUI::RenderRunningStatus() {
 
   // Center the text horizontally
   ImVec2 textSize = ImGui::CalcTextSize(statusText.c_str());
-  float textX = (availableWidth - textSize.x) * 0.5f;
-  if (textX > 0) {
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + textX);
-  }
+  float textPosX = (availableWidth - textSize.x) * 0.5f;
+  ImGui::SetCursorPosX(textPosX);
 
   ImGui::Text("%s", statusText.c_str());
 
+  // Reset font scale after status text
+  ImGui::SetWindowFontScale(1.0f);
   ImGui::PopStyleColor(); // Pop text color
-  ImGui::SetWindowFontScale(1.0f); // Reset font scale
 
-  // Move cursor past the status bar
-  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 15.0f); // Bottom padding
+  // Move cursor to end of green background area
+  ImGui::SetCursorPosY(cursorPos.y + statusHeight);
+
+  // Add some spacing below green area
+  ImGui::Spacing();
+
+  // Progress bar below the green background
+  float progressValue = m_processRunning ? m_progress : 0.0f; // 0% when idle
+
+  // Create progress text with percentage
+  char progressText[32];
+  snprintf(progressText, sizeof(progressText), "%.1f%%", progressValue * 100.0f);
+
+  ImGui::ProgressBar(progressValue, ImVec2(availableWidth, 25.0f), progressText);
 }
+
+
+
 
 // UPDATE: StartProcess method to sync auto-confirm on sequence start
 void RunPageUI::StartProcess(const std::string& processName) {
@@ -304,48 +321,37 @@ void RunPageUI::RenderColumn2() {
 }
 
 void RunPageUI::RenderColumn3() {
-  ImGui::Text("Status & Information");
-  ImGui::Separator();
+  // Create tab bar for Column3
+  if (ImGui::BeginTabBar("Column3Tabs", ImGuiTabBarFlags_None)) {
 
-  // Process filter status at top
-  auto currentList = GetCurrentProcessList();
-  auto totalList = m_filterManager->GetAllAvailableProcesses();
+    // Status tab (existing content)
+    if (ImGui::BeginTabItem("Status")) {
+      RenderStatusTab();
+      ImGui::EndTabItem();
+    }
 
-  ImGui::Text("Process Filter Status:");
-  ImGui::Text("Showing %zu of %zu sequences", currentList.size(), totalList.size());
+    // Detail Results tab (new OperationsDisplayUI)
+    if (ImGui::BeginTabItem("Detail Results")) {
+      RenderDetailResultsTab();
+      ImGui::EndTabItem();
+    }
 
-  if (currentList.size() < totalList.size()) {
-    ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "Some processes are hidden by filters");
+    ImGui::EndTabBar();
   }
+}
 
-  ImGui::Separator();
+void RunPageUI::RenderStatusTab() {
+  ImGui::Text("Status & Information");
+  ImGui::Text("Process Filter Status:");
+  ImGui::Text("Showing %d of %d sequences",
+    static_cast<int>(GetCurrentProcessList().size()), 12);
 
-  // Progress information 
   if (m_processRunning) {
-    ImGui::Text("Process: %s", m_selectedProcess.c_str());
-    ImGui::ProgressBar(m_progress, ImVec2(-1, 0));
-
-    if (m_processPaused) {
-      ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "⏸ PAUSED");
-      ImGui::Text("Click RESUME to continue execution");
-    }
-    else {
-      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "▶ RUNNING");
-      ImGui::Text("Process is executing normally");
-    }
-
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Text("Process Controls:");
-    ImGui::BulletText("PAUSE: Temporarily halt execution");
-    ImGui::BulletText("RESUME: Continue from pause point");
-    ImGui::BulletText("STOP: Terminate process completely");
+    ImGui::Text("Process running");
   }
   else {
-    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "⏹ IDLE");
     ImGui::Text("No process running");
 
-    ImGui::Spacing();
     ImGui::Separator();
     ImGui::Text("Ready to Start:");
     ImGui::BulletText("Select a process from Column 1");
@@ -382,7 +388,7 @@ void RunPageUI::RenderColumn3() {
     }
   }
 
-  // Status Messages at bottom of Column3
+  // Status Messages at bottom of tab
   // Calculate space for status area at bottom
   float remainingHeight = ImGui::GetContentRegionAvail().y;
   float statusAreaHeight = 200.0f;
@@ -395,6 +401,18 @@ void RunPageUI::RenderColumn3() {
 
   ImGui::Separator();
   RenderStatusArea(); // Status area at bottom
+}
+
+void RunPageUI::RenderDetailResultsTab() {
+  // Embed the existing OperationsDisplayUI
+  if (m_operationsDisplayUI) {
+    // Render the operations display UI within this tab
+    m_operationsDisplayUI->RenderUI();
+  }
+  else {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Operations Display UI not available");
+    ImGui::Text("Unable to load operation results display.");
+  }
 }
 
 void RunPageUI::RenderControlButtons() {
