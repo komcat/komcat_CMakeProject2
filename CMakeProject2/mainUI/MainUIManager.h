@@ -16,6 +16,7 @@
 #include "Programming/MacroManager.h"
 #include "MacroPanelUI.h"
 #include "RunPageUI.h"
+#include "ConfigFileWatchdog.h"
 
 // Forward declarations
 class MotionConfigManager;
@@ -104,8 +105,8 @@ public:
 
   // NEW: Add getter for UserPromptUI (optional, for debugging)
   UserPromptUI* GetUserPromptUI() const { return m_userPromptUI.get(); }
-
-
+  void SetConfigWatchdog(ConfigFileWatchdog* watchdog);
+  void RenderWatchdogStatus(ConfigFileWatchdog* watchdog);
 private:
   MainPage currentMainPage = MainPage::MAIN;
   ManualSubPage currentManualSubPage = ManualSubPage::NONE;
@@ -138,6 +139,7 @@ private:
   ACSControllerManager* m_acsControllerManager = nullptr;
   DataClientManager* m_dataClientManager = nullptr;
   Keithley2400Manager* m_keithleyManager = nullptr;
+  ConfigFileWatchdog* m_configWatchdog = nullptr;
   // Jog window
   bool m_showGlobalJogWindow = false;
 

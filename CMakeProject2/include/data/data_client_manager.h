@@ -239,7 +239,11 @@ private:
   bool m_isVisible = true;
 
   bool m_showDebug = false; // Add this line
+  // Check if a client is already connected to the same host:port
+  bool IsAlreadyConnectedTo(const std::string& host, int port) const;
 
+  // Get the client info that's connected to specific host:port
+  DataClientInfo* GetClientConnectedTo(const std::string& host, int port);
 public:
   // Constructor takes the path to the config file
   DataClientManager(const std::string& configFilePath);
@@ -283,6 +287,11 @@ public:
   // Add these methods to the public section:
   bool IsVisible() const { return m_isVisible; }
   void ToggleWindow() { m_isVisible = !m_isVisible; }
+  // Check for duplicate connections before connecting
+  bool HasDuplicateConnection(const std::string& serverId) const;
+
+  // Get connection conflicts for a specific server
+  std::vector<std::string> GetConnectionConflicts(const std::string& serverId) const;
 
 
 };

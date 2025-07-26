@@ -884,6 +884,9 @@ void MainUIManager::RenderRunProgramPage() {
 	}
 }
 
+
+// MODIFY the existing RenderConfigPage() method to include watchdog status
+
 void MainUIManager::RenderConfigPage() {
 	ImGui::SetWindowFontScale(1.5f);
 	ImGui::Text("Configuration");
@@ -900,7 +903,21 @@ void MainUIManager::RenderConfigPage() {
 	if (ImGui::Button("2. Node Visualizer", ImVec2(200, 50))) {
 		currentConfigSubPage = ConfigSubPage::NODE_VISUALIZER;
 	}
+
+	// ADD THIS - Watchdog status in config page
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	if (m_configWatchdog) {
+		RenderWatchdogStatus(m_configWatchdog);
+	}
+	else {
+		ImGui::Text("📂 Configuration File Watchdog: Not Available");
+		ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Watchdog not initialized or database unavailable");
+	}
 }
+
 
 void MainUIManager::RenderVisionPage() {
 	ImGui::SetWindowFontScale(1.5f);
@@ -1233,5 +1250,115 @@ void MainUIManager::RenderMacroManagerPage() {
 		ImGui::Spacing();
 		ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create Macro Panel UI");
 		ImGui::Text("Check console for error messages");
+	}
+}
+
+void MainUIManager::SetConfigWatchdog(ConfigFileWatchdog* watchdog) {
+	m_configWatchdog = watchdog;
+	if (watchdog) {
+		std::cout << "MainUIManager: Config watchdog connected" << std::endl;
+	}
+}
+
+
+
+// ADD this helper function (can be private method or standalone function)
+
+void MainUIManager::RenderWatchdogStatus(ConfigFileWatchdog* watchdog) {
+	if (!watchdog) {
+		return;
+	}
+
+	// Create a collapsible section in your UI
+	if (ImGui::CollapsingHeader("📂 Configuration File Watchdog")) {
+		auto stats = watchdog->GetStatistics();
+
+		// Status indicators
+		bool running = stats["running"].get<bool>();
+		if (running) {
+			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "● RUNNING");
+		}
+		else {
+			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "● STOPPED");
+		}
+
+		ImGui::SameLine();
+		ImGui::Text("Uptime: %d minutes", stats["uptime_minutes"].get<int>());
+
+		// Statistics
+		ImGui::Separator();
+		ImGui::Text("Statistics:");
+		ImGui::BulletText("Changes detected: %d", stats["changes_detected"].get<int>());
+		ImGui::BulletText("Database updates: %d", stats["database_updates"].get<int>());
+		ImGui::BulletText("Update failures: %d", stats["update_failures"].get<int>());
+		ImGui::BulletText("Poll interval: %d ms", stats["poll_interval_ms"].get<int>());
+
+		// Watched files
+		ImGui::Separator();
+		ImGui::Text("Watched Files (%d):", stats["watched_files_count"].get<int>());
+
+		if (stats.contains("files") && stats["files"].is_array()) {
+			for (const auto& file : stats["files"]) {
+				std::string filename = file["path"].get<std::string>();
+				bool exists = file["exists"].get<bool>();
+
+				if (exists) {
+					ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓");
+				}
+				else {
+					ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗");
+				}
+				ImGui::SameLine();
+				ImGui::Text("%s", filename.c_str());
+			}
+		}
+
+		// Recent events
+		ImGui::Separator();
+		if (ImGui::TreeNode("Recent Events")) {
+			auto recentEvents = watchdog->GetRecentEvents(5);
+
+			if (recentEvents.empty()) {
+				ImGui::Text("No recent events");
+			}
+			else {
+				for (const auto& event : recentEvents) {
+					if (event.updateSuccess) {
+						ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓");
+					}
+					else {
+						ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗");
+					}
+					ImGui::SameLine();
+					ImGui::Text("%s", event.filename.c_str());
+
+					if (!event.errorMessage.empty()) {
+						ImGui::SameLine();
+						ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+							"(%s)", event.errorMessage.c_str());
+					}
+				}
+			}
+			ImGui::TreePop();
+		}
+
+		// Control buttons
+		ImGui::Separator();
+		if (running) {
+			if (ImGui::Button("Stop Watchdog")) {
+				watchdog->Stop();
+			}
+		}
+		else {
+			if (ImGui::Button("Start Watchdog")) {
+				watchdog->Start();
+			}
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Force Check Now")) {
+			int changes = watchdog->ForceCheck();
+			// Show changes detected in console/log
+		}
 	}
 }

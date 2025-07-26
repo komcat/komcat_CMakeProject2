@@ -38,9 +38,9 @@
 #include "include/motions/motion_control_layer.h"
 
 // NEW: Add the split operation classes
-#include "motion_ops.h"
-#include "io_ops.h"
-#include "vision_ops.h"
+#include "include/ops/motion_ops.h"
+#include "include/ops/io_ops.h"
+#include "include/ops/vision_ops.h"
 #include "Version.h"
 
 #include "raylibclass.h"
@@ -50,8 +50,8 @@
 #include "LiveVideoSubscriber.h"
 #include "CameraConfigManager.h"
 
-
-
+#include "ConfigDatabaseUtils.h"
+#include "ConfigFileWatchdog.h"
 
 
 
@@ -129,6 +129,77 @@ void DebugCameraFeedSetupEnhanced(CameraManager* cameraManager,
 }
 
 
+/**
+ * @brief Initialize database with migration check
+ */
+bool InitializeDatabaseWithMigration(const std::string& databasePath, Logger* logger) {
+	// Initialize database normally
+	if (!ConfigDatabaseUtils::InitializeDatabase(databasePath, logger)) {
+		return false;
+	}
+
+	UAA3::UAA3DatabaseManager& dbManager = UAA3::GetDatabaseManager();
+
+	// Check if any tables need migration
+	auto tables = dbManager.GetAllConfigTables();
+	bool needsMigration = false;
+
+	for (const auto& table : tables) {
+		if (dbManager.IsOldFormatTable(table.tableName)) {
+			needsMigration = true;
+			break;
+		}
+	}
+
+	if (needsMigration) {
+		if (logger) {
+			logger->LogInfo("🔄 Database migration needed - converting to simplified format");
+		}
+
+		// Create backup before migration
+		UAA3::DatabaseResult backupResult = dbManager.CreateBackup();
+		if (backupResult.success) {
+			if (logger) {
+				logger->LogInfo("✅ Backup created: " + backupResult.details);
+			}
+		}
+		else {
+			if (logger) {
+				logger->LogWarning("⚠️ Failed to create backup: " + backupResult.errorMessage);
+			}
+		}
+
+		// Migrate all tables
+		auto migrationResults = dbManager.MigrateAllTablesToNewFormat();
+
+		int successCount = 0;
+		for (const auto& result : migrationResults) {
+			if (result.success) {
+				successCount++;
+				if (logger) {
+					logger->LogInfo("✅ " + result.details);
+				}
+			}
+			else {
+				if (logger) {
+					logger->LogError("❌ " + result.errorMessage + " - " + result.details);
+				}
+			}
+		}
+
+		if (logger) {
+			logger->LogInfo("🎉 Migration completed: " + std::to_string(successCount) +
+				" out of " + std::to_string(migrationResults.size()) + " tables migrated");
+		}
+	}
+	else {
+		if (logger) {
+			logger->LogInfo("✅ Database already using simplified JSON storage format");
+		}
+	}
+
+	return true;
+}
 
 int main(int argc, char* argv[])
 {
@@ -137,6 +208,129 @@ int main(int argc, char* argv[])
 	logger->LogInfo("Hello World from uaa3App!");
 
 	GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+
+
+	// ================================================================
+	// ADD THIS ENTIRE SECTION - DATABASE CONFIGURATION SYSTEM
+	// ================================================================
+
+	// REPLACE the database initialization with this:
+	logger->LogInfo("=== INITIALIZING DATABASE CONFIGURATION SYSTEM ===");
+
+	// Initialize database with automatic migration
+	bool databaseAvailable = InitializeDatabaseWithMigration("", logger);
+	if (databaseAvailable) {
+		logger->LogInfo("✅ Database configuration system ready (with migration check)");
+	}
+	else {
+		logger->LogWarning("⚠️  Database unavailable - using traditional file-based configs");
+	}
+
+	// List of all configuration files to manage with database
+	std::vector<std::string> configFiles = {
+		"camera_calibration.json",
+		"camera_exposure_config.json",
+		"camera_to_object_offset.json",
+		"data_display_config.json",
+		"DataServerConfig.json",
+		"io_panel_config.json",
+		"IOConfig.json",
+		"motion_config.json",
+		"program.json",
+		"script_runner_config.json",
+		"smu_config.json",
+		"toolbar_state.json",
+		"transformation_matrix.json",
+		"camera_config.json",
+	};
+
+	// Load all configurations with database integration
+	logger->LogInfo("Loading configurations with database integration...");
+	std::vector<ConfigDatabaseUtils::ConfigLoadResult> configResults =
+		ConfigDatabaseUtils::LoadMultipleConfigs(configFiles, logger);
+
+	// Log summary of configuration loading
+	int fromDatabase = 0, fromFile = 0, savedToDb = 0, failed = 0;
+	for (const auto& result : configResults) {
+		if (result.success) {
+			if (result.loadedFromDatabase) fromDatabase++;
+			if (result.source == "file") fromFile++;
+			if (result.savedToDatabase) savedToDb++;
+		}
+		else {
+			failed++;
+		}
+	}
+
+	logger->LogInfo("Configuration loading summary:");
+	logger->LogInfo("  📁 From database: " + std::to_string(fromDatabase));
+	logger->LogInfo("  💾 From files: " + std::to_string(fromFile));
+	logger->LogInfo("  💿 Saved to database: " + std::to_string(savedToDb));
+	logger->LogInfo("  ❌ Failed: " + std::to_string(failed));
+
+	// Log database statistics
+	if (databaseAvailable) {
+		ConfigDatabaseUtils::LogDatabaseStats(logger);
+	}
+
+	logger->LogInfo("=== DATABASE CONFIGURATION SYSTEM READY ===");
+	logger->LogInfo("");
+
+
+	// ================================================================
+// CONFIGURATION FILE WATCHDOG SYSTEM  
+// ================================================================
+
+	logger->LogInfo("=== STARTING CONFIGURATION FILE WATCHDOG ===");
+
+	// Create and configure the watchdog
+	std::unique_ptr<ConfigFileWatchdog> configWatchdog = nullptr;
+
+	if (databaseAvailable) {
+		// Create watchdog with manual configuration using our complete config files list
+		configWatchdog = std::make_unique<ConfigFileWatchdog>(1000, true, logger);
+
+		// Add all configuration files from our complete list (defined above)
+		int addedCount = configWatchdog->AddFiles(configFiles);
+		logger->LogInfo("Added " + std::to_string(addedCount) + " out of " +
+			std::to_string(configFiles.size()) + " config files to watchdog");
+
+		// Add custom callback for file changes (optional)
+		configWatchdog->AddChangeCallback([logger](const ConfigFileWatchdog::FileChangeEvent& event) {
+			if (event.updateSuccess) {
+				logger->LogInfo("🔄 Config file auto-synced to database: " + event.filename);
+			}
+			else if (!event.errorMessage.empty()) {
+				logger->LogWarning("⚠️ Auto-sync failed for " + event.filename + ": " + event.errorMessage);
+			}
+			});
+
+		// Start the watchdog
+		if (configWatchdog->Start()) {
+			logger->LogInfo("✅ Configuration file watchdog started");
+			logger->LogInfo("📂 Monitoring " + std::to_string(configWatchdog->GetWatchedFiles().size()) + " config files");
+		}
+		else {
+			logger->LogError("❌ Failed to start configuration file watchdog");
+			configWatchdog.reset();
+		}
+	}
+	else {
+		logger->LogInfo("⏭️ Skipping watchdog - database not available");
+	}
+
+	logger->LogInfo("=== CONFIGURATION SYSTEM READY ===");
+	logger->LogInfo("");
+
+
+	// ================================================================
+	// END OF ADDITIONS - EXISTING CODE CONTINUES UNCHANGED
+	// ================================================================
+
+
+
+
+
 
 	// Initialize SDL
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
@@ -374,7 +568,7 @@ int main(int argc, char* argv[])
 			default: stateStr = "Unknown";
 			}
 			logger->LogInfo("Pneumatic slide '" + slideName + "' changed state to: " + stateStr);
-		});
+			});
 
 		logger->LogInfo("Pneumatic system initialized");
 	}
@@ -569,7 +763,7 @@ int main(int argc, char* argv[])
 			else {
 				logger->LogWarning("Path execution failed or was cancelled");
 			}
-		});
+			});
 		logger->LogInfo("MotionControlLayer initialized");
 	}
 
@@ -739,6 +933,12 @@ int main(int argc, char* argv[])
 		std::cout << "✗ RunPageUI not accessible - check setup" << std::endl;
 	}
 
+	// ADD THIS - Connect watchdog to UI manager
+	if (configWatchdog) {
+		uiManager.SetConfigWatchdog(configWatchdog.get());
+		logger->LogInfo("Config watchdog connected to MainUIManager");
+	}
+
 
 	// In your uaa3App.cpp, replace the camera feed setup section with this:
 
@@ -898,7 +1098,7 @@ int main(int argc, char* argv[])
 	// Set up menu callbacks
 	menuManager->SetOnExitCallback([&done]() {
 		done = true;
-	});
+		});
 
 
 	while (!done)
@@ -1616,6 +1816,23 @@ int main(int argc, char* argv[])
 			}
 		}
 #pragma endregion
+
+
+		// ADD THIS - Optional: Log watchdog stats periodically
+		static auto lastWatchdogStats = std::chrono::steady_clock::now();
+		auto now = std::chrono::steady_clock::now();
+		auto timeSinceStats = std::chrono::duration_cast<std::chrono::minutes>(now - lastWatchdogStats);
+
+		if (configWatchdog && timeSinceStats.count() >= 10) { // Every 10 minutes
+			auto stats = configWatchdog->GetStatistics();
+			if (stats["changes_detected"].get<int>() > 0) {
+				logger->LogInfo("📊 Watchdog stats: " +
+					std::to_string(stats["changes_detected"].get<int>()) + " changes, " +
+					std::to_string(stats["database_updates"].get<int>()) + " DB updates");
+			}
+			lastWatchdogStats = now;
+		}
+
 
 		// Rendering
 		ImGui::Render();
