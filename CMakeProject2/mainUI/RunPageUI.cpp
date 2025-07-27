@@ -4,6 +4,7 @@
 #include <iostream>
 #include <algorithm>
 #include "uaa3_process_builders.h"
+#include "ProcessRegistry.h"
 
 // UPDATE RunPageUI.cpp - Constructor
 RunPageUI::RunPageUI(MachineOperations& machineOps)
@@ -346,9 +347,28 @@ void RunPageUI::ClearCompletedSteps() {
 }
 
 
-// NEW: Get current filtered process list
+// ============================================================================
+// REPLACE: GetCurrentProcessList() method in RunPageUI.cpp
+// ============================================================================
 std::vector<std::string> RunPageUI::GetCurrentProcessList() const {
-  return m_filterManager->GetFilteredProcessList();
+    // Get all processes from registry
+    auto allProcesses = ProcessRegistry::GetInstance().GetAllProcessNames();
+
+    // Apply filters if filter manager is available
+    if (m_filterManager) {
+        std::vector<std::string> filtered;
+        filtered.reserve(allProcesses.size());
+        
+        for (const auto& process : allProcesses) {
+            if (m_filterManager->IsProcessVisible(process)) {
+                filtered.push_back(process);
+            }
+        }
+        return filtered;
+    }
+
+    // If no filter manager, return all processes
+    return allProcesses;
 }
 
 
@@ -910,139 +930,38 @@ void RunPageUI::UpdateStatus(const std::string& message, bool isError) {
   }
 }
 
-// UPDATED: BuildSelectedProcess with UAA3 sequences only
+
+// ============================================================================
+// REPLACE: BuildSelectedProcess() method in RunPageUI.cpp
+// ============================================================================
 std::unique_ptr<SequenceStep> RunPageUI::BuildSelectedProcess() {
+    // Check if process exists in registry
+    if (ProcessRegistry::GetInstance().HasProcess(m_selectedProcess)) {
+        if (m_promptUI) {
+            auto process = ProcessRegistry::GetInstance().BuildProcess(m_selectedProcess, m_machineOps, *m_promptUI);
+            if (process) {
+                UpdateStatus("Building process: " + m_selectedProcess);
+                return process;
+            }
+            else {
+                UpdateStatus("Failed to build process: " + m_selectedProcess, true);
+                return nullptr;
+            }
+        }
+        else {
+            const auto* processInfo = ProcessRegistry::GetInstance().GetProcessInfo(m_selectedProcess);
+            if (processInfo && processInfo->requiresUserPromptUI) {
+                UpdateStatus("UserPromptUI not available for " + m_selectedProcess, true);
+            }
+            else {
+                UpdateStatus("UserPromptUI not configured", true);
+            }
+            return nullptr;
+        }
+    }
 
-  // ============================================================================
-  // UAA3 CORE PROCESSES
-  // ============================================================================
-
-  if (m_selectedProcess == "UAA3_Initialization") {
-    return UAA3ProcessBuilders::BuildInitializationSequence_uaa3(m_machineOps, *m_promptUI);
-  }
-  else if (m_selectedProcess == "UAA3_Probing") {
-    if (m_promptUI) {
-      return UAA3ProcessBuilders::BuildProbingSequence_uaa3(m_machineOps, *m_promptUI);
-    }
-    else {
-      UpdateStatus("UserPromptUI not available for UAA3_Probing", true);
-      return nullptr;
-    }
-  }
-  else if (m_selectedProcess == "UAA3_PickPlaceLeftLens") {
-    if (m_promptUI) {
-      return UAA3ProcessBuilders::BuildPickPlaceLeftLensSequence_uaa3(m_machineOps, *m_promptUI);
-    }
-    else {
-      UpdateStatus("UserPromptUI not available for UAA3_PickPlaceLeftLens", true);
-      return nullptr;
-    }
-  }
-  else if (m_selectedProcess == "UAA3_PickPlaceRightLens") {
-    if (m_promptUI) {
-      return UAA3ProcessBuilders::BuildPickPlaceRightLensSequence_uaa3(m_machineOps, *m_promptUI);
-    }
-    else {
-      UpdateStatus("UserPromptUI not available for UAA3_PickPlaceRightLens", true);
-      return nullptr;
-    }
-  }
-  else if (m_selectedProcess == "UAA3_UVCuring") {
-    if (m_promptUI) {
-      return UAA3ProcessBuilders::BuildUVCuringSequence_uaa3(m_machineOps, *m_promptUI);
-    }
-    else {
-      UpdateStatus("UserPromptUI not available for UAA3_UVCuring", true);
-      return nullptr;
-    }
-  }
-
-  // ============================================================================
-  // UAA3 UTILITY SEQUENCES
-  // ============================================================================
-
-  else if (m_selectedProcess == "UAA3_RejectLeftLens") {
-    if (m_promptUI) {
-      return UAA3ProcessBuilders::RejectLeftLensSequence_uaa3(m_machineOps, *m_promptUI);
-    }
-    else {
-      UpdateStatus("UserPromptUI not available for UAA3_RejectLeftLens", true);
-      return nullptr;
-    }
-  }
-  else if (m_selectedProcess == "UAA3_RejectRightLens") {
-    if (m_promptUI) {
-      return UAA3ProcessBuilders::RejectRightLensSequence_uaa3(m_machineOps, *m_promptUI);
-    }
-    else {
-      UpdateStatus("UserPromptUI not available for UAA3_RejectRightLens", true);
-      return nullptr;
-    }
-  }
-
-  // ============================================================================
-  // UAA3 CALIBRATION SEQUENCES
-  // ============================================================================
-
-  else if (m_selectedProcess == "UAA3_NeedleCalibration") {
-    if (m_promptUI) {
-      return UAA3ProcessBuilders::BuildNeedleXYCalibrationSequenceEnhanced_uaa3(m_machineOps, *m_promptUI);
-    }
-    else {
-      UpdateStatus("UserPromptUI not available for UAA3_NeedleCalibration", true);
-      return nullptr;
-    }
-  }
-  else if (m_selectedProcess == "UAA3_DispenseCalibration1") {
-    if (m_promptUI) {
-      return UAA3ProcessBuilders::BuildDispenseCalibrationSequence_uaa3(m_machineOps, *m_promptUI);
-    }
-    else {
-      UpdateStatus("UserPromptUI not available for UAA3_DispenseCalibration1", true);
-      return nullptr;
-    }
-  }
-  else if (m_selectedProcess == "UAA3_DispenseCalibration2") {
-    if (m_promptUI) {
-      return UAA3ProcessBuilders::BuildDispenseCalibration2Sequence_uaa3(m_machineOps, *m_promptUI);
-    }
-    else {
-      UpdateStatus("UserPromptUI not available for UAA3_DispenseCalibration2", true);
-      return nullptr;
-    }
-  }
-
-  // ============================================================================
-  // UAA3 DISPENSING SEQUENCES
-  // ============================================================================
-
-  else if (m_selectedProcess == "UAA3_DispenseEpoxy1") {
-    if (m_promptUI) {
-      return UAA3ProcessBuilders::BuildDispenseEpoxy1Sequence_uaa3(m_machineOps, *m_promptUI);
-    }
-    else {
-      UpdateStatus("UserPromptUI not available for UAA3_DispenseEpoxy1", true);
-      return nullptr;
-    }
-  }
-  else if (m_selectedProcess == "UAA3_DispenseEpoxy2") {
-    if (m_promptUI) {
-      return UAA3ProcessBuilders::BuildDispenseEpoxy2Sequence_uaa3(m_machineOps, *m_promptUI);
-    }
-    else {
-      UpdateStatus("UserPromptUI not available for UAA3_DispenseEpoxy2", true);
-      return nullptr;
-    }
-  }
-
-  // ============================================================================
-  // DEFAULT FALLBACK
-  // ============================================================================
-
-  else {
+    // Process not found in registry
     UpdateStatus("Unknown process selected: " + m_selectedProcess, true);
     return nullptr;
-  }
 }
-
 

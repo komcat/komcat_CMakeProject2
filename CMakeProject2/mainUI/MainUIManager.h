@@ -17,6 +17,7 @@
 #include "MacroPanelUI.h"
 #include "RunPageUI.h"
 #include "ConfigFileWatchdog.h"
+#include "Processes/SAA3ProcessBuilders/NewProcesses_SAA3.h"
 
 // Forward declarations
 class MotionConfigManager;
