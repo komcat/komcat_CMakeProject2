@@ -89,6 +89,7 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 
 	// Initialize RunPageUI as nullptr - will be created when MachineOperations is set
 	m_runPageUI = nullptr;
+	
 }
 
 
@@ -487,7 +488,10 @@ void MainUIManager::RenderMainPage() {
 }
 
 
-// Update RenderManualPage() to include the pneumatic button:
+// In MainUIManager.cpp - Replace the RenderManualPage() method with this fixed version:
+
+// Fix 1: Use simpler emoji alternatives in RenderManualPage()
+
 void MainUIManager::RenderManualPage() {
 	ImGui::SetWindowFontScale(1.5f);
 	ImGui::Text("Manual Control");
@@ -497,27 +501,31 @@ void MainUIManager::RenderManualPage() {
 	ImGui::Text("Select a manual control option:");
 	ImGui::Spacing();
 
-	if (ImGui::Button("1. PI", ImVec2(200, 50))) {
+
+
+	// OPTION 1: Use simple single-character emojis (avoid compound emojis)
+	if (ImGui::Button(reinterpret_cast<const char*>(u8"1. PI 🤖"), ImVec2(200, 50))) {
 		currentManualSubPage = ManualSubPage::PI;
 	}
 
-	if (ImGui::Button("2. Gantry", ImVec2(200, 50))) {
+	if (ImGui::Button(reinterpret_cast<const char*>(u8"2. Gantry 🦾"), ImVec2(200, 50))) { // Changed from 🦿 to 🦾
 		currentManualSubPage = ManualSubPage::GANTRY;
 	}
 
-	if (ImGui::Button("3. IO", ImVec2(200, 50))) {
+	if (ImGui::Button(reinterpret_cast<const char*>(u8"3. IO ⚡"), ImVec2(200, 50))) { // Changed from 🔌 to ⚡
 		currentManualSubPage = ManualSubPage::IO;
 	}
 
-	if (ImGui::Button("4. Pneumatic", ImVec2(200, 50))) {    // Add this button
+	if (ImGui::Button(reinterpret_cast<const char*>(u8"4. Pneumatic 💨"), ImVec2(200, 50))) {
 		currentManualSubPage = ManualSubPage::PNEUMATIC;
 	}
 
-	if (ImGui::Button("5. Camera", ImVec2(200, 50))) {       // Update number
+	if (ImGui::Button(reinterpret_cast<const char*>(u8"5. Camera 📷"), ImVec2(200, 50))) {
 		currentManualSubPage = ManualSubPage::CAMERA;
 	}
-}
 
+
+}
 
 
 // Update RenderManualSubPage() to include pneumatic case:
@@ -775,35 +783,12 @@ void MainUIManager::RenderTcpDataManagerPage() {
 
 
 
-// ==============================================================================
-// HEADER FILE CHANGES (MainUIManager.h)
-// ==============================================================================
-
-// 1. ADD FORWARD DECLARATION at the top with other forward declarations:
-class CLD101xManager;
-
-// 2. ADD METHOD DECLARATION in public section with other SetXXXManager methods:
-void SetCLD101xManager(CLD101xManager* cld101xManager);
-
-// 3. ADD MEMBER VARIABLE in private section with other manager pointers:
-CLD101xManager* m_cld101xManager = nullptr;
-
-
-// ==============================================================================
-// IMPLEMENTATION FILE CHANGES (MainUIManager.cpp)
-// ==============================================================================
-
 
 // In MainUIManager::SetCLD101xManager method, add:
 void MainUIManager::SetCLD101xManager(CLD101xManager* cld101xManager) {
 	m_cld101xManager = cld101xManager;
 
-	// REMOVE the CLD101xEquipmentUI connection:
-	// if (m_cld101xEquipmentUI) {
-	//     m_cld101xEquipmentUI->SetCLD101xManager(cld101xManager);
-	// }
 
-	// KEEP the Global Data Store integration:
 	if (cld101xManager) {
 		cld101xManager->EnableGlobalDataStoreForAll(true);
 		Logger::GetInstance()->LogInfo("MainUIManager: Enabled Global Data Store for CLD101x equipment");
@@ -811,20 +796,15 @@ void MainUIManager::SetCLD101xManager(CLD101xManager* cld101xManager) {
 }
 
 
-// 2. UPDATE RenderCld101xEquipmentPage() to use the manager:
+
 void MainUIManager::RenderCld101xEquipmentPage() {
 	if (m_cld101xManager) {
-		// Render manager UI directly
+		// Use ONLY the manager's built-in UI - no duplication
 		m_cld101xManager->RenderUI();
 
-		// Also render individual client UIs if needed
-		auto clientNames = m_cld101xManager->GetClientNames();
-		for (const auto& clientName : clientNames) {
-			auto client = m_cld101xManager->GetClient(clientName);
-			if (client && client->IsVisible()) {
-				client->RenderUI();
-			}
-		}
+		// REMOVE the duplicate client rendering loop:
+		// auto clientNames = m_cld101xManager->GetClientNames();
+		// for (const auto& clientName : clientNames) { ... }
 	}
 	else {
 		// Fallback when manager not available
@@ -843,7 +823,6 @@ void MainUIManager::RenderCld101xEquipmentPage() {
 		ImGui::BulletText("Check network connectivity to laser controllers");
 	}
 }
-
 
 // Update RenderSmuManagerPage() method to use the dedicated UI:
 void MainUIManager::RenderSmuManagerPage() {
@@ -1142,6 +1121,11 @@ void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
 		// Create RunPageUI when MachineOperations is available
 		if (m_machineOperations) {
 			m_runPageUI = std::make_unique<RunPageUI>(*m_machineOperations);
+
+			// 4. Set font if available
+			if (m_imguiFont) {
+				m_runPageUI->SetImguiFont(m_imguiFont);
+			}
 		}
 
 	}
@@ -1360,5 +1344,20 @@ void MainUIManager::RenderWatchdogStatus(ConfigFileWatchdog* watchdog) {
 			int changes = watchdog->ForceCheck();
 			// Show changes detected in console/log
 		}
+	}
+}
+
+void MainUIManager::SetImguiFont(ImFont* font) {
+	if (font) {
+		m_imguiFont = font;
+		std::cout << "MainUIManager: Custom font set successfully" << std::endl;
+
+		// Set font for RunPageUI only if it exists
+		if (m_runPageUI) {
+			m_runPageUI->SetImguiFont(m_imguiFont);
+		}
+	}
+	else {
+		std::cerr << "MainUIManager: Failed to set custom font - font is null" << std::endl;
 	}
 }

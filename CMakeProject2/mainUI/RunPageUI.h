@@ -26,13 +26,15 @@ public:
   // Render the run page UI
   void RenderUI();
   void SetUserPromptUI(UserPromptUI* promptUI) { m_promptUI = promptUI; }
-
+  // Add font management methods
+  void SetImguiFont(ImFont* font);
+  ImFont* GetImguiFont() const { return m_imguiFont; }
 private:
   // References to managers
   MachineOperations& m_machineOps;
   std::unique_ptr<MockUserInteractionManager> m_uiManager;
   Logger* m_logger;
-
+  ImFont* m_imguiFont = nullptr;
   // UserPromptUI for modern sequences
   UserPromptUI* m_promptUI = nullptr;
 

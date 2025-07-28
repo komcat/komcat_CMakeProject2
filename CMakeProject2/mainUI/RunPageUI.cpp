@@ -26,6 +26,9 @@ RunPageUI::RunPageUI(MachineOperations& machineOps)
   // Initialize operations display UI for detail results tab
   m_operationsDisplayUI = std::make_unique<OperationsDisplayUI>(machineOps);
 
+
+
+
   m_logger->LogInfo("RunPageUI: Initialized with process filtering and operations display support");
 }
 
@@ -35,6 +38,8 @@ RunPageUI::~RunPageUI() {
 }
 
 void RunPageUI::RenderUI() {
+
+
   // Get available content region
   ImVec2 contentRegion = ImGui::GetContentRegionAvail();
 
@@ -65,7 +70,10 @@ void RunPageUI::RenderUI() {
 }
 
 void RunPageUI::RenderColumn1() {
-  ImGui::Text("Process Control");
+
+
+
+  ImGui::Text(reinterpret_cast<const char*>(u8"🔧 Process Control"));
   ImGui::Separator();
 
   // Render control buttons at the top
@@ -82,6 +90,8 @@ void RunPageUI::RenderColumn1() {
 
   // Render process step buttons (now takes more space)
   RenderProcessButtons();
+
+
 }
 
 // NEW: Render single-line running status with progress bar
@@ -714,7 +724,11 @@ void RunPageUI::RenderStatusArea() {
 // UPDATE: RenderProcessButtons to use filtered list
 void RunPageUI::RenderProcessButtons() {
   ImGui::Text("Process Steps");
-
+  // Push emoji font if available
+  // Push emoji font if available
+  if (m_imguiFont) {
+    ImGui::PushFont(m_imguiFont);
+  }
   // Process buttons with vertical layout
   ImGui::BeginChild("ProcessButtons", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
 
@@ -758,9 +772,9 @@ void RunPageUI::RenderProcessButtons() {
       // Add prefix indicator for UAA3 processes
       std::string displayName = process;
       if (isUAA3) {
-        displayName = "🔧 " + process;
+        //displayName = "🔧 " + process;
+        displayName = std::string(reinterpret_cast<const char*>(u8"⚡ ")) + process;
       }
-
       if (ImGui::Button(displayName.c_str(), ImVec2(buttonWidth, buttonHeight))) {
         m_selectedProcess = process;
         if (!m_processRunning) {
@@ -845,6 +859,13 @@ void RunPageUI::RenderProcessButtons() {
 
   ImGui::PopStyleVar();
   ImGui::EndChild();
+
+
+
+  // Pop emoji font if we pushed it
+  if (m_imguiFont) {
+    ImGui::PopFont();
+  }
 }
 
 // UPDATE: Fix PauseProcess method
@@ -965,3 +986,12 @@ std::unique_ptr<SequenceStep> RunPageUI::BuildSelectedProcess() {
     return nullptr;
 }
 
+void RunPageUI::SetImguiFont(ImFont* font) {
+  if (font) {
+    m_imguiFont = font;
+    std::cout << "RunPageUI: Custom font set successfully" << std::endl;
+  }
+  else {
+    std::cerr << "RunPageUI: Failed to set custom font - font is null" << std::endl;
+  }
+}

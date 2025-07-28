@@ -8,6 +8,11 @@
 #include "backends/imgui_impl_opengl3.h"
 #include "implot/implot.h"
 
+// FreeType support
+#ifdef IMGUI_ENABLE_FREETYPE
+#include "misc/freetype/imgui_freetype.h"
+#endif
+
 // Include our UI manager and config manager
 #include "MainUIManager.h"
 #include "include/motions/MotionConfigManager.h"
@@ -209,7 +214,7 @@ int main(int argc, char* argv[])
 
 	GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
 
-
+#pragma region InitializeDataClientManager
 	// ================================================================
 	// ADD THIS ENTIRE SECTION - DATABASE CONFIGURATION SYSTEM
 	// ================================================================
@@ -322,12 +327,7 @@ int main(int argc, char* argv[])
 	logger->LogInfo("=== CONFIGURATION SYSTEM READY ===");
 	logger->LogInfo("");
 
-
-	// ================================================================
-	// END OF ADDITIONS - EXISTING CODE CONTINUES UNCHANGED
-	// ================================================================
-
-
+#pragma endregion
 
 
 
@@ -374,60 +374,391 @@ int main(int argc, char* argv[])
 	ImPlot::CreateContext();
 
 
-#pragma region Font Loading
+//#pragma region Enhanced Font Loading with FreeType and Emoji Support
+//
+//	// Font loading code with comprehensive Unicode and emoji support
+//	std::cout << "=== INITIALIZING FREETYPE FONT SYSTEM ===" << std::endl;
+//
+//#ifdef IMGUI_ENABLE_FREETYPE
+//	// Enable FreeType font builder
+//	io.Fonts->FontBuilderIO = ImGuiFreeType::GetBuilderForFreeType();
+//	io.Fonts->FontBuilderFlags = ImGuiFreeTypeBuilderFlags_LightHinting;
+//	std::cout << "✅ FreeType 2.13.3 builder enabled" << std::endl;
+//#else
+//	std::cout << "❌ FreeType not enabled - add #define IMGUI_ENABLE_FREETYPE to imconfig.h" << std::endl;
+//#endif
+//
+//#ifdef IMGUI_USE_WCHAR32
+//	std::cout << "✅ IMGUI_USE_WCHAR32 enabled - 32-bit Unicode support active" << std::endl;
+//#else
+//	std::cout << "❌ IMGUI_USE_WCHAR32 disabled - add #define IMGUI_USE_WCHAR32 to imconfig.h for emoji" << std::endl;
+//#endif
+//
+//	// Comprehensive Unicode ranges for technical applications
+//	static const ImWchar comprehensive_ranges[] = {
+//		0x0020, 0x00FF, // Basic Latin + Latin Supplement  
+//		0x0100, 0x017F, // Latin Extended-A
+//		0x0180, 0x024F, // Latin Extended-B
+//		0x0370, 0x03FF, // Greek and Coptic (includes μ at 0x03BC)
+//		0x0400, 0x04FF, // Cyrillic
+//		0x2000, 0x206F, // General Punctuation
+//		0x2070, 0x209F, // Superscripts and Subscripts
+//		0x20A0, 0x20CF, // Currency Symbols
+//		0x2100, 0x214F, // Letterlike Symbols
+//		0x2150, 0x218F, // Number Forms
+//		0x2190, 0x21FF, // Arrows
+//		0x2200, 0x22FF, // Mathematical Operators (comprehensive math symbols)
+//		0x2300, 0x23FF, // Miscellaneous Technical
+//		0x2460, 0x24FF, // Enclosed Alphanumerics
+//		0x25A0, 0x25FF, // Geometric Shapes
+//		0x2600, 0x26FF, // Miscellaneous Symbols
+//		0x2700, 0x27BF, // Dingbats
+//		0x231A, 0x231B, // Watch symbols
+//		0x2764, 0x2764, // Heavy black heart
+//		0,
+//	};
+//
+//	// Emoji ranges for comprehensive emoji support
+//	static const ImWchar emoji_ranges[] = {
+//		0x1F600, 0x1F64F, // Emoticons
+//		0x1F300, 0x1F5FF, // Misc Symbols and Pictographs
+//		0x1F680, 0x1F6FF, // Transport and Map
+//		0x1F700, 0x1F77F, // Alchemical Symbols
+//		0x1F780, 0x1F7FF, // Geometric Shapes Extended
+//		0x1F800, 0x1F8FF, // Supplemental Arrows-C
+//		0x1F900, 0x1F9FF, // Supplemental Symbols and Pictographs
+//		0x1FA00, 0x1FA6F, // Chess Symbols
+//		0x1FA70, 0x1FAFF, // Symbols and Pictographs Extended-A
+//		0x2600, 0x26FF,   // Miscellaneous Symbols (weather, zodiac)
+//		0x2700, 0x27BF,   // Dingbats
+//		0x231A, 0x231B,   // Watch symbols
+//		0x2764, 0x2764,   // Heavy black heart
+//		0,
+//	};
+//
+//	ImFont* mainFont = nullptr;
+//	bool fontLoaded = false;
+//	bool emojiLoaded = false;
+//
+//	// Strategy 1: Try to load project fonts first
+//	std::cout << "1. Trying project fonts..." << std::endl;
+//
+//	const char* projectFonts[] = {
+//		"assets/fonts/NotoSans-Regular.ttf",
+//		"assets/fonts/JuliaMono-Regular.ttf",
+//		"assets/fonts/CascadiaCode-Regular.ttf"
+//	};
+//
+//	for (const char* fontPath : projectFonts) {
+//		if (std::filesystem::exists(fontPath)) {
+//			mainFont = io.Fonts->AddFontFromFileTTF(fontPath, 16.0f, nullptr, comprehensive_ranges);
+//			if (mainFont) {
+//				std::cout << "✅ Loaded project font: " << fontPath << std::endl;
+//				fontLoaded = true;
+//				break;
+//			}
+//		}
+//	}
+//
+//	// Strategy 2: Try system fonts if project fonts not found
+//	if (!fontLoaded) {
+//		std::cout << "2. Trying system fonts..." << std::endl;
+//
+//		const char* systemFonts[] = {
+//			"C:/Windows/Fonts/segoeui.ttf",     // Segoe UI (excellent Unicode support)
+//			"C:/Windows/Fonts/calibri.ttf",    // Calibri
+//			"C:/Windows/Fonts/arial.ttf",      // Arial
+//			"C:/Windows/Fonts/times.ttf",      // Times New Roman
+//		};
+//
+//		for (const char* fontPath : systemFonts) {
+//			if (std::filesystem::exists(fontPath)) {
+//				mainFont = io.Fonts->AddFontFromFileTTF(fontPath, 16.0f, nullptr, comprehensive_ranges);
+//				if (mainFont) {
+//					std::cout << "✅ Loaded system font: " << fontPath << std::endl;
+//					fontLoaded = true;
+//					break;
+//				}
+//			}
+//		}
+//	}
+//
+//	// Strategy 3: Fallback to default font
+//	if (!fontLoaded) {
+//		std::cout << "3. Using ImGui default font..." << std::endl;
+//		mainFont = io.Fonts->AddFontDefault();
+//		fontLoaded = true;
+//	}
+//
+//	// Strategy 4: Merge emoji font for emoji support
+//	std::cout << "4. Loading emoji fonts..." << std::endl;
+//
+//	// Configure emoji font merge
+//	static ImFontConfig emojiConfig;
+//	emojiConfig.MergeMode = true;          // CRITICAL: Merge into existing font
+//	emojiConfig.PixelSnapH = true;
+//	// emojiConfig.GlyphExtraSpacing.x = 1.0f; // Not available in this ImGui version
+//
+//#ifdef IMGUI_ENABLE_FREETYPE
+//	// Enable color emoji loading for FreeType
+//	emojiConfig.FontBuilderFlags |= ImGuiFreeTypeBuilderFlags_LoadColor;
+//	std::cout << "✅ Color emoji loading enabled" << std::endl;
+//#endif
+//
+//	// Try multiple emoji font sources
+//	const char* emojiFonts[] = {
+//		"C:/Windows/Fonts/seguiemj.ttf",           // Windows Segoe UI Emoji (bitmap)
+//		"assets/fonts/NotoColorEmoji.ttf",         // Google Noto Color Emoji (SVG)
+//		"assets/fonts/Apple Color Emoji.ttc",     // Apple Color Emoji (bitmap)
+//		"C:/Windows/Fonts/tahoma.ttf"             // Fallback with some emoji
+//	};
+//
+//	for (const char* emojiPath : emojiFonts) {
+//		if (std::filesystem::exists(emojiPath)) {
+//			std::cout << "Attempting to merge emoji font: " << emojiPath << std::endl;
+//
+//			try {
+//				ImFont* merged = io.Fonts->AddFontFromFileTTF(emojiPath, 16.0f, &emojiConfig, emoji_ranges);
+//				if (merged) {
+//					std::cout << "✅ Successfully merged emoji font: " << emojiPath << std::endl;
+//					emojiLoaded = true;
+//					break;
+//				}
+//			}
+//			catch (const std::exception& e) {
+//				std::cout << "⚠️ Failed to load emoji font " << emojiPath << ": " << e.what() << std::endl;
+//			}
+//		}
+//	}
+//
+//	if (!emojiLoaded) {
+//		std::cout << "⚠️ No emoji fonts loaded - emoji may display as squares" << std::endl;
+//	}
+//
+//	// Build font atlas
+//	std::cout << "5. Building font atlas..." << std::endl;
+//	bool buildSuccess = io.Fonts->Build();
+//	if (buildSuccess) {
+//		std::cout << "✅ Font atlas built successfully" << std::endl;
+//		std::cout << "   Atlas size: " << io.Fonts->TexWidth << "x" << io.Fonts->TexHeight << std::endl;
+//		std::cout << "   Total fonts: " << io.Fonts->Fonts.Size << std::endl;
+//
+//		// Show glyph counts for each font
+//		for (int i = 0; i < io.Fonts->Fonts.Size; i++) {
+//			ImFont* font = io.Fonts->Fonts[i];
+//			std::cout << "   Font " << i << ": " << font->Glyphs.Size << " glyphs, "
+//				<< font->FontSize << "px" << std::endl;
+//		}
+//	}
+//	else {
+//		std::cout << "❌ Failed to build font atlas" << std::endl;
+//	}
+//
+//	// Test critical characters
+//	std::cout << "6. Testing critical character availability..." << std::endl;
+//
+//	struct TestChar {
+//		ImWchar codepoint;
+//		const char* name;
+//	};
+//
+//	TestChar testChars[] = {
+//		{0x03BC, "μ (micro symbol)"},
+//		{0x00B0, "° (degree)"},
+//		{0x00B1, "± (plus-minus)"},
+//		{0x2192, "→ (right arrow)"},
+//		{0x231A, "⌚ (watch)"},
+//		{0x1F60A, "😊 (smile)"},
+//	};
+//
+//	int foundCount = 0;
+//	for (const auto& testChar : testChars) {
+//		bool found = false;
+//		for (int i = 0; i < io.Fonts->Fonts.Size && !found; i++) {
+//			const ImFontGlyph* glyph = io.Fonts->Fonts[i]->FindGlyph(testChar.codepoint);
+//			if (glyph) found = true;
+//		}
+//		if (found) {
+//			std::cout << "   ✅ " << testChar.name << std::endl;
+//			foundCount++;
+//		}
+//		else {
+//			std::cout << "   ❌ " << testChar.name << std::endl;
+//		}
+//	}
+//
+//	std::cout << "=== FONT SYSTEM INITIALIZATION COMPLETE ===" << std::endl;
+//	std::cout << "Summary:" << std::endl;
+//	std::cout << "  Main font: " << (fontLoaded ? "✅ Loaded" : "❌ Failed") << std::endl;
+//	std::cout << "  Emoji support: " << (emojiLoaded ? "✅ Loaded" : "⚠️ Limited") << std::endl;
+//	std::cout << "  Test characters: " << foundCount << "/" << (sizeof(testChars) / sizeof(testChars[0])) << " available" << std::endl;
+//	std::cout << "" << std::endl;
+//
+//#pragma endregion
+
+	// Setup Dear ImGui style
+	ImGui::StyleColorsDark();
 
 
 
-	// Font loading code with Greek support for μ symbol
-	static const ImWchar ranges[] = {
-		0x0020, 0x00FF, // Basic Latin + Latin Supplement  
-		0x0370, 0x03FF, // Greek and Coptic (includes μ at 0x03BC)
-		0x2200, 0x22FF, // Mathematical Operators (JuliaMono has lots of math symbols)
-		0,
-	};
 
-	bool fontLoaded = false;
 
-	// Try bundled font first (put in your project directory)
-	ImFont* font = io.Fonts->AddFontFromFileTTF("assets/fonts/JuliaMono-Regular.ttf", 16.0f, NULL, ranges);
-	if (font != NULL) {
-		logger->LogInfo("Loaded bundled Noto Sans font with Greek support");
-		fontLoaded = true;
+#pragma region ImGui FreeType and Emoji Support
+
+
+#ifdef IMGUI_ENABLE_FREETYPE
+	// Enable FreeType
+	io.Fonts->FontBuilderIO = ImGuiFreeType::GetBuilderForFreeType();
+	io.Fonts->FontBuilderFlags = ImGuiFreeTypeBuilderFlags_LightHinting;
+	std::cout << "✅ FreeType enabled" << std::endl;
+#else
+	std::cout << "❌ FreeType disabled" << std::endl;
+#endif
+
+	// Simple font loading
+	ImFont* mainFont = nullptr;
+	bool emojiLoaded = false;
+
+	// Load main font (try project font, fallback to default)
+	if (std::filesystem::exists("assets/fonts/Roboto-Regular.ttf")) {
+		mainFont = io.Fonts->AddFontFromFileTTF("assets/fonts/Roboto-Regular.ttf", 16.0f);
+		std::cout << "✅ Loaded Roboto-Regular" << std::endl;
 	}
 	else {
-		// Fallback to system fonts
-		const char* systemFonts[] = {
-			"C:/Windows/Fonts/times.ttf",
-			"C:/Windows/Fonts/calibri.ttf",
-			"C:/Windows/Fonts/segoeui.ttf",
-		};
+		mainFont = io.Fonts->AddFontDefault();
+		std::cout << "📝 Using default font" << std::endl;
+	}
 
-		for (const char* fontPath : systemFonts) {
-			font = io.Fonts->AddFontFromFileTTF(fontPath, 16.0f, NULL, ranges);
-			if (font != NULL) {
-				logger->LogInfo("Loaded system font: " + std::string(fontPath));
-				fontLoaded = true;
+	// Try to merge emoji font
+	static ImFontConfig emojiConfig;
+	emojiConfig.MergeMode = true;
+#ifdef IMGUI_ENABLE_FREETYPE
+	emojiConfig.FontBuilderFlags |= ImGuiFreeTypeBuilderFlags_LoadColor;
+#endif
+
+	// UPDATED: Extended emoji ranges for better coverage
+	static const ImWchar extended_emoji_ranges[] = {
+		// Basic emoji blocks
+		0x1F600, 0x1F64F, // Emoticons
+		0x1F300, 0x1F5FF, // Misc Symbols and Pictographs  
+		0x1F680, 0x1F6FF, // Transport and Map
+		0x1F700, 0x1F77F, // Alchemical Symbols
+		0x1F780, 0x1F7FF, // Geometric Shapes Extended
+		0x1F800, 0x1F8FF, // Supplemental Arrows-C
+		0x1F900, 0x1F9FF, // Supplemental Symbols and Pictographs
+		0x1FA00, 0x1FA6F, // Chess Symbols  
+		0x1FA70, 0x1FAFF, // Symbols and Pictographs Extended-A
+
+		// Additional useful ranges
+		0x2600, 0x26FF,   // Miscellaneous Symbols
+		0x2700, 0x27BF,   // Dingbats
+		0x231A, 0x231B,   // Watch symbols
+		0x2764, 0x2764,   // Heavy black heart
+		0x2049, 0x2049,   // Exclamation question mark
+		0x203C, 0x203C,   // Double exclamation mark
+
+		// Enclosed alphanumerics (for circled numbers like ①②③④⑤)
+		0x2460, 0x24FF,   // Enclosed Alphanumerics
+		0x1F100, 0x1F1FF, // Enclosed Alphanumeric Supplement
+
+		// Technical symbols
+		0x2300, 0x23FF,   // Miscellaneous Technical
+		0x25A0, 0x25FF,   // Geometric Shapes
+
+		// Arrows and symbols
+		0x2190, 0x21FF,   // Arrows
+		0x2200, 0x22FF,   // Mathematical Operators
+
+		// Variation selectors (important for emoji presentation)
+		0xFE00, 0xFE0F,   // Variation Selectors
+		0xE0100, 0xE01EF, // Variation Selectors Supplement
+
+		// Zero-width joiner and other combining characters
+		0x200D, 0x200D,   // Zero Width Joiner (for emoji sequences)
+		0x20E3, 0x20E3,   // Combining Enclosing Keycap (for number emojis like 1️⃣)
+
+		0, // Terminator
+	};
+
+	// Try multiple emoji sources (Windows font first - no SVG issues)
+	const char* emojiSources[] = {
+		"C:/Windows/Fonts/seguiemj.ttf"        // Windows emoji (bitmap - no SVG)
+		//,"assets/fonts/NotoColorEmoji.ttf"       // Google emoji (SVG - might fail)
+	};
+
+	for (const char* emojiPath : emojiSources) {
+		if (std::filesystem::exists(emojiPath)) {
+			// Use the extended emoji ranges instead of the wide range
+			ImFont* emoji = io.Fonts->AddFontFromFileTTF(emojiPath, 16.0f, &emojiConfig, extended_emoji_ranges);
+			if (emoji) {
+				std::cout << "✅ Loaded emoji with extended ranges: " << emojiPath << std::endl;
+				emojiLoaded = true;
 				break;
 			}
 		}
 	}
 
-	if (!fontLoaded) {
-		// Final fallback
-		io.Fonts->AddFontDefault();
-		logger->LogWarning("No Greek font support available, using 'um' instead of 'μm'");
+	if (!emojiLoaded) {
+		std::cout << "⚠️ No emoji font loaded" << std::endl;
+
+		// Fallback: Try loading with basic ranges only
+		std::cout << "🔄 Attempting fallback emoji loading..." << std::endl;
+
+		static const ImWchar basic_emoji_ranges[] = {
+			0x1F600, 0x1F64F, // Emoticons only
+			0x2600, 0x26FF,   // Miscellaneous Symbols
+			0x2460, 0x24FF,   // Enclosed Alphanumerics (①②③④⑤)
+			0,
+		};
+
+		for (const char* emojiPath : emojiSources) {
+			if (std::filesystem::exists(emojiPath)) {
+				ImFont* emoji = io.Fonts->AddFontFromFileTTF(emojiPath, 16.0f, &emojiConfig, basic_emoji_ranges);
+				if (emoji) {
+					std::cout << "✅ Loaded emoji with basic ranges: " << emojiPath << std::endl;
+					emojiLoaded = true;
+					break;
+				}
+			}
+		}
 	}
 
-	// Build font atlas BEFORE checking glyphs
-	bool buildSuccess = io.Fonts->Build();
-	if (!buildSuccess) {
-		logger->LogError("Failed to build font atlas");
+	// Build fonts
+	if (io.Fonts->Build()) {
+		std::cout << "✅ Font atlas built successfully" << std::endl;
+		std::cout << "   Total fonts: " << io.Fonts->Fonts.Size << std::endl;
+
+		// Debug: Show glyph counts
+		for (int i = 0; i < io.Fonts->Fonts.Size; i++) {
+			ImFont* font = io.Fonts->Fonts[i];
+			std::cout << "   Font " << i << ": " << font->Glyphs.Size << " glyphs, "
+				<< font->FontSize << "px" << std::endl;
+		}
+
+		if (emojiLoaded) {
+			std::cout << "🎉 Emoji support enabled with extended character ranges" << std::endl;
+		}
+
+
+
+
 	}
+	else {
+		std::cout << "❌ Failed to build font atlas" << std::endl;
+	}
+
+
+
+	// Set the emoji-enabled font as the default font for the entire application
+	if (mainFont && emojiLoaded) {
+		// Make the merged font (main + emoji) the default
+		io.FontDefault = mainFont;  // This makes it the default for everything
+		std::cout << "✅ Set emoji-enabled font as default application font" << std::endl;
+	}
+
 
 #pragma endregion
-
-	// Setup Dear ImGui style
-	ImGui::StyleColorsDark();
+	
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
@@ -1100,6 +1431,8 @@ int main(int argc, char* argv[])
 		done = true;
 		});
 
+
+	//uiManager.SetImguiFont(mainFont);
 
 	while (!done)
 	{
@@ -1832,6 +2165,174 @@ int main(int argc, char* argv[])
 			}
 			lastWatchdogStats = now;
 		}
+
+
+
+
+
+
+
+
+
+
+		// Main test window
+		ImGui::Begin("Emoji Test");
+
+		ImGui::Text("Configuration Status:");
+#ifdef IMGUI_USE_WCHAR32
+		ImGui::TextColored(ImVec4(0, 1, 0, 1), "✅ IMGUI_USE_WCHAR32");
+#else
+		ImGui::TextColored(ImVec4(1, 0, 0, 1), "❌ IMGUI_USE_WCHAR32 - add to imconfig.h");
+#endif
+
+#ifdef IMGUI_ENABLE_FREETYPE
+		ImGui::TextColored(ImVec4(0, 1, 0, 1), "✅ IMGUI_ENABLE_FREETYPE");
+#else
+		ImGui::TextColored(ImVec4(1, 0, 0, 1), "❌ IMGUI_ENABLE_FREETYPE - add to imconfig.h");
+#endif
+
+		if (emojiLoaded) {
+			ImGui::TextColored(ImVec4(0, 1, 0, 1), "✅ Emoji font loaded");
+		}
+		else {
+			ImGui::TextColored(ImVec4(1, 0, 0, 1), "❌ No emoji font");
+		}
+
+		ImGui::Separator();
+
+		ImGui::Text("Font Debug Information:");
+		ImGui::Text("Total fonts loaded: %d", io.Fonts->Fonts.Size);
+
+		for (int i = 0; i < io.Fonts->Fonts.Size; i++) {
+			ImFont* font = io.Fonts->Fonts[i];
+			ImGui::Text("Font %d: %.0f px, %d glyphs", i, font->FontSize, font->Glyphs.Size);
+
+			// Test Greek letters with each font
+			if (ImGui::TreeNode(("Test with Font " + std::to_string(i)).c_str())) {
+				ImGui::PushFont(font);
+				ImGui::Text("Greek test: α β γ μ");
+				ImGui::Text("Math test: ± ÷ × ≠ ∞");
+				ImGui::Text("Emoji test: 👍 ❤ 🔥");
+				ImGui::PopFont();
+				ImGui::TreePop();
+			}
+		}
+
+		ImGui::Separator();
+
+		// Check specific glyph availability
+		ImGui::Text("Glyph Availability Check:");
+
+		struct TestGlyph {
+			ImWchar codepoint;
+			const char* name;
+			const char* utf8;
+		};
+
+		TestGlyph testGlyphs[] = {
+				{0x03B1, "α (alpha)", reinterpret_cast<const char*>(u8"α")},
+				{0x03B2, "β (beta)", reinterpret_cast<const char*>(u8"β")},
+				{0x03B3, "γ (gamma)", reinterpret_cast<const char*>(u8"γ")},
+				{0x03BC, "μ (mu)", reinterpret_cast<const char*>(u8"μ")},
+				{0x1F44D, "👍 (thumbs up)", reinterpret_cast<const char*>(u8"👍")},
+				{0x2764, "❤ (heart)", reinterpret_cast<const char*>(u8"❤")},
+		};
+
+		for (const auto& glyph : testGlyphs) {
+			const ImFontGlyph* g = nullptr;
+			int fontIndex = -1;
+
+			for (int i = 0; i < io.Fonts->Fonts.Size; i++) {
+				g = io.Fonts->Fonts[i]->FindGlyph(glyph.codepoint);
+				if (g) {
+					fontIndex = i;
+					break;
+				}
+			}
+
+			ImGui::Text("U+%04X %s: %s",
+				glyph.codepoint,
+				glyph.name,
+				g ? "✅ Found" : "❌ Missing");
+
+			if (g) {
+				ImGui::SameLine();
+				ImGui::Text("(Font %d) ", fontIndex);
+				ImGui::SameLine();
+
+				// Try to render the actual character
+				if (fontIndex >= 0 && fontIndex < io.Fonts->Fonts.Size) {
+					ImGui::PushFont(io.Fonts->Fonts[fontIndex]);
+					ImGui::Text("%s", reinterpret_cast<const char*>(glyph.utf8));
+					ImGui::PopFont();
+				}
+			}
+		}
+
+		ImGui::Separator();
+
+		// Additional debug: check fallback character
+		ImFont* currentFont = io.Fonts->Fonts[0];
+		ImGui::Text("Font Debug:");
+		ImGui::Text("Fallback char: U+%04X (%c)", currentFont->FallbackChar, (char)currentFont->FallbackChar);
+		ImGui::Text("Ellipsis char: U+%04X", currentFont->EllipsisChar);
+
+		// Test direct character codes
+		ImGui::Text("Direct character test:");
+		ImGui::Text("Alpha test: %lc", (wint_t)0x03B1);  // Try wide character
+
+		ImGui::Separator();
+
+		ImGui::Text("Basic Tests:");
+		ImGui::Text("ASCII: Hello World 123");
+
+		// Test with different approaches
+		ImGui::Text("Unicode Test Methods:");
+		ImGui::Text("Method 1 (reinterpret_cast): ");
+		ImGui::SameLine();
+		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"α β γ μ"));
+
+		ImGui::Text("Method 2 (direct UTF-8): ");
+		ImGui::SameLine();
+		ImGui::Text("α β γ μ");  // Direct UTF-8 without u8 prefix
+
+		ImGui::Text("Method 3 (escape codes): ");
+		ImGui::SameLine();
+		ImGui::Text("\u03B1 \u03B2 \u03B3 \u03BC");  // α β γ μ as Unicode escapes
+
+		ImGui::Text("Method 4 (hex codes): ");
+		ImGui::SameLine();
+		ImGui::Text("U+03B1=%c U+03B2=%c U+03B3=%c U+03BC=%c",
+			(char)0x03B1, (char)0x03B2, (char)0x03B3, (char)0x03BC);
+
+		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"Math: ± ÷ × ≠ ∞"));
+		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"Arrows: ← → ↑ ↓"));
+
+		ImGui::Separator();
+
+		ImGui::Text("Your Test Cases:");
+		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"⌚ <- watch"));
+		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"😊 <- smile"));
+
+		ImGui::Separator();
+
+		ImGui::Text("More Emoji Tests:");
+		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"👍 ❤ 🔥 🎉 🚀"));
+		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"😀 😃 😄 😁 😆"));
+
+		ImGui::Separator();
+
+		ImGui::Text("Instructions:");
+		ImGui::BulletText("Add '#define IMGUI_USE_WCHAR32' to imconfig.h");
+		ImGui::BulletText("Add '#define IMGUI_ENABLE_FREETYPE' to imconfig.h");
+		ImGui::BulletText("Put emoji font in assets/fonts/");
+
+		ImGui::End();
+
+
+
+
+
 
 
 		// Rendering

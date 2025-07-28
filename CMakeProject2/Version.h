@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <string>
 #include <sstream>
 
@@ -8,13 +8,32 @@ version 2.1.0.46
 - add macro manager executing block programs
 - user write multiple block program and connected into larger macro program.
 
+
+version 2.3.2.xxx
+- implement "allicareisyou.db" for local retain config json, prevent overwritting from repostiry when build
+- utilize watchdog to automatic blob dump into local db sqlite.
+- automatic sequence processbuilders registering, only include "uaa3_process_builders.h" to use all modern sequences for example
+- add documentation and newprocess builders template for new process builders
+
+
+
+version 2.3.3.222
+- add emoji support
+Key Lesson Learned:
+For emoji support in ImGui with C++, you need:
+cpp// ❌ This doesn't work reliably:
+ImGui::Text("🔧 Process Control");
+
+// ✅ This works properly:
+ImGui::Text(reinterpret_cast<const char*>(u8"🔧 Process Control"));
+- add freetype support for font rendering
 */
 
 // Version information - manually set for now
 #define VERSION_MAJOR 2
 #define VERSION_MINOR 3
-#define VERSION_PATCH 2
-#define VERSION_BUILD 206
+#define VERSION_PATCH 3
+#define VERSION_BUILD 222
 
 // Build information
 #define BUILD_DATE __DATE__

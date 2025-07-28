@@ -57,6 +57,49 @@ if(WIN32)
 endif()
 
 
+set(FREETYPE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/freetype")
+# FreeType paths
+set(FREETYPE_INCLUDE_DIR "${FREETYPE_DIR}/include")
+
+
+
+#freetype configuration
+if(WIN32)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+
+        # FreeType 2.13.3 libraries - 64-bit
+        if(FREETYPE_USE_DLL)
+            # DLL version (recommended for easier deployment)
+            set(FREETYPE_LIBRARY "${FREETYPE_DIR}/lib/win64/freetype.lib")
+            set(FREETYPE_DLL "${FREETYPE_DIR}/lib/win64/freetype.dll")
+            message(STATUS "Using FreeType 2.13.3 DLL (64-bit)")
+        else()
+            # Static version (no DLL needed)
+            set(FREETYPE_LIBRARY "${FREETYPE_DIR}/lib/static/vs2015-2022/win64/freetype.lib")
+            set(FREETYPE_DLL "")
+            message(STATUS "Using FreeType 2.13.3 Static Library (64-bit)")
+        endif()
+    else()
+ 
+        # FreeType 2.13.3 libraries - 32-bit
+        if(FREETYPE_USE_DLL)
+            set(FREETYPE_LIBRARY "${FREETYPE_DIR}/lib/win32/freetype.lib")
+            set(FREETYPE_DLL "${FREETYPE_DIR}/lib/win32/freetype.dll")
+            message(STATUS "Using FreeType 2.13.3 DLL (32-bit)")
+        else()
+            set(FREETYPE_LIBRARY "${FREETYPE_DIR}/lib/static/vs2015-2022/win32/freetype.lib")
+            set(FREETYPE_DLL "")
+            message(STATUS "Using FreeType 2.13.3 Static Library (32-bit)")
+        endif()
+    endif()
+
+else()
+
+    set(FREETYPE_LIBRARY "freetype")
+endif()
+
+option(FREETYPE_USE_DLL "Use FreeType DLL instead of static library" ON)
+
 
 
 #set eziio
@@ -172,6 +215,7 @@ set(IMGUI_SOURCES
     "${IMGUI_DIR}/imgui_widgets.cpp"
     "${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp"
     "${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
+    "${IMGUI_DIR}/misc/freetype/imgui_freetype.cpp"  # ADD THIS LINE!
 )
 
 # OpenGL - use basic approach rather than find_package
@@ -542,6 +586,8 @@ target_include_directories(CMakeProject2 PRIVATE
      ${INCL_DIR}
      ${INCL_PROCESSES}
      ${INCL_Uaa3_PROCESSES}
+     ${FREETYPE_INCLUDE_DIR}
+     ${FREETYPE_INCLUDE_DIR}
 )
 
 # Link libraries - directly reference libraries
@@ -562,6 +608,7 @@ target_link_libraries(CMakeProject2 PRIVATE
     gdi32     # For Windows GDI
     user32    # For Windows user interface
     shell32   # For Windows shell
+     ${FREETYPE_LIBRARY}
 )
 
 
@@ -866,6 +913,7 @@ target_include_directories(uaa3App PRIVATE
   ${INCL_DIR}
   ${INCL_PROCESSES}
   ${INCL_Uaa3_PROCESSES}
+  ${FREETYPE_INCLUDE_DIR}
 )
 
 # Link libraries - directly reference libraries
@@ -886,8 +934,8 @@ target_link_libraries(uaa3App PRIVATE
   gdi32     # For Windows GDI
   user32    # For Windows user interface
   shell32   # For Windows shell
+  ${FREETYPE_LIBRARY}
 )
-
 
 
 
@@ -903,7 +951,11 @@ target_compile_definitions(CMakeProject2 PRIVATE
     SQLITE_ENABLE_RTREE
     SQLITE_THREADSAFE=1
     SQLITE_ENABLE_COLUMN_METADATA
+
 )
+
+
+
 
 # For Windows, we need to copy the SDL2.dll and PI_GCS2_DLL
 if(WIN32)
@@ -1085,6 +1137,7 @@ add_custom_command(TARGET CMakeProject2 POST_BUILD
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/CascadiaCode-Regular.ttf"
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/JuliaMono-Regular.ttf"
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/NotoSans-Regular.ttf"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/NotoColorEmoji.ttf"
     $<TARGET_FILE_DIR:CMakeProject2>/assets/fonts/
     COMMENT "Copying font files to build directory"
 )
@@ -1143,3 +1196,28 @@ add_custom_command(TARGET CMakeProject2 POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo "Configuration files synchronized to build directory"
     COMMENT "Configuration file copy completed"
 )
+
+# Copy DLLs for Windows
+if(WIN32)
+    # Copy SDL2.dll
+    add_custom_command(TARGET uaa3App POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${SDL2_DLL}
+        $<TARGET_FILE_DIR:uaa3App>
+        COMMENT "Copying SDL2.dll to output directory"
+    )
+    
+    # Copy FreeType DLL if using DLL version
+    if(FREETYPE_USE_DLL AND EXISTS "${FREETYPE_DLL}")
+        add_custom_command(TARGET uaa3App POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${FREETYPE_DLL}
+            $<TARGET_FILE_DIR:uaa3App>
+            COMMENT "Copying FreeType 2.13.3 DLL to output directory"
+        )
+        message(STATUS "FreeType DLL will be copied: ${FREETYPE_DLL}")
+    elseif(FREETYPE_USE_DLL AND NOT EXISTS "${FREETYPE_DLL}")
+        message(WARNING "FreeType DLL not found at: ${FREETYPE_DLL}")
+        message(WARNING "Make sure FreeType DLL is in the correct location")
+    endif()
+endif()

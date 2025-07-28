@@ -94,6 +94,10 @@ public:
   void SetCameraManager(CameraManager* cameraManager);
   void SetDataClientManager(DataClientManager* dataClientManager);
   void SetCLD101xManager(CLD101xManager* cld101xManager);
+  void SetImguiFont(ImFont* font);
+	ImFont* GetImguiFont() const { return m_imguiFont; }
+
+
   // Add this method in the public section with other setter methods:
   void SetKeithley2400Manager(Keithley2400Manager* keithleyManager);
 
@@ -115,6 +119,8 @@ private:
   DataInstrumentSubPage currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
   // ADD THIS LINE with other UI components:
   std::unique_ptr<UserPromptUI> m_promptUI;
+
+	ImFont* m_imguiFont = nullptr; // Pointer to ImGui font 
 
   // Reference to the config manager (owned by main)
   MotionConfigManager& motionConfigManager;
