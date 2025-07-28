@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <string>
 #include <sstream>
 
@@ -21,11 +21,11 @@ version 2.3.3.222
 - add emoji support
 Key Lesson Learned:
 For emoji support in ImGui with C++, you need:
-cpp// ❌ This doesn't work reliably:
-ImGui::Text("🔧 Process Control");
+cpp// ? This doesn't work reliably:
+ImGui::Text("?? Process Control");
 
-// ✅ This works properly:
-ImGui::Text(reinterpret_cast<const char*>(u8"🔧 Process Control"));
+// ? This works properly:
+ImGui::Text(reinterpret_cast<const char*>(u8"?? Process Control"));
 - add freetype support for font rendering
 */
 
@@ -33,7 +33,7 @@ ImGui::Text(reinterpret_cast<const char*>(u8"🔧 Process Control"));
 #define VERSION_MAJOR 2
 #define VERSION_MINOR 3
 #define VERSION_PATCH 3
-#define VERSION_BUILD 222
+#define VERSION_BUILD 223
 
 // Build information
 #define BUILD_DATE __DATE__

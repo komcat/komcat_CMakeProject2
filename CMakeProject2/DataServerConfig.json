@@ -1,77 +1,45 @@
 {
-  "Settings": {
-    "DefaultServerId": "SLED_Current",
-    "MaxLogEntries": 1000,
-    "LogDirectory": "./logs",
-    "AutoSaveData": false,
-    "DataSaveInterval": 60
-  },
   "Servers": [
     {
-      "Id": "SLED_Current",
-      "Name": "SLED Current",
-      "Host": "127.0.0.22",
-      "Port": 22222,
-      "Unit": "mA",
-      "displayUnitSuffix": true,
-      "Description": "SLED Current (mA)",
+      "Id": "GPIB-Current",
+      "Name": "Current reading",
+      "Host": "127.0.0.44",
+      "Port": 55555,
+      "Unit": "A",
+      "displayUnitSuffix":true,
+      "Description": "Keithley multimeter current readings via GPIB",
       "AutoConnect": true,
       "LogData": true
     },
     {
-      "Id": "Photo_Current",
-      "Name": "Photo Current", 
-      "Host": "127.0.0.23",
-      "Port": 22222,
-      "Unit": "uA",
-      "displayUnitSuffix": true,
-      "Description": "Photo Current (uA)",
-      "AutoConnect": true,
+      "Id": "Virtual_1",
+      "Name": "Current reading",
+      "Host": "127.0.0.1",
+      "Port": 8888,
+      "Unit": "unit",
+      "displayUnitSuffix":false,
+      "Description": "random generator1",
+      "AutoConnect": false,
       "LogData": true
     },
     {
-      "Id": "SLED_Temp",
-      "Name": "SLED Temperature",
-      "Host": "127.0.0.24", 
-      "Port": 22222,
-      "Unit": "C",
-      "displayUnitSuffix": true,
-      "Description": "SLED Temperature (C)",
-      "AutoConnect": true,
-      "LogData": true
-    },
-    {
-      "Id": "Target_SAG_PWR",
-      "Name": "Target SAG Power",
-      "Host": "127.0.0.25",
-      "Port": 22222,
-      "Unit": "V",
-      "displayUnitSuffix": true,
-      "Description": "Target SAG Power (V)",
-      "AutoConnect": true,
-      "LogData": true
-    },
-    {
-      "Id": "SAG_PWR",
-      "Name": "SAG Power",
-      "Host": "127.0.0.26",
-      "Port": 22222,
-      "Unit": "V", 
-      "displayUnitSuffix": true,
-      "Description": "SAG Power (V)",
-      "AutoConnect": true,
-      "LogData": true
-    },
-    {
-      "Id": "TEC_Current",
-      "Name": "TEC Current",
-      "Host": "127.0.0.27",
-      "Port": 22222,
-      "Unit": "mA",
-      "displayUnitSuffix": true,
-      "Description": "TEC Current (mA)",
-      "AutoConnect": true,
+      "Id": "Virtual_2",
+      "Name": "Current reading",
+      "Host": "127.0.0.2",
+      "Port": 8888,
+      "Unit": "unit",
+      "displayUnitSuffix":false,
+      "Description": "random generator2",
+      "AutoConnect": false,
       "LogData": true
     }
-  ]
+
+  ],
+  "Settings": {
+    "DefaultServerId": "GPIB-Current",
+    "MaxLogEntries": 1000,
+    "LogDirectory": "C:\\Data\\Logs",
+    "AutoSaveData": false,
+    "DataSaveInterval": 60
+  }
 }

@@ -979,7 +979,7 @@ int main(int argc, char* argv[])
 	std::unique_ptr<DataClientManager> dataClientManager;
 	try {
 		dataClientManager = std::make_unique<DataClientManager>("DataServerConfig.json");
-		dataClientManager->ConnectAutoClients();
+		//dataClientManager->ConnectAutoClients();
 		logger->LogInfo("DataClientManager initialized successfully");
 	}
 	catch (const std::exception& e) {
