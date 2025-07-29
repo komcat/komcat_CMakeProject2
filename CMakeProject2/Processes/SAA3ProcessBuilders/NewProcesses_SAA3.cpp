@@ -1,4 +1,4 @@
-// ============================================================================
+Ôªø// ============================================================================
 // NewProcesses_SAA3.cpp - SAA3 Machine Process Implementations
 // ============================================================================
 
@@ -17,40 +17,41 @@ namespace SAA3Processes {
         // TODO: Implement SAA3 initialization sequence
         // Placeholder implementation - replace with actual SAA3 initialization steps
 
-        // 1. Welcome prompt
-        sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "SAA3 Initialization",
-            "Starting SAA3 machine initialization sequence.\n\n"
-            "This will initialize all SAA3 systems and move\n"
-            "all devices to their safe starting positions.\n\n"
-            "Click YES to begin initialization.",
-            promptUI));
+
+
+        //// 5. Clear output R_Gripper (pin 2)
+        //sequence->AddOperation(std::make_shared<SetOutputOperation>(
+        //    "IOBottom", 2, false));
+
+        // 6. Retract UV_Head pneumatic
+        sequence->AddOperation(std::make_shared<RetractSlideOperation>(
+            "UV_Head"));
+
+        // 7. Retract Dispenser_Head pneumatic
+        sequence->AddOperation(std::make_shared<RetractSlideOperation>(
+            "Dispenser_Head"));
+
+        // 8. Retract Pick_Up_Tool pneumatic
+        sequence->AddOperation(std::make_shared<RetractSlideOperation>(
+            "Pick_Up_Tool"));
 
         // 2. Move to safe positions (adjust nodes for SAA3)
         // TODO: Replace with actual SAA3 node names
         sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-            "saa3-gantry", "SAA3_Process_Flow", "saa3_safe_position"));
+            "gantry-main", "Process_Flow", "node_home"));
 
-        // 3. Initialize outputs (adjust for SAA3 hardware)
-        // TODO: Update with actual SAA3 IO configuration
-        sequence->AddOperation(std::make_shared<SetOutputOperation>(
-            "SAA3_IO", 0, false));  // Clear gripper output
 
-        // 4. Retract pneumatics (adjust for SAA3 hardware)
-        // TODO: Update with actual SAA3 pneumatic names
-        sequence->AddOperation(std::make_shared<RetractSlideOperation>(
-            "SAA3_Gripper"));
+        // 3. Move hex-right to home position
+        sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+            "hex-right", "Process_Flow", "node_8550"));
 
-        // 5. Completion confirmation
-        sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "SAA3 Initialization Complete",
-            "SAA3 machine initialization completed successfully.\n\n"
-            "All systems are now in safe starting positions:\n"
-            "ï Gantry: Safe position\n"
-            "ï Pneumatics: Retracted\n"
-            "ï Outputs: Cleared\n\n"
-            "SAA3 is ready for operation.",
-            promptUI));
+        // 9. Clear dedicated output (pin 10) - Vacuum_Base
+        sequence->AddOperation(std::make_shared<ClearOutputOperationDedicated>(
+            "IOBottom", 7));  // Clear Vacuum_Base (pin 10)
+
+
+
+
 
         return sequence;
     }
@@ -64,69 +65,52 @@ namespace SAA3Processes {
         // TODO: Implement SAA3 pick and place FAU sequence
         // Placeholder implementation - replace with actual SAA3 pick/place steps
 
-        // 1. Start prompt
-        sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "SAA3 PickPlace FAU",
-            "Starting SAA3 pick and place FAU operation.\n\n"
-            "This process will:\n"
-            "ï Move to FAU pickup position\n"
-            "ï Grip the FAU component\n"
-            "ï Move to placement position\n"
-            "ï Place the FAU component\n\n"
-            "Ensure FAU is ready for pickup.",
-            promptUI));
 
-        // 2. Move to FAU pickup position
-        // TODO: Replace with actual SAA3 FAU pickup node
+
+
         sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-            "saa3-gantry", "SAA3_Process_Flow", "saa3_fau_pickup"));
+            "gantry-main", "Process_Flow", "node_FAU"));
 
-        // 3. Position verification
+
+        sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+            "hex-right", "Process_Flow", "node_8593"));
+
+
+        // 4. Wait for user confirmation that grip is successful
         sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "FAU Pickup Position",
-            "Verify FAU component is correctly positioned for pickup.\n\n"
-            "Check that:\n"
-            "ï FAU is properly aligned\n"
-            "ï No obstructions present\n"
-            "ï Gripper is positioned correctly\n\n"
-            "Click YES to proceed with pickup.",
+            "Grip Confirmation",
+            "Confirm to grip?",
             promptUI));
 
-        // 4. Activate gripper
-        // TODO: Update with actual SAA3 gripper control
         sequence->AddOperation(std::make_shared<SetOutputOperation>(
-            "SAA3_IO", 0, true));  // Activate FAU gripper
+            "IOBottom", 2, true));  // Set RIGHT gripper
 
-        // 5. Wait for grip stabilization
         sequence->AddOperation(std::make_shared<WaitOperation>(1000));
 
-        // 6. Grip confirmation
-        sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "FAU Grip Confirmation",
-            "Confirm FAU component is securely gripped.\n\n"
-            "Verify the gripper has properly secured the FAU.\n"
-            "Click YES if grip is secure, NO to abort.",
-            promptUI));
-
-        // 7. Move to placement position
-        // TODO: Replace with actual SAA3 FAU placement node
-        sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-            "saa3-gantry", "SAA3_Process_Flow", "saa3_fau_placement"));
-
-        // 8. Place FAU
+        // Release and re-grip cycle for the RIGHT lens
         sequence->AddOperation(std::make_shared<SetOutputOperation>(
-            "SAA3_IO", 0, false));  // Release FAU gripper
+            "IOBottom", 2, false));  // Release RIGHT gripper
 
-        // 9. Placement confirmation
+        sequence->AddOperation(std::make_shared<WaitOperation>(1000));
+
+        sequence->AddOperation(std::make_shared<SetOutputOperation>(
+            "IOBottom", 2, true));  // Set RIGHT gripper
+
+
         sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "FAU Placement Complete",
-            "SAA3 FAU pick and place operation completed.\n\n"
-            "FAU component has been successfully:\n"
-            "ï Picked up from source position\n"
-            "ï Transported safely\n"
-            "ï Placed at target position\n\n"
-            "Ready for next operation.",
+            "FAU gripped confirmation",
+            "Yes to continue to place.",
             promptUI));
+
+
+        sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+            "gantry-main", "Process_Flow", "node_PIC"));
+
+        sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+            "hex-right", "Process_Flow", "node_8601"));
+
+
+
 
         return sequence;
     }
@@ -137,80 +121,58 @@ namespace SAA3Processes {
     std::unique_ptr<SequenceStep> BuildSAA3DispenseEpoxyFAU(MachineOperations& machineOps, UserPromptUI& promptUI) {
         auto sequence = std::make_unique<SequenceStep>("SAA3 DispenseEpoxy FAU", machineOps);
 
-        // TODO: Implement SAA3 epoxy dispensing for FAU
-        // Placeholder implementation - replace with actual SAA3 dispensing steps
+       
 
-        // 1. Start prompt
-        sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "SAA3 DispenseEpoxy FAU",
-            "Starting SAA3 epoxy dispensing for FAU.\n\n"
-            "This process will:\n"
-            "ï Move to dispensing position\n"
-            "ï Prepare dispensing system\n"
-            "ï Apply precise epoxy pattern\n"
-            "ï Complete dispensing cycle\n\n"
-            "Ensure epoxy system is primed and ready.",
-            promptUI));
 
-        // 2. Move to dispensing position
-        // TODO: Replace with actual SAA3 dispensing node
+
         sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-            "saa3-gantry", "SAA3_Process_Flow", "saa3_fau_dispense_position"));
+            "gantry-main", "Process_Flow", "node_dispense_FAU"));
 
-        // 3. Activate dispensing head
-        // TODO: Update with actual SAA3 dispenser control
+
+
+
         sequence->AddOperation(std::make_shared<ExtendSlideOperation>(
-            "SAA3_Dispenser_Head"));
+            "Dispenser_Head"));
 
-        // 4. Pre-dispense verification
         sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "Pre-Dispense Check",
-            "Verify dispensing setup before starting.\n\n"
-            "Check that:\n"
-            "ï Dispenser head is properly positioned\n"
-            "ï FAU is correctly aligned\n"
-            "ï Epoxy flow is ready\n\n"
-            "Click YES to begin dispensing.",
+            "Please manual jog to dispense position",
+            "Continue click Yes?",
             promptUI));
 
-        // 5. Start epoxy dispensing
-        // TODO: Update with actual SAA3 dispensing control
-        sequence->AddOperation(std::make_shared<SetOutputOperation>(
-            "SAA3_IO", 5, true));  // Start epoxy flow
+        sequence->AddOperation(std::make_shared<MoveRelativeOperation>(
+            "hex-right", "Z", -0.1)); // --> to the left
 
-        // 6. Dispensing pattern (simulate with moves and timing)
-        // TODO: Replace with actual SAA3 dispensing pattern
-        sequence->AddOperation(std::make_shared<WaitOperation>(2000));  // Dispense time
+        sequence->AddOperation(std::make_shared<MoveRelativeOperation>(
+            "gantry-main", "X", 0.3)); // --> to the left
+
+
+        sequence->AddOperation(std::make_shared<SetOutputOperation>(
+            "IOBottom", 15, true,0));  // Start epoxy flow
+
+
+        sequence->AddOperation(std::make_shared<WaitOperation>(1800));  // Dispense time
+
+        sequence->AddOperation(std::make_shared<SetOutputOperation>(
+            "IOBottom", 15, false, 0));  // stop epoxy flow
+
+        sequence->AddOperation(std::make_shared<MoveRelativeOperation>(
+            "gantry-main", "X", -0.3)); // Move left 0.1mm on Y axis
+
+        sequence->AddOperation(std::make_shared<MoveRelativeOperation>(
+            "hex-right", "Z", 0.1)); // Move up 0.1mm on Z axis
 
         // 7. Stop epoxy dispensing
         sequence->AddOperation(std::make_shared<SetOutputOperation>(
-            "SAA3_IO", 5, false));  // Stop epoxy flow
+            "IOBottom", 5, false));  // Stop epoxy flow
 
         // 8. Retract dispensing head
         sequence->AddOperation(std::make_shared<RetractSlideOperation>(
-            "SAA3_Dispenser_Head"));
+            "Dispenser_Head"));
 
-        // 9. Quality check
-        sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "Dispensing Quality Check",
-            "Inspect epoxy dispensing quality.\n\n"
-            "Verify that:\n"
-            "ï Epoxy pattern is complete\n"
-            "ï No air bubbles present\n"
-            "ï Coverage is adequate\n\n"
-            "Click YES if quality is acceptable.",
-            promptUI));
 
-        // 10. Completion confirmation
-        sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "SAA3 Epoxy Dispensing Complete",
-            "SAA3 epoxy dispensing for FAU completed successfully.\n\n"
-            "Dispensing results:\n"
-            "ï Pattern applied correctly\n"
-            "ï Quality verified\n"
-            "ï System ready for curing\n\n"
-            "Proceed to UV curing when ready.",
-            promptUI));
+
+
+
 
         return sequence;
     }
@@ -221,77 +183,74 @@ namespace SAA3Processes {
     std::unique_ptr<SequenceStep> BuildSAA3UVCuring(MachineOperations& machineOps, UserPromptUI& promptUI) {
         auto sequence = std::make_unique<SequenceStep>("SAA3 UV Curing", machineOps);
 
-        // TODO: Implement SAA3 UV curing sequence
-        // Placeholder implementation - replace with actual SAA3 curing steps
 
-        // 1. Start prompt
-        sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "SAA3 UV Curing",
-            "Starting SAA3 UV curing process.\n\n"
-            "This process will:\n"
-            "ï Position UV head over component\n"
-            "ï Set optimal temperature\n"
-            "ï Apply UV light for curing\n"
-            "ï Monitor curing progress\n\n"
-            "Ensure safety glasses are worn.",
-            promptUI));
-
-        // 2. Move to curing position
-        // TODO: Replace with actual SAA3 curing node
         sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-            "saa3-gantry", "SAA3_Process_Flow", "saa3_uv_curing_position"));
+            "gantry-main", "Process_Flow", "node_UV"));
 
-        // 3. Extend UV head
-        // TODO: Update with actual SAA3 UV head control
+
         sequence->AddOperation(std::make_shared<ExtendSlideOperation>(
-            "SAA3_UV_Head"));
+            "UV_Head"));
 
-        // 4. Set temperature
-        // TODO: Update with actual SAA3 temperature control
-        sequence->AddOperation(std::make_shared<SetTECTemperatureOperation>(30.0f));
-
-        // 5. Wait for temperature stabilization
-        sequence->AddOperation(std::make_shared<WaitForLaserTemperatureOperation>(
-            30.0f, 2.0f, 10000));
-
-        // 6. Pre-curing safety check
         sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "UV Curing Safety Check",
-            "SAFETY: UV curing about to begin.\n\n"
-            "Ensure that:\n"
-            "ï All personnel have safety glasses\n"
-            "ï Work area is clear\n"
-            "ï Component is properly positioned\n\n"
-            "Click YES to start UV curing.",
+            "Start UV curing Step1 confirmation",
+            "Continue click Yes?",
             promptUI));
 
-        // 7. Start UV curing
-        // TODO: Update with actual SAA3 UV control
-        sequence->AddOperation(std::make_shared<SetLaserCurrentOperation>(0.300f));
-        sequence->AddOperation(std::make_shared<LaserOnOperation>());
+        //create rising edge IO 14 for UV PLC1
+        sequence->AddOperation(std::make_shared<ClearOutputOperation>(
+            "IOBottom", 14));  
+        sequence->AddOperation(std::make_shared<SetOutputOperation>(
+            "IOBottom", 14, true));  
+        sequence->AddOperation(std::make_shared<ClearOutputOperation>(
+            "IOBottom", 14));  
 
-        // 8. Curing cycle
-        sequence->AddOperation(std::make_shared<WaitOperation>(5000));  // 5 second cure time
+        // wait 3 minutes
+        sequence->AddOperation(std::make_shared<WaitOperation>(90000));
 
-        // 9. Stop UV curing
-        sequence->AddOperation(std::make_shared<LaserOffOperation>());
+        sequence->AddOperation(UserPromptOperation::CreateBasic(
+            "Click Yes when UV step 1 finished to continue to UV step 2",
+            "Continue click Yes.",
+            promptUI));
+
+        sequence->AddOperation(UserPromptOperation::CreateBasic(
+            "Click Yes to Continue UV step 2",
+            "Continue click Yes?",
+            promptUI));
+
+        //create rising edge IO 14 for UV PLC1
+        sequence->AddOperation(std::make_shared<ClearOutputOperation>(
+            "IOBottom", 13));
+        sequence->AddOperation(std::make_shared<SetOutputOperation>(
+            "IOBottom", 13, true));
+        sequence->AddOperation(std::make_shared<ClearOutputOperation>(
+            "IOBottom", 13));
+
+
+        sequence->AddOperation(std::make_shared<WaitOperation>(300000));
+
+
+        sequence->AddOperation(UserPromptOperation::CreateBasic(
+            "Click Yes when UV Step 2 finished, Yes will lift up UV head",
+            "Continue click Yes?",
+            promptUI));
 
         // 10. Retract UV head
         sequence->AddOperation(std::make_shared<RetractSlideOperation>(
-            "SAA3_UV_Head"));
+            "UV_Head"));
 
-        // 11. Cool down
-        sequence->AddOperation(std::make_shared<TECOffOperation>());
+        sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+            "gantry-main", "Process_Flow", "node_home"));
 
-        // 12. Completion confirmation
+        sequence->AddOperation(std::make_shared<ClearOutputOperation>(
+            "IOBottom", 2, 3000)); //clear gripper
+
+        sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
+            "hex-right", "AvoidPlace"));
+
+
         sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "SAA3 UV Curing Complete",
-            "SAA3 UV curing process completed successfully.\n\n"
-            "Curing results:\n"
-            "ï UV exposure completed\n"
-            "ï Component properly cured\n"
-            "ï Temperature normalized\n\n"
-            "Component is ready for final inspection.",
+            "‡∏¢‡∏¥‡∏ô‡∏î‡∏µ‡∏î‡πâ‡∏ß‡∏¢ ‡∏™‡∏≥‡πÄ‡∏£‡πá‡∏à‡πÅ‡∏•‡πâ‡∏ß",
+            "Continue click Yes?",
             promptUI));
 
         return sequence;
@@ -303,81 +262,7 @@ namespace SAA3Processes {
     std::unique_ptr<SequenceStep> BuildSAA3RejectFAU(MachineOperations& machineOps, UserPromptUI& promptUI) {
         auto sequence = std::make_unique<SequenceStep>("SAA3 Reject FAU", machineOps);
 
-        // TODO: Implement SAA3 FAU rejection sequence
-        // Placeholder implementation - replace with actual SAA3 rejection steps
-
-        // 1. Start prompt
-        sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "SAA3 Reject FAU",
-            "Starting SAA3 FAU rejection sequence.\n\n"
-            "This process will safely remove and dispose\n"
-            "of a defective or unwanted FAU component.\n\n"
-            "This action will:\n"
-            "ï Move to FAU position\n"
-            "ï Safely grip the component\n"
-            "ï Transport to reject bin\n"
-            "ï Log rejection reason\n\n"
-            "Click YES to proceed with rejection.",
-            promptUI));
-
-        // 2. Move to FAU position
-        // TODO: Replace with actual SAA3 FAU position node
-        sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-            "saa3-gantry", "SAA3_Process_Flow", "saa3_fau_current_position"));
-
-        // 3. Rejection reason prompt
-        sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "Rejection Reason",
-            "Specify the reason for FAU rejection:\n\n"
-            "Common reasons:\n"
-            "ï Quality defect detected\n"
-            "ï Positioning error\n"
-            "ï Contamination\n"
-            "ï Process failure\n\n"
-            "This will be logged for quality tracking.",
-            promptUI));
-
-        // 4. Activate gripper for rejection
-        // TODO: Update with actual SAA3 gripper control
-        sequence->AddOperation(std::make_shared<SetOutputOperation>(
-            "SAA3_IO", 0, true));  // Activate reject gripper
-
-        // 5. Wait for secure grip
-        sequence->AddOperation(std::make_shared<WaitOperation>(1000));
-
-        // 6. Grip verification
-        sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "Reject Grip Verification",
-            "Verify FAU is securely gripped for rejection.\n\n"
-            "Ensure the gripper has properly secured\n"
-            "the component for safe transport.\n\n"
-            "Click YES if grip is secure.",
-            promptUI));
-
-        // 7. Move to reject bin
-        // TODO: Replace with actual SAA3 reject bin node
-        sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-            "saa3-gantry", "SAA3_Process_Flow", "saa3_reject_bin"));
-
-        // 8. Release into reject bin
-        sequence->AddOperation(std::make_shared<SetOutputOperation>(
-            "SAA3_IO", 0, false));  // Release gripper
-
-        // 9. Move to safe position
-        sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-            "saa3-gantry", "SAA3_Process_Flow", "saa3_safe_position"));
-
-        // 10. Completion confirmation
-        sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "SAA3 FAU Rejection Complete",
-            "SAA3 FAU rejection completed successfully.\n\n"
-            "Rejection summary:\n"
-            "ï Component safely removed\n"
-            "ï Disposed in reject bin\n"
-            "ï Rejection logged\n"
-            "ï System returned to safe position\n\n"
-            "Ready for next operation.",
-            promptUI));
+   
 
         return sequence;
     }
