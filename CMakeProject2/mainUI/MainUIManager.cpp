@@ -21,7 +21,7 @@
 #include "include/data/global_data_store.h" // Add this with your other includes
 #include "include/machine_operations.h"  // Add this include at the top
 
-
+#include <SDL.h>
 #include "implot/implot.h"
 #include <deque>
 #include <map>
@@ -1359,5 +1359,12 @@ void MainUIManager::SetImguiFont(ImFont* font) {
 	}
 	else {
 		std::cerr << "MainUIManager: Failed to set custom font - font is null" << std::endl;
+	}
+}
+
+void MainUIManager::ProcessKeyInput(SDL_Keycode key, bool pressed) {
+	// Forward keyboard input to UIJogWindow if it exists
+	if (m_uiJogWindow) {
+		m_uiJogWindow->ProcessKeyInput(key, pressed);
 	}
 }

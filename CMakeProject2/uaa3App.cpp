@@ -1446,6 +1446,28 @@ int main(int argc, char* argv[])
 			if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE &&
 				event.window.windowID == SDL_GetWindowID(window))
 				done = true;
+
+
+			// *** ADD THIS NEW SECTION FOR KEYBOARD INPUT ***
+	// Process keyboard events for UIJogWindow
+			if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) {
+				// Add debug output to see if keys are being detected
+				const char* keyName = SDL_GetKeyName(event.key.keysym.sym);
+				const char* eventType = (event.type == SDL_KEYDOWN) ? "DOWN" : "UP";
+
+				// Only log common movement keys to avoid spam
+				if (event.key.keysym.sym == SDLK_w || event.key.keysym.sym == SDLK_a ||
+					event.key.keysym.sym == SDLK_s || event.key.keysym.sym == SDLK_d ||
+					event.key.keysym.sym == SDLK_q || event.key.keysym.sym == SDLK_e ||
+					event.key.keysym.sym == SDLK_UP || event.key.keysym.sym == SDLK_DOWN ||
+					event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_RIGHT) {
+
+					logger->LogInfo("Keyboard: " + std::string(keyName) + " " + std::string(eventType));
+				}
+
+				// Forward keyboard events to UIJogWindow through MainUIManager
+				uiManager.ProcessKeyInput(event.key.keysym.sym, event.type == SDL_KEYDOWN);
+			}
 		}
 
 		// Start the Dear ImGui frame

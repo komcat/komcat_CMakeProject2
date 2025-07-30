@@ -18,7 +18,7 @@
 #include "RunPageUI.h"
 #include "ConfigFileWatchdog.h"
 #include "Processes/SAA3ProcessBuilders/NewProcesses_SAA3.h"
-
+#include <SDL.h>
 // Forward declarations
 class MotionConfigManager;
 class UIConfigEditor;
@@ -112,6 +112,9 @@ public:
   UserPromptUI* GetUserPromptUI() const { return m_userPromptUI.get(); }
   void SetConfigWatchdog(ConfigFileWatchdog* watchdog);
   void RenderWatchdogStatus(ConfigFileWatchdog* watchdog);
+
+  // Add this method for keyboard input processing
+  void ProcessKeyInput(SDL_Keycode key, bool pressed);
 private:
   MainPage currentMainPage = MainPage::MAIN;
   ManualSubPage currentManualSubPage = ManualSubPage::NONE;
