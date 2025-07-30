@@ -201,64 +201,91 @@ void RunPageUI::StartProcess(const std::string& processName) {
   m_processThread.detach();
 }
 
-// UPDATE: RenderColumn2 - Add completed steps section
-// UPDATE: RenderColumn2 - Add completed steps section
-// UPDATE: RenderColumn2 - Add completed steps section
+
+// UPDATED: RenderColumn2 to include button ordering controls
 void RunPageUI::RenderColumn2() {
-  ImGui::Text("Process Filters");
-  ImGui::Separator();
+    ImGui::Text("Process Filters & Order");
+    ImGui::Separator();
 
-  // Current preset info
-  auto currentPresets = m_filterManager->GetAvailablePresetFiles();
-  ImGui::Text("Available Presets: %zu", currentPresets.size());
+    // Current preset info
+    auto currentPresets = m_filterManager->GetAvailablePresetFiles();
+    ImGui::Text("Available Presets: %zu", currentPresets.size());
 
-  // Quick filter controls
-  if (ImGui::Button("Configure Filters", ImVec2(-1, 30))) {
-    ShowFilterConfiguration();
-  }
-
-  ImGui::Separator();
-
-  // Show current filter info
-  auto currentList = GetCurrentProcessList();
-  auto totalList = m_filterManager->GetAllAvailableProcesses();
-  ImGui::Text("Visible processes: %zu / %zu", currentList.size(), totalList.size());
-
-  if (currentList.empty()) {
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "All processes hidden");
-    ImGui::TextWrapped("Load a preset or configure filters to show processes");
-  }
-
-  ImGui::Separator();
-
-
-  // Auto-confirm checkbox with UserPromptUI integration
-  bool autoConfirmValue = m_autoConfirm;
-  if (ImGui::Checkbox("Auto-confirm Interactions", &autoConfirmValue)) {
-    m_autoConfirm = autoConfirmValue;
-
-    // Update UserPromptUI auto-confirm setting
-    if (m_promptUI) {
-      m_promptUI->SetAutoConfirm(autoConfirmValue);
-      UpdateStatus("Auto-confirm " + std::string(autoConfirmValue ? "enabled" : "disabled") +
-        " for UAA3 sequences");
+    // Quick filter controls
+    if (ImGui::Button("Configure Filters", ImVec2(-1, 30))) {
+        ShowFilterConfiguration();
     }
 
-    // Update legacy MockUserInteractionManager
-    if (m_uiManager) {
-      m_uiManager->SetAutoConfirm(autoConfirmValue);
+    ImGui::Separator();
+
+    // Show current filter info
+    auto currentList = GetCurrentProcessList();
+    auto sortedList = GetSortedProcessList();
+    auto totalList = m_filterManager->GetAllAvailableProcesses();
+
+    ImGui::Text("Visible processes: %zu / %zu", currentList.size(), totalList.size());
+
+    // NEW: Show sort info
+    if (m_filterManager) {
+        int numberedCount = 0;
+        for (const auto& process : sortedList) {
+            if (m_filterManager->GetProcessSortNumber(process) > 0) {
+                numberedCount++;
+            }
+        }
+        ImGui::Text("Numbered buttons: %d / %zu", numberedCount, sortedList.size());
     }
 
-    std::string status = autoConfirmValue ? "Auto-confirm enabled" : "Auto-confirm disabled";
-    UpdateStatus(status);
-  }
+    if (currentList.empty()) {
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "All processes hidden");
+        ImGui::TextWrapped("Load a preset or configure filters to show processes");
+    }
 
-  ImGui::Separator();
+    ImGui::Separator();
 
-  // NEW: Completed Steps Section
-  RenderCompletedSteps();
+    // NEW: Quick button ordering controls
+    if (m_filterManager && !sortedList.empty()) {
+        ImGui::TextColored(ImVec4(0.8f, 1.0f, 0.8f, 1.0f), "Quick Button Ordering:");
+
+        if (ImGui::Button("Number 1,2,3...", ImVec2(-1, 25))) {
+            m_filterManager->AssignSequentialNumbers();
+        }
+
+        if (ImGui::Button("Number 10,20,30...", ImVec2(-1, 25))) {
+            m_filterManager->AssignSpacedNumbers();
+        }
+
+        if (ImGui::Button("Clear All Numbers", ImVec2(-1, 25))) {
+            m_filterManager->ClearAllSortNumbers();
+        }
+
+        ImGui::Separator();
+    }
+
+    // Auto-confirm checkbox (existing code)
+    bool autoConfirmValue = m_autoConfirm;
+    if (ImGui::Checkbox("Auto-confirm Interactions", &autoConfirmValue)) {
+        m_autoConfirm = autoConfirmValue;
+
+        if (m_promptUI) {
+            m_promptUI->SetAutoConfirm(autoConfirmValue);
+            UpdateStatus("Auto-confirm " + std::string(autoConfirmValue ? "enabled" : "disabled") +
+                " for UAA3 sequences");
+        }
+
+        if (m_uiManager) {
+            m_uiManager->SetAutoConfirm(autoConfirmValue);
+        }
+
+        std::string status = autoConfirmValue ? "Auto-confirm enabled" : "Auto-confirm disabled";
+        UpdateStatus(status);
+    }
+
+    ImGui::Separator();
+
+    // Completed Steps Section (existing code)
+    RenderCompletedSteps();
 }
-
 
 
 
@@ -357,9 +384,8 @@ void RunPageUI::ClearCompletedSteps() {
 }
 
 
-// ============================================================================
-// REPLACE: GetCurrentProcessList() method in RunPageUI.cpp
-// ============================================================================
+
+// KEEP: GetCurrentProcessList method unchanged (for backward compatibility)
 std::vector<std::string> RunPageUI::GetCurrentProcessList() const {
     // Get all processes from registry
     auto allProcesses = ProcessRegistry::GetInstance().GetAllProcessNames();
@@ -368,7 +394,7 @@ std::vector<std::string> RunPageUI::GetCurrentProcessList() const {
     if (m_filterManager) {
         std::vector<std::string> filtered;
         filtered.reserve(allProcesses.size());
-        
+
         for (const auto& process : allProcesses) {
             if (m_filterManager->IsProcessVisible(process)) {
                 filtered.push_back(process);
@@ -382,6 +408,16 @@ std::vector<std::string> RunPageUI::GetCurrentProcessList() const {
 }
 
 
+
+// UPDATED: GetSortedProcessList method - NEW method for sorted buttons
+std::vector<std::string> RunPageUI::GetSortedProcessList() const {
+    if (m_filterManager) {
+        return m_filterManager->GetSortedFilteredProcessList();  // NEW: Use sorted method
+    }
+
+    // Fallback: return all processes from registry if no filter manager
+    return ProcessRegistry::GetInstance().GetAllProcessNames();
+}
 
 
 // UPDATE: ProcessThreadFunc to track both completed and failed processes
@@ -503,21 +539,21 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
 
 
 
-// NEW: Handle filter changes
+// UPDATED: OnFilterChanged to handle sorted list changes
 void RunPageUI::OnFilterChanged() {
-  // Update selected process if it's no longer visible
-  auto currentList = GetCurrentProcessList();
-  auto it = std::find(currentList.begin(), currentList.end(), m_selectedProcess);
+    // Update selected process if it's no longer visible
+    auto currentList = GetSortedProcessList();  // Use sorted list for consistency
+    auto it = std::find(currentList.begin(), currentList.end(), m_selectedProcess);
 
-  if (it == currentList.end() && !currentList.empty()) {
-    // Selected process is no longer visible, select first available
-    m_selectedProcess = currentList[0];
-    UpdateStatus("Process selection changed due to filter update");
-  }
-  else if (currentList.empty()) {
-    // No processes visible, keep current selection but warn user
-    UpdateStatus("No processes visible with current filter settings");
-  }
+    if (it == currentList.end() && !currentList.empty()) {
+        // Selected process is no longer visible, select first available (which is now the first sorted)
+        m_selectedProcess = currentList[0];
+        UpdateStatus("Process selection changed due to filter update - selected: " + m_selectedProcess);
+    }
+    else if (currentList.empty()) {
+        // No processes visible, keep current selection but warn user
+        UpdateStatus("No processes visible with current filter settings");
+    }
 }
 
 
@@ -721,151 +757,202 @@ void RunPageUI::RenderStatusArea() {
   ImGui::EndChild();
 }
 
-// UPDATE: RenderProcessButtons to use filtered list
+
+// UPDATED: RenderProcessButtons to use sorted process list
 void RunPageUI::RenderProcessButtons() {
-  ImGui::Text("Process Steps");
-  // Push emoji font if available
-  // Push emoji font if available
-  if (m_imguiFont) {
-    ImGui::PushFont(m_imguiFont);
-  }
-  // Process buttons with vertical layout
-  ImGui::BeginChild("ProcessButtons", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+    ImGui::Text("Process Steps");
 
-  const float buttonWidth = ImGui::GetContentRegionAvail().x * 0.95f;
-  const float buttonHeight = 35.0f;
-
-  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-
-  // NEW: Use filtered process list instead of static list
-  auto processesToShow = GetCurrentProcessList();
-
-  if (processesToShow.empty()) {
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No processes visible");
-    ImGui::Text("Load a preset to show processes");
-    ImGui::Spacing();
-    if (ImGui::Button("Configure Filters", ImVec2(buttonWidth, buttonHeight))) {
-      ShowFilterConfiguration();
+    // Push emoji font if available
+    if (m_imguiFont) {
+        ImGui::PushFont(m_imguiFont);
     }
-  }
-  else {
-    for (const auto& process : processesToShow) {
-      // Different colors for UAA3 vs Legacy processes
-      bool isUAA3 = (process.find("UAA3_") == 0);
 
-      if (m_selectedProcess == process) {
-        // Selected process - bright green
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.7f, 0.2f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.0f, 0.8f, 0.3f, 1.0f));
-      }
-      else if (isUAA3) {
-        // UAA3 process - blue tint
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.6f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
-      }
-      else {
-        // Legacy process - gray
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
-      }
+    // Process buttons with vertical layout
+    ImGui::BeginChild("ProcessButtons", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
 
-      // Add prefix indicator for UAA3 processes
-      std::string displayName = process;
-      if (isUAA3) {
-        //displayName = "🔧 " + process;
-        displayName = std::string(reinterpret_cast<const char*>(u8"⚡ ")) + process;
-      }
-      if (ImGui::Button(displayName.c_str(), ImVec2(buttonWidth, buttonHeight))) {
-        m_selectedProcess = process;
-        if (!m_processRunning) {
-          StartProcess(process);
+    const float buttonWidth = ImGui::GetContentRegionAvail().x * 0.95f;
+    const float buttonHeight = 35.0f;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+
+    // NEW: Use sorted filtered process list instead of regular filtered list
+    auto processesToShow = GetSortedProcessList();
+
+    if (processesToShow.empty()) {
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No processes visible");
+        ImGui::Text("Load a preset to show processes");
+        ImGui::Spacing();
+        if (ImGui::Button("Configure Filters", ImVec2(buttonWidth, buttonHeight))) {
+            ShowFilterConfiguration();
         }
-      }
+    }
+    else {
+        for (const auto& process : processesToShow) {
+            // Different colors for UAA3 vs Legacy processes (your existing logic)
+            bool isUAA3 = (process.find("UAA3_") == 0);
 
-      // Enhanced tooltips with filter info
-      if (ImGui::IsItemHovered()) {
-        ImGui::BeginTooltip();
-        ImGui::Text("Process: %s", process.c_str());
-        if (isUAA3) {
-          ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "UAA3 Modern Sequence");
-          ImGui::Text("• Uses UserPromptUI");
-          ImGui::Text("• Enhanced safety checks");
-          if (!m_promptUI) {
-            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "⚠ Requires UserPromptUI setup");
-          }
-        }
-        else {
-          ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Legacy Sequence");
-          ImGui::Text("• Uses MockUserInteractionManager");
-        }
-        ImGui::EndTooltip();
-      }
+            if (m_selectedProcess == process) {
+                // Selected process - bright green
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.7f, 0.2f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.0f, 0.8f, 0.3f, 1.0f));
+            }
+            else if (isUAA3) {
+                // UAA3 process - blue tint
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.6f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
+            }
+            else {
+                // Legacy process - gray
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+            }
 
-      // Right-click for process details
-      if (ImGui::BeginPopupContextItem(("ProcessMenu_" + process).c_str())) {
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Process: %s", process.c_str());
+            // NEW: Enhanced display name with sort numbers
+            std::string displayName = process;
+            int sortNum = 0;
 
-        if (isUAA3) {
-          ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "Type: UAA3 Modern");
-        }
-        else {
-          ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Type: Legacy");
-        }
+            if (m_filterManager) {
+                sortNum = m_filterManager->GetProcessSortNumber(process);
+            }
 
-        ImGui::Separator();
+            if (sortNum > 0) {
+                // Show button with number: "1. ProcessName"
+                displayName = std::to_string(sortNum) + ". " + process;
+            }
+            else if (isUAA3) {
+                // UAA3 without number: "⚡ ProcessName"
+                displayName = std::string(reinterpret_cast<const char*>(u8"⚡ ")) + process;
+            }
+            // Regular processes without numbers show as normal
 
-        try {
-          std::string originalSelected = m_selectedProcess;
-          m_selectedProcess = process;
+            if (ImGui::Button(displayName.c_str(), ImVec2(buttonWidth, buttonHeight))) {
+                m_selectedProcess = process;
+                if (!m_processRunning) {
+                    StartProcess(process);
+                }
+            }
 
-          auto sequence = BuildSelectedProcess();
-          if (sequence) {
-            const auto& operations = sequence->GetOperations();
-            ImGui::Text("Operations: %zu", operations.size());
+            // Enhanced tooltips with sort number info
+            if (ImGui::IsItemHovered()) {
+                ImGui::BeginTooltip();
+                ImGui::Text("Process: %s", process.c_str());
+
+                // NEW: Show sort number in tooltip
+                if (sortNum > 0) {
+                    ImGui::TextColored(ImVec4(0.8f, 1.0f, 0.8f, 1.0f), "Button Order: %d", sortNum);
+                }
+
+                if (isUAA3) {
+                    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "UAA3 Modern Sequence");
+                    ImGui::Text("• Uses UserPromptUI");
+                    ImGui::Text("• Enhanced safety checks");
+                    if (!m_promptUI) {
+                        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "⚠ Requires UserPromptUI setup");
+                    }
+                }
+                else {
+                    ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Legacy Sequence");
+                    ImGui::Text("• Uses MockUserInteractionManager");
+                }
+
+                // NEW: Quick sort number assignment in tooltip
+                if (m_filterManager && !m_processRunning) {
+                    ImGui::Separator();
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 1.0f, 1.0f), "Right-click for quick number assignment");
+                }
+
+                ImGui::EndTooltip();
+            }
+
+            // NEW: Right-click context menu for quick sort number assignment
+            if (ImGui::BeginPopupContextItem(("ProcessMenu_" + process).c_str())) {
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Process: %s", process.c_str());
+
+                if (isUAA3) {
+                    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "Type: UAA3 Modern");
+                }
+                else {
+                    ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Type: Legacy");
+                }
+
+                ImGui::Separator();
+
+                // NEW: Quick sort number assignment
+                if (m_filterManager) {
+                    ImGui::TextColored(ImVec4(0.8f, 1.0f, 0.8f, 1.0f), "Button Order:");
+
+                    static int quickSortNum = sortNum > 0 ? sortNum : 1;
+                    ImGui::SetNextItemWidth(80);
+                    if (ImGui::InputInt("Number", &quickSortNum, 1, 5)) {
+                        if (quickSortNum < 0) quickSortNum = 0;
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("Apply")) {
+                        m_filterManager->SetProcessSortNumber(process, quickSortNum);
+                        ImGui::CloseCurrentPopup();
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("Remove")) {
+                        m_filterManager->RemoveProcessSortNumber(process);
+                        ImGui::CloseCurrentPopup();
+                    }
+
+                    ImGui::Separator();
+                }
+
+                // Existing process details section
+                try {
+                    std::string originalSelected = m_selectedProcess;
+                    m_selectedProcess = process;
+
+                    auto sequence = BuildSelectedProcess();
+                    if (sequence) {
+                        const auto& operations = sequence->GetOperations();
+                        ImGui::Text("Operations: %zu", operations.size());
+                        ImGui::Spacing();
+
+                        for (size_t i = 0; i < (std::min)(operations.size(), size_t(10)); ++i) {
+                            ImGui::Text("%zu. %s", i + 1, operations[i]->GetDescription().c_str());
+                        }
+
+                        if (operations.size() > 10) {
+                            ImGui::Text("... and %zu more", operations.size() - 10);
+                        }
+                    }
+                    else {
+                        ImGui::Text("Error: Could not build sequence");
+                        if (isUAA3 && !m_promptUI) {
+                            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "UserPromptUI not available");
+                        }
+                    }
+
+                    m_selectedProcess = originalSelected;
+                }
+                catch (const std::exception& e) {
+                    ImGui::Text("Error: %s", e.what());
+                }
+
+                if (ImGui::Button("Close")) {
+                    ImGui::CloseCurrentPopup();
+                }
+
+                ImGui::EndPopup();
+            }
+
+            ImGui::PopStyleColor(2);
             ImGui::Spacing();
-
-            for (size_t i = 0; i < (std::min)(operations.size(), size_t(10)); ++i) {
-              ImGui::Text("%zu. %s", i + 1, operations[i]->GetDescription().c_str());
-            }
-
-            if (operations.size() > 10) {
-              ImGui::Text("... and %zu more", operations.size() - 10);
-            }
-          }
-          else {
-            ImGui::Text("Error: Could not build sequence");
-            if (isUAA3 && !m_promptUI) {
-              ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "UserPromptUI not available");
-            }
-          }
-
-          m_selectedProcess = originalSelected;
         }
-        catch (const std::exception& e) {
-          ImGui::Text("Error: %s", e.what());
-        }
-
-        if (ImGui::Button("Close")) {
-          ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::EndPopup();
-      }
-
-      ImGui::PopStyleColor(2);
-      ImGui::Spacing();
     }
-  }
 
-  ImGui::PopStyleVar();
-  ImGui::EndChild();
+    ImGui::PopStyleVar();
+    ImGui::EndChild();
 
-
-
-  // Pop emoji font if we pushed it
-  if (m_imguiFont) {
-    ImGui::PopFont();
-  }
+    // Pop emoji font if we pushed it
+    if (m_imguiFont) {
+        ImGui::PopFont();
+    }
 }
 
 // UPDATE: Fix PauseProcess method

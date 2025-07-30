@@ -244,6 +244,9 @@ private:
 
   // Get the client info that's connected to specific host:port
   DataClientInfo* GetClientConnectedTo(const std::string& host, int port);
+
+  static bool s_instanceExists;
+
 public:
   // Constructor takes the path to the config file
   DataClientManager(const std::string& configFilePath);

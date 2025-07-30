@@ -11,6 +11,7 @@
 #include <cmath>
 #include <iostream>
 
+bool DataClientManager::s_instanceExists = false;
 
 // Constructor
 DataClientManager::DataClientManager(const std::string& configFilePath)
@@ -20,6 +21,10 @@ DataClientManager::DataClientManager(const std::string& configFilePath)
   m_dataSaveInterval(60),
   m_showDebug(false) // Add this line
 {
+    if (s_instanceExists) {
+        throw std::runtime_error("DataClientManager instance already exists");
+    }
+    s_instanceExists = true;
   // Load configuration
   if (!LoadConfig()) {
     Logger::GetInstance()->LogError("Failed to load data server configuration: " + configFilePath);
@@ -34,6 +39,8 @@ DataClientManager::DataClientManager(const std::string& configFilePath)
 
 // Destructor
 DataClientManager::~DataClientManager() {
+
+    s_instanceExists = false;
   // Disconnect all clients
   for (auto& clientInfo : m_clients) {
     if (clientInfo.connected) {
