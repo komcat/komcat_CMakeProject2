@@ -214,7 +214,7 @@ int main(int argc, char* argv[])
 
 	GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
 
-#pragma region InitializeDataClientManager
+#pragma region INITIALIZING DATABASE CONFIGURATION SYSTEM
 	// ================================================================
 	// ADD THIS ENTIRE SECTION - DATABASE CONFIGURATION SYSTEM
 	// ================================================================
@@ -248,6 +248,41 @@ int main(int argc, char* argv[])
 		"transformation_matrix.json",
 		"camera_config.json",
 	};
+
+	// SCAN PRESETS FOLDER DYNAMICALLY
+	logger->LogInfo("Scanning presets folder for JSON files...");
+	std::string presetsFolder = "presets";
+	int presetFilesFound = 0;
+
+	try {
+		if (std::filesystem::exists(presetsFolder) && std::filesystem::is_directory(presetsFolder)) {
+			for (const auto& entry : std::filesystem::directory_iterator(presetsFolder)) {
+				if (entry.is_regular_file()) {
+					std::string filename = entry.path().filename().string();
+					std::string extension = entry.path().extension().string();
+
+					// Convert extension to lowercase for comparison
+					std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+					if (extension == ".json") {
+						// Add relative path from presets folder
+						std::string relativePath = entry.path().string();
+						configFiles.push_back(relativePath);
+						presetFilesFound++;
+						logger->LogInfo("  📄 Found preset: " + filename);
+					}
+				}
+			}
+		}
+		else {
+			logger->LogWarning("⚠️ Presets folder not found: " + presetsFolder);
+		}
+	}
+	catch (const std::filesystem::filesystem_error& e) {
+		logger->LogError("❌ Error scanning presets folder: " + std::string(e.what()));
+	}
+
+	logger->LogInfo("Found " + std::to_string(presetFilesFound) + " preset files in /" + presetsFolder);
 
 	// Load all configurations with database integration
 	logger->LogInfo("Loading configurations with database integration...");
@@ -295,10 +330,14 @@ int main(int argc, char* argv[])
 		// Create watchdog with manual configuration using our complete config files list
 		configWatchdog = std::make_unique<ConfigFileWatchdog>(1000, true, logger);
 
-		// Add all configuration files from our complete list (defined above)
+		// Add all configuration files from our complete list (includes presets)
 		int addedCount = configWatchdog->AddFiles(configFiles);
 		logger->LogInfo("Added " + std::to_string(addedCount) + " out of " +
 			std::to_string(configFiles.size()) + " config files to watchdog");
+
+		if (presetFilesFound > 0) {
+			logger->LogInfo("  📂 Including " + std::to_string(presetFilesFound) + " preset files in watchdog");
+		}
 
 		// Add custom callback for file changes (optional)
 		configWatchdog->AddChangeCallback([logger](const ConfigFileWatchdog::FileChangeEvent& event) {
