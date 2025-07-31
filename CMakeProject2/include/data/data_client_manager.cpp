@@ -33,7 +33,7 @@ DataClientManager::DataClientManager(const std::string& configFilePath)
     Logger::GetInstance()->LogInfo("Data server configuration loaded: " + configFilePath);
 
     // Connect to auto-connect clients
-    ConnectAutoClients();
+    //ConnectAutoClients();
   }
 }
 

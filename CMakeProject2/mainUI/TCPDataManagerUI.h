@@ -1,4 +1,3 @@
-
 // TCPDataManagerUI.h
 #pragma once
 
@@ -7,25 +6,25 @@
 
 class TCPDataManagerUI {
 private:
-  DataClientManager* m_dataClientManager = nullptr; // Changed to raw pointer
-  bool m_isInitialized = false;
+	DataClientManager* m_dataClientManager = nullptr; // Changed to raw pointer
+	bool m_isInitialized = false;
 
 public:
-  TCPDataManagerUI();
-  ~TCPDataManagerUI();
+	TCPDataManagerUI();
+	~TCPDataManagerUI();
 
-  // Initialize with external data client manager
-  bool Initialize(DataClientManager* dataClientManager);
+	// Initialize with external data client manager
+	bool Initialize(DataClientManager* dataClientManager);
 
-  // Update the manager (call this every frame)
-  void Update();
+	// Update the manager (call this every frame)
+	void Update();
 
-  // Render the UI
-  void Render();
+	// Render the UI
+	void Render();
 
-  // Check if initialized
-  bool IsInitialized() const { return m_isInitialized; }
+	// Check if initialized
+	bool IsInitialized() const { return m_isInitialized; }
 
-  // Get access to the underlying manager (if needed)
-  DataClientManager* GetManager() { return m_dataClientManager; }
+	// Get access to the underlying manager (if needed)
+	DataClientManager* GetManager() { return m_dataClientManager; }
 };
