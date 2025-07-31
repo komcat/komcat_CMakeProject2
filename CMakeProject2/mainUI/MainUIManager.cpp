@@ -79,7 +79,7 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 
 	// Initialize TCP Data Manager UI
 	m_tcpDataManagerUI = std::make_unique<TCPDataManagerUI>();
-	if (!m_tcpDataManagerUI->Initialize()) {
+	if (!m_tcpDataManagerUI->Initialize(m_dataClientManager)) {
 		// Log error but continue - the UI will show the error state
 		std::cout << "Warning: TCP Data Manager failed to initialize" << std::endl;
 	}
@@ -1044,6 +1044,16 @@ void MainUIManager::SetDataClientManager(DataClientManager* dataClientManager) {
 
 	if (m_dataClientManager) {
 		std::cout << "MainUIManager: DataClientManager set successfully" << std::endl;
+
+		// Initialize TCPDataManagerUI with the external DataClientManager
+		if (m_tcpDataManagerUI) {
+			if (m_tcpDataManagerUI->Initialize(m_dataClientManager)) {
+				std::cout << "MainUIManager: TCPDataManagerUI initialized with external DataClientManager" << std::endl;
+			}
+			else {
+				std::cout << "MainUIManager: Failed to initialize TCPDataManagerUI" << std::endl;
+			}
+		}
 
 		// Pass the data client manager to the Global Data Store Viewer
 		if (m_globalDataStoreViewerUI) {

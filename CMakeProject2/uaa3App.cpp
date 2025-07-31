@@ -1294,6 +1294,14 @@ int main(int argc, char* argv[])
 		uiManager.SetMachineOperations(machineOps.get());
 		logger->LogInfo("MachineOperations set in MainUIManager");
 	}
+
+	if (dataClientManager) {
+		uiManager.SetDataClientManager(dataClientManager.get());
+		logger->LogInfo("DataClientManager passed to MainUIManager");
+	}
+
+
+
 	// Connect UserPromptUI to RunPageUI
 	// Verify it worked
 	if (auto* runPageUI = uiManager.GetRunPageUI()) {
@@ -1436,9 +1444,10 @@ int main(int argc, char* argv[])
 	}
 
 
+
 	//debug setup 
 // You can call this function in your main loop or when troubleshooting:
-	DebugCameraFeedSetupEnhanced(cameraManager.get(), raylibCameraFeed.get(), raylibWindow.get(), logger);
+	//DebugCameraFeedSetupEnhanced(cameraManager.get(), raylibCameraFeed.get(), raylibWindow.get(), logger);
 
 
 
