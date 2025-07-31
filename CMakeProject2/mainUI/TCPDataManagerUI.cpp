@@ -1,3 +1,4 @@
+
 // TCPDataManagerUI.cpp
 #include "TCPDataManagerUI.h"
 #include "imgui.h"
@@ -8,26 +9,20 @@ TCPDataManagerUI::TCPDataManagerUI() {
 }
 
 TCPDataManagerUI::~TCPDataManagerUI() {
-  // Destructor - cleanup handled by unique_ptr
+  // Destructor - no cleanup needed since we don't own the pointer
 }
 
-bool TCPDataManagerUI::Initialize(const std::string& configPath) {
-  try {
-    // Create the data client manager with config file
-    m_dataClientManager = std::make_unique<DataClientManager>(configPath);
-
-    // Try to connect auto-connect clients
-    m_dataClientManager->ConnectAutoClients();
-
-    m_isInitialized = true;
-    std::cout << "TCPDataManagerUI initialized with config: " << configPath << std::endl;
-    return true;
-  }
-  catch (const std::exception& e) {
-    std::cerr << "Failed to initialize TCPDataManagerUI: " << e.what() << std::endl;
+bool TCPDataManagerUI::Initialize(DataClientManager* dataClientManager) {
+  if (!dataClientManager) {
+    std::cerr << "Failed to initialize TCPDataManagerUI: dataClientManager is nullptr" << std::endl;
     m_isInitialized = false;
     return false;
   }
+
+  m_dataClientManager = dataClientManager;
+  m_isInitialized = true;
+  std::cout << "TCPDataManagerUI initialized with external DataClientManager" << std::endl;
+  return true;
 }
 
 void TCPDataManagerUI::Update() {
@@ -48,14 +43,9 @@ void TCPDataManagerUI::Render() {
 
     ImGui::Spacing();
     ImGui::Text("The TCP Data Manager failed to initialize.");
-    ImGui::BulletText("Check if DataServerConfig.json exists");
-    ImGui::BulletText("Verify JSON format is correct");
-    ImGui::BulletText("Check console for error messages");
+    ImGui::BulletText("DataClientManager pointer is null");
+    ImGui::BulletText("Check main() initialization");
 
-    ImGui::Spacing();
-    if (ImGui::Button("Retry Initialization")) {
-      Initialize();
-    }
     return;
   }
 
@@ -106,12 +96,6 @@ void TCPDataManagerUI::Render() {
     for (size_t i = 0; i < clientCount; ++i) {
       m_dataClientManager->DisconnectClient(static_cast<int>(i));
     }
-  }
-
-  ImGui::SameLine();
-  if (ImGui::Button("Reload Config")) {
-    // Reinitialize with the same config
-    Initialize();
   }
 
   ImGui::Spacing();

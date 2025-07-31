@@ -1,3 +1,4 @@
+
 // TCPDataManagerUI.h
 #pragma once
 
@@ -6,15 +7,15 @@
 
 class TCPDataManagerUI {
 private:
-  std::unique_ptr<DataClientManager> m_dataClientManager;
+  DataClientManager* m_dataClientManager = nullptr; // Changed to raw pointer
   bool m_isInitialized = false;
 
 public:
   TCPDataManagerUI();
   ~TCPDataManagerUI();
 
-  // Initialize the data client manager
-  bool Initialize(const std::string& configPath = "DataServerConfig.json");
+  // Initialize with external data client manager
+  bool Initialize(DataClientManager* dataClientManager);
 
   // Update the manager (call this every frame)
   void Update();
@@ -26,5 +27,5 @@ public:
   bool IsInitialized() const { return m_isInitialized; }
 
   // Get access to the underlying manager (if needed)
-  DataClientManager* GetManager() { return m_dataClientManager.get(); }
+  DataClientManager* GetManager() { return m_dataClientManager; }
 };
