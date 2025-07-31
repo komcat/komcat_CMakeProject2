@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include "imgui.h"
-
+#include <iostream>
 // Forward declaration approach to avoid header conflicts
 // We'll use void* pointers and cast them when needed
 // Forward declare MachineOperations class to enable casting
@@ -46,20 +46,21 @@ extern "C" {
 extern "C" bool MachineOperations_IsScanActive(void* machineOpsPtr, const char* deviceName);
 
 RealtimeChartPage::RealtimeChartPage(Logger* logger)
-  : m_logger(logger), m_dataStore(nullptr), m_fontLoaded(false),
-  m_machineOperations(nullptr), m_piControllerManager(nullptr),
-  m_dataChannel("GPIB-Current"), m_timeWindow(10.0f),  // Keep default
-  m_currentValue(0.0f), m_scaledValue(0.0f),
-  m_selectedChannelIndex(0),  // NEW: Initialize channel index
-  m_leftCoarseState(ScanState::IDLE), m_leftFineState(ScanState::IDLE),
-  m_rightCoarseState(ScanState::IDLE), m_rightFineState(ScanState::IDLE) {
+    : m_logger(logger), m_dataStore(nullptr), m_fontLoaded(false),
+    m_machineOperations(nullptr), m_piControllerManager(nullptr),
+    m_dataChannel("GPIB-Current"), m_timeWindow(10.0f),  // Keep default but will be changed by selector
+    m_currentValue(0.0f), m_scaledValue(0.0f),
+    m_selectedChannelIndex(0),
+    m_leftCoarseState(ScanState::IDLE), m_leftFineState(ScanState::IDLE),
+    m_rightCoarseState(ScanState::IDLE), m_rightFineState(ScanState::IDLE) {
 
-  // NEW: Initialize available channels with default
-  m_availableChannels = { "GPIB-Current" };
+    // Initialize available channels with default
+    m_availableChannels = { "GPIB-Current" };
 
-  if (m_logger) {
-    m_logger->LogInfo("RealtimeChartPage created");
-  }
+    if (m_logger) {
+        m_logger->LogInfo("RealtimeChartPage created");
+        m_logger->LogInfo("Initial data channel: " + m_dataChannel);  // Show initial channel
+    }
 
   // Load custom font
   m_customFont = LoadFont("assets/fonts/CascadiaCode-Regular.ttf");
@@ -277,75 +278,107 @@ void RealtimeChartPage::renderDigitalDisplay() {
 
 
 
+// Add this debug version to RealtimeChartPage.cpp - add at the start of renderButtons method:
+
 void RealtimeChartPage::renderButtons() {
-  int screenWidth = GetScreenWidth();
-  int screenHeight = GetScreenHeight();
-  int topSectionHeight = (int)(screenHeight * 0.6f);
+    int screenWidth = GetScreenWidth();
+    int screenHeight = GetScreenHeight();
+    int topSectionHeight = (int)(screenHeight * 0.6f);
 
-  // Button dimensions
-  int buttonWidth = 120;
-  int buttonHeight = 50;
-  int buttonSpacing = 20;
+    // Debug screen dimensions
+    static bool dimensionsLogged = false;
+    if (!dimensionsLogged) {
+        std::cout << "[DEBUG] Screen dimensions: " << screenWidth << "x" << screenHeight << std::endl;
+        std::cout << "[DEBUG] Top section height: " << topSectionHeight << std::endl;
+        if (m_logger) {
+            m_logger->LogInfo("Screen: " + std::to_string(screenWidth) + "x" + std::to_string(screenHeight) +
+                ", TopSection: " + std::to_string(topSectionHeight));
+        }
+        dimensionsLogged = true;
+    }
 
-  // Left side buttons
-  int leftX = 30;
-  int leftCoarseY = 300;
-  int leftFineY = leftCoarseY + buttonHeight + buttonSpacing;
+    // Button dimensions
+    int buttonWidth = 120;
+    int buttonHeight = 50;
+    int buttonSpacing = 20;
 
-  Rectangle leftCoarseBtn = { (float)leftX, (float)leftCoarseY, (float)buttonWidth, (float)buttonHeight };
-  Rectangle leftFineBtn = { (float)leftX, (float)leftFineY, (float)buttonWidth, (float)buttonHeight };
+    // Left side buttons
+    int leftX = 30;
+    int leftCoarseY = 300;
+    int leftFineY = leftCoarseY + buttonHeight + buttonSpacing;
 
-  // Right side buttons  
-  int rightX = screenWidth - buttonWidth - 30;
-  int rightCoarseY = 300;
-  int rightFineY = rightCoarseY + buttonHeight + buttonSpacing;
+    Rectangle leftCoarseBtn = { (float)leftX, (float)leftCoarseY, (float)buttonWidth, (float)buttonHeight };
+    Rectangle leftFineBtn = { (float)leftX, (float)leftFineY, (float)buttonWidth, (float)buttonHeight };
 
-  Rectangle rightCoarseBtn = { (float)rightX, (float)rightCoarseY, (float)buttonWidth, (float)buttonHeight };
-  Rectangle rightFineBtn = { (float)rightX, (float)rightFineY, (float)buttonWidth, (float)buttonHeight };
+    // Right side buttons  
+    int rightX = screenWidth - buttonWidth - 30;
+    int rightCoarseY = 300;
+    int rightFineY = rightCoarseY + buttonHeight + buttonSpacing;
 
-  // Stop button (center, below value display)
-  int stopWidth = 100;
-  int stopHeight = 40;
-  int stopX = screenWidth / 2 - stopWidth / 2;
-  int stopY = topSectionHeight - 80;
+    Rectangle rightCoarseBtn = { (float)rightX, (float)rightCoarseY, (float)buttonWidth, (float)buttonHeight };
+    Rectangle rightFineBtn = { (float)rightX, (float)rightFineY, (float)buttonWidth, (float)buttonHeight };
 
-  Rectangle stopBtn = { (float)stopX, (float)stopY, (float)stopWidth, (float)stopHeight };
+    // Debug button coordinates
+    static bool coordsLogged = false;
+    if (!coordsLogged) {
+        std::cout << "[DEBUG] Button coordinates:" << std::endl;
+        std::cout << "  Left Coarse: " << leftCoarseBtn.x << "," << leftCoarseBtn.y << " " << leftCoarseBtn.width << "x" << leftCoarseBtn.height << std::endl;
+        std::cout << "  Right Coarse: " << rightCoarseBtn.x << "," << rightCoarseBtn.y << " " << rightCoarseBtn.width << "x" << rightCoarseBtn.height << std::endl;
+        std::cout << "  Left Fine: " << leftFineBtn.x << "," << leftFineBtn.y << " " << leftFineBtn.width << "x" << leftFineBtn.height << std::endl;
+        std::cout << "  Right Fine: " << rightFineBtn.x << "," << rightFineBtn.y << " " << rightFineBtn.width << "x" << rightFineBtn.height << std::endl;
 
-  // Draw buttons
-  drawButton(leftCoarseBtn, "Left Coarse", m_leftCoarseState);
-  drawButton(leftFineBtn, "Left Fine", m_leftFineState);
-  drawButton(rightCoarseBtn, "Right Coarse", m_rightCoarseState);
-  drawButton(rightFineBtn, "Right Fine", m_rightFineState);
+        if (m_logger) {
+            m_logger->LogInfo("Button coords - LeftCoarse: " + std::to_string(leftCoarseBtn.x) + "," + std::to_string(leftCoarseBtn.y));
+            m_logger->LogInfo("Button coords - RightCoarse: " + std::to_string(rightCoarseBtn.x) + "," + std::to_string(rightCoarseBtn.y));
+        }
+        coordsLogged = true;
+    }
 
-  // Stop button (always red when any scanning is active)
-  bool anyScanning = (m_leftCoarseState == ScanState::SCANNING ||
-    m_leftFineState == ScanState::SCANNING ||
-    m_rightCoarseState == ScanState::SCANNING ||
-    m_rightFineState == ScanState::SCANNING);
+    // Stop button (center, below value display)
+    int stopWidth = 100;
+    int stopHeight = 40;
+    int stopX = screenWidth / 2 - stopWidth / 2;
+    int stopY = topSectionHeight - 80;
 
-  Color stopColor = anyScanning ? RED : DARKGRAY;
-  Vector2 mousePos = GetMousePosition();
-  bool stopHovered = CheckCollisionPointRec(mousePos, stopBtn);
+    Rectangle stopBtn = { (float)stopX, (float)stopY, (float)stopWidth, (float)stopHeight };
 
-  if (stopHovered && anyScanning) {
-    stopColor = MAROON; // Darker red when hovered
-  }
+    // Draw buttons
+    drawButton(leftCoarseBtn, "Left Coarse", m_leftCoarseState);
+    drawButton(leftFineBtn, "Left Fine", m_leftFineState);
+    drawButton(rightCoarseBtn, "Right Coarse", m_rightCoarseState);
+    drawButton(rightFineBtn, "Right Fine", m_rightFineState);
 
-  DrawRectangleRec(stopBtn, stopColor);
-  DrawRectangleLinesEx(stopBtn, 2, BLACK);
+    // Stop button (always red when any scanning is active)
+    bool anyScanning = (m_leftCoarseState == ScanState::SCANNING ||
+        m_leftFineState == ScanState::SCANNING ||
+        m_rightCoarseState == ScanState::SCANNING ||
+        m_rightFineState == ScanState::SCANNING);
 
-  // Draw stop button text with custom font
-  Font font = m_fontLoaded ? m_customFont : GetFontDefault();
-  const char* stopText = "STOP";
-  int fontSize = 16;
-  Vector2 stopTextSize = MeasureTextEx(font, stopText, fontSize, 2);
-  Vector2 stopTextPos = {
-    stopBtn.x + stopBtn.width / 2 - stopTextSize.x / 2,
-    stopBtn.y + stopBtn.height / 2 - stopTextSize.y / 2
-  };
+    Color stopColor = anyScanning ? RED : DARKGRAY;
+    Vector2 mousePos = GetMousePosition();
+    bool stopHovered = CheckCollisionPointRec(mousePos, stopBtn);
 
-  DrawTextEx(font, stopText, stopTextPos, fontSize, 2, WHITE);
+    if (stopHovered && anyScanning) {
+        stopColor = MAROON; // Darker red when hovered
+    }
+
+    DrawRectangleRec(stopBtn, stopColor);
+    DrawRectangleLinesEx(stopBtn, 2, BLACK);
+
+    // Draw stop button text with custom font
+    Font font = m_fontLoaded ? m_customFont : GetFontDefault();
+    const char* stopText = "STOP";
+    int fontSize = 16;
+    Vector2 stopTextSize = MeasureTextEx(font, stopText, fontSize, 2);
+    Vector2 stopTextPos = {
+        stopBtn.x + stopBtn.width / 2 - stopTextSize.x / 2,
+        stopBtn.y + stopBtn.height / 2 - stopTextSize.y / 2
+    };
+
+    DrawTextEx(font, stopText, stopTextPos, fontSize, 2, WHITE);
 }
+
+
 
 bool RealtimeChartPage::drawButton(Rectangle rect, const char* text, ScanState state) {
   Vector2 mousePos = GetMousePosition();
@@ -383,80 +416,147 @@ bool RealtimeChartPage::drawButton(Rectangle rect, const char* text, ScanState s
   return isHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
 
+// Add this debug version to RealtimeChartPage.cpp - replace the handleButtonClicks method:
+
 void RealtimeChartPage::handleButtonClicks() {
-  int screenWidth = GetScreenWidth();
-  int screenHeight = GetScreenHeight();
-  int topSectionHeight = (int)(screenHeight * 0.6f);
+    // Add general debug at the start
+    static int clickCheckCount = 0;
+    clickCheckCount++;
 
-  // Button dimensions (same as in renderButtons)
-  int buttonWidth = 120;
-  int buttonHeight = 50;
-  int buttonSpacing = 20;
-
-  // Left side buttons
-  int leftX = 30;
-  int leftCoarseY = 150;
-  int leftFineY = leftCoarseY + buttonHeight + buttonSpacing;
-
-  Rectangle leftCoarseBtn = { (float)leftX, (float)leftCoarseY, (float)buttonWidth, (float)buttonHeight };
-  Rectangle leftFineBtn = { (float)leftX, (float)leftFineY, (float)buttonWidth, (float)buttonHeight };
-
-  // Right side buttons  
-  int rightX = screenWidth - buttonWidth - 30;
-  int rightCoarseY = 150;
-  int rightFineY = rightCoarseY + buttonHeight + buttonSpacing;
-
-  Rectangle rightCoarseBtn = { (float)rightX, (float)rightCoarseY, (float)buttonWidth, (float)buttonHeight };
-  Rectangle rightFineBtn = { (float)rightX, (float)rightFineY, (float)buttonWidth, (float)buttonHeight };
-
-  // Stop button
-  int stopWidth = 100;
-  int stopHeight = 40;
-  int stopX = screenWidth / 2 - stopWidth / 2;
-  int stopY = topSectionHeight - 80;
-
-  Rectangle stopBtn = { (float)stopX, (float)stopY, (float)stopWidth, (float)stopHeight };
-
-  // Check button clicks
-  if (drawButton(leftCoarseBtn, "Left Coarse", m_leftCoarseState)) {
-    if (m_leftCoarseState == ScanState::IDLE) {
-      startHexLeftCoarseScan();
+    if (clickCheckCount % 300 == 0) { // Every 5 seconds at 60fps
+        std::cout << "[DEBUG] handleButtonClicks called " << clickCheckCount << " times" << std::endl;
+        if (m_logger) {
+            m_logger->LogInfo("handleButtonClicks called " + std::to_string(clickCheckCount) + " times");
+        }
     }
-  }
 
-  if (drawButton(leftFineBtn, "Left Fine", m_leftFineState)) {
-    if (m_leftFineState == ScanState::IDLE) {
-      startHexLeftFineScan();
+    int screenWidth = GetScreenWidth();
+    int screenHeight = GetScreenHeight();
+    int topSectionHeight = (int)(screenHeight * 0.6f);
+
+    // Button dimensions (same as in renderButtons)
+    int buttonWidth = 120;
+    int buttonHeight = 50;
+    int buttonSpacing = 20;
+
+    // Left side buttons
+    int leftX = 30;
+    int leftCoarseY = 300;  // Make sure this matches renderButtons
+    int leftFineY = leftCoarseY + buttonHeight + buttonSpacing;
+
+    Rectangle leftCoarseBtn = { (float)leftX, (float)leftCoarseY, (float)buttonWidth, (float)buttonHeight };
+    Rectangle leftFineBtn = { (float)leftX, (float)leftFineY, (float)buttonWidth, (float)buttonHeight };
+
+    // Right side buttons  
+    int rightX = screenWidth - buttonWidth - 30;
+    int rightCoarseY = 300;  // Make sure this matches renderButtons
+    int rightFineY = rightCoarseY + buttonHeight + buttonSpacing;
+
+    Rectangle rightCoarseBtn = { (float)rightX, (float)rightCoarseY, (float)buttonWidth, (float)buttonHeight };
+    Rectangle rightFineBtn = { (float)rightX, (float)rightFineY, (float)buttonWidth, (float)buttonHeight };
+
+    // Stop button
+    int stopWidth = 100;
+    int stopHeight = 40;
+    int stopX = screenWidth / 2 - stopWidth / 2;
+    int stopY = topSectionHeight - 80;
+
+    Rectangle stopBtn = { (float)stopX, (float)stopY, (float)stopWidth, (float)stopHeight };
+
+    // Debug mouse position
+    Vector2 mousePos = GetMousePosition();
+    static Vector2 lastMousePos = { -1, -1 };
+
+    if (mousePos.x != lastMousePos.x || mousePos.y != lastMousePos.y) {
+        if (clickCheckCount % 60 == 0) { // Every second
+            std::cout << "[DEBUG] Mouse position: " << mousePos.x << ", " << mousePos.y << std::endl;
+        }
+        lastMousePos = mousePos;
     }
-  }
 
-  if (drawButton(rightCoarseBtn, "Right Coarse", m_rightCoarseState)) {
-    if (m_rightCoarseState == ScanState::IDLE) {
-      startHexRightCoarseScan();
+    // Debug mouse clicks
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        std::cout << "[DEBUG] MOUSE CLICK DETECTED at: " << mousePos.x << ", " << mousePos.y << std::endl;
+        if (m_logger) {
+            m_logger->LogInfo("Mouse click detected at: " + std::to_string(mousePos.x) + ", " + std::to_string(mousePos.y));
+        }
     }
-  }
 
-  if (drawButton(rightFineBtn, "Right Fine", m_rightFineState)) {
-    if (m_rightFineState == ScanState::IDLE) {
-      startHexRightFineScan();
+    // Check button clicks with detailed debug
+    if (drawButton(leftCoarseBtn, "Left Coarse", m_leftCoarseState)) {
+        std::cout << "[DEBUG] LEFT COARSE BUTTON CLICKED!" << std::endl;
+        if (m_logger) {
+            m_logger->LogInfo("LEFT COARSE BUTTON CLICKED!");
+        }
+        if (m_leftCoarseState == ScanState::IDLE) {
+            startHexLeftCoarseScan();
+        }
     }
-  }
 
-  // Stop button click
-  Vector2 mousePos = GetMousePosition();
-  bool stopHovered = CheckCollisionPointRec(mousePos, stopBtn);
-  if (stopHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-    stopAllScanning();
-  }
+    if (drawButton(leftFineBtn, "Left Fine", m_leftFineState)) {
+        std::cout << "[DEBUG] LEFT FINE BUTTON CLICKED!" << std::endl;
+        if (m_logger) {
+            m_logger->LogInfo("LEFT FINE BUTTON CLICKED!");
+        }
+        if (m_leftFineState == ScanState::IDLE) {
+            startHexLeftFineScan();
+        }
+    }
+
+    if (drawButton(rightCoarseBtn, "Right Coarse", m_rightCoarseState)) {
+        std::cout << "[DEBUG] RIGHT COARSE BUTTON CLICKED!" << std::endl;
+        if (m_logger) {
+            m_logger->LogInfo("RIGHT COARSE BUTTON CLICKED!");
+        }
+        if (m_rightCoarseState == ScanState::IDLE) {
+            startHexRightCoarseScan();
+        }
+    }
+
+    if (drawButton(rightFineBtn, "Right Fine", m_rightFineState)) {
+        std::cout << "[DEBUG] RIGHT FINE BUTTON CLICKED!" << std::endl;
+        if (m_logger) {
+            m_logger->LogInfo("RIGHT FINE BUTTON CLICKED!");
+        }
+        if (m_rightFineState == ScanState::IDLE) {
+            startHexRightFineScan();
+        }
+    }
+
+    // Stop button click
+    bool stopHovered = CheckCollisionPointRec(mousePos, stopBtn);
+    if (stopHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        std::cout << "[DEBUG] STOP BUTTON CLICKED!" << std::endl;
+        if (m_logger) {
+            m_logger->LogInfo("STOP BUTTON CLICKED!");
+        }
+        stopAllScanning();
+    }
+
+    // Debug button hover states
+    static bool lastLeftCoarseHover = false;
+    static bool lastRightCoarseHover = false;
+
+    bool leftCoarseHover = CheckCollisionPointRec(mousePos, leftCoarseBtn);
+    bool rightCoarseHover = CheckCollisionPointRec(mousePos, rightCoarseBtn);
+
+    if (leftCoarseHover != lastLeftCoarseHover) {
+        std::cout << "[DEBUG] Left Coarse hover: " << (leftCoarseHover ? "IN" : "OUT") << std::endl;
+        lastLeftCoarseHover = leftCoarseHover;
+    }
+
+    if (rightCoarseHover != lastRightCoarseHover) {
+        std::cout << "[DEBUG] Right Coarse hover: " << (rightCoarseHover ? "IN" : "OUT") << std::endl;
+        lastRightCoarseHover = rightCoarseHover;
+    }
 }
-
 
 
 void RealtimeChartPage::startHexLeftCoarseScan() {
   if (m_logger) {
     m_logger->LogInfo("Starting Hex-Left Coarse Scan");
   }
-
+  std::cout << "Starting Hex-Left Coarse Scan" << std::endl;
   // Execute RunScanOperation with coarse preset
   executeRunScanOperation("hex-left", { 0.005, 0.001, 0.0005 });
   m_leftCoarseState = ScanState::SCANNING;
@@ -466,7 +566,7 @@ void RealtimeChartPage::startHexLeftFineScan() {
   if (m_logger) {
     m_logger->LogInfo("Starting Hex-Left Fine Scan");
   }
-
+  std::cout << "Starting Hex-Left Fine Scan" << std::endl;
   // Execute RunScanOperation with fine preset
   executeRunScanOperation("hex-left", { 0.0005, 0.0002 });
   m_leftFineState = ScanState::SCANNING;
@@ -475,7 +575,9 @@ void RealtimeChartPage::startHexLeftFineScan() {
 void RealtimeChartPage::startHexRightCoarseScan() {
   if (m_logger) {
     m_logger->LogInfo("Starting Hex-Right Coarse Scan");
+
   }
+  std::cout << "Starting Hex-Right Coarse Scan" << std::endl;
 
   // Execute RunScanOperation with coarse preset
   executeRunScanOperation("hex-right", { 0.005, 0.001, 0.0005 });
@@ -486,7 +588,7 @@ void RealtimeChartPage::startHexRightFineScan() {
   if (m_logger) {
     m_logger->LogInfo("Starting Hex-Right Fine Scan");
   }
-
+  std::cout << "Starting Hex-Right Fine Scan" << std::endl;
   // Execute RunScanOperation with fine preset
   executeRunScanOperation("hex-right", { 0.0005, 0.0002 });
   m_rightFineState = ScanState::SCANNING;
@@ -628,68 +730,68 @@ void RealtimeChartPage::renderChart() {
   DrawTextEx(font, minLabel, Vector2{ 25, (float)(chartArea.y + chartArea.height - 15) }, labelFontSize, 2, LIGHTGRAY);
 }
 
+
 void RealtimeChartPage::executeRunScanOperation(const std::string& device,
-  const std::vector<double>& stepSizes) {
-  if (!m_machineOperations) {
-    if (m_logger) {
-      m_logger->LogError("RealtimeChart: MachineOperations not available");
-    }
-    return;
-  }
-
-  try {
-    if (m_logger) {
-      m_logger->LogInfo("RealtimeChart: Starting scan operation for " + device);
-      std::string stepStr;
-      for (size_t i = 0; i < stepSizes.size(); ++i) {
-        if (i > 0) stepStr += ", ";
-        stepStr += std::to_string(stepSizes[i]);
-      }
-      m_logger->LogInfo("  Step sizes: {" + stepStr + "}");
-      m_logger->LogInfo("  Data channel: GPIB-Current");
-      m_logger->LogInfo("  Settling time: 300ms");
+    const std::vector<double>& stepSizes) {
+    if (!m_machineOperations) {
+        if (m_logger) {
+            m_logger->LogError("RealtimeChart: MachineOperations not available");
+        }
+        return;
     }
 
+    try {
+        if (m_logger) {
+            m_logger->LogInfo("RealtimeChart: Starting scan operation for " + device);
+            std::string stepStr;
+            for (size_t i = 0; i < stepSizes.size(); ++i) {
+                if (i > 0) stepStr += ", ";
+                stepStr += std::to_string(stepSizes[i]);
+            }
+            m_logger->LogInfo("  Step sizes: {" + stepStr + "}");
+            // CHANGED: Use the active channel instead of hardcoded "GPIB-Current"
+            m_logger->LogInfo("  Data channel: " + m_dataChannel);  // Use m_dataChannel instead of "GPIB-Current"
+            m_logger->LogInfo("  Settling time: 300ms");
+        }
 
-    // Prepare parameters for C wrapper
-    std::vector<std::string> axes = { "Z", "X", "Y" };
-    std::vector<const char*> axesCStr;
-    for (const auto& axis : axes) {
-      axesCStr.push_back(axis.c_str());
+        // Prepare parameters for C wrapper
+        std::vector<std::string> axes = { "Z", "X", "Y" };
+        std::vector<const char*> axesCStr;
+        for (const auto& axis : axes) {
+            axesCStr.push_back(axis.c_str());
+        }
+
+        int settlingTimeMs = 300;
+        std::string callerContext = "RealtimeChartPage_" + device + "_scan";
+
+        // CHANGED: Use m_dataChannel instead of hardcoded "GPIB-Current"
+        bool success = MachineOperations_StartScan(
+            m_machineOperations,
+            device.c_str(),
+            m_dataChannel.c_str(),  // Use the currently selected channel
+            stepSizes.data(),
+            static_cast<int>(stepSizes.size()),
+            settlingTimeMs,
+            axesCStr.data(),
+            static_cast<int>(axesCStr.size()),
+            callerContext.c_str());
+
+        if (m_logger) {
+            if (success) {
+                m_logger->LogInfo("RealtimeChart: Scan started successfully for " + device + " using channel: " + m_dataChannel);
+            }
+            else {
+                m_logger->LogError("RealtimeChart: Failed to start scan for " + device + " using channel: " + m_dataChannel);
+            }
+        }
+
     }
-
-    int settlingTimeMs = 300;
-    std::string callerContext = "RealtimeChartPage_" + device + "_scan";
-
-    // Call the C wrapper function for StartScan (non-blocking)
-    bool success = MachineOperations_StartScan(
-      m_machineOperations,
-      device.c_str(),
-      "GPIB-Current",
-      stepSizes.data(),
-      static_cast<int>(stepSizes.size()),
-      settlingTimeMs,
-      axesCStr.data(),
-      static_cast<int>(axesCStr.size()),
-      callerContext.c_str());
-
-    if (m_logger) {
-      if (success) {
-        m_logger->LogInfo("RealtimeChart: Scan started successfully for " + device);
-      }
-      else {
-        m_logger->LogError("RealtimeChart: Failed to start scan for " + device);
-      }
+    catch (const std::exception& e) {
+        if (m_logger) {
+            m_logger->LogError("RealtimeChart: Exception executing scan: " + std::string(e.what()));
+        }
     }
-
-  }
-  catch (const std::exception& e) {
-    if (m_logger) {
-      m_logger->LogError("RealtimeChart: Exception executing scan: " + std::string(e.what()));
-    }
-  }
 }
-
 
 bool RealtimeChartPage::isDeviceScanning(const std::string& deviceName) {
   if (!m_machineOperations) {
@@ -770,19 +872,31 @@ void RealtimeChartPage::renderChannelSelector() {
     DrawRectangleLinesEx(selectorRect, 2, YELLOW);
   }
 
+
   if (isHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-    // Cycle to next channel
-    if (!m_availableChannels.empty()) {
-      m_selectedChannelIndex = (m_selectedChannelIndex + 1) % m_availableChannels.size();
-      m_dataChannel = m_availableChannels[m_selectedChannelIndex];
+      // Cycle to next channel
+      if (!m_availableChannels.empty()) {
+          std::string oldChannel = m_dataChannel;  // Store old channel
 
-      // Clear old data when changing channels
-      m_dataBuffer.clear();
+          m_selectedChannelIndex = (m_selectedChannelIndex + 1) % m_availableChannels.size();
+          m_dataChannel = m_availableChannels[m_selectedChannelIndex];
 
-      if (m_logger) {
-        m_logger->LogInfo("RealtimeChart: Switched to channel: " + m_dataChannel);
+          // Clear old data when changing channels
+          m_dataBuffer.clear();
+
+          if (m_logger) {
+              m_logger->LogInfo("RealtimeChart: Channel changed from '" + oldChannel + "' to '" + m_dataChannel + "'");
+
+              // Check if new channel has data
+              if (m_dataStore && m_dataStore->HasValue(m_dataChannel)) {
+                  float value = m_dataStore->GetValue(m_dataChannel);
+                  m_logger->LogInfo("RealtimeChart: New channel '" + m_dataChannel + "' has data: " + std::to_string(value));
+              }
+              else {
+                  m_logger->LogWarning("RealtimeChart: New channel '" + m_dataChannel + "' has no data available");
+              }
+          }
       }
-    }
   }
 
   // Show channel info below the selector (smaller text)
