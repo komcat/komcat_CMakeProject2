@@ -43,12 +43,14 @@ namespace SAA3Processes {
 
         // 3. Move hex-right to home position
         sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-            "hex-right", "Process_Flow", "node_8550"));
+            "hex-right", "Process_Flow", "node_8550")); //gripper home
 
-        // 9. Clear dedicated output (pin 10) - Vacuum_Base
-        sequence->AddOperation(std::make_shared<ClearOutputOperationDedicated>(
-            "IOBottom", 7));  // Clear Vacuum_Base (pin 10)
-
+        // on vacuu,
+        sequence->AddOperation(std::make_shared<SetOutputOperation>(
+            "IOBottom", 7,true));  // Clear Vacuum_Base (pin 10)
+        // open gripper
+        sequence->AddOperation(std::make_shared<SetOutputOperation>(
+            "IOBottom", 2, false));  // Clear Vacuum_Base (pin 10)
 
 
 
@@ -73,7 +75,7 @@ namespace SAA3Processes {
 
 
         sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-            "hex-right", "Process_Flow", "node_8593"));
+            "hex-right", "Process_Flow", "node_8593")); //grip FAU
 
 
         // 4. Wait for user confirmation that grip is successful
@@ -249,7 +251,7 @@ namespace SAA3Processes {
 
 
         sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "ยินดีด้วย สำเร็จแล้ว",
+            "Congratulation, you successfully UV cure.",
             "Continue click Yes?",
             promptUI));
 
@@ -262,7 +264,17 @@ namespace SAA3Processes {
     std::unique_ptr<SequenceStep> BuildSAA3RejectFAU(MachineOperations& machineOps, UserPromptUI& promptUI) {
         auto sequence = std::make_unique<SequenceStep>("SAA3 Reject FAU", machineOps);
 
-   
+        sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
+            "hex-right", "AvoidPlace"));
+
+        sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+            "hex-right", "Process_Flow", "node_8593")); //grip FAU
+
+        sequence->AddOperation(std::make_shared<ClearOutputOperation>(
+            "IOBottom", 2, 3000)); //clear gripper
+
+        sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+            "hex-right", "Process_Flow", "node_8550")); //gripper home
 
         return sequence;
     }
@@ -318,7 +330,7 @@ namespace SAA3Processes {
     }
 
     size_t GetSAA3ProcessCount() {
-        return 5; // Update this if you add more SAA3 processes
+        return 6; // Update this if you add more SAA3 processes
     }
 
     bool AreSAA3ProcessesRegistered() {
