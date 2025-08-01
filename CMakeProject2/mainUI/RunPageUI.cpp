@@ -5,13 +5,19 @@
 #include <algorithm>
 #include "uaa3_process_builders.h"
 #include "ProcessRegistry.h"
-
+#include "LiveVideoSubscriber.h"
 // UPDATE RunPageUI.cpp - Constructor
+
+// NEW: Add to constructor
+
+// NEW: Add to constructor
 RunPageUI::RunPageUI(MachineOperations& machineOps)
   : m_machineOps(machineOps),
   m_uiManager(std::make_unique<MockUserInteractionManager>()),
   m_stopRequested(false),
-  m_pauseRequested(false)
+  m_pauseRequested(false),
+  m_cameraManager(nullptr),  // NEW: Initialize camera manager
+  m_cameraSystemInitialized(false)  // NEW: Initialize camera system flag
 {
   m_logger = Logger::GetInstance();
 
@@ -26,16 +32,17 @@ RunPageUI::RunPageUI(MachineOperations& machineOps)
   // Initialize operations display UI for detail results tab
   m_operationsDisplayUI = std::make_unique<OperationsDisplayUI>(machineOps);
 
-
-
-
   m_logger->LogInfo("RunPageUI: Initialized with process filtering and operations display support");
 }
 
+// NEW: Add to destructor
 RunPageUI::~RunPageUI() {
   StopProcess();
+  CleanupCameraTexture();  // NEW: Clean up OpenGL texture
+  ClearCameraFeed();  // NEW: Clear camera feed
   m_logger->LogInfo("RunPageUI: Destroyed");
 }
+
 
 void RunPageUI::RenderUI() {
 
@@ -557,6 +564,9 @@ void RunPageUI::OnFilterChanged() {
 }
 
 
+
+
+// UPDATED: RenderColumn3 to include Live View tab
 void RunPageUI::RenderColumn3() {
   // Create tab bar for Column3
   if (ImGui::BeginTabBar("Column3Tabs", ImGuiTabBarFlags_None)) {
@@ -567,15 +577,306 @@ void RunPageUI::RenderColumn3() {
       ImGui::EndTabItem();
     }
 
-    // Detail Results tab (new OperationsDisplayUI)
+    // Detail Results tab (existing content)
     if (ImGui::BeginTabItem("Detail Results")) {
       RenderDetailResultsTab();
+      ImGui::EndTabItem();
+    }
+
+    // NEW: Live View tab
+    if (ImGui::BeginTabItem("Live View")) {
+      RenderLiveViewTab();
       ImGui::EndTabItem();
     }
 
     ImGui::EndTabBar();
   }
 }
+
+// NEW: Live View tab rendering
+void RunPageUI::RenderLiveViewTab() {
+  ImGui::Text("Live Camera Feed");
+  ImGui::Separator();
+
+  if (!m_cameraManager) {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Camera system not available");
+    ImGui::TextWrapped("Camera manager not initialized. Enable camera support in the main application.");
+    return;
+  }
+
+  // Camera controls at the top
+  RenderCameraControls();
+
+  ImGui::Separator();
+
+  // Calculate canvas size for camera feed
+  ImVec2 availableSize = ImGui::GetContentRegionAvail();
+  float cameraHeight = availableSize.y - 20.0f; // Leave some margin
+
+  // Maintain 4:3 aspect ratio (adjust as needed)
+  const float CAMERA_ASPECT_RATIO = 1280.0f / 1024.0f;
+  ImVec2 canvasSize;
+  canvasSize.x = availableSize.x;
+  canvasSize.y = canvasSize.x / CAMERA_ASPECT_RATIO;
+
+  // Ensure we don't exceed available height
+  if (canvasSize.y > cameraHeight) {
+    canvasSize.y = cameraHeight;
+    canvasSize.x = canvasSize.y * CAMERA_ASPECT_RATIO;
+  }
+
+  // Create camera feed area
+  ImGui::BeginChild("CameraFeedArea", canvasSize, false, ImGuiWindowFlags_NoScrollbar);
+  RenderCameraFeedFromSubscriber(canvasSize);
+  ImGui::EndChild();
+}
+
+// NEW: Camera feed rendering using subscriber
+void RunPageUI::RenderCameraFeedFromSubscriber(const ImVec2& canvasSize) {
+  // Update texture from latest frame
+  UpdateCameraTexture();
+
+  if (m_textureInitialized && m_textureWidth > 0 && m_textureHeight > 0) {
+    // Calculate display size maintaining aspect ratio
+    float aspectRatio = (float)m_textureWidth / (float)m_textureHeight;
+
+    float displayWidth = canvasSize.x;
+    float displayHeight = displayWidth / aspectRatio;
+
+    if (displayHeight > canvasSize.y) {
+      displayHeight = canvasSize.y;
+      displayWidth = displayHeight * aspectRatio;
+    }
+
+    // Center the image
+    float offsetX = (canvasSize.x - displayWidth) * 0.5f;
+    float offsetY = (canvasSize.y - displayHeight) * 0.5f;
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offsetY);
+
+    // Display the image
+    ImGui::Image((ImTextureID)(intptr_t)m_cameraTextureID,
+      ImVec2(displayWidth, displayHeight));
+
+    // Add info overlay on hover
+    if (ImGui::IsItemHovered() && m_cameraSubscriber) {
+      ImGui::SetTooltip("Live Camera Feed\nCamera: %s\nResolution: %ux%u\nFrames: %llu",
+        m_selectedCameraId.c_str(),
+        m_textureWidth,
+        m_textureHeight,
+        m_cameraSubscriber->GetTotalFramesReceived());
+    }
+  }
+  else {
+    // Show status-based placeholder
+    std::string message;
+    if (!m_cameraSystemInitialized) {
+      message = "Camera System Not Initialized\nNo camera manager available";
+    }
+    else if (!m_cameraSubscriber) {
+      message = "No Camera Subscriber\nSelect a camera to begin";
+    }
+    else if (!m_cameraSubscriber->IsCameraConnected()) {
+      message = "Camera Disconnected\nCamera: " + m_selectedCameraId + "\nCheck camera connection";
+    }
+    else if (!m_cameraSubscriber->IsCameraGrabbing()) {
+      message = "Camera Not Grabbing\nCamera: " + m_selectedCameraId + "\nStart live feed to begin";
+    }
+    else {
+      message = "Waiting for Video Frames...\nCamera: " + m_selectedCameraId +
+        "\nFrames received: " + std::to_string(m_cameraSubscriber->GetTotalFramesReceived());
+    }
+
+    RenderCameraPlaceholder(canvasSize, message);
+  }
+}
+
+// NEW: Camera placeholder rendering
+void RunPageUI::RenderCameraPlaceholder(const ImVec2& canvasSize, const std::string& message) {
+  ImDrawList* drawList = ImGui::GetWindowDrawList();
+  ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+  ImVec2 canvasMax = ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y);
+
+  // Background
+  drawList->AddRectFilled(canvasPos, canvasMax, IM_COL32(60, 60, 60, 255));
+  drawList->AddRect(canvasPos, canvasMax, IM_COL32(100, 150, 200, 255), 0.0f, 0, 2.0f);
+
+  // Status text
+  ImVec2 textSize = ImGui::CalcTextSize(message.c_str());
+  ImVec2 textPos = ImVec2(
+    canvasPos.x + (canvasSize.x - textSize.x) * 0.5f,
+    canvasPos.y + (canvasSize.y - textSize.y) * 0.5f
+  );
+  drawList->AddText(textPos, IM_COL32(200, 200, 200, 255), message.c_str());
+}
+
+// NEW: Camera controls rendering
+void RunPageUI::RenderCameraControls() {
+  if (!m_cameraManager) {
+    ImGui::Text("Camera Manager not available");
+    return;
+  }
+
+  auto cameraIds = m_cameraManager->GetCameraIds();
+  if (cameraIds.empty()) {
+    ImGui::Text("No cameras available");
+    if (ImGui::Button("Refresh Camera List", ImVec2(-1, 25))) {
+      m_logger->LogInfo("Refreshing camera list");
+    }
+    return;
+  }
+
+  // Camera selection
+  ImGui::Text("Camera:");
+
+  // Find current selection index
+  int currentCameraIndex = 0;
+  for (size_t i = 0; i < cameraIds.size(); i++) {
+    if (cameraIds[i] == m_selectedCameraId) {
+      currentCameraIndex = (int)i;
+      break;
+    }
+  }
+
+  // Create camera selection array
+  std::vector<const char*> cameraNames;
+  for (const auto& id : cameraIds) {
+    cameraNames.push_back(id.c_str());
+  }
+
+  ImGui::SetNextItemWidth(200);
+  if (ImGui::Combo("##CameraSelection", &currentCameraIndex, cameraNames.data(), (int)cameraNames.size())) {
+    SetSelectedCamera(cameraIds[currentCameraIndex]);
+  }
+
+  // Camera status and controls
+  if (!m_selectedCameraId.empty()) {
+    ImGui::SameLine();
+
+    auto status = m_cameraManager->GetCameraStatus(m_selectedCameraId);
+
+    // Connection status
+    if (status.connected) {
+      if (status.grabbing) {
+        ImGui::TextColored(ImVec4(0, 1, 0, 1), "[LIVE]");
+      }
+      else {
+        ImGui::TextColored(ImVec4(0, 0.8f, 0, 1), "[CONN]");
+      }
+    }
+    else {
+      ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "[DISC]");
+    }
+
+    // Quick controls
+    ImGui::Spacing();
+
+    if (status.connected) {
+      if (!status.grabbing) {
+        if (ImGui::Button("Start Live Feed", ImVec2(120, 25))) {
+          m_cameraManager->StartGrabbing(m_selectedCameraId);
+          m_logger->LogInfo("Started grabbing for camera: " + m_selectedCameraId);
+        }
+      }
+      else {
+        if (ImGui::Button("Stop Live Feed", ImVec2(120, 25))) {
+          m_cameraManager->StopGrabbing(m_selectedCameraId);
+          m_logger->LogInfo("Stopped grabbing for camera: " + m_selectedCameraId);
+        }
+      }
+
+      ImGui::SameLine();
+      if (ImGui::Button("Reconnect", ImVec2(80, 25))) {
+        m_cameraManager->ConnectCamera(m_selectedCameraId);
+        m_logger->LogInfo("Reconnecting camera: " + m_selectedCameraId);
+      }
+    }
+    else {
+      if (ImGui::Button("Connect Camera", ImVec2(120, 25))) {
+        m_cameraManager->ConnectCamera(m_selectedCameraId);
+        m_logger->LogInfo("Connecting camera: " + m_selectedCameraId);
+      }
+    }
+
+    // Show subscriber statistics
+    if (m_cameraSubscriber) {
+      ImGui::SameLine();
+      ImGui::Text("| Frames: %llu", m_cameraSubscriber->GetTotalFramesReceived());
+    }
+  }
+}
+
+// NEW: Update OpenGL texture from camera frames
+void RunPageUI::UpdateCameraTexture() {
+  if (!m_cameraSubscriber || !m_cameraSubscriber->HasNewFrame()) {
+    return;
+  }
+
+  CameraFrameData frameData = m_cameraSubscriber->GetLatestFrame();
+  m_cameraSubscriber->MarkFrameConsumed();
+
+  if (!frameData.IsValid() || frameData.channels != 3) {
+    return;
+  }
+
+  // Create texture if not initialized
+  if (!m_textureInitialized) {
+    glGenTextures(1, &m_cameraTextureID);
+    glBindTexture(GL_TEXTURE_2D, m_cameraTextureID);
+
+    // Set texture parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    m_textureInitialized = true;
+    m_textureWidth = frameData.width;
+    m_textureHeight = frameData.height;
+
+    // Upload initial texture data
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frameData.width, frameData.height,
+      0, GL_RGB, GL_UNSIGNED_BYTE, frameData.imageData.data());
+
+    m_logger->LogInfo("RunPageUI: Created OpenGL texture " + std::to_string(m_cameraTextureID) +
+      " (" + std::to_string(frameData.width) + "x" + std::to_string(frameData.height) + ")");
+  }
+  else {
+    glBindTexture(GL_TEXTURE_2D, m_cameraTextureID);
+
+    // Check if we need to resize texture
+    if (frameData.width != m_textureWidth || frameData.height != m_textureHeight) {
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frameData.width, frameData.height,
+        0, GL_RGB, GL_UNSIGNED_BYTE, frameData.imageData.data());
+      m_textureWidth = frameData.width;
+      m_textureHeight = frameData.height;
+
+      m_logger->LogInfo("RunPageUI: Resized texture to " +
+        std::to_string(frameData.width) + "x" + std::to_string(frameData.height));
+    }
+    else {
+      // Update existing texture (more efficient)
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, frameData.width, frameData.height,
+        GL_RGB, GL_UNSIGNED_BYTE, frameData.imageData.data());
+    }
+  }
+
+  glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+// NEW: Cleanup OpenGL texture
+void RunPageUI::CleanupCameraTexture() {
+  if (m_textureInitialized) {
+    glDeleteTextures(1, &m_cameraTextureID);
+    m_textureInitialized = false;
+    m_cameraTextureID = 0;
+    m_textureWidth = 0;
+    m_textureHeight = 0;
+    m_logger->LogInfo("RunPageUI: Cleaned up OpenGL texture");
+  }
+}
+
 
 void RunPageUI::RenderStatusTab() {
   ImGui::Text("Status & Information");
@@ -1081,4 +1382,73 @@ void RunPageUI::SetImguiFont(ImFont* font) {
   else {
     std::cerr << "RunPageUI: Failed to set custom font - font is null" << std::endl;
   }
+}
+
+
+
+// NEW: Camera management methods
+void RunPageUI::SetCameraManager(CameraManager* cameraManager) {
+  m_cameraManager = cameraManager;
+
+  if (m_cameraManager) {
+    auto cameraIds = m_cameraManager->GetCameraIds();
+    if (!cameraIds.empty()) {
+      m_selectedCameraId = cameraIds[0];
+      InitializeCameraFeed();
+    }
+    m_logger->LogInfo("RunPageUI: Camera manager set with " + std::to_string(cameraIds.size()) + " cameras");
+  }
+  else {
+    m_logger->LogInfo("RunPageUI: Camera manager cleared");
+  }
+}
+
+void RunPageUI::SetSelectedCamera(const std::string& cameraId) {
+  if (m_selectedCameraId == cameraId) {
+    return; // No change
+  }
+
+  m_selectedCameraId = cameraId;
+
+  if (m_cameraSubscriber) {
+    // Update existing subscriber target
+    m_cameraSubscriber->SetTargetCamera(cameraId);
+    m_logger->LogInfo("RunPageUI: Camera switched to: " + cameraId);
+  }
+  else {
+    // Initialize new feed
+    InitializeCameraFeed();
+  }
+}
+
+void RunPageUI::InitializeCameraFeed() {
+  if (m_selectedCameraId.empty() || !m_cameraManager) {
+    m_cameraSystemInitialized = false;
+    return;
+  }
+
+  // Clear existing subscription
+  ClearCameraFeed();
+
+  // Create new subscriber
+  m_cameraSubscriber = std::make_shared<LiveVideoSubscriber>(m_selectedCameraId);
+
+  // Subscribe to the broadcasting system
+  m_cameraManager->SubscribeToFrames(m_cameraSubscriber);
+
+  // Start broadcast system if not already active
+  m_cameraManager->StartBroadcastSystem();
+
+  m_cameraSystemInitialized = true;
+  m_logger->LogInfo("RunPageUI: Camera feed initialized for: " + m_selectedCameraId);
+}
+
+void RunPageUI::ClearCameraFeed() {
+  if (m_cameraSubscriber && m_cameraManager) {
+    m_cameraManager->UnsubscribeFromFrames(m_cameraSubscriber->GetSubscriberId());
+    m_cameraSubscriber.reset();
+    m_logger->LogInfo("RunPageUI: Camera feed cleared");
+  }
+  CleanupCameraTexture();
+  m_cameraSystemInitialized = false;
 }

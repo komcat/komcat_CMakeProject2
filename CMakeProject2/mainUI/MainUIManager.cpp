@@ -89,6 +89,8 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 
 	// Initialize RunPageUI as nullptr - will be created when MachineOperations is set
 	m_runPageUI = nullptr;
+	// NEW: Initialize IO Control Panel as nullptr - will be created when IO manager is set
+	m_ioControlPanel = nullptr;  // <-- ADD THIS LINE
 	
 }
 
@@ -128,6 +130,11 @@ void MainUIManager::RenderUI() {
 
 	// Always render jog window (it handles its own visibility internally)
 	RenderGlobalJogWindow();
+
+	// NEW: Always render IO control panel (it handles its own visibility internally)
+	if (m_ioControlPanel && m_ioControlPanel->IsVisible()) {  // <-- ADDED THESE 3 LINES
+		m_ioControlPanel->RenderUI();
+	}
 
 	// Render UserPromptUI (handles prompts from UAA3 sequences)
 	if (m_userPromptUI) {
@@ -228,9 +235,7 @@ void MainUIManager::RenderTopMenuBar() {
 	ImGui::PopStyleVar();
 }
 
-// In RenderDateTime method - UPDATE the JOG button logic:
 void MainUIManager::RenderDateTime() {
-
 	// Get date/time strings
 	time_t rawtime;
 	struct tm timeinfo;
@@ -255,7 +260,53 @@ void MainUIManager::RenderDateTime() {
 	float buttonHeight = 30.0f;
 	float spacing = 10.0f;
 
-	// Position for JOG button (left of date/time)
+	// NEW: Position for Q-IO button (left of JOG button)
+	ImGui::SameLine(ImGui::GetWindowWidth() - textSize.x - (buttonWidth * 2) - (spacing * 2) - 20);
+	ImGui::SetCursorPosY(30);
+
+	// Check if IO control is available
+	bool ioAvailable = (m_ioControlPanel != nullptr);
+	bool ioRealMode = ioAvailable && m_ioManager;
+
+	// Q-IO Button styling - similar pattern to JOG button
+	if (ioRealMode && m_ioControlPanel->IsVisible()) {
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.7f, 1.0f)); // Active blue (real mode)
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.8f, 1.0f));
+	}
+	else if (ioAvailable && m_ioControlPanel->IsVisible()) {
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.2f, 1.0f)); // Active orange (limited mode)
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.6f, 0.3f, 1.0f));
+	}
+	else if (ioAvailable) {
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.4f, 0.4f, 1.0f)); // Inactive gray
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+	}
+	else {
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 1.0f)); // Disabled dark gray
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+	}
+
+	if (ImGui::Button("Q-IO", ImVec2(buttonWidth, buttonHeight))) {
+		if (m_ioControlPanel) {
+			m_ioControlPanel->ToggleWindow();
+		}
+	}
+	ImGui::PopStyleColor(2);
+
+	// Q-IO tooltip
+	if (ImGui::IsItemHovered()) {
+		if (ioRealMode) {
+			ImGui::SetTooltip("Quick IO Control\n(Real mode - IO Manager available)");
+		}
+		else if (ioAvailable) {
+			ImGui::SetTooltip("Quick IO Control\n(Limited mode - Check IO Manager)");
+		}
+		else {
+			ImGui::SetTooltip("Quick IO Control\n(Not available - IO Manager missing)");
+		}
+	}
+
+	// Position for JOG button (left of date/time, right of Q-IO button)
 	ImGui::SameLine(ImGui::GetWindowWidth() - textSize.x - buttonWidth - spacing - 20);
 	ImGui::SetCursorPosY(30);
 
@@ -480,6 +531,15 @@ void MainUIManager::RenderMainPage() {
 	}
 	else {
 		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "○ Global Jog Panel: Waiting for motion controllers");
+	}
+
+
+	// NEW: Show IO control status
+	if (m_ioControlPanel) {
+		ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Quick IO Control: Ready");
+	}
+	else {
+		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "○ Quick IO Control: Waiting for IO manager");
 	}
 
 	ImGui::Spacing();
@@ -1007,7 +1067,6 @@ void MainUIManager::SetACSControllerManager(ACSControllerManager* acsManager) {
 }
 
 
-// Add this method implementation:
 void MainUIManager::SetIOManager(EziIOManager* ioManager, IOConfigManager* ioConfigManager) {
 	m_ioManager = ioManager;
 	m_ioConfigManager = ioConfigManager;
@@ -1022,6 +1081,21 @@ void MainUIManager::SetIOManager(EziIOManager* ioManager, IOConfigManager* ioCon
 		}
 
 		std::cout << "MainUIManager: IO Panel UI created successfully" << std::endl;
+
+		// NEW: Create IO Control Panel for Q-IO button
+		CreateIOControlPanel();  // <-- ADD THIS LINE
+	}
+}
+
+// NEW: Helper method to create IO Control Panel
+void MainUIManager::CreateIOControlPanel() {
+	if (m_ioManager && !m_ioControlPanel) {
+		m_ioControlPanel = std::make_unique<IOControlPanel>(*m_ioManager);
+
+		// Load default configuration
+		m_ioControlPanel->LoadConfiguration("io_panel_config.json");
+
+		std::cout << "MainUIManager: IO Control Panel created successfully for Q-IO button" << std::endl;
 	}
 }
 

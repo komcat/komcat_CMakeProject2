@@ -1,4 +1,4 @@
-// RunPageUI.h - Add button ordering support
+// RunPageUI.h - Add Live View camera support
 #pragma once
 
 #include "ProcessBuilders.h"
@@ -6,9 +6,10 @@
 #include "machine_operations.h"
 #include "MockUserInteractionManager.h"
 #include "Programming/UserPromptUI.h"
-#include "ProcessFilterManager.h"  // Enhanced with button ordering
+#include "ProcessFilterManager.h"
 #include "include/ui/OperationsDisplayUI.h"
 #include "logger.h"
+#include "LiveVideoSubscriber.h"  // NEW: Add camera support
 #include <string>
 #include <vector>
 #include <thread>
@@ -16,96 +17,126 @@
 #include <mutex>
 #include <memory>
 #include <chrono>
+#include <SDL_opengl.h>  // NEW: For OpenGL texture management
+
+// Forward declarations
+class CameraManager;
 
 class RunPageUI {
 public:
-    RunPageUI(MachineOperations& machineOps);
-    ~RunPageUI();
+  RunPageUI(MachineOperations& machineOps);
+  ~RunPageUI();
 
-    void RenderUI();
-    void SetUserPromptUI(UserPromptUI* promptUI) { m_promptUI = promptUI; }
-    void SetImguiFont(ImFont* font);
-    ImFont* GetImguiFont() const { return m_imguiFont; }
+  void RenderUI();
+  void SetUserPromptUI(UserPromptUI* promptUI) { m_promptUI = promptUI; }
+  void SetImguiFont(ImFont* font);
+  ImFont* GetImguiFont() const { return m_imguiFont; }
+
+  // NEW: Camera management
+  void SetCameraManager(CameraManager* cameraManager);
+  void SetSelectedCamera(const std::string& cameraId);
+  void InitializeCameraFeed();
+  void ClearCameraFeed();
 
 private:
-    // Existing members...
-    MachineOperations& m_machineOps;
-    std::unique_ptr<MockUserInteractionManager> m_uiManager;
-    Logger* m_logger;
-    ImFont* m_imguiFont = nullptr;
-    UserPromptUI* m_promptUI = nullptr;
-    std::unique_ptr<OperationsDisplayUI> m_operationsDisplayUI;
+  // Existing members...
+  MachineOperations& m_machineOps;
+  std::unique_ptr<MockUserInteractionManager> m_uiManager;
+  Logger* m_logger;
+  ImFont* m_imguiFont = nullptr;
+  UserPromptUI* m_promptUI = nullptr;
+  std::unique_ptr<OperationsDisplayUI> m_operationsDisplayUI;
 
-    // UI state
-    std::string m_statusMessage = "Ready";
-    std::string m_selectedProcess = "Initialization";
-    bool m_processRunning = false;
-    bool m_processPaused = false;
-    float m_progress = 0.0f;
-    int m_column3TabIndex = 0;
+  // UI state
+  std::string m_statusMessage = "Ready";
+  std::string m_selectedProcess = "Initialization";
+  bool m_processRunning = false;
+  bool m_processPaused = false;
+  float m_progress = 0.0f;
+  int m_column3TabIndex = 0;
 
-    // Process handling
-    std::thread m_processThread;
-    std::atomic<bool> m_stopRequested;
-    std::atomic<bool> m_pauseRequested;
-    std::mutex m_mutex;
-    std::atomic<bool> m_autoConfirm;
+  // Process handling
+  std::thread m_processThread;
+  std::atomic<bool> m_stopRequested;
+  std::atomic<bool> m_pauseRequested;
+  std::mutex m_mutex;
+  std::atomic<bool> m_autoConfirm;
 
-    // Enhanced filter management with button ordering
-    std::unique_ptr<ProcessFilterManager> m_filterManager;
-    bool m_showFilterWindow = false;
+  // Enhanced filter management with button ordering
+  std::unique_ptr<ProcessFilterManager> m_filterManager;
+  bool m_showFilterWindow = false;
 
-    // Completed steps tracking
-    struct CompletedProcess {
-        std::string processName;
-        std::string dateTime;
-        std::string duration;
-        std::string idleTime;
-        bool isSuccess;
-    };
-    std::vector<CompletedProcess> m_completedSteps;
-    static const size_t MAX_COMPLETED_STEPS = 50;
-    std::chrono::steady_clock::time_point m_processStartTime;
-    std::chrono::steady_clock::time_point m_lastProcessEndTime;
-    bool m_hasLastProcessEndTime = false;
+  // NEW: Camera system for Live View tab
+  CameraManager* m_cameraManager = nullptr;
+  std::shared_ptr<LiveVideoSubscriber> m_cameraSubscriber;
+  std::string m_selectedCameraId;
+  bool m_cameraSystemInitialized = false;
 
-    // Status messages
-    std::vector<std::string> m_statusHistory;
-    static const size_t MAX_STATUS_HISTORY = 100;
+  // OpenGL texture management for camera feed
+  unsigned int m_cameraTextureID = 0;
+  bool m_textureInitialized = false;
+  uint32_t m_textureWidth = 0;
+  uint32_t m_textureHeight = 0;
 
-    // Methods
-    void ShowFilterConfiguration() { m_showFilterWindow = true; }
+  // Completed steps tracking
+  struct CompletedProcess {
+    std::string processName;
+    std::string dateTime;
+    std::string duration;
+    std::string idleTime;
+    bool isSuccess;
+  };
+  std::vector<CompletedProcess> m_completedSteps;
+  static const size_t MAX_COMPLETED_STEPS = 50;
+  std::chrono::steady_clock::time_point m_processStartTime;
+  std::chrono::steady_clock::time_point m_lastProcessEndTime;
+  bool m_hasLastProcessEndTime = false;
 
-    // UPDATED: Process list methods with sorting support
-    std::vector<std::string> GetCurrentProcessList() const;        // Regular filtered list
-    std::vector<std::string> GetSortedProcessList() const;         // NEW: Sorted filtered list
-    void OnFilterChanged();
+  // Status messages
+  std::vector<std::string> m_statusHistory;
+  static const size_t MAX_STATUS_HISTORY = 100;
 
-    // Process control methods
-    void StartProcess(const std::string& processName);
-    void PauseProcess();
-    void ResumeProcess();
-    void StopProcess();
-    void UpdateStatus(const std::string& message, bool isError = false);
+  // Methods
+  void ShowFilterConfiguration() { m_showFilterWindow = true; }
 
-    // Completed steps management
-    void AddCompletedStep(const std::string& stepName, const std::string& duration,
-        const std::string& idleTime, bool isSuccess);
-    void ClearCompletedSteps();
+  // Process list methods with sorting support
+  std::vector<std::string> GetCurrentProcessList() const;
+  std::vector<std::string> GetSortedProcessList() const;
+  void OnFilterChanged();
 
-    // UI rendering methods
-    void RenderColumn1();
-    void RenderColumn2();
-    void RenderColumn3();
-    void RenderStatusTab();
-    void RenderDetailResultsTab();
-    void RenderControlButtons();
-    void RenderStatusArea();
-    void RenderProcessButtons();          // UPDATED: Now uses sorted list
-    void RenderRunningStatus();
-    void RenderCompletedSteps();
+  // Process control methods
+  void StartProcess(const std::string& processName);
+  void PauseProcess();
+  void ResumeProcess();
+  void StopProcess();
+  void UpdateStatus(const std::string& message, bool isError = false);
 
-    // Process management
-    std::unique_ptr<SequenceStep> BuildSelectedProcess();
-    void ProcessThreadFunc(const std::string& processName);
+  // Completed steps management
+  void AddCompletedStep(const std::string& stepName, const std::string& duration,
+    const std::string& idleTime, bool isSuccess);
+  void ClearCompletedSteps();
+
+  // UI rendering methods
+  void RenderColumn1();
+  void RenderColumn2();
+  void RenderColumn3();
+  void RenderStatusTab();
+  void RenderDetailResultsTab();
+  void RenderLiveViewTab();  // NEW: Live View tab
+  void RenderControlButtons();
+  void RenderStatusArea();
+  void RenderProcessButtons();
+  void RenderRunningStatus();
+  void RenderCompletedSteps();
+
+  // NEW: Camera rendering methods
+  void RenderCameraFeedFromSubscriber(const ImVec2& canvasSize);
+  void RenderCameraPlaceholder(const ImVec2& canvasSize, const std::string& message);
+  void RenderCameraControls();
+  void UpdateCameraTexture();
+  void CleanupCameraTexture();
+
+  // Process management
+  std::unique_ptr<SequenceStep> BuildSelectedProcess();
+  void ProcessThreadFunc(const std::string& processName);
 };

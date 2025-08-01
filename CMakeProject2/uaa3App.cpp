@@ -1275,6 +1275,9 @@ int main(int argc, char* argv[])
 	if (ioManager) {
 		uiManager.SetIOManager(ioManager.get(), ioconfigManager.get());
 	}
+
+
+
 	if (pneumaticManager) {
 		uiManager.SetPneumaticManager(pneumaticManager.get());
 	}

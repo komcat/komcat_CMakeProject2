@@ -19,6 +19,8 @@
 #include "ConfigFileWatchdog.h"
 #include "Processes/SAA3ProcessBuilders/NewProcesses_SAA3.h"
 #include <SDL.h>
+#include "include/eziio/IOControlPanel.h"
+
 // Forward declarations
 class MotionConfigManager;
 class UIConfigEditor;
@@ -46,7 +48,6 @@ public:
     PROGRAMMING    // Add this new page
   };
 
-
   // Add new enum for Programming sub-pages:
   enum class ProgrammingSubPage {
     NONE,
@@ -63,7 +64,6 @@ public:
     PNEUMATIC,    // Add this new option
     CAMERA
   };
-
 
   enum class ConfigSubPage {
     NONE,
@@ -84,8 +84,8 @@ public:
   MainUIManager(MotionConfigManager& configManager);
   ~MainUIManager();
 
-
   void RenderUI();
+
   // Method to set motion managers separately for cleaner initialization
   void SetPIControllerManager(PIControllerManager* piManager);
   void SetACSControllerManager(ACSControllerManager* acsManager);
@@ -95,8 +95,7 @@ public:
   void SetDataClientManager(DataClientManager* dataClientManager);
   void SetCLD101xManager(CLD101xManager* cld101xManager);
   void SetImguiFont(ImFont* font);
-	ImFont* GetImguiFont() const { return m_imguiFont; }
-
+  ImFont* GetImguiFont() const { return m_imguiFont; }
 
   // Add this method in the public section with other setter methods:
   void SetKeithley2400Manager(Keithley2400Manager* keithleyManager);
@@ -115,15 +114,17 @@ public:
 
   // Add this method for keyboard input processing
   void ProcessKeyInput(SDL_Keycode key, bool pressed);
+
 private:
   MainPage currentMainPage = MainPage::MAIN;
   ManualSubPage currentManualSubPage = ManualSubPage::NONE;
   ConfigSubPage currentConfigSubPage = ConfigSubPage::NONE;
   DataInstrumentSubPage currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
+
   // ADD THIS LINE with other UI components:
   std::unique_ptr<UserPromptUI> m_promptUI;
 
-	ImFont* m_imguiFont = nullptr; // Pointer to ImGui font 
+  ImFont* m_imguiFont = nullptr; // Pointer to ImGui font 
 
   // Reference to the config manager (owned by main)
   MotionConfigManager& motionConfigManager;
@@ -139,7 +140,6 @@ private:
   std::unique_ptr<UIPneumaticPanel> m_pneumaticPanelUI;
   std::unique_ptr<UICameraPanel> m_cameraPanelUI;
   std::unique_ptr<GlobalDataStoreViewerUI> m_globalDataStoreViewerUI;
-  //std::unique_ptr<CLD101xEquipmentUI> m_cld101xEquipmentUI;
   std::unique_ptr<MacroPanelUI> m_macroPanelUI;
 
   CLD101xManager* m_cld101xManager = nullptr;
@@ -150,22 +150,20 @@ private:
   DataClientManager* m_dataClientManager = nullptr;
   Keithley2400Manager* m_keithleyManager = nullptr;
   ConfigFileWatchdog* m_configWatchdog = nullptr;
+
   // Jog window
   bool m_showGlobalJogWindow = false;
-
 
   // Add this member variable in the private section with other UI components:
   std::unique_ptr<UISMUPanel> m_smuPanelUI;
 
-
-
-
   EziIOManager* m_ioManager = nullptr;
   IOConfigManager* m_ioConfigManager = nullptr;
 
+  // NEW: Add IO Control Panel for Q-IO button
+  std::unique_ptr<IOControlPanel> m_ioControlPanel;
 
   // Add these member variables in the private section (with other panel UIs):
-
   PneumaticManager* m_pneumaticManager = nullptr;
   CameraManager* m_cameraManager = nullptr;
   MachineOperations* m_machineOperations = nullptr;
@@ -176,10 +174,11 @@ private:
   std::unique_ptr<MacroManager> m_macroManager;
 
   void RenderTopMenuBar();
-  void RenderDateTime();
+  void RenderDateTime();  // This is where JOG and Q-IO buttons are rendered
   void RenderBreadcrumbs();
   void RenderMainContent();
   void RenderBackButton();
+
   // Main pages
   void RenderMainPage();
   void RenderManualPage();
@@ -207,7 +206,6 @@ private:
   // Add this method declaration (with other render methods):
   void RenderPneumaticPage();
 
-
   // Data Instrument sub-pages
   void RenderDataInstrumentSubPage();
   void RenderGlobalDataStorePage();
@@ -215,16 +213,14 @@ private:
   void RenderCld101xEquipmentPage();
   void RenderSmuManagerPage();
 
-
   void RenderProgrammingSubPage();
   void RenderMachineBlockPage();
-
-
   void RenderMacroManagerPage();
 
   // NEW: Add these members if not already present
   std::unique_ptr<RunPageUI> m_runPageUI;
   std::unique_ptr<UserPromptUI> m_userPromptUI;
 
-
+  // NEW: Helper methods for IO Control Panel
+  void CreateIOControlPanel();  // Helper to create IO panel when manager is available
 };
