@@ -5,6 +5,10 @@
 #include <memory>
 #include <functional>
 #include <vector>
+#include <mutex>
+#include <atomic>
+#include <thread>
+#include <chrono>
 
 class IDSCameraTest {
 public:
@@ -36,34 +40,40 @@ public:
   // NEW: Live video/grabbing methods
   bool StartGrabbing();                          // Start continuous grabbing
   bool StopGrabbing();                           // Stop continuous grabbing
-  bool IsGrabbing() const { return m_isGrabbing; }
+  bool IsGrabbing() const { return m_isGrabbing.load(); }
 
-  // NEW: Image data access
-  const char* GetImageData() const { return m_pImageMemory; }
+  // NEW: Thread-safe image data access
+  const char* GetImageData() const;
   int GetImageWidth() const { return m_imageWidth; }
   int GetImageHeight() const { return m_imageHeight; }
   int GetImageBitsPerPixel() const { return m_imageBitsPerPixel; }
-  bool HasNewFrame() const { return m_hasNewFrame; }
-  void MarkFrameProcessed() { m_hasNewFrame = false; }
+  bool HasNewFrame() const { return m_hasNewFrame.load(); }
+  void MarkFrameProcessed() { m_hasNewFrame.store(false); }
 
   // Set callback for status updates (optional)
   void SetStatusCallback(StatusCallback callback) { m_statusCallback = callback; }
 
 private:
   HIDS m_cameraHandle;
-  bool m_isConnected;
-  bool m_isGrabbing;
+  std::atomic<bool> m_isConnected;
+  std::atomic<bool> m_isGrabbing;
   int m_cameraId;
   std::string m_lastError;
   StatusCallback m_statusCallback;
 
-  // Image memory management
+  // Thread-safe image memory management
+  mutable std::mutex m_imageMutex;
   char* m_pImageMemory;
   int m_imageMemoryId;
   int m_imageWidth;
   int m_imageHeight;
   int m_imageBitsPerPixel;
-  bool m_hasNewFrame;
+  std::atomic<bool> m_hasNewFrame;
+
+  // Grabbing thread management
+  std::thread m_grabThread;
+  std::atomic<bool> m_threadRunning;
+  int m_targetFPS;
 
   // Helper methods
   void LogStatus(const std::string& message);
@@ -72,4 +82,7 @@ private:
   void FreeImageMemory();
   std::string GenerateTimestampFilename(const std::string& extension = ".bmp") const;
   bool SaveImageAlternativeMethod(const std::string& filename);
+
+  // Thread function for continuous grabbing
+  void GrabThreadFunction();
 };

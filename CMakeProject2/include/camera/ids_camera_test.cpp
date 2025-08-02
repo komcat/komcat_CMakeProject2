@@ -5,11 +5,12 @@
 #include <iomanip>
 #include <fstream>
 #include <vector>
+#include <thread>
 
 IDSCameraTest::IDSCameraTest()
   : m_cameraHandle(0), m_isConnected(false), m_isGrabbing(false), m_cameraId(0),
   m_pImageMemory(nullptr), m_imageMemoryId(0), m_imageWidth(0), m_imageHeight(0),
-  m_imageBitsPerPixel(0), m_hasNewFrame(false) {
+  m_imageBitsPerPixel(0), m_hasNewFrame(false), m_threadRunning(false), m_targetFPS(30) {
 }
 
 IDSCameraTest::~IDSCameraTest() {
@@ -17,7 +18,7 @@ IDSCameraTest::~IDSCameraTest() {
 }
 
 bool IDSCameraTest::ConnectById(int cameraId) {
-  if (m_isConnected) {
+  if (m_isConnected.load()) {
     SetError("Camera already connected. Disconnect first.");
     return false;
   }
@@ -32,7 +33,7 @@ bool IDSCameraTest::ConnectById(int cameraId) {
 
   if (result == IS_SUCCESS) {
     m_cameraHandle = hCam;
-    m_isConnected = true;
+    m_isConnected.store(true);
     LogStatus("Successfully connected to camera ID: " + std::to_string(cameraId));
 
     // Setup image memory after successful connection
@@ -54,7 +55,7 @@ bool IDSCameraTest::ConnectById(int cameraId) {
 }
 
 bool IDSCameraTest::ConnectBySerial(const std::string& serialNumber) {
-  if (m_isConnected) {
+  if (m_isConnected.load()) {
     SetError("Camera already connected. Disconnect first.");
     return false;
   }
@@ -90,11 +91,11 @@ bool IDSCameraTest::ConnectBySerial(const std::string& serialNumber) {
 }
 
 void IDSCameraTest::Disconnect() {
-  if (m_isConnected && m_cameraHandle != 0) {
+  if (m_isConnected.load() && m_cameraHandle != 0) {
     LogStatus("Disconnecting camera...");
 
     // Stop grabbing if active
-    if (m_isGrabbing) {
+    if (m_isGrabbing.load()) {
       StopGrabbing();
     }
 
@@ -104,17 +105,19 @@ void IDSCameraTest::Disconnect() {
     // Exit camera
     is_ExitCamera(m_cameraHandle);
     m_cameraHandle = 0;
-    m_isConnected = false;
+    m_isConnected.store(false);
     m_cameraId = 0;
     LogStatus("Camera disconnected");
   }
 }
 
 bool IDSCameraTest::CaptureImage() {
-  if (!m_isConnected) {
+  if (!m_isConnected.load()) {
     SetError("Camera not connected");
     return false;
   }
+
+  std::lock_guard<std::mutex> lock(m_imageMutex);
 
   if (!m_pImageMemory) {
     SetError("Image memory not allocated");
@@ -127,7 +130,7 @@ bool IDSCameraTest::CaptureImage() {
   INT result = is_FreezeVideo(m_cameraHandle, IS_WAIT);
 
   if (result == IS_SUCCESS) {
-    m_hasNewFrame = true;
+    m_hasNewFrame.store(true);
     LogStatus("Image captured successfully");
     return true;
   }
@@ -173,15 +176,17 @@ bool IDSCameraTest::CaptureImageToDisk(const std::string& filename) {
 }
 
 bool IDSCameraTest::StartGrabbing() {
-  if (!m_isConnected) {
+  if (!m_isConnected.load()) {
     SetError("Camera not connected");
     return false;
   }
 
-  if (m_isGrabbing) {
+  if (m_isGrabbing.load()) {
     LogStatus("Already grabbing");
     return true;
   }
+
+  std::lock_guard<std::mutex> lock(m_imageMutex);
 
   if (!m_pImageMemory) {
     SetError("Image memory not allocated");
@@ -194,7 +199,12 @@ bool IDSCameraTest::StartGrabbing() {
   INT result = is_CaptureVideo(m_cameraHandle, IS_DONT_WAIT);
 
   if (result == IS_SUCCESS) {
-    m_isGrabbing = true;
+    m_isGrabbing.store(true);
+    m_threadRunning.store(true);
+
+    // Start grabbing thread
+    m_grabThread = std::thread(&IDSCameraTest::GrabThreadFunction, this);
+
     LogStatus("Started grabbing successfully");
     return true;
   }
@@ -205,30 +215,96 @@ bool IDSCameraTest::StartGrabbing() {
 }
 
 bool IDSCameraTest::StopGrabbing() {
-  if (!m_isConnected) {
+  if (!m_isConnected.load()) {
     SetError("Camera not connected");
     return false;
   }
 
-  if (!m_isGrabbing) {
+  if (!m_isGrabbing.load()) {
     LogStatus("Not currently grabbing");
     return true;
   }
 
   LogStatus("Stopping grabbing...");
 
+  // Signal thread to stop
+  m_threadRunning.store(false);
+
+  // Wait for thread to finish
+  if (m_grabThread.joinable()) {
+    m_grabThread.join();
+  }
+
   // Stop live video capture
   INT result = is_StopLiveVideo(m_cameraHandle, IS_WAIT);
 
   if (result == IS_SUCCESS) {
-    m_isGrabbing = false;
+    m_isGrabbing.store(false);
     LogStatus("Stopped grabbing successfully");
     return true;
   }
   else {
+    m_isGrabbing.store(false); // Set to false anyway
     SetError("Failed to stop grabbing (Error code: " + std::to_string(result) + ")");
     return false;
   }
+}
+
+void IDSCameraTest::GrabThreadFunction() {
+  std::cout << "[INFO] IDS grab thread started" << std::endl;
+  int frameCounter = 0;
+
+  // Frame rate control variables
+  const std::chrono::microseconds frameDuration(1000000 / m_targetFPS);
+
+  while (m_threadRunning.load() && m_isConnected.load()) {
+    auto frameStart = std::chrono::steady_clock::now();
+
+    try {
+      // For IDS cameras in live mode, we check if video has started and new frames are available
+      BOOL videoStarted = FALSE;
+      INT result = is_HasVideoStarted(m_cameraHandle, &videoStarted);
+
+      if (result == IS_SUCCESS && videoStarted) {
+        // Video is running, signal that we have frames available
+        m_hasNewFrame.store(true);
+        frameCounter++;
+
+        // Debug logging every 30 frames
+        if ((frameCounter % 30) == 0) {
+          LogStatus("Grabbed " + std::to_string(frameCounter) + " frames");
+        }
+      }
+      else if (result != IS_SUCCESS) {
+        // Error checking video status
+        std::cout << "[WARN] Video status check error: " << result << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      }
+      // If video hasn't started or no new frame, just continue the loop
+    }
+    catch (const std::exception& e) {
+      std::cout << "[ERROR] Error in IDS grab thread: " << e.what() << std::endl;
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    // Frame rate control
+    auto frameEnd = std::chrono::steady_clock::now();
+    auto frameTime = std::chrono::duration_cast<std::chrono::microseconds>(frameEnd - frameStart);
+
+    if (frameTime < frameDuration) {
+      std::this_thread::sleep_for(frameDuration - frameTime);
+    }
+    else {
+      std::this_thread::yield();
+    }
+  }
+
+  std::cout << "[INFO] IDS grab thread exiting after grabbing " << frameCounter << " frames" << std::endl;
+}
+
+const char* IDSCameraTest::GetImageData() const {
+  std::lock_guard<std::mutex> lock(m_imageMutex);
+  return m_pImageMemory;
 }
 
 std::string IDSCameraTest::GetCameraInfo() const {

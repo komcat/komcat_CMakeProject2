@@ -5,6 +5,8 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <mutex>
+#include <chrono>
 
 class IDSCameraUI {
 public:
@@ -33,11 +35,26 @@ private:
   std::vector<int> m_availableCameraIds;
   std::vector<std::string> m_statusMessages;
 
-  // Image display
+  // Image display with frame buffering
   unsigned int m_textureID;
   bool m_textureInitialized;
   unsigned int m_imageTextureWidth;
   unsigned int m_imageTextureHeight;
+
+  // Frame buffering for smooth display
+  struct FrameBuffer {
+    std::vector<uint8_t> data;
+    uint32_t width;
+    uint32_t height;
+    bool isValid;
+    std::chrono::steady_clock::time_point timestamp;
+
+    FrameBuffer() : width(0), height(0), isValid(false) {}
+  };
+
+  FrameBuffer m_bufferedFrame;
+  mutable std::mutex m_frameBufferMutex;
+  std::chrono::steady_clock::time_point m_lastFrameUpdate;
 
   // Capture settings
   char m_saveFilename[256];
@@ -61,6 +78,7 @@ private:
   void RefreshCameraList();
   void ConnectBySelectedId();
   void UpdateImageTexture();
+  void UpdateFrameBuffer();
   void AddStatusMessage(const std::string& message);
   void CleanupTexture();
 

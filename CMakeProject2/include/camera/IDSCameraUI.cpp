@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <sstream>
 #include <vector>
+#include <thread>
 
 IDSCameraUI::IDSCameraUI()
   : m_camera(std::make_unique<IDSCameraTest>()),
@@ -21,6 +22,10 @@ IDSCameraUI::IDSCameraUI()
 
   // Initialize filename buffer
   strcpy(m_saveFilename, "capture.bmp");
+
+  // Initialize frame buffer
+  m_bufferedFrame = FrameBuffer();
+  m_lastFrameUpdate = std::chrono::steady_clock::now();
 
   // Set up camera status callback
   m_camera->SetStatusCallback([this](const std::string& message) {
@@ -133,14 +138,11 @@ void IDSCameraUI::RenderImageDisplay() {
   ImVec2 canvasSize = ImGui::GetContentRegionAvail();
   canvasSize.y = (std::max)(canvasSize.y - 50.0f, 200.0f); // Leave space for buttons below
 
-  // Update texture if new frame available
-  if (m_camera->HasNewFrame()) {
-    UpdateImageTexture();
-    m_camera->MarkFrameProcessed();
-  }
+  // Update frame buffer from camera
+  UpdateFrameBuffer();
 
-  // Display image if texture is available
-  if (m_textureInitialized && m_textureID != 0) {
+  // Display image if we have a valid buffered frame
+  if (m_bufferedFrame.isValid && m_textureInitialized && m_textureID != 0) {
     // Verify texture is still valid in OpenGL
     GLboolean isValid = glIsTexture(m_textureID);
     if (!isValid) {
@@ -173,9 +175,12 @@ void IDSCameraUI::RenderImageDisplay() {
 
     // Add tooltip on hover
     if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("IDS Camera Image\nTexture ID: %u\nResolution: %ux%u\nBits per Pixel: %d",
+      auto timeSinceUpdate = std::chrono::steady_clock::now() - m_lastFrameUpdate;
+      auto millisSinceUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(timeSinceUpdate).count();
+
+      ImGui::SetTooltip("IDS Camera Image\nTexture ID: %u\nResolution: %ux%u\nBits per Pixel: %d\nLast Update: %lld ms ago",
         m_textureID, m_imageTextureWidth, m_imageTextureHeight,
-        m_camera->GetImageBitsPerPixel());
+        m_camera->GetImageBitsPerPixel(), millisSinceUpdate);
     }
 
     // Show image info below
@@ -187,40 +192,18 @@ void IDSCameraUI::RenderImageDisplay() {
   else {
     // Show placeholder when no image is available
     std::string errorText;
-    if (!m_textureInitialized) {
-      errorText = "No Image Available\nCapture an image to see it here";
+    if (!m_bufferedFrame.isValid) {
+      errorText = m_camera->IsGrabbing() ?
+        "Waiting for frames...\nCheck camera connection" :
+        "No Image Available\nCapture an image or start grabbing";
     }
     else {
       errorText = "Invalid Image Data\nCheck camera connection";
     }
 
     RenderErrorCanvas(canvasSize.x, canvasSize.y, errorText);
-    ImGui::Text("No image available - capture an image first");
+    ImGui::Text("No image available");
   }
-}
-
-void IDSCameraUI::RenderErrorCanvas(float width, float height, const std::string& errorText) {
-  ImVec2 canvasPos = ImGui::GetCursorScreenPos();
-  ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-  // Error canvas - dark background
-  drawList->AddRectFilled(canvasPos,
-    ImVec2(canvasPos.x + width, canvasPos.y + height),
-    IM_COL32(40, 40, 40, 255));
-
-  // Error border
-  drawList->AddRect(canvasPos,
-    ImVec2(canvasPos.x + width, canvasPos.y + height),
-    IM_COL32(100, 100, 100, 255));
-
-  // Error text
-  ImVec2 textSize = ImGui::CalcTextSize(errorText.c_str());
-  ImVec2 textPos = ImVec2(canvasPos.x + (width - textSize.x) * 0.5f,
-    canvasPos.y + (height - textSize.y) * 0.5f);
-  drawList->AddText(textPos, IM_COL32(200, 200, 200, 255), errorText.c_str());
-
-  // Advance cursor
-  ImGui::SetCursorScreenPos(ImVec2(canvasPos.x, canvasPos.y + height));
 }
 
 void IDSCameraUI::RenderCaptureControls() {
@@ -257,24 +240,74 @@ void IDSCameraUI::RenderLiveControls() {
 
   bool isGrabbing = m_camera->IsGrabbing();
 
-  // Start/Stop grabbing buttons
-  if (!isGrabbing) {
-    if (ImGui::Button("Start Grabbing", ImVec2(120, 30))) {
+  // Start/Stop grabbing buttons with color coding
+  ImVec4 buttonColor = isGrabbing ?
+    ImVec4(0.8f, 0.3f, 0.3f, 1.0f) :  // Red for stop
+    ImVec4(0.3f, 0.8f, 0.3f, 1.0f);   // Green for start
+
+  ImGui::PushStyleColor(ImGuiCol_Button, buttonColor);
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+    ImVec4(buttonColor.x * 1.2f, buttonColor.y * 1.2f, buttonColor.z * 1.2f, 1.0f));
+
+  std::string buttonText = isGrabbing ? "Stop Grabbing" : "Start Grabbing";
+
+  if (ImGui::Button(buttonText.c_str(), ImVec2(120, 30))) {
+    if (isGrabbing) {
+      if (m_camera->StopGrabbing()) {
+        AddStatusMessage("Stopped live grabbing");
+      }
+    }
+    else {
       if (m_camera->StartGrabbing()) {
         AddStatusMessage("Started live grabbing");
       }
     }
   }
-  else {
-    if (ImGui::Button("Stop Grabbing", ImVec2(120, 30))) {
-      if (m_camera->StopGrabbing()) {
-        AddStatusMessage("Stopped live grabbing");
-      }
-    }
-  }
+
+  ImGui::PopStyleColor(2);
 
   ImGui::SameLine();
-  ImGui::Text("Status: %s", isGrabbing ? "Grabbing" : "Stopped");
+
+  // Status with color coding
+  if (isGrabbing) {
+    ImGui::TextColored(ImVec4(0, 1, 0, 1), "Status: Grabbing");
+  }
+  else {
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "Status: Stopped");
+  }
+
+  // Frame rate estimation
+  if (isGrabbing && m_bufferedFrame.isValid) {
+    static int frameCounter = 0;
+    static auto lastTime = std::chrono::steady_clock::now();
+    static float estimatedFPS = 0.0f;
+
+    frameCounter++;
+    auto currentTime = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastTime);
+
+    if (elapsed.count() >= 1000) { // Update every second
+      estimatedFPS = frameCounter * 1000.0f / elapsed.count();
+      frameCounter = 0;
+      lastTime = currentTime;
+    }
+
+    ImGui::Text("Est. FPS: %.1f", estimatedFPS);
+
+    // Frame freshness indicator
+    auto timeSinceUpdate = std::chrono::steady_clock::now() - m_lastFrameUpdate;
+    auto millisSinceUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(timeSinceUpdate).count();
+
+    if (millisSinceUpdate < 100) {
+      ImGui::TextColored(ImVec4(0, 1, 0, 1), "Frame: Fresh");
+    }
+    else if (millisSinceUpdate < 500) {
+      ImGui::TextColored(ImVec4(1, 1, 0, 1), "Frame: Recent");
+    }
+    else {
+      ImGui::TextColored(ImVec4(1, 0, 0, 1), "Frame: Stale");
+    }
+  }
 }
 
 void IDSCameraUI::RenderStatusLog() {
@@ -298,6 +331,30 @@ void IDSCameraUI::RenderStatusLog() {
   }
 }
 
+void IDSCameraUI::RenderErrorCanvas(float width, float height, const std::string& errorText) {
+  ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+  ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+  // Error canvas - dark background
+  drawList->AddRectFilled(canvasPos,
+    ImVec2(canvasPos.x + width, canvasPos.y + height),
+    IM_COL32(40, 40, 40, 255));
+
+  // Error border
+  drawList->AddRect(canvasPos,
+    ImVec2(canvasPos.x + width, canvasPos.y + height),
+    IM_COL32(100, 100, 100, 255));
+
+  // Error text
+  ImVec2 textSize = ImGui::CalcTextSize(errorText.c_str());
+  ImVec2 textPos = ImVec2(canvasPos.x + (width - textSize.x) * 0.5f,
+    canvasPos.y + (height - textSize.y) * 0.5f);
+  drawList->AddText(textPos, IM_COL32(200, 200, 200, 255), errorText.c_str());
+
+  // Advance cursor
+  ImGui::SetCursorScreenPos(ImVec2(canvasPos.x, canvasPos.y + height));
+}
+
 void IDSCameraUI::RefreshCameraList() {
   m_availableCameraIds = IDSCameraTest::GetAvailableCameraIds();
   m_selectedCameraIdIndex = 0;
@@ -312,15 +369,56 @@ void IDSCameraUI::ConnectBySelectedId() {
   }
 }
 
-void IDSCameraUI::UpdateImageTexture() {
-  const char* imageData = m_camera->GetImageData();
-  int width = m_camera->GetImageWidth();
-  int height = m_camera->GetImageHeight();
-  int bpp = m_camera->GetImageBitsPerPixel();
+void IDSCameraUI::UpdateFrameBuffer() {
+  // Check for new frames and buffer them for smooth UI display
+  if (m_camera->HasNewFrame()) {
+    const char* imageData = m_camera->GetImageData();
+    int width = m_camera->GetImageWidth();
+    int height = m_camera->GetImageHeight();
+    int bpp = m_camera->GetImageBitsPerPixel();
 
-  if (!imageData || width <= 0 || height <= 0) {
-    return;
+    if (imageData && width > 0 && height > 0) {
+      // Update buffered frame with lock
+      {
+        std::lock_guard<std::mutex> lock(m_frameBufferMutex);
+
+        size_t dataSize = width * height * (bpp / 8);
+        m_bufferedFrame.data.resize(dataSize);
+        std::memcpy(m_bufferedFrame.data.data(), imageData, dataSize);
+        m_bufferedFrame.width = width;
+        m_bufferedFrame.height = height;
+        m_bufferedFrame.isValid = true;
+        m_bufferedFrame.timestamp = std::chrono::steady_clock::now();
+
+        m_lastFrameUpdate = m_bufferedFrame.timestamp;
+      } // Lock released here
+
+      // Update OpenGL texture WITHOUT holding the mutex
+      UpdateImageTexture();
+    }
+
+    // Mark frame as processed
+    m_camera->MarkFrameProcessed();
   }
+}
+
+void IDSCameraUI::UpdateImageTexture() {
+  // Create local copy of frame data to avoid holding mutex during OpenGL calls
+  FrameBuffer localFrame;
+  int bpp;
+
+  // Copy frame data with minimal lock time
+  {
+    std::lock_guard<std::mutex> lock(m_frameBufferMutex);
+    if (!m_bufferedFrame.isValid || m_bufferedFrame.data.empty()) {
+      return;
+    }
+    localFrame = m_bufferedFrame; // Copy the frame data
+  } // Lock released here
+
+  bpp = m_camera->GetImageBitsPerPixel();
+  int width = localFrame.width;
+  int height = localFrame.height;
 
   // Create texture if not initialized or size changed
   if (!m_textureInitialized || m_imageTextureWidth != width || m_imageTextureHeight != height) {
@@ -343,13 +441,13 @@ void IDSCameraUI::UpdateImageTexture() {
       << width << "x" << height << ", " << bpp << " bpp)" << std::endl;
   }
 
-  // Update texture data
+  // Update texture data using local copy (no mutex needed)
   glBindTexture(GL_TEXTURE_2D, m_textureID);
 
   if (bpp == 8) {
     // Mono8 - convert to RGB by replicating the single channel to all 3 channels
     std::vector<uint8_t> rgbData(width * height * 3);
-    const uint8_t* srcData = reinterpret_cast<const uint8_t*>(imageData);
+    const uint8_t* srcData = localFrame.data.data();
 
     for (int i = 0; i < width * height; i++) {
       uint8_t grayValue = srcData[i];
@@ -359,20 +457,14 @@ void IDSCameraUI::UpdateImageTexture() {
     }
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, rgbData.data());
-    std::cout << "[DEBUG] Uploaded mono8 image as RGB texture" << std::endl;
   }
   else if (bpp == 24) {
     // RGB24 - direct upload
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, imageData);
-    std::cout << "[DEBUG] Uploaded RGB24 image" << std::endl;
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, localFrame.data.data());
   }
   else if (bpp == 32) {
     // RGBA32 - direct upload
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
-    std::cout << "[DEBUG] Uploaded RGBA32 image" << std::endl;
-  }
-  else {
-    std::cout << "[ERROR] Unsupported bits per pixel: " << bpp << std::endl;
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, localFrame.data.data());
   }
 
   glBindTexture(GL_TEXTURE_2D, 0);
