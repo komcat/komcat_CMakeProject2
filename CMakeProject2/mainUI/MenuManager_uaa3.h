@@ -1,6 +1,8 @@
 #pragma once
 #include <functional>
 #include <string>
+#include "include/camera/IDSCameraUI.h"
+
 class MenuManagerUaa3 {
 public:
   MenuManagerUaa3();
@@ -15,7 +17,7 @@ public:
 
   // Callbacks for menu actions
   void SetOnExitCallback(std::function<void()> callback) { m_onExit = callback; }
-
+  void SetIDSCameraUI(IDSCameraUI* ui) { m_idsCameraUI = ui; }
 private:
   bool m_showRaylibDebug = false;
   bool m_showAbout = false;
@@ -28,4 +30,7 @@ private:
   void RenderDebugMenu();
   void RenderHelpMenu();
   void RenderAboutDialog();
+
+  // ... your existing members ...
+  IDSCameraUI* m_idsCameraUI = nullptr;  // Add this pointer
 };

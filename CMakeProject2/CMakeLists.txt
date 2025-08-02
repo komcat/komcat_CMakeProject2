@@ -234,6 +234,41 @@ set(PI_SOURCES
 )
 
 
+# Set IDS uEye SDK paths
+set(IDS_UEYE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/uEye")
+set(IDS_UEYE_INCLUDE_DIR "${IDS_UEYE_DIR}/include")
+
+# Handle different platforms for IDS uEye library files
+if(WIN32)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        # 64-bit build
+        set(IDS_UEYE_LIB_DIR "${IDS_UEYE_DIR}/lib")
+        set(IDS_UEYE_BIN_DIR "${IDS_UEYE_DIR}/bin")
+        set(IDS_UEYE_LIBRARY "${IDS_UEYE_LIB_DIR}/ueye_api_64.lib")
+        set(IDS_UEYE_DLL "${IDS_UEYE_BIN_DIR}/ueye_api_64.dll")
+    else()
+        # 32-bit build
+        set(IDS_UEYE_LIB_DIR "${IDS_UEYE_DIR}/lib")
+        set(IDS_UEYE_BIN_DIR "${IDS_UEYE_DIR}/bin")
+        set(IDS_UEYE_LIBRARY "${IDS_UEYE_LIB_DIR}/ueye_api.lib")
+        set(IDS_UEYE_DLL "${IDS_UEYE_BIN_DIR}/ueye_api.dll")
+    endif()
+else()
+    # Linux configuration (if needed later)
+    set(IDS_UEYE_LIB_DIR "${IDS_UEYE_DIR}/lib")
+    set(IDS_UEYE_LIBRARY "${IDS_UEYE_LIB_DIR}/libueye_api.so")
+endif()
+
+# Check if IDS uEye installation exists
+if(NOT EXISTS ${IDS_UEYE_DIR})
+    message(WARNING "IDS uEye SDK not found at ${IDS_UEYE_DIR}. IDS camera features will be disabled.")
+    set(IDS_UEYE_FOUND FALSE)
+else()
+    message(STATUS "IDS uEye SDK found at: ${IDS_UEYE_DIR}")
+    set(IDS_UEYE_FOUND TRUE)
+endif()
+
+
 # Set HALCON paths based on your installation
 set(MAINUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mainUI")
 set(INCL_CAMERA "${CMAKE_CURRENT_SOURCE_DIR}/include/camera")
@@ -544,7 +579,18 @@ add_executable(CMakeProject2
   "mainUI/UAA3DatabaseManager_Global.cpp"
   "mainUI/ConfigDatabaseUtils.h" 
   "mainUI/ConfigDatabaseUtils.cpp"
-  "mainUI/ConfigFileWatchdog.h" "mainUI/ConfigFileWatchdog.cpp" "Processes/ProcessRegistry.h" "Processes/ProcessInitializer.cpp" "Processes/NewProcesses_Template.cpp" "Processes/SAA3ProcessBuilders/NewProcesses_SAA3.cpp" "Processes/SAA3ProcessBuilders/NewProcesses_SAA3.h")
+  "mainUI/ConfigFileWatchdog.h"
+  "mainUI/ConfigFileWatchdog.cpp"
+  "Processes/ProcessRegistry.h"
+  "Processes/ProcessInitializer.cpp"
+  "Processes/NewProcesses_Template.cpp"
+  "Processes/SAA3ProcessBuilders/NewProcesses_SAA3.cpp"
+  "Processes/SAA3ProcessBuilders/NewProcesses_SAA3.h"   
+  "include/camera/ids_camera_test.h"
+  "include/camera/ids_camera_test.cpp"
+  "include/camera/IDSCameraUI.h" 
+  "include/camera/IDSCameraUI.cpp"
+  )
 
 
 
@@ -588,6 +634,7 @@ target_include_directories(CMakeProject2 PRIVATE
      ${INCL_Uaa3_PROCESSES}
      ${FREETYPE_INCLUDE_DIR}
      ${FREETYPE_INCLUDE_DIR}
+     ${IDS_UEYE_INCLUDE_DIR}
 )
 
 # Link libraries - directly reference libraries
@@ -609,6 +656,7 @@ target_link_libraries(CMakeProject2 PRIVATE
     user32    # For Windows user interface
     shell32   # For Windows shell
      ${FREETYPE_LIBRARY}
+     ${IDS_UEYE_LIBRARY}
 )
 
 
@@ -888,7 +936,44 @@ add_executable(uaa3App
   "mainUI/MenuManager_uaa3.h" 
   "mainUI/MenuManager_uaa3.cpp"
   "mainUI/RaylibDebugWindow.h" 
-  "mainUI/RaylibDebugWindow.cpp" "mainUI/LiveVideoSubscriber.h" "mainUI/LiveVideoSubscriber.cpp" "include/camera/CameraFrameData.h" "mainUI/RunPageUI.h" "mainUI/RunPageUI.cpp"   "Processes/ProcessFilterManager.h" "Processes/ProcessFilterManager.cpp" "Processes/UAA3ProcessBuilders/uaa3_process_builders.h" "Processes/UAA3ProcessBuilders/Core/uaa3_probing_sequence.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_pick_place_sequences.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_uv_curing_sequence.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_reject_sequences.cpp" "Processes/UAA3ProcessBuilders/Calibration/uaa3_needle_calibration.cpp" "Processes/UAA3ProcessBuilders/Calibration/uaa3_dispense_calibration.cpp" "Processes/UAA3ProcessBuilders/Dispensing/uaa3_dispense_epoxy.cpp" "Processes/UAA3ProcessBuilders/uaa3_utility_functions.cpp" "Processes/UAA3ProcessBuilders/Core/uaa3_initialzation_sequences.cpp" "include/camera/CameraConfigManager.h" "include/camera/CameraConfigManager.cpp" "mainUI/UAA3DatabaseManager.h" "mainUI/UAA3DatabaseManager.cpp" "mainUI/UAA3DatabaseManager_JsonOps.cpp" "mainUI/UAA3DatabaseManager_Utils.cpp" "mainUI/UAA3DatabaseManager_Global.cpp" "mainUI/ConfigDatabaseUtils.h" "mainUI/ConfigDatabaseUtils.cpp" "mainUI/ConfigFileWatchDog.h" "mainUI/ConfigFileWatchdog.cpp" "Processes/ProcessRegistry.h" "Processes/ProcessInitializer.cpp" "Processes/NewProcesses_Template.cpp" "Processes/SAA3ProcessBuilders/NewProcesses_SAA3.cpp" "Processes/SAA3ProcessBuilders/NewProcesses_SAA3.h")
+  "mainUI/RaylibDebugWindow.cpp" 
+  "mainUI/LiveVideoSubscriber.h"
+  "mainUI/LiveVideoSubscriber.cpp"
+  "include/camera/CameraFrameData.h"
+  "mainUI/RunPageUI.h" 
+  "mainUI/RunPageUI.cpp" 
+  "Processes/ProcessFilterManager.h"
+  "Processes/ProcessFilterManager.cpp" 
+  "Processes/UAA3ProcessBuilders/uaa3_process_builders.h" 
+  "Processes/UAA3ProcessBuilders/Core/uaa3_probing_sequence.cpp"
+  "Processes/UAA3ProcessBuilders/Core/uaa3_pick_place_sequences.cpp"
+  "Processes/UAA3ProcessBuilders/Core/uaa3_uv_curing_sequence.cpp"
+  "Processes/UAA3ProcessBuilders/Core/uaa3_reject_sequences.cpp" 
+  "Processes/UAA3ProcessBuilders/Calibration/uaa3_needle_calibration.cpp"
+  "Processes/UAA3ProcessBuilders/Calibration/uaa3_dispense_calibration.cpp" 
+  "Processes/UAA3ProcessBuilders/Dispensing/uaa3_dispense_epoxy.cpp"
+  "Processes/UAA3ProcessBuilders/uaa3_utility_functions.cpp" 
+  "Processes/UAA3ProcessBuilders/Core/uaa3_initialzation_sequences.cpp"
+  "include/camera/CameraConfigManager.h" "include/camera/CameraConfigManager.cpp"
+  "mainUI/UAA3DatabaseManager.h"
+  "mainUI/UAA3DatabaseManager.cpp"
+  "mainUI/UAA3DatabaseManager_JsonOps.cpp" 
+  "mainUI/UAA3DatabaseManager_Utils.cpp"
+  "mainUI/UAA3DatabaseManager_Global.cpp" 
+  "mainUI/ConfigDatabaseUtils.h" 
+  "mainUI/ConfigDatabaseUtils.cpp"
+  "mainUI/ConfigFileWatchDog.h"
+  "mainUI/ConfigFileWatchdog.cpp"
+  "Processes/ProcessRegistry.h"
+  "Processes/ProcessInitializer.cpp"
+  "Processes/NewProcesses_Template.cpp"
+  "Processes/SAA3ProcessBuilders/NewProcesses_SAA3.cpp"
+  "Processes/SAA3ProcessBuilders/NewProcesses_SAA3.h" 
+  "include/camera/ids_camera_test.h" 
+  "include/camera/ids_camera_test.cpp"
+  "include/camera/IDSCameraUI.h" 
+  "include/camera/IDSCameraUI.cpp"
+  )
 
 
 
@@ -914,6 +999,7 @@ target_include_directories(uaa3App PRIVATE
   ${INCL_PROCESSES}
   ${INCL_Uaa3_PROCESSES}
   ${FREETYPE_INCLUDE_DIR}
+  ${IDS_UEYE_INCLUDE_DIR}
 )
 
 # Link libraries - directly reference libraries
@@ -935,6 +1021,7 @@ target_link_libraries(uaa3App PRIVATE
   user32    # For Windows user interface
   shell32   # For Windows shell
   ${FREETYPE_LIBRARY}
+  ${IDS_UEYE_LIBRARY}
 )
 
 
@@ -1220,4 +1307,23 @@ if(WIN32)
         message(WARNING "FreeType DLL not found at: ${FREETYPE_DLL}")
         message(WARNING "Make sure FreeType DLL is in the correct location")
     endif()
+endif()
+
+# Add DLL copying for Windows (add this section around line 800, after existing DLL copies)
+if(WIN32)
+    # Copy IDS uEye DLL to the output directory for CMakeProject2
+    add_custom_command(TARGET CMakeProject2 POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${IDS_UEYE_DLL}
+        $<TARGET_FILE_DIR:CMakeProject2>
+        COMMENT "Copying IDS uEye DLL to CMakeProject2 output directory"
+    )
+    
+    # Copy IDS uEye DLL to the output directory for uaa3App
+    add_custom_command(TARGET uaa3App POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${IDS_UEYE_DLL}
+        $<TARGET_FILE_DIR:uaa3App>
+        COMMENT "Copying IDS uEye DLL to uaa3App output directory"
+    )
 endif()
