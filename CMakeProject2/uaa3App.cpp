@@ -2037,165 +2037,165 @@ int main(int argc, char* argv[])
 
 
 
-#pragma region emoji test
-
-		// Main test window
-		ImGui::Begin("Emoji Test");
-
-		ImGui::Text("Configuration Status:");
-#ifdef IMGUI_USE_WCHAR32
-		ImGui::TextColored(ImVec4(0, 1, 0, 1), "✅ IMGUI_USE_WCHAR32");
-#else
-		ImGui::TextColored(ImVec4(1, 0, 0, 1), "❌ IMGUI_USE_WCHAR32 - add to imconfig.h");
-#endif
-
-#ifdef IMGUI_ENABLE_FREETYPE
-		ImGui::TextColored(ImVec4(0, 1, 0, 1), "✅ IMGUI_ENABLE_FREETYPE");
-#else
-		ImGui::TextColored(ImVec4(1, 0, 0, 1), "❌ IMGUI_ENABLE_FREETYPE - add to imconfig.h");
-#endif
-
-		if (emojiLoaded) {
-			ImGui::TextColored(ImVec4(0, 1, 0, 1), "✅ Emoji font loaded");
-		}
-		else {
-			ImGui::TextColored(ImVec4(1, 0, 0, 1), "❌ No emoji font");
-		}
-
-		ImGui::Separator();
-
-		ImGui::Text("Font Debug Information:");
-		ImGui::Text("Total fonts loaded: %d", io.Fonts->Fonts.Size);
-
-		for (int i = 0; i < io.Fonts->Fonts.Size; i++) {
-			ImFont* font = io.Fonts->Fonts[i];
-			ImGui::Text("Font %d: %.0f px, %d glyphs", i, font->FontSize, font->Glyphs.Size);
-
-			// Test Greek letters with each font
-			if (ImGui::TreeNode(("Test with Font " + std::to_string(i)).c_str())) {
-				ImGui::PushFont(font);
-				ImGui::Text("Greek test: α β γ μ");
-				ImGui::Text("Math test: ± ÷ × ≠ ∞");
-				ImGui::Text("Emoji test: 👍 ❤ 🔥");
-				ImGui::PopFont();
-				ImGui::TreePop();
-			}
-		}
-
-		ImGui::Separator();
-
-		// Check specific glyph availability
-		ImGui::Text("Glyph Availability Check:");
-
-		struct TestGlyph {
-			ImWchar codepoint;
-			const char* name;
-			const char* utf8;
-		};
-
-		TestGlyph testGlyphs[] = {
-				{0x03B1, "α (alpha)", reinterpret_cast<const char*>(u8"α")},
-				{0x03B2, "β (beta)", reinterpret_cast<const char*>(u8"β")},
-				{0x03B3, "γ (gamma)", reinterpret_cast<const char*>(u8"γ")},
-				{0x03BC, "μ (mu)", reinterpret_cast<const char*>(u8"μ")},
-				{0x1F44D, "👍 (thumbs up)", reinterpret_cast<const char*>(u8"👍")},
-				{0x2764, "❤ (heart)", reinterpret_cast<const char*>(u8"❤")},
-		};
-
-		for (const auto& glyph : testGlyphs) {
-			const ImFontGlyph* g = nullptr;
-			int fontIndex = -1;
-
-			for (int i = 0; i < io.Fonts->Fonts.Size; i++) {
-				g = io.Fonts->Fonts[i]->FindGlyph(glyph.codepoint);
-				if (g) {
-					fontIndex = i;
-					break;
-				}
-			}
-
-			ImGui::Text("U+%04X %s: %s",
-				glyph.codepoint,
-				glyph.name,
-				g ? "✅ Found" : "❌ Missing");
-
-			if (g) {
-				ImGui::SameLine();
-				ImGui::Text("(Font %d) ", fontIndex);
-				ImGui::SameLine();
-
-				// Try to render the actual character
-				if (fontIndex >= 0 && fontIndex < io.Fonts->Fonts.Size) {
-					ImGui::PushFont(io.Fonts->Fonts[fontIndex]);
-					ImGui::Text("%s", reinterpret_cast<const char*>(glyph.utf8));
-					ImGui::PopFont();
-				}
-			}
-		}
-
-		ImGui::Separator();
-
-		// Additional debug: check fallback character
-		ImFont* currentFont = io.Fonts->Fonts[0];
-		ImGui::Text("Font Debug:");
-		ImGui::Text("Fallback char: U+%04X (%c)", currentFont->FallbackChar, (char)currentFont->FallbackChar);
-		ImGui::Text("Ellipsis char: U+%04X", currentFont->EllipsisChar);
-
-		// Test direct character codes
-		ImGui::Text("Direct character test:");
-		ImGui::Text("Alpha test: %lc", (wint_t)0x03B1);  // Try wide character
-
-		ImGui::Separator();
-
-		ImGui::Text("Basic Tests:");
-		ImGui::Text("ASCII: Hello World 123");
-
-		// Test with different approaches
-		ImGui::Text("Unicode Test Methods:");
-		ImGui::Text("Method 1 (reinterpret_cast): ");
-		ImGui::SameLine();
-		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"α β γ μ"));
-
-		ImGui::Text("Method 2 (direct UTF-8): ");
-		ImGui::SameLine();
-		ImGui::Text("α β γ μ");  // Direct UTF-8 without u8 prefix
-
-		ImGui::Text("Method 3 (escape codes): ");
-		ImGui::SameLine();
-		ImGui::Text("\u03B1 \u03B2 \u03B3 \u03BC");  // α β γ μ as Unicode escapes
-
-		ImGui::Text("Method 4 (hex codes): ");
-		ImGui::SameLine();
-		ImGui::Text("U+03B1=%c U+03B2=%c U+03B3=%c U+03BC=%c",
-			(char)0x03B1, (char)0x03B2, (char)0x03B3, (char)0x03BC);
-
-		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"Math: ± ÷ × ≠ ∞"));
-		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"Arrows: ← → ↑ ↓"));
-
-		ImGui::Separator();
-
-		ImGui::Text("Your Test Cases:");
-		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"⌚ <- watch"));
-		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"😊 <- smile"));
-
-		ImGui::Separator();
-
-		ImGui::Text("More Emoji Tests:");
-		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"👍 ❤ 🔥 🎉 🚀"));
-		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"😀 😃 😄 😁 😆"));
-
-		ImGui::Separator();
-
-		ImGui::Text("Instructions:");
-		ImGui::BulletText("Add '#define IMGUI_USE_WCHAR32' to imconfig.h");
-		ImGui::BulletText("Add '#define IMGUI_ENABLE_FREETYPE' to imconfig.h");
-		ImGui::BulletText("Put emoji font in assets/fonts/");
-
-		ImGui::End();
-
-
-
-#pragma endregion
+//#pragma region emoji test
+//
+//		// Main test window
+//		ImGui::Begin("Emoji Test");
+//
+//		ImGui::Text("Configuration Status:");
+//#ifdef IMGUI_USE_WCHAR32
+//		ImGui::TextColored(ImVec4(0, 1, 0, 1), "✅ IMGUI_USE_WCHAR32");
+//#else
+//		ImGui::TextColored(ImVec4(1, 0, 0, 1), "❌ IMGUI_USE_WCHAR32 - add to imconfig.h");
+//#endif
+//
+//#ifdef IMGUI_ENABLE_FREETYPE
+//		ImGui::TextColored(ImVec4(0, 1, 0, 1), "✅ IMGUI_ENABLE_FREETYPE");
+//#else
+//		ImGui::TextColored(ImVec4(1, 0, 0, 1), "❌ IMGUI_ENABLE_FREETYPE - add to imconfig.h");
+//#endif
+//
+//		if (emojiLoaded) {
+//			ImGui::TextColored(ImVec4(0, 1, 0, 1), "✅ Emoji font loaded");
+//		}
+//		else {
+//			ImGui::TextColored(ImVec4(1, 0, 0, 1), "❌ No emoji font");
+//		}
+//
+//		ImGui::Separator();
+//
+//		ImGui::Text("Font Debug Information:");
+//		ImGui::Text("Total fonts loaded: %d", io.Fonts->Fonts.Size);
+//
+//		for (int i = 0; i < io.Fonts->Fonts.Size; i++) {
+//			ImFont* font = io.Fonts->Fonts[i];
+//			ImGui::Text("Font %d: %.0f px, %d glyphs", i, font->FontSize, font->Glyphs.Size);
+//
+//			// Test Greek letters with each font
+//			if (ImGui::TreeNode(("Test with Font " + std::to_string(i)).c_str())) {
+//				ImGui::PushFont(font);
+//				ImGui::Text("Greek test: α β γ μ");
+//				ImGui::Text("Math test: ± ÷ × ≠ ∞");
+//				ImGui::Text("Emoji test: 👍 ❤ 🔥");
+//				ImGui::PopFont();
+//				ImGui::TreePop();
+//			}
+//		}
+//
+//		ImGui::Separator();
+//
+//		// Check specific glyph availability
+//		ImGui::Text("Glyph Availability Check:");
+//
+//		struct TestGlyph {
+//			ImWchar codepoint;
+//			const char* name;
+//			const char* utf8;
+//		};
+//
+//		TestGlyph testGlyphs[] = {
+//				{0x03B1, "α (alpha)", reinterpret_cast<const char*>(u8"α")},
+//				{0x03B2, "β (beta)", reinterpret_cast<const char*>(u8"β")},
+//				{0x03B3, "γ (gamma)", reinterpret_cast<const char*>(u8"γ")},
+//				{0x03BC, "μ (mu)", reinterpret_cast<const char*>(u8"μ")},
+//				{0x1F44D, "👍 (thumbs up)", reinterpret_cast<const char*>(u8"👍")},
+//				{0x2764, "❤ (heart)", reinterpret_cast<const char*>(u8"❤")},
+//		};
+//
+//		for (const auto& glyph : testGlyphs) {
+//			const ImFontGlyph* g = nullptr;
+//			int fontIndex = -1;
+//
+//			for (int i = 0; i < io.Fonts->Fonts.Size; i++) {
+//				g = io.Fonts->Fonts[i]->FindGlyph(glyph.codepoint);
+//				if (g) {
+//					fontIndex = i;
+//					break;
+//				}
+//			}
+//
+//			ImGui::Text("U+%04X %s: %s",
+//				glyph.codepoint,
+//				glyph.name,
+//				g ? "✅ Found" : "❌ Missing");
+//
+//			if (g) {
+//				ImGui::SameLine();
+//				ImGui::Text("(Font %d) ", fontIndex);
+//				ImGui::SameLine();
+//
+//				// Try to render the actual character
+//				if (fontIndex >= 0 && fontIndex < io.Fonts->Fonts.Size) {
+//					ImGui::PushFont(io.Fonts->Fonts[fontIndex]);
+//					ImGui::Text("%s", reinterpret_cast<const char*>(glyph.utf8));
+//					ImGui::PopFont();
+//				}
+//			}
+//		}
+//
+//		ImGui::Separator();
+//
+//		// Additional debug: check fallback character
+//		ImFont* currentFont = io.Fonts->Fonts[0];
+//		ImGui::Text("Font Debug:");
+//		ImGui::Text("Fallback char: U+%04X (%c)", currentFont->FallbackChar, (char)currentFont->FallbackChar);
+//		ImGui::Text("Ellipsis char: U+%04X", currentFont->EllipsisChar);
+//
+//		// Test direct character codes
+//		ImGui::Text("Direct character test:");
+//		ImGui::Text("Alpha test: %lc", (wint_t)0x03B1);  // Try wide character
+//
+//		ImGui::Separator();
+//
+//		ImGui::Text("Basic Tests:");
+//		ImGui::Text("ASCII: Hello World 123");
+//
+//		// Test with different approaches
+//		ImGui::Text("Unicode Test Methods:");
+//		ImGui::Text("Method 1 (reinterpret_cast): ");
+//		ImGui::SameLine();
+//		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"α β γ μ"));
+//
+//		ImGui::Text("Method 2 (direct UTF-8): ");
+//		ImGui::SameLine();
+//		ImGui::Text("α β γ μ");  // Direct UTF-8 without u8 prefix
+//
+//		ImGui::Text("Method 3 (escape codes): ");
+//		ImGui::SameLine();
+//		ImGui::Text("\u03B1 \u03B2 \u03B3 \u03BC");  // α β γ μ as Unicode escapes
+//
+//		ImGui::Text("Method 4 (hex codes): ");
+//		ImGui::SameLine();
+//		ImGui::Text("U+03B1=%c U+03B2=%c U+03B3=%c U+03BC=%c",
+//			(char)0x03B1, (char)0x03B2, (char)0x03B3, (char)0x03BC);
+//
+//		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"Math: ± ÷ × ≠ ∞"));
+//		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"Arrows: ← → ↑ ↓"));
+//
+//		ImGui::Separator();
+//
+//		ImGui::Text("Your Test Cases:");
+//		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"⌚ <- watch"));
+//		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"😊 <- smile"));
+//
+//		ImGui::Separator();
+//
+//		ImGui::Text("More Emoji Tests:");
+//		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"👍 ❤ 🔥 🎉 🚀"));
+//		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"😀 😃 😄 😁 😆"));
+//
+//		ImGui::Separator();
+//
+//		ImGui::Text("Instructions:");
+//		ImGui::BulletText("Add '#define IMGUI_USE_WCHAR32' to imconfig.h");
+//		ImGui::BulletText("Add '#define IMGUI_ENABLE_FREETYPE' to imconfig.h");
+//		ImGui::BulletText("Put emoji font in assets/fonts/");
+//
+//		ImGui::End();
+//
+//
+//
+//#pragma endregion
 
 		if (idsCameraUI) {
 			idsCameraUI->Render();
