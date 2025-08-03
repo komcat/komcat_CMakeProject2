@@ -593,7 +593,10 @@ void RunPageUI::RenderColumn3() {
   }
 }
 
-// NEW: Live View tab rendering
+
+
+// REPLACE the RenderLiveViewTab() method in RunPageUI.cpp with this UIConfigVisualizer-style implementation
+
 void RunPageUI::RenderLiveViewTab() {
   ImGui::Text("Live Camera Feed");
   ImGui::Separator();
@@ -604,32 +607,230 @@ void RunPageUI::RenderLiveViewTab() {
     return;
   }
 
-  // Camera controls at the top
-  RenderCameraControls();
+  // Get available cameras
+  auto cameraIds = m_cameraManager->GetCameraIds();
+
+  if (cameraIds.empty()) {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No cameras available");
+    ImGui::TextWrapped("No cameras found. Please configure cameras in the Config section.");
+    return;
+  }
+
+  // Camera selection dropdown (similar to UIConfigVisualizer)
+  ImGui::Text("Camera:");
+
+  // Find current selection index
+  int currentCameraIndex = 0;
+  if (!m_selectedCameraId.empty()) {
+    for (size_t i = 0; i < cameraIds.size(); i++) {
+      if (cameraIds[i] == m_selectedCameraId) {
+        currentCameraIndex = (int)i;
+        break;
+      }
+    }
+  }
+  else {
+    // Select first camera by default
+    m_selectedCameraId = cameraIds[0];
+    SetSelectedCamera(m_selectedCameraId);
+  }
+
+  // Create camera selection array
+  std::vector<const char*> cameraNames;
+  for (const auto& id : cameraIds) {
+    cameraNames.push_back(id.c_str());
+  }
+
+  ImGui::SetNextItemWidth(200);
+  if (ImGui::Combo("##CameraSelection", &currentCameraIndex, cameraNames.data(), (int)cameraNames.size())) {
+    SetSelectedCamera(cameraIds[currentCameraIndex]);
+  }
+
+  // Camera status and controls (similar to UIConfigVisualizer)
+  if (!m_selectedCameraId.empty()) {
+    ImGui::Spacing();
+    auto status = m_cameraManager->GetCameraStatus(m_selectedCameraId);
+
+    // Connection status
+    ImGui::Text("Status: %s", status.connected ? "Connected" : "Disconnected");
+
+    if (status.connected) {
+      ImGui::SameLine();
+      ImGui::Text("| Grabbing: %s", status.grabbing ? "Yes" : "No");
+
+      // Quick controls
+      ImGui::Spacing();
+      if (!status.grabbing) {
+        if (ImGui::Button("Start Live Feed", ImVec2(120, 25))) {
+          // Use StartGrabbingWithBroadcast if available, otherwise regular StartGrabbing
+          bool success = false;
+          try {
+            success = m_cameraManager->StartGrabbingWithBroadcast(m_selectedCameraId);
+            UpdateStatus("Started live feed with broadcast: " + m_selectedCameraId);
+          }
+          catch (...) {
+            success = m_cameraManager->StartGrabbing(m_selectedCameraId);
+            UpdateStatus("Started live feed: " + m_selectedCameraId);
+          }
+
+          if (success && !m_cameraSubscriber) {
+            // Ensure subscriber is initialized
+            InitializeCameraFeed();
+          }
+        }
+      }
+      else {
+        if (ImGui::Button("Stop Live Feed", ImVec2(120, 25))) {
+          m_cameraManager->StopGrabbing(m_selectedCameraId);
+          UpdateStatus("Stopped live feed: " + m_selectedCameraId);
+        }
+      }
+
+      ImGui::SameLine();
+      if (ImGui::Button("Reconnect", ImVec2(80, 25))) {
+        m_cameraManager->ConnectCamera(m_selectedCameraId);
+        UpdateStatus("Reconnecting camera: " + m_selectedCameraId);
+      }
+    }
+    else {
+      if (ImGui::Button("Connect Camera", ImVec2(120, 25))) {
+        if (m_cameraManager->ConnectCamera(m_selectedCameraId)) {
+          UpdateStatus("Connected camera: " + m_selectedCameraId);
+        }
+        else {
+          UpdateStatus("Failed to connect camera: " + m_selectedCameraId);
+        }
+      }
+    }
+  }
 
   ImGui::Separator();
 
-  // Calculate canvas size for camera feed
+  // Live video feed display area
   ImVec2 availableSize = ImGui::GetContentRegionAvail();
-  float cameraHeight = availableSize.y - 20.0f; // Leave some margin
+  float feedHeight = availableSize.y - 60.0f; // Leave space for statistics
 
-  // Maintain 4:3 aspect ratio (adjust as needed)
+  // Calculate canvas size with aspect ratio (similar to UIConfigVisualizer)
   const float CAMERA_ASPECT_RATIO = 1280.0f / 1024.0f;
   ImVec2 canvasSize;
   canvasSize.x = availableSize.x;
   canvasSize.y = canvasSize.x / CAMERA_ASPECT_RATIO;
 
   // Ensure we don't exceed available height
-  if (canvasSize.y > cameraHeight) {
-    canvasSize.y = cameraHeight;
+  if (canvasSize.y > feedHeight) {
+    canvasSize.y = feedHeight;
     canvasSize.x = canvasSize.y * CAMERA_ASPECT_RATIO;
   }
 
-  // Create camera feed area
-  ImGui::BeginChild("CameraFeedArea", canvasSize, false, ImGuiWindowFlags_NoScrollbar);
+  // Minimum size check
+  if (canvasSize.x < 160.0f) {
+    canvasSize.x = 160.0f;
+    canvasSize.y = 160.0f / CAMERA_ASPECT_RATIO;
+  }
+
+  // Create camera canvas (similar to UIConfigVisualizer)
+  ImGui::BeginChild("CameraCanvas", canvasSize, true, ImGuiWindowFlags_NoScrollbar);
+
+  // Render camera feed using existing method
   RenderCameraFeedFromSubscriber(canvasSize);
+
   ImGui::EndChild();
+
+  // Display statistics below the feed (similar to UIConfigVisualizer)
+  if (m_cameraSubscriber) {
+    ImGui::Text("Frames: %llu | Subscriber: %s",
+      m_cameraSubscriber->GetTotalFramesReceived(),
+      m_cameraSubscriber->GetSubscriberId().c_str());
+
+    if (m_textureInitialized) {
+      ImGui::SameLine();
+      ImGui::Text("| Resolution: %ux%u", m_textureWidth, m_textureHeight);
+    }
+
+    // Frame rate calculation
+    static auto lastTime = std::chrono::steady_clock::now();
+    static uint64_t lastFrameCount = 0;
+    static float frameRate = 0.0f;
+
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTime).count();
+
+    if (elapsed >= 2000) { // Update every 2 seconds
+      uint64_t currentFrameCount = m_cameraSubscriber->GetTotalFramesReceived();
+      uint64_t frameDelta = currentFrameCount - lastFrameCount;
+      frameRate = (float)frameDelta / (elapsed / 1000.0f);
+
+      lastTime = now;
+      lastFrameCount = currentFrameCount;
+    }
+
+    ImGui::SameLine();
+    ImGui::Text("| FPS: %.1f", frameRate);
+
+    // Status indicators
+    ImGui::Text("Camera Connected: %s | Camera Grabbing: %s",
+      m_cameraSubscriber->IsCameraConnected() ? "Yes" : "No",
+      m_cameraSubscriber->IsCameraGrabbing() ? "Yes" : "No");
+
+    // Debug: Show if subscriber is receiving frames
+    if (m_cameraSubscriber->GetTotalFramesReceived() == 0) {
+      ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No frames received - check camera connection and grabbing status");
+    }
+  }
+  else {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No subscriber - camera feed not initialized");
+    if (ImGui::Button("Initialize Camera Feed", ImVec2(-1, 25))) {
+      InitializeCameraFeed();
+      UpdateStatus("Attempting to initialize camera feed for: " + m_selectedCameraId);
+    }
+  }
 }
+
+// ALSO ADD: Update the SetCameraManager method to ensure proper initialization
+void RunPageUI::SetCameraManager(CameraManager* cameraManager) {
+  m_cameraManager = cameraManager;
+
+  if (m_cameraManager) {
+    auto cameraIds = m_cameraManager->GetCameraIds();
+    if (!cameraIds.empty()) {
+      m_selectedCameraId = cameraIds[0];
+      // Don't initialize feed immediately - let user select camera first
+      m_cameraSystemInitialized = true;
+    }
+    m_logger->LogInfo("RunPageUI: Camera manager set with " +
+      std::to_string(cameraIds.size()) + " cameras");
+  }
+  else {
+    m_logger->LogInfo("RunPageUI: Camera manager cleared");
+    m_cameraSystemInitialized = false;
+  }
+}
+
+// ALSO UPDATE: InitializeCameraFeed method to be more robust
+void RunPageUI::InitializeCameraFeed() {
+  if (m_selectedCameraId.empty() || !m_cameraManager) {
+    m_cameraSystemInitialized = false;
+    UpdateStatus("Cannot initialize camera feed: no camera selected or manager unavailable");
+    return;
+  }
+
+  // Clear existing subscription
+  ClearCameraFeed();
+
+  // Create new subscriber
+  m_cameraSubscriber = std::make_shared<LiveVideoSubscriber>(m_selectedCameraId);
+
+  // Subscribe to the broadcasting system
+  m_cameraManager->SubscribeToFrames(m_cameraSubscriber);
+
+  // Start broadcast system if not already active
+  m_cameraManager->StartBroadcastSystem();
+
+  m_cameraSystemInitialized = true;
+  m_logger->LogInfo("RunPageUI: Camera feed initialized for: " + m_selectedCameraId);
+  UpdateStatus("Camera feed initialized for: " + m_selectedCameraId);
+}
+
 
 // NEW: Camera feed rendering using subscriber
 void RunPageUI::RenderCameraFeedFromSubscriber(const ImVec2& canvasSize) {
@@ -1387,21 +1588,6 @@ void RunPageUI::SetImguiFont(ImFont* font) {
 
 
 // NEW: Camera management methods
-void RunPageUI::SetCameraManager(CameraManager* cameraManager) {
-  m_cameraManager = cameraManager;
-
-  if (m_cameraManager) {
-    auto cameraIds = m_cameraManager->GetCameraIds();
-    if (!cameraIds.empty()) {
-      m_selectedCameraId = cameraIds[0];
-      InitializeCameraFeed();
-    }
-    m_logger->LogInfo("RunPageUI: Camera manager set with " + std::to_string(cameraIds.size()) + " cameras");
-  }
-  else {
-    m_logger->LogInfo("RunPageUI: Camera manager cleared");
-  }
-}
 
 void RunPageUI::SetSelectedCamera(const std::string& cameraId) {
   if (m_selectedCameraId == cameraId) {
@@ -1421,27 +1607,6 @@ void RunPageUI::SetSelectedCamera(const std::string& cameraId) {
   }
 }
 
-void RunPageUI::InitializeCameraFeed() {
-  if (m_selectedCameraId.empty() || !m_cameraManager) {
-    m_cameraSystemInitialized = false;
-    return;
-  }
-
-  // Clear existing subscription
-  ClearCameraFeed();
-
-  // Create new subscriber
-  m_cameraSubscriber = std::make_shared<LiveVideoSubscriber>(m_selectedCameraId);
-
-  // Subscribe to the broadcasting system
-  m_cameraManager->SubscribeToFrames(m_cameraSubscriber);
-
-  // Start broadcast system if not already active
-  m_cameraManager->StartBroadcastSystem();
-
-  m_cameraSystemInitialized = true;
-  m_logger->LogInfo("RunPageUI: Camera feed initialized for: " + m_selectedCameraId);
-}
 
 void RunPageUI::ClearCameraFeed() {
   if (m_cameraSubscriber && m_cameraManager) {

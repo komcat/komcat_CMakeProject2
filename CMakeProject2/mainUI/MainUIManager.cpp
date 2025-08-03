@@ -1148,6 +1148,9 @@ void MainUIManager::SetKeithley2400Manager(Keithley2400Manager* keithleyManager)
 }
 
 // Add this method implementation:
+// In MainUIManager.cpp - Update the SetCameraManager method
+// Add this code to pass camera manager to RunPageUI
+
 void MainUIManager::SetCameraManager(CameraManager* cameraManager) {
 	m_cameraManager = cameraManager;
 
@@ -1169,8 +1172,18 @@ void MainUIManager::SetCameraManager(CameraManager* cameraManager) {
 		m_macroPanelUI->SetCameraManager(m_cameraManager);
 		std::cout << "MainUIManager: MacroPanelUI updated with Camera Manager" << std::endl;
 	}
+
+	// IMPORTANT: Pass camera manager to RunPageUI if it exists
+	if (m_runPageUI && m_cameraManager) {
+		m_runPageUI->SetCameraManager(m_cameraManager);
+		std::cout << "MainUIManager: RunPageUI updated with Camera Manager" << std::endl;
+	}
 }
 
+
+
+
+// REPLACE the SetMachineOperations method in MainUIManager.cpp with this fixed version
 
 void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
 	m_machineOperations = machineOps;
@@ -1186,9 +1199,7 @@ void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
 			std::cout << "MainUIManager: MachineBlockUI updated with MachineOperations" << std::endl;
 		}
 
-
 		// IMPORTANT: Reconnect MacroManager to MachineBlockUI after MachineOperations is set
-		// This ensures MacroManager has access to the fully initialized MachineBlockUI
 		if (m_macroManager && m_machineBlockUI) {
 			m_macroManager->SetMachineBlockUI(m_machineBlockUI.get());
 			std::cout << "MainUIManager: MacroManager reconnected with initialized MachineBlockUI" << std::endl;
@@ -1201,36 +1212,41 @@ void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
 			std::cout << "MainUIManager: MacroPanelUI reconnected with initialized components" << std::endl;
 		}
 
+		// Create UserPromptUI and RunPageUI when MachineOperations is available
+		if (!m_userPromptUI) {
+			// 1. Create UserPromptUI
+			m_userPromptUI = std::make_unique<UserPromptUI>();
+			std::cout << "MainUIManager: UserPromptUI created" << std::endl;
+		}
 
-		// Create RunPageUI when MachineOperations is available
-		if (m_machineOperations) {
+		if (!m_runPageUI) {
+			// 2. Create RunPageUI
 			m_runPageUI = std::make_unique<RunPageUI>(*m_machineOperations);
+			std::cout << "MainUIManager: RunPageUI created" << std::endl;
+
+			// 3. Connect UserPromptUI to RunPageUI
+			if (m_userPromptUI) {
+				m_runPageUI->SetUserPromptUI(m_userPromptUI.get());
+				std::cout << "MainUIManager: UserPromptUI connected to RunPageUI" << std::endl;
+			}
 
 			// 4. Set font if available
 			if (m_imguiFont) {
 				m_runPageUI->SetImguiFont(m_imguiFont);
+				std::cout << "MainUIManager: Font set on RunPageUI" << std::endl;
+			}
+
+			// 5. CRITICAL: Set camera manager if available
+			if (m_cameraManager) {
+				m_runPageUI->SetCameraManager(m_cameraManager);
+				std::cout << "MainUIManager: Camera Manager set on RunPageUI" << std::endl;
 			}
 		}
-
 	}
 	else {
 		std::cout << "MainUIManager: MachineOperations cleared" << std::endl;
 	}
-
-	// Create UserPromptUI when MachineOperations is available
-	if (m_machineOperations) {
-		// 1. Create UserPromptUI
-		m_userPromptUI = std::make_unique<UserPromptUI>();
-
-		// 2. Create RunPageUI
-		m_runPageUI = std::make_unique<RunPageUI>(*m_machineOperations);
-
-		// 3. Connect UserPromptUI to RunPageUI
-		m_runPageUI->SetUserPromptUI(m_userPromptUI.get());
-	}
-
 }
-
 // Optionally, add a getter method as well
 MachineOperations* MainUIManager::GetMachineOperations() {
 	return m_machineOperations;

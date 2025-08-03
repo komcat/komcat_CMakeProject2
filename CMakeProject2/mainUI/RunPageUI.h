@@ -8,6 +8,7 @@
 #include "Programming/UserPromptUI.h"
 #include "ProcessFilterManager.h"
 #include "include/ui/OperationsDisplayUI.h"
+#include "include/camera/ICameraHardware.h"  // NEW: Add for camera hardware interface
 #include "logger.h"
 #include "LiveVideoSubscriber.h"  // NEW: Add camera support
 #include <string>
