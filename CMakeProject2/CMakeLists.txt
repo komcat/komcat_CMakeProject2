@@ -590,7 +590,7 @@ add_executable(CMakeProject2
   "include/camera/ids_camera_test.cpp"
   "include/camera/IDSCameraUI.h" 
   "include/camera/IDSCameraUI.cpp"
-  )
+   "include/camera/ICameraHardware.h" "include/camera/PylonCameraAdapter.cpp" "include/camera/IDSCameraAdapter.h" "include/camera/IDSCameraAdapter.cpp" "include/camera/CameraHardwareFactory.h" "include/camera/CameraHardwareFactory.cpp")
 
 
 
@@ -973,7 +973,7 @@ add_executable(uaa3App
   "include/camera/ids_camera_test.cpp"
   "include/camera/IDSCameraUI.h" 
   "include/camera/IDSCameraUI.cpp"
-  )
+   "include/camera/ICameraHardware.h" "include/camera/PylonCameraAdapter.cpp" "include/camera/IDSCameraAdapter.h" "include/camera/IDSCameraAdapter.cpp" "include/camera/CameraHardwareFactory.h" "include/camera/CameraHardwareFactory.cpp")
 
 
 

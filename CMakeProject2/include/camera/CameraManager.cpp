@@ -1,1134 +1,612 @@
+﻿// CameraManager.cpp - Complete implementation with interface support
 #include "CameraManager.h"
+#include "ICameraHardware.h"
+#include "CameraHardwareFactory.h"
+#include "pylon_camera_test.h"  // For backward compatibility
+#include "include/logger.h"
+#include "ids_camera_test.h"
 #include "imgui.h"
-#include <iostream>
 #include <algorithm>
-#include "CameraFrameData.h"
+#include <iostream>
 #include <pylon/PylonIncludes.h>
-#include <pylon/ImageFormatConverter.h>
-
+// ============================================================================
+// CONSTRUCTOR / DESTRUCTOR
+// ============================================================================
 
 CameraManager::CameraManager()
-  : m_showUI(true), m_selectedCameraId("") {
-  std::cout << "CameraManager initialized" << std::endl;
+  : m_showUI(false)
+  , m_broadcastSystemRunning(false)
+  , m_shouldStopBroadcast(false)
+  , m_globalBroadcastRate(30.0f) {
+
+  Logger* logger = Logger::GetInstance();
+  if (logger) {
+    logger->LogInfo("CameraManager created with interface support");
+  }
+}
+
+CameraManager::~CameraManager() {
+  StopBroadcastSystem();
+
+  // Stop all cameras
+  StopGrabbingAll();
+
+  // Clear all cameras
+  m_cameras.clear();
+
+  Logger* logger = Logger::GetInstance();
+  if (logger) {
+    logger->LogInfo("CameraManager destroyed");
+  }
+}
+
+// ============================================================================
+// MANAGED CAMERA IMPLEMENTATION
+// ============================================================================
+
+CameraManager::ManagedCamera::ManagedCamera(const ExtendedCameraInfo& cameraInfo)
+  : info(cameraInfo) {
+
+  // Create camera using factory
+  camera = CameraHardwareFactory::CreateCamera(cameraInfo.type, cameraInfo.id, cameraInfo.deviceInfo);
+
+  // For Pylon cameras, also create PylonCameraTest for backward compatibility
+  if (cameraInfo.type == ICameraHardware::CameraType::PYLON && camera) {
+    pylonCameraTest = std::make_unique<PylonCameraTest>();
+  }
+
+  Logger* logger = Logger::GetInstance();
+  if (logger) {
+    std::string typeName = CameraHardwareFactory::GetCameraTypeName(cameraInfo.type);
+    if (camera) {
+      logger->LogInfo("Created " + typeName + " camera: " + cameraInfo.id);
+    }
+    else {
+      logger->LogError("Failed to create " + typeName + " camera: " + cameraInfo.id);
+    }
+  }
+}
+
+// ============================================================================
+// CAMERA MANAGEMENT - ADD CAMERAS
+// ============================================================================
+// Add this method to CameraManager.cpp in the "CAMERA MANAGEMENT - ADD CAMERAS" section
+// This should go right after the existing ExtendedCameraInfo AddCamera method
+
+bool CameraManager::AddCamera(const CameraInfo& cameraInfo) {
+  // Convert CameraInfo to ExtendedCameraInfo with default Pylon type for backward compatibility
+  ExtendedCameraInfo extendedInfo(cameraInfo, ICameraHardware::CameraType::PYLON);
+  return AddCamera(extendedInfo);
+}
+bool CameraManager::AddCamera(const ExtendedCameraInfo& cameraInfo) {
+  std::lock_guard<std::mutex> lock(m_camerasMutex);
+
+  // Check if camera already exists
+  if (m_cameras.find(cameraInfo.id) != m_cameras.end()) {
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      logger->LogWarning("Camera already exists: " + cameraInfo.id);
+    }
+    return false;
+  }
+
+  try {
+    auto managedCamera = std::make_unique<ManagedCamera>(cameraInfo);
+    if (!managedCamera->camera) {
+      Logger* logger = Logger::GetInstance();
+      if (logger) {
+        logger->LogError("Failed to create camera instance for: " + cameraInfo.id);
+      }
+      return false;
+    }
+
+    // Set up frame callback for broadcasting
+    managedCamera->camera->SetFrameCallback([this](const CameraFrameData& frameData) {
+      BroadcastFrame(frameData);
+    });
+
+    m_cameras[cameraInfo.id] = std::move(managedCamera);
+
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      std::string typeStr = CameraHardwareFactory::GetCameraTypeName(cameraInfo.type);
+      logger->LogInfo("Added " + typeStr + " camera: " + cameraInfo.id);
+    }
+
+    return true;
+
+  }
+  catch (const std::exception& e) {
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      logger->LogError("Exception adding camera [" + cameraInfo.id + "]: " + std::string(e.what()));
+    }
+    return false;
+  }
+}
+
+bool CameraManager::AddPylonCamera(const CameraInfo& cameraInfo) {
+  ExtendedCameraInfo extendedInfo(cameraInfo, ICameraHardware::CameraType::PYLON);
+  return AddCamera(extendedInfo);
+}
+
+bool CameraManager::AddIDSCamera(const CameraInfo& cameraInfo, int deviceId) {
+  ExtendedCameraInfo extendedInfo(cameraInfo, ICameraHardware::CameraType::IDS, std::to_string(deviceId));
+  return AddCamera(extendedInfo);
+}
+
+bool CameraManager::AddCameraAutoDetect(const CameraInfo& cameraInfo, const std::string& deviceInfo) {
+  ICameraHardware::CameraType detectedType = CameraHardwareFactory::DetectCameraType(deviceInfo);
+
+  if (detectedType == ICameraHardware::CameraType::UNKNOWN) {
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      logger->LogWarning("Could not auto-detect camera type for: " + cameraInfo.id + ", defaulting to Pylon");
+    }
+    detectedType = ICameraHardware::CameraType::PYLON;
+  }
+
+  ExtendedCameraInfo extendedInfo(cameraInfo, detectedType, deviceInfo);
+  return AddCamera(extendedInfo);
+}
+
+bool CameraManager::RemoveCamera(const std::string& cameraId) {
+  std::lock_guard<std::mutex> lock(m_camerasMutex);
+
+  auto it = m_cameras.find(cameraId);
+  if (it != m_cameras.end()) {
+    // Stop camera if running
+    if (it->second->camera) {
+      if (it->second->camera->IsGrabbing()) {
+        it->second->camera->StopGrabbing();
+      }
+      if (it->second->camera->IsConnected()) {
+        it->second->camera->Disconnect();
+      }
+    }
+
+    m_cameras.erase(it);
+
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      logger->LogInfo("Removed camera: " + cameraId);
+    }
+    return true;
+  }
+
+  return false;
+}
+
+// ============================================================================
+// CAMERA ACCESS METHODS
+// ============================================================================
+
+ICameraHardware* CameraManager::GetCameraHardware(const std::string& cameraId) {
+  std::lock_guard<std::mutex> lock(m_camerasMutex);
+
+  auto it = m_cameras.find(cameraId);
+  if (it != m_cameras.end()) {
+    return it->second->camera.get();
+  }
+  return nullptr;
+}
+
+PylonCameraTest* CameraManager::GetCamera(const std::string& cameraId) {
+  std::lock_guard<std::mutex> lock(m_camerasMutex);
+
+  auto it = m_cameras.find(cameraId);
+  if (it != m_cameras.end() && it->second->pylonCameraTest) {
+    return it->second->pylonCameraTest.get();
+  }
+  return nullptr;  // Return nullptr for non-Pylon cameras
+}
+
+std::vector<std::string> CameraManager::GetCameraIds() const {
+  std::lock_guard<std::mutex> lock(m_camerasMutex);
+
+  std::vector<std::string> ids;
+  for (const auto& [id, camera] : m_cameras) {
+    ids.push_back(id);
+  }
+  return ids;
+}
+
+std::vector<std::string> CameraManager::GetCameraIdsByType(ICameraHardware::CameraType type) const {
+  std::lock_guard<std::mutex> lock(m_camerasMutex);
+
+  std::vector<std::string> result;
+  for (const auto& [id, camera] : m_cameras) {
+    if (camera->info.type == type) {
+      result.push_back(id);
+    }
+  }
+  return result;
+}
+
+// ============================================================================
+// CAMERA OPERATIONS
+// ============================================================================
+
+
+bool CameraManager::InitializeAllCameras() {
+  std::lock_guard<std::mutex> lock(m_camerasMutex);
+
+  bool allSuccess = true;
+  for (const auto& [id, managedCamera] : m_cameras) {
+    if (managedCamera->camera) {
+      // Direct call to avoid nested locking
+      if (!managedCamera->camera->Initialize()) {
+        allSuccess = false;
+        Logger* logger = Logger::GetInstance();
+        if (logger) {
+          logger->LogError("Failed to initialize camera: " + id);
+        }
+      }
+    }
+  }
+
+  return allSuccess;
+}
+
+bool CameraManager::ConnectCamera(const std::string& cameraId) {
+  // Get camera without holding lock to avoid deadlock
+  ICameraHardware* camera = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(m_camerasMutex);
+    auto it = m_cameras.find(cameraId);
+    if (it != m_cameras.end()) {
+      camera = it->second->camera.get();
+    }
+  }
+
+  if (camera) {
+    return camera->Initialize() && camera->Connect();
+  }
+  return false;
+}
+
+bool CameraManager::DisconnectCamera(const std::string& cameraId) {
+  // Get camera without holding lock to avoid deadlock
+  ICameraHardware* camera = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(m_camerasMutex);
+    auto it = m_cameras.find(cameraId);
+    if (it != m_cameras.end()) {
+      camera = it->second->camera.get();
+    }
+  }
+
+  if (camera) {
+    return camera->Disconnect();
+  }
+  return false;
+}
+
+bool CameraManager::StartGrabbing(const std::string& cameraId) {
+  // Get camera without holding lock to avoid deadlock
+  ICameraHardware* camera = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(m_camerasMutex);
+    auto it = m_cameras.find(cameraId);
+    if (it != m_cameras.end()) {
+      camera = it->second->camera.get();
+    }
+  }
+
+  if (camera) {
+    return camera->StartGrabbing();
+  }
+  return false;
+}
+
+bool CameraManager::StopGrabbing(const std::string& cameraId) {
+  // Get camera without holding lock to avoid deadlock
+  ICameraHardware* camera = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(m_camerasMutex);
+    auto it = m_cameras.find(cameraId);
+    if (it != m_cameras.end()) {
+      camera = it->second->camera.get();
+    }
+  }
+
+  if (camera) {
+    return camera->StopGrabbing();
+  }
+  return false;
 }
 
 
-CameraManager::~CameraManager() {
-  // Stop broadcasting system first (this will stop the thread safely)
-  StopBroadcastSystem();
 
-  // Clear all subscribers
-  {
-    std::lock_guard<std::mutex> lock(m_subscribersMutex);
-    m_subscribers.clear();
+bool CameraManager::StartGrabbingAll() {
+  std::lock_guard<std::mutex> lock(m_camerasMutex);
+
+  bool allSuccess = true;
+  for (const auto& [id, managedCamera] : m_cameras) {
+    if (managedCamera->camera && managedCamera->camera->IsConnected()) {
+      if (!managedCamera->camera->StartGrabbing()) {
+        allSuccess = false;
+        Logger* logger = Logger::GetInstance();
+        if (logger) {
+          logger->LogError("Failed to start grabbing for camera: " + id);
+        }
+      }
+    }
   }
 
-  // Stop all cameras before cleanup
-  StopGrabbingAll();
-
-  // Clear cameras
-  m_cameras.clear();
-
-  std::cout << "CameraManager destroyed" << std::endl;
+  return allSuccess;
 }
 
 bool CameraManager::StopGrabbingAll() {
+  std::lock_guard<std::mutex> lock(m_camerasMutex);
+
   bool allSuccess = true;
-
-  std::cout << "Stopping grabbing on all cameras..." << std::endl;
-
-  for (auto& [id, managedCamera] : m_cameras) {
-    auto& camera = managedCamera->camera->GetCamera();
-
-    if (!camera.IsGrabbing()) {
-      continue; // Already stopped
+  for (const auto& [id, managedCamera] : m_cameras) {
+    if (managedCamera->camera && managedCamera->camera->IsGrabbing()) {
+      if (!managedCamera->camera->StopGrabbing()) {
+        allSuccess = false;
+        Logger* logger = Logger::GetInstance();
+        if (logger) {
+          logger->LogError("Failed to stop grabbing for camera: " + id);
+        }
+      }
     }
-
-    camera.StopGrabbing();
-    std::cout << "Stopped grabbing on camera: " << id << std::endl;
   }
 
   return allSuccess;
 }
 
-//bool CameraManager::StartGrabbing(const std::string& cameraId) {
-//  auto* managedCamera = FindCamera(cameraId);
-//  if (!managedCamera) {
-//    std::cerr << "Camera '" << cameraId << "' not found" << std::endl;
-//    return false;
-//  }
-//
-//  auto& camera = managedCamera->camera->GetCamera();
-//
-//  if (!camera.IsConnected()) {
-//    std::cerr << "Camera '" << cameraId << "' is not connected" << std::endl;
-//    return false;
-//  }
-//
-//  if (camera.StartGrabbing()) {
-//    std::cout << "Started grabbing on camera: " << cameraId << std::endl;
-//    return true;
-//  }
-//  else {
-//    std::cerr << "Failed to start grabbing on camera: " << cameraId << std::endl;
-//    return false;
-//  }
-//}
 
-bool CameraManager::StopGrabbing(const std::string& cameraId) {
-  auto* managedCamera = FindCamera(cameraId);
-  if (!managedCamera) {
-    std::cerr << "Camera '" << cameraId << "' not found" << std::endl;
-    return false;
+bool CameraManager::StartGrabbingWithBroadcast(const std::string& cameraId) {
+  // Start broadcasting system if not running
+  if (!m_broadcastSystemRunning.load()) {
+    StartBroadcastSystem();
   }
 
-  auto& camera = managedCamera->camera->GetCamera();
-  camera.StopGrabbing();
-
-  std::cout << "Stopped grabbing on camera: " << cameraId << std::endl;
-  return true;
+  return StartGrabbing(cameraId);
 }
 
-bool CameraManager::ApplyExposureForNode(const std::string& cameraId, const std::string& nodeId) {
-  auto* managedCamera = FindCamera(cameraId);
-  if (!managedCamera) {
-    std::cerr << "Camera '" << cameraId << "' not found" << std::endl;
-    return false;
-  }
+// ============================================================================
+// EXPOSURE CONTROL
+// ============================================================================
+// Add this method to CameraManager.cpp in the "EXPOSURE CONTROL" section
+// This should go right after the existing ApplyExposureForNodeAll method
 
-  return managedCamera->camera->ApplyExposureForNode(nodeId);
+bool CameraManager::ApplyExposureSettings(const std::string& cameraId, const PylonCamera::ExposureSettings& settings) {
+  // Legacy method - use PylonCameraTest for backward compatibility
+  auto pylonCamera = GetCamera(cameraId);
+  if (pylonCamera) {
+    if (settings.exposure_auto)
+    {
+      return pylonCamera->GetCamera().SetExposureAuto(settings.exposure_auto);
+    }
+    else
+    {
+      return pylonCamera->GetCamera().SetExposureTime(settings.exposure_time);
+    }
+    
+  }
+  return false;
+}
+
+
+bool CameraManager::ApplyExposureForNode(const std::string& cameraId, const std::string& nodeId) {
+  // This is for Pylon cameras with exposure manager - keep for compatibility
+  auto pylonCamera = GetCamera(cameraId);
+  if (pylonCamera) {
+    return pylonCamera->ApplyExposureForNode(nodeId);
+  }
+  return false;
 }
 
 bool CameraManager::ApplyExposureForNodeAll(const std::string& nodeId) {
+  std::lock_guard<std::mutex> lock(m_camerasMutex);
+
   bool allSuccess = true;
-
-  std::cout << "Applying exposure settings for node '" << nodeId << "' to all cameras..." << std::endl;
-
-  for (auto& [id, managedCamera] : m_cameras) {
-    if (!managedCamera->camera->ApplyExposureForNode(nodeId)) {
-      std::cerr << "Failed to apply exposure for node '" << nodeId << "' to camera: " << id << std::endl;
-      allSuccess = false;
+  for (const auto& [id, managedCamera] : m_cameras) {
+    if (managedCamera->pylonCameraTest) {
+      if (!managedCamera->pylonCameraTest->ApplyExposureForNode(nodeId)) {
+        allSuccess = false;
+      }
     }
   }
 
   return allSuccess;
 }
 
-bool CameraManager::ApplyExposureSettings(const std::string& cameraId, const PylonCamera::ExposureSettings& settings) {
-  auto* managedCamera = FindCamera(cameraId);
-  if (!managedCamera) {
-    std::cerr << "Camera '" << cameraId << "' not found" << std::endl;
-    return false;
+bool CameraManager::ApplyExposureSettings(const std::string& cameraId, const ICameraHardware::ExposureSettings& settings) {
+  auto camera = GetCameraHardware(cameraId);
+  if (camera) {
+    return camera->SetExposureSettings(settings);
   }
-
-  auto& camera = managedCamera->camera->GetCamera();
-  return camera.ApplyExposureSettings(settings);
+  return false;
 }
 
-bool CameraManager::CaptureImage(const std::string& cameraId) {
-  auto* managedCamera = FindCamera(cameraId);
-  if (!managedCamera) {
-    std::cerr << "Camera '" << cameraId << "' not found" << std::endl;
-    return false;
-  }
+// ============================================================================
+// IMAGE CAPTURE
+// ============================================================================
 
-  return managedCamera->camera->CaptureImage();
+bool CameraManager::CaptureImage(const std::string& cameraId) {
+  auto camera = GetCameraHardware(cameraId);
+  if (camera) {
+    CameraFrameData frameData;
+    return camera->CaptureFrame(frameData);
+  }
+  return false;
 }
 
 bool CameraManager::CaptureImageAll() {
+  std::lock_guard<std::mutex> lock(m_camerasMutex);
+
   bool allSuccess = true;
-
-  std::cout << "Capturing images from all cameras..." << std::endl;
-
-  for (auto& [id, managedCamera] : m_cameras) {
-    auto& camera = managedCamera->camera->GetCamera();
-
-    if (!camera.IsConnected() || !camera.IsGrabbing()) {
-      std::cout << "Skipping camera " << id << " (not connected or not grabbing)" << std::endl;
-      continue;
-    }
-
-    if (!managedCamera->camera->CaptureImage()) {
-      std::cerr << "Failed to capture image from camera: " << id << std::endl;
-      allSuccess = false;
-    }
-    else {
-      std::cout << "Captured image from camera: " << id << std::endl;
+  for (const auto& [id, managedCamera] : m_cameras) {
+    if (managedCamera->camera && managedCamera->camera->IsGrabbing()) {
+      CameraFrameData frameData;
+      if (!managedCamera->camera->CaptureFrame(frameData)) {
+        allSuccess = false;
+      }
     }
   }
 
   return allSuccess;
 }
+
+// ============================================================================
+// CAMERA STATUS
+// ============================================================================
 
 CameraManager::CameraStatus CameraManager::GetCameraStatus(const std::string& cameraId) const {
   CameraStatus status;
   status.id = cameraId;
+  status.type = ICameraHardware::CameraType::UNKNOWN;
+  status.connected = false;
+  status.grabbing = false;
+  status.deviceRemoved = true;
 
-  const auto* managedCamera = FindCamera(cameraId);
-  if (!managedCamera) {
-    status.connected = false;
-    status.grabbing = false;
-    status.deviceRemoved = false;
-    status.deviceInfo = "Camera not found";
-    return status;
+  std::lock_guard<std::mutex> lock(m_camerasMutex);
+  auto it = m_cameras.find(cameraId);
+  if (it != m_cameras.end()) {
+    const auto& managedCamera = it->second;
+    const auto& camera = managedCamera->camera;
+
+    status.type = managedCamera->info.type;
+    status.deviceInfo = managedCamera->info.deviceInfo;
+
+    if (camera) {
+      status.connected = camera->IsConnected();
+      status.grabbing = camera->IsGrabbing();
+      status.deviceRemoved = camera->IsDeviceRemoved();
+      status.modelName = camera->GetModelName();
+      status.serialNumber = camera->GetSerialNumber();
+      status.currentExposure = camera->GetExposureSettings();
+    }
   }
-
-  const auto& camera = managedCamera->camera->GetCamera();
-  status.connected = camera.IsConnected();
-  status.grabbing = camera.IsGrabbing();
-  status.deviceRemoved = camera.IsCameraDeviceRemoved();
-  status.deviceInfo = camera.GetDeviceInfo();
-  status.currentExposure = camera.GetCurrentExposureSettings();
 
   return status;
 }
 
+// Replace GetAllCameraStatus method in CameraManager.cpp to fix the deadlock:
+
 std::vector<CameraManager::CameraStatus> CameraManager::GetAllCameraStatus() const {
-  std::vector<CameraStatus> statusList;
-  statusList.reserve(m_cameras.size());
+  std::vector<CameraStatus> statuses;
 
+  std::lock_guard<std::mutex> lock(m_camerasMutex);
+
+  // Direct iteration without calling GetCameraStatus to avoid nested locking
   for (const auto& [id, managedCamera] : m_cameras) {
-    statusList.push_back(GetCameraStatus(id));
+    CameraStatus status;
+    status.id = id;
+    status.type = ICameraHardware::CameraType::UNKNOWN;
+    status.connected = false;
+    status.grabbing = false;
+    status.deviceRemoved = true;
+
+    if (managedCamera) {
+      const auto& camera = managedCamera->camera;
+
+      status.type = managedCamera->info.type;
+      status.deviceInfo = managedCamera->info.deviceInfo;
+
+      if (camera) {
+        status.connected = camera->IsConnected();
+        status.grabbing = camera->IsGrabbing();
+        status.deviceRemoved = camera->IsDeviceRemoved();
+        status.modelName = camera->GetModelName();
+        status.serialNumber = camera->GetSerialNumber();
+        status.currentExposure = camera->GetExposureSettings();
+      }
+    }
+
+    statuses.push_back(status);
   }
 
-  return statusList;
+  return statuses;
+}
+// ============================================================================
+// CAMERA CONFIGURATION
+// ============================================================================
+
+bool CameraManager::SetCameraConfiguration(const std::string& cameraId, const std::string& key, const std::string& value) {
+  auto camera = GetCameraHardware(cameraId);
+  if (camera) {
+    return camera->SetConfiguration(key, value);
+  }
+  return false;
 }
 
-void CameraManager::RenderUI() {
-  if (!m_showUI) return;
-
-  ImGui::Begin("Camera Manager", &m_showUI);
-
-  // Camera count and status
-  ImGui::Text("Cameras: %zu", m_cameras.size());
-
-  if (ImGui::Button("Initialize All")) {
-    InitializeAllCameras();
+std::string CameraManager::GetCameraConfiguration(const std::string& cameraId, const std::string& key) const {
+  auto camera = const_cast<CameraManager*>(this)->GetCameraHardware(cameraId);
+  if (camera) {
+    return camera->GetConfiguration(key);
   }
-  ImGui::SameLine();
-  if (ImGui::Button("Start All")) {
-    StartGrabbingAll();
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("Stop All")) {
-    StopGrabbingAll();
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("Capture All")) {
-    CaptureImageAll();
-  }
-
-  ImGui::Separator();
-
-  // Create a two-panel layout
-  ImGui::Columns(2, "CameraManagerColumns");
-
-  // Left panel - Camera list
-  RenderCameraList();
-
-  ImGui::NextColumn();
-
-  // Right panel - Selected camera details
-  RenderSelectedCameraPanel();
-
-  ImGui::Columns(1); // Reset columns
-
-  ImGui::Separator();
-
-  // Bulk operations
-  RenderBulkOperations();
-
-  ImGui::Separator();
-
-  // Status table
-  RenderCameraStatusTable();
-
-  ImGui::End();
+  return "";
 }
 
-CameraManager::ManagedCamera* CameraManager::FindCamera(const std::string& cameraId) {
-  auto it = m_cameras.find(cameraId);
-  return (it != m_cameras.end()) ? it->second.get() : nullptr;
-}
+// ============================================================================
+// BROADCASTING SYSTEM
+// ============================================================================
 
-const CameraManager::ManagedCamera* CameraManager::FindCamera(const std::string& cameraId) const {
-  auto it = m_cameras.find(cameraId);
-  return (it != m_cameras.end()) ? it->second.get() : nullptr;
-}
-
-void CameraManager::RenderCameraList() {
-  ImGui::Text("Camera List");
-  ImGui::Separator();
-
-  // Add camera button
-  if (ImGui::Button("Add Camera")) {
-    static int cameraCounter = 1;
-    std::string newId = "camera_" + std::to_string(cameraCounter++);
-    CameraInfo info(newId, "New Camera");
-    AddCamera(info);
-  }
-
-  // Camera list
-  for (const auto& [id, managedCamera] : m_cameras) {
-    bool isSelected = (m_selectedCameraId == id);
-
-    if (ImGui::Selectable(id.c_str(), isSelected)) {
-      m_selectedCameraId = id;
-    }
-
-    // Right-click context menu
-    if (ImGui::BeginPopupContextItem()) {
-      if (ImGui::MenuItem("Remove Camera")) {
-        RemoveCamera(id);
-        if (m_selectedCameraId == id) {
-          m_selectedCameraId = "";
-        }
-        ImGui::CloseCurrentPopup();
-      }
-      ImGui::EndPopup();
-    }
-
-    // Show status indicator
-    const auto& camera = managedCamera->camera->GetCamera();
-    ImGui::SameLine();
-    if (camera.IsConnected()) {
-      if (camera.IsGrabbing()) {
-        ImGui::TextColored(ImVec4(0, 1, 0, 1), "[GRAB]");
-      }
-      else {
-        ImGui::TextColored(ImVec4(0, 0.8f, 0, 1), "[CONN]");
-      }
-    }
-    else {
-      ImGui::TextColored(ImVec4(0.8f, 0, 0, 1), "[DISC]");
-    }
-  }
-}
-
-void CameraManager::RenderSelectedCameraPanel() {
-  ImGui::Text("Camera Details");
-  ImGui::Separator();
-
-  if (m_selectedCameraId.empty()) {
-    ImGui::Text("No camera selected");
-    return;
-  }
-
-  auto* managedCamera = FindCamera(m_selectedCameraId);
-  if (!managedCamera) {
-    ImGui::Text("Selected camera not found");
-    return;
-  }
-
-  // Camera info
-  ImGui::Text("ID: %s", managedCamera->info.id.c_str());
-  ImGui::Text("Description: %s", managedCamera->info.description.c_str());
-  if (!managedCamera->info.serialNumber.empty()) {
-    ImGui::Text("Serial: %s", managedCamera->info.serialNumber.c_str());
-  }
-
-  auto& camera = managedCamera->camera->GetCamera();
-  auto& cameraTest = *managedCamera->camera;
-
-  // Connection controls
-  ImGui::Separator();
-  ImGui::Text("Connection");
-
-  if (!camera.IsConnected()) {
-    if (ImGui::Button("Connect")) {
-      ConnectCamera(m_selectedCameraId);
-    }
-  }
-  else {
-    if (ImGui::Button("Disconnect")) {
-      DisconnectCamera(m_selectedCameraId);
-    }
-
-    ImGui::SameLine();
-    if (!camera.IsGrabbing()) {
-      if (ImGui::Button("Start Grab")) {
-        StartGrabbing(m_selectedCameraId);
-      }
-    }
-    else {
-      if (ImGui::Button("Stop Grab")) {
-        StopGrabbing(m_selectedCameraId);
-      }
-    }
-
-    ImGui::SameLine();
-    if (ImGui::Button("Capture")) {
-      CaptureImage(m_selectedCameraId);
-    }
-  }
-
-  // Quick exposure controls if connected
-  if (camera.IsConnected()) {
-    ImGui::Separator();
-    ImGui::Text("Quick Exposure");
-
-    // Quick node buttons
-    const std::vector<std::pair<std::string, std::string>> quickNodes = {
-        {"node_4083", "Sled"},
-        {"node_4107", "PIC"},
-        {"node_4137", "Coll Lens"},
-        {"node_4156", "Focus Lens"}
-    };
-
-    int buttonCount = 0;
-    for (const auto& [nodeId, nodeName] : quickNodes) {
-      if (ImGui::Button(nodeName.c_str())) {
-        ApplyExposureForNode(m_selectedCameraId, nodeId);
-      }
-      buttonCount++;
-      if ((buttonCount % 2) != 0) {
-        ImGui::SameLine();
-      }
-    }
-
-    // Show current exposure settings
-    ImGui::Separator();
-    ImGui::Text("Current Settings");
-    auto settings = camera.GetCurrentExposureSettings();
-    ImGui::Text("Exposure: %.0f us", settings.exposure_time);
-    ImGui::Text("Gain: %.1f", settings.gain);
-    ImGui::Text("Auto Exp: %s", settings.exposure_auto ? "On" : "Off");
-    ImGui::Text("Auto Gain: %s", settings.gain_auto ? "On" : "Off");
-  }
-
-  // Camera window toggle
-  ImGui::Separator();
-  if (ImGui::Button("Toggle Camera Window")) {
-    cameraTest.ToggleWindow();
-  }
-}
-
-void CameraManager::RenderBulkOperations() {
-  ImGui::Text("Bulk Operations");
-
-  // Node-based exposure application
-  static char nodeIdBuffer[64] = "node_4083";
-  ImGui::InputText("Node ID", nodeIdBuffer, sizeof(nodeIdBuffer));
-  ImGui::SameLine();
-  if (ImGui::Button("Apply to All")) {
-    ApplyExposureForNodeAll(std::string(nodeIdBuffer));
-  }
-}
-
-void CameraManager::RenderCameraStatusTable() {
-  ImGui::Text("Camera Status");
-
-  if (ImGui::BeginTable("CameraStatusTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-    ImGui::TableSetupColumn("ID");
-    ImGui::TableSetupColumn("Connected");
-    ImGui::TableSetupColumn("Grabbing");
-    ImGui::TableSetupColumn("Device Info");
-    ImGui::TableSetupColumn("Exposure");
-    ImGui::TableSetupColumn("Gain");
-    ImGui::TableHeadersRow();
-
-    for (const auto& [id, managedCamera] : m_cameras) {
-      ImGui::TableNextRow();
-
-      const auto& camera = managedCamera->camera->GetCamera();
-
-      ImGui::TableSetColumnIndex(0);
-      ImGui::Text("%s", id.c_str());
-
-      ImGui::TableSetColumnIndex(1);
-      ImGui::Text("%s", camera.IsConnected() ? "Yes" : "No");
-
-      ImGui::TableSetColumnIndex(2);
-      ImGui::Text("%s", camera.IsGrabbing() ? "Yes" : "No");
-
-      ImGui::TableSetColumnIndex(3);
-      if (camera.IsConnected()) {
-        std::string deviceInfo = camera.GetDeviceInfo();
-        if (deviceInfo.length() > 20) {
-          deviceInfo = deviceInfo.substr(0, 17) + "...";
-        }
-        ImGui::Text("%s", deviceInfo.c_str());
-      }
-      else {
-        ImGui::Text("N/A");
-      }
-
-      ImGui::TableSetColumnIndex(4);
-      if (camera.IsConnected()) {
-        ImGui::Text("%.0f us", camera.GetExposureTime());
-      }
-      else {
-        ImGui::Text("N/A");
-      }
-
-      ImGui::TableSetColumnIndex(5);
-      if (camera.IsConnected()) {
-        ImGui::Text("%.1f", camera.GetGain());
-      }
-      else {
-        ImGui::Text("N/A");
-      }
-    }
-
-    ImGui::EndTable();
-  }
-}
-
-
-// UPDATE your existing AddCamera method to show connection info:
-bool CameraManager::AddCamera(const CameraInfo& cameraInfo) {
-  // Check if camera with this ID already exists
-  if (m_cameras.find(cameraInfo.id) != m_cameras.end()) {
-    std::cerr << "Camera with ID '" << cameraInfo.id << "' already exists" << std::endl;
-    return false;
-  }
-
-  // Create new managed camera
-  auto managedCamera = std::make_unique<ManagedCamera>(cameraInfo);
-
-  std::cout << "Added camera: " << cameraInfo.id;
-  if (!cameraInfo.description.empty()) {
-    std::cout << " (" << cameraInfo.description << ")";
-  }
-  std::cout << " - Connection: " << cameraInfo.GetConnectionInfo() << std::endl;  // NEW: Show connection method
-
-  m_cameras[cameraInfo.id] = std::move(managedCamera);
-
-  // Auto-select first camera
-  if (m_selectedCameraId.empty()) {
-    m_selectedCameraId = cameraInfo.id;
-  }
-
-  return true;
-}
-
-
-bool CameraManager::RemoveCamera(const std::string& cameraId) {
-  auto it = m_cameras.find(cameraId);
-  if (it == m_cameras.end()) {
-    std::cerr << "Camera '" << cameraId << "' not found" << std::endl;
-    return false;
-  }
-
-  // Stop grabbing if active
-  StopGrabbing(cameraId);
-
-  // Remove camera
-  m_cameras.erase(it);
-
-  // Update selection if needed
-  if (m_selectedCameraId == cameraId) {
-    m_selectedCameraId = m_cameras.empty() ? "" : m_cameras.begin()->first;
-  }
-
-  std::cout << "Removed camera: " << cameraId << std::endl;
-  return true;
-}
-
-PylonCameraTest* CameraManager::GetCamera(const std::string& cameraId) {
-  auto* managedCamera = FindCamera(cameraId);
-  return managedCamera ? managedCamera->camera.get() : nullptr;
-}
-
-std::vector<std::string> CameraManager::GetCameraIds() const {
-  std::vector<std::string> ids;
-  ids.reserve(m_cameras.size());
-
-  for (const auto& [id, camera] : m_cameras) {
-    ids.push_back(id);
-  }
-
-  return ids;
-}
-
-
-// UPDATE your existing InitializeAllCameras method to show connection details:
-bool CameraManager::InitializeAllCameras() {
-  bool allSuccess = true;
-
-  std::cout << "Initializing all cameras with enhanced connection support..." << std::endl;
-
-  for (auto& [id, managedCamera] : m_cameras) {
-    if (!managedCamera->info.autoConnect) {
-      std::cout << "Skipping camera " << id << " (auto-connect disabled)" << std::endl;
-      continue;
-    }
-
-    std::cout << "Initializing camera: " << id << " (" << managedCamera->info.GetConnectionInfo() << ")" << std::endl;  // NEW: Show connection method
-
-    if (!ConnectCamera(id)) {
-      std::cerr << "Failed to connect camera: " << id << std::endl;
-      allSuccess = false;
-    }
-  }
-
-  std::cout << "Camera initialization " << (allSuccess ? "completed successfully" : "completed with errors") << std::endl;
-  return allSuccess;
-}
-
-
-
-bool CameraManager::ConnectCamera(const std::string& cameraId) {
-  auto* managedCamera = FindCamera(cameraId);
-  if (!managedCamera) {
-    std::cerr << "Camera '" << cameraId << "' not found" << std::endl;
-    return false;
-  }
-
-  auto& camera = managedCamera->camera->GetCamera();
-  const auto& info = managedCamera->info;
-
-  if (!camera.Initialize()) {
-    std::cerr << "Failed to initialize camera: " << cameraId << std::endl;
-    return false;
-  }
-
-  bool connected = false;
-
-  // NEW: Enhanced connection logic based on camera info
-  switch (info.connectionMethod) {
-  case CameraInfo::ConnectionMethod::IP_ADDRESS:
-    std::cout << "Connecting to camera " << cameraId << " via IP: " << info.ipAddress << std::endl;
-    connected = camera.ConnectToIP(info.ipAddress);
-    break;
-
-  case CameraInfo::ConnectionMethod::SERIAL_NUMBER:
-    std::cout << "Connecting to camera " << cameraId << " via Serial: " << info.serialNumber << std::endl;
-    connected = camera.ConnectToSerial(info.serialNumber);
-    break;
-
-  case CameraInfo::ConnectionMethod::DEVICE_INDEX:
-    std::cout << "Connecting to camera " << cameraId << " via Index: " << info.deviceIndex << std::endl;
-    connected = camera.ConnectToIndex(info.deviceIndex);
-    break;
-
-  case CameraInfo::ConnectionMethod::AUTO:
-  default:
-    std::cout << "Connecting to camera " << cameraId << " via Auto-detection" << std::endl;
-    connected = camera.Connect();
-    break;
-  }
-
-  if (connected) {
-    std::cout << "Successfully connected camera: " << cameraId << std::endl;
-
-    // NEW: Log network information for GigE cameras
-    if (info.IsIPConnection()) {
-      std::string networkInfo = camera.GetNetworkInfo();
-      if (!networkInfo.empty()) {
-        std::cout << "  Network Info: " << networkInfo << std::endl;
-      }
-    }
-  }
-  else {
-    std::cerr << "Failed to connect camera: " << cameraId << std::endl;
-  }
-
-  return connected;
-}
-
-
-bool CameraManager::DisconnectCamera(const std::string& cameraId) {
-  auto* managedCamera = FindCamera(cameraId);
-  if (!managedCamera) {
-    std::cerr << "Camera '" << cameraId << "' not found" << std::endl;
-    return false;
-  }
-
-  auto& camera = managedCamera->camera->GetCamera();
-  camera.Disconnect();
-
-  std::cout << "Disconnected camera: " << cameraId << std::endl;
-  return true;
-}
-
-bool CameraManager::StartGrabbingAll() {
-  bool allSuccess = true;
-
-  std::cout << "Starting grabbing on all cameras..." << std::endl;
-
-  for (auto& [id, managedCamera] : m_cameras) {
-    auto& camera = managedCamera->camera->GetCamera();
-
-    if (!camera.IsConnected()) {
-      std::cout << "Skipping camera " << id << " (not connected)" << std::endl;
-      continue;
-    }
-
-    if (!camera.StartGrabbing()) {
-      std::cerr << "Failed to start grabbing on camera: " << id << std::endl;
-      allSuccess = false;
-    }
-    else {
-      std::cout << "Started grabbing on camera: " << id << std::endl;
-    }
-  }
-
-  return allSuccess;
-}
-
-
-// ADD this new method to your CameraManager.cpp (enhanced status table):
-void CameraManager::RenderEnhancedCameraStatusTable() {
-  ImGui::Text("Enhanced Camera Status");
-
-  if (ImGui::BeginTable("EnhancedCameraStatusTable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-    ImGui::TableSetupColumn("ID");
-    ImGui::TableSetupColumn("Connection");
-    ImGui::TableSetupColumn("Connected");
-    ImGui::TableSetupColumn("Grabbing");
-    ImGui::TableSetupColumn("Device Info");
-    ImGui::TableSetupColumn("Network Info");
-    ImGui::TableSetupColumn("Exposure");
-    ImGui::TableSetupColumn("Gain");
-    ImGui::TableHeadersRow();
-
-    for (const auto& [id, managedCamera] : m_cameras) {
-      ImGui::TableNextRow();
-
-      const auto& camera = managedCamera->camera->GetCamera();
-      const auto& info = managedCamera->info;
-
-      ImGui::TableSetColumnIndex(0);
-      ImGui::Text("%s", id.c_str());
-
-      ImGui::TableSetColumnIndex(1);
-      ImGui::Text("%s", info.GetConnectionInfo().c_str());
-
-      ImGui::TableSetColumnIndex(2);
-      ImGui::Text("%s", camera.IsConnected() ? "Yes" : "No");
-
-      ImGui::TableSetColumnIndex(3);
-      ImGui::Text("%s", camera.IsGrabbing() ? "Yes" : "No");
-
-      ImGui::TableSetColumnIndex(4);
-      if (camera.IsConnected()) {
-        std::string deviceInfo = camera.GetDeviceInfo();
-        if (deviceInfo.length() > 20) {
-          deviceInfo = deviceInfo.substr(0, 17) + "...";
-        }
-        ImGui::Text("%s", deviceInfo.c_str());
-      }
-      else {
-        ImGui::Text("N/A");
-      }
-
-      ImGui::TableSetColumnIndex(5);
-      if (camera.IsConnected() && info.IsIPConnection()) {
-        std::string networkInfo = camera.GetNetworkInfo();
-        if (networkInfo.length() > 15) {
-          networkInfo = networkInfo.substr(0, 12) + "...";
-        }
-        ImGui::Text("%s", networkInfo.c_str());
-      }
-      else {
-        ImGui::Text("N/A");
-      }
-
-      ImGui::TableSetColumnIndex(6);
-      if (camera.IsConnected()) {
-        ImGui::Text("%.0f us", camera.GetExposureTime());
-      }
-      else {
-        ImGui::Text("N/A");
-      }
-
-      ImGui::TableSetColumnIndex(7);
-      if (camera.IsConnected()) {
-        ImGui::Text("%.1f", camera.GetGain());
-      }
-      else {
-        ImGui::Text("N/A");
-      }
-    }
-
-    ImGui::EndTable();
-  }
-}
-
-// ADD this new method to your CameraManager.cpp (enhanced camera list):
-void CameraManager::RenderEnhancedCameraList() {
-  ImGui::Text("Camera List");
-  ImGui::Separator();
-
-  for (const auto& [id, managedCamera] : m_cameras) {
-    bool isSelected = (m_selectedCameraId == id);
-
-    if (ImGui::Selectable(id.c_str(), isSelected)) {
-      m_selectedCameraId = id;
-    }
-
-    // Right-click context menu
-    if (ImGui::BeginPopupContextItem()) {
-      if (ImGui::MenuItem("Remove Camera")) {
-        RemoveCamera(id);
-        if (m_selectedCameraId == id) {
-          m_selectedCameraId = "";
-        }
-        ImGui::CloseCurrentPopup();
-      }
-      ImGui::EndPopup();
-    }
-
-    // NEW: Show connection info
-    ImGui::SameLine();
-    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "[%s]", managedCamera->info.GetConnectionInfo().c_str());
-
-    // Show status indicator
-    const auto& camera = managedCamera->camera->GetCamera();
-    ImGui::SameLine();
-    if (camera.IsConnected()) {
-      if (camera.IsGrabbing()) {
-        ImGui::TextColored(ImVec4(0, 1, 0, 1), "[GRAB]");
-      }
-      else {
-        ImGui::TextColored(ImVec4(0, 0.8f, 0, 1), "[CONN]");
-      }
-    }
-    else {
-      ImGui::TextColored(ImVec4(0.8f, 0, 0, 1), "[DISC]");
-    }
-  }
-}
-
-
-
-// Add these methods to your existing CameraManager.cpp file
-
-// **NEW: Broadcasting system implementation**
 void CameraManager::StartBroadcastSystem() {
-  if (m_broadcastActive.load()) return;
+  if (m_broadcastSystemRunning.exchange(true)) {
+    return; // Already running
+  }
 
-  m_broadcastActive = true;
-  m_broadcastThread = std::make_unique<std::thread>(&CameraManager::BroadcastThreadFunction, this);
-  std::cout << "Camera broadcasting system started" << std::endl;
+  m_shouldStopBroadcast.store(false);
+  m_broadcastThread = std::thread(&CameraManager::BroadcastThreadFunction, this);
+
+  Logger* logger = Logger::GetInstance();
+  if (logger) {
+    logger->LogInfo("Camera broadcasting system started");
+  }
 }
 
 void CameraManager::StopBroadcastSystem() {
-  if (!m_broadcastActive.load()) return;
-
-  m_broadcastActive = false;
-  m_frameQueueCV.notify_all();
-
-  if (m_broadcastThread && m_broadcastThread->joinable()) {
-    m_broadcastThread->join();
+  if (!m_broadcastSystemRunning.exchange(false)) {
+    return; // Already stopped
   }
 
-  std::cout << "Camera broadcasting system stopped" << std::endl;
-}
+  m_shouldStopBroadcast.store(true);
 
-
-
-// **ENHANCED: Debug version of BroadcastThreadFunction**
-void CameraManager::BroadcastThreadFunction() {
-  std::cout << "[DEBUG] Broadcast thread started" << std::endl;
-
-  int broadcastCounter = 0;
-
-  while (m_broadcastActive.load()) {
-    std::unique_lock<std::mutex> lock(m_frameQueueMutex);
-
-    // Wait for frames or shutdown signal
-    m_frameQueueCV.wait(lock, [this]() {
-      return !m_frameQueue.empty() || !m_broadcastActive.load();
-    });
-
-    // Process all queued frames
-    while (!m_frameQueue.empty() && m_broadcastActive.load()) {
-      auto frameData = std::move(m_frameQueue.front());
-      m_frameQueue.pop();
-      lock.unlock();
-
-      broadcastCounter++;
-
-      if ((broadcastCounter % 30) == 1) {
-        std::cout << "[DEBUG] Broadcasting frame #" << broadcastCounter
-          << " from camera: " << frameData.cameraId << std::endl;
-      }
-
-      // Broadcast to subscribers (with enhanced debugging)
-      {
-        std::lock_guard<std::mutex> subLock(m_subscribersMutex);
-        CleanupExpiredSubscribers();
-
-        auto now = std::chrono::steady_clock::now();
-
-        if ((broadcastCounter % 30) == 1) {
-          std::cout << "[DEBUG] Broadcasting to " << m_subscribers.size() << " subscribers" << std::endl;
-        }
-
-        for (auto& subInfo : m_subscribers) {
-          auto subscriber = subInfo.subscriber;
-          if (!subscriber) continue;
-
-          // Check if this subscriber wants frames from this camera
-          if (!subscriber->WantsFramesFromCamera(frameData.cameraId)) {
-            if ((broadcastCounter % 30) == 1) {
-              std::cout << "[DEBUG] Subscriber " << subscriber->GetSubscriberId()
-                << " doesn't want frames from " << frameData.cameraId << std::endl;
-            }
-            continue;
-          }
-
-          // Rate limiting check
-          auto timeSinceLastBroadcast = std::chrono::duration_cast<std::chrono::milliseconds>(
-            now - subInfo.lastBroadcast).count();
-
-          int minInterval = (std::max)(subscriber->GetMinFrameIntervalMs(),
-            m_globalMinFrameInterval.load());
-
-          if (timeSinceLastBroadcast < minInterval) {
-            if ((broadcastCounter % 30) == 1) {
-              std::cout << "[DEBUG] Rate limiting subscriber " << subscriber->GetSubscriberId()
-                << " (last: " << timeSinceLastBroadcast << "ms, min: " << minInterval << "ms)" << std::endl;
-            }
-            continue;
-          }
-
-          // Broadcast frame
-          try {
-            if ((broadcastCounter % 30) == 1) {
-              std::cout << "[DEBUG] Sending frame to subscriber: " << subscriber->GetSubscriberId() << std::endl;
-            }
-
-            subscriber->OnNewFrame(frameData);
-            subInfo.lastBroadcast = now;
-
-            if ((broadcastCounter % 30) == 1) {
-              std::cout << "[DEBUG] Frame sent successfully to: " << subscriber->GetSubscriberId() << std::endl;
-            }
-          }
-          catch (const std::exception& e) {
-            std::cerr << "[ERROR] Error broadcasting to subscriber "
-              << subscriber->GetSubscriberId() << ": " << e.what() << std::endl;
-          }
-          catch (...) {
-            std::cerr << "[ERROR] Unknown error broadcasting to subscriber "
-              << subscriber->GetSubscriberId() << std::endl;
-          }
-        }
-      }
-
-      lock.lock();
-    }
+  if (m_broadcastThread.joinable()) {
+    m_broadcastThread.join();
   }
 
-  std::cout << "[DEBUG] Broadcast thread ended" << std::endl;
-}
-
-
-// **ENHANCED: Debug version of EnqueueFrame**
-void CameraManager::EnqueueFrame(const CameraFrameData& frameData) {
-  static int enqueueCounter = 0;
-  enqueueCounter++;
-
-  {
-    std::lock_guard<std::mutex> lock(m_frameQueueMutex);
-
-    // Prevent queue overflow
-    if (m_frameQueue.size() >= m_maxQueueSize.load()) {
-      m_frameQueue.pop(); // Remove oldest frame
-      if ((enqueueCounter % 30) == 1) {
-        std::cout << "[DEBUG] Queue overflow - removed oldest frame" << std::endl;
-      }
-    }
-
-    m_frameQueue.push(frameData);
-
-    if ((enqueueCounter % 30) == 1) {
-      std::cout << "[DEBUG] Frame enqueued - Queue size: " << m_frameQueue.size()
-        << " Frame: " << frameData.width << "x" << frameData.height << std::endl;
-    }
-  }
-
-  m_frameQueueCV.notify_one();
-
-  if ((enqueueCounter % 30) == 1) {
-    std::cout << "[DEBUG] Broadcast thread notified" << std::endl;
+  Logger* logger = Logger::GetInstance();
+  if (logger) {
+    logger->LogInfo("Camera broadcasting system stopped");
   }
 }
-
-
-
-// **FINAL VERSION: Clean up the excessive debug logging for better performance**
-
-void CameraManager::OnCameraFrameReceived(const std::string& cameraId,
-  const Pylon::CGrabResultPtr& grabResult) {
-
-  static int frameCallbackCounter = 0;
-  frameCallbackCounter++;
-
-  // **REDUCED LOGGING: Only log every 300 frames (every 10 seconds at 30fps)**
-  bool shouldLog = (frameCallbackCounter % 300) == 1;
-
-  if (shouldLog) {
-    std::cout << "[INFO] Camera " << cameraId << " frame #" << frameCallbackCounter
-      << " - System working normally" << std::endl;
-  }
-
-  if (!grabResult || !grabResult->GrabSucceeded()) {
-    return; // Skip failed frames silently
-  }
-
-  // Quick subscriber check
-  {
-    std::lock_guard<std::mutex> lock(m_subscribersMutex);
-    if (m_subscribers.empty()) return;
-  }
-
-  try {
-    // Create frame data with real camera dimensions
-    CameraFrameData frameData;
-    frameData.cameraId = cameraId;
-    frameData.width = grabResult->GetWidth();
-    frameData.height = grabResult->GetHeight();
-    frameData.channels = 3;
-    frameData.timestamp = grabResult->GetTimeStamp();
-    frameData.frameNumber = grabResult->GetID();
-
-    // Get camera metadata
-    auto* managedCamera = FindCamera(cameraId);
-    if (managedCamera) {
-      auto& camera = managedCamera->camera->GetCamera();
-      frameData.exposureTime = camera.GetExposureTime();
-      frameData.gain = camera.GetGain();
-    }
-
-    // Convert camera image to RGB
-    try {
-      Pylon::CImageFormatConverter converter;
-      converter.OutputPixelFormat = Pylon::PixelType_RGB8packed;
-      converter.OutputBitAlignment = Pylon::OutputBitAlignment_MsbAligned;
-
-      Pylon::CPylonImage pylonImage;
-      pylonImage.AttachGrabResultBuffer(grabResult);
-
-      Pylon::CPylonImage convertedImage;
-      converter.Convert(convertedImage, pylonImage);
-
-      // Copy image data
-      const uint8_t* imageBuffer = static_cast<const uint8_t*>(convertedImage.GetBuffer());
-      size_t dataSize = frameData.GetDataSize();
-      frameData.imageData.assign(imageBuffer, imageBuffer + dataSize);
-
-    }
-    catch (...) {
-      // Silent fallback - create a simple test pattern
-      size_t dataSize = frameData.GetDataSize();
-      frameData.imageData.resize(dataSize);
-
-      // Simple gray pattern for fallback
-      uint8_t grayValue = (frameCallbackCounter % 256);
-      for (size_t i = 0; i < dataSize; i += 3) {
-        frameData.imageData[i] = grayValue;     // R
-        frameData.imageData[i + 1] = grayValue;   // G
-        frameData.imageData[i + 2] = grayValue;   // B
-      }
-    }
-
-    // Deliver to subscribers
-    {
-      std::lock_guard<std::mutex> lock(m_subscribersMutex);
-
-      for (auto& subInfo : m_subscribers) {
-        auto subscriber = subInfo.subscriber;
-        if (subscriber && subscriber->WantsFramesFromCamera(cameraId)) {
-          try {
-            subscriber->OnNewFrame(frameData);
-          }
-          catch (...) {
-            // Silent error handling for better performance
-          }
-        }
-      }
-    }
-
-  }
-  catch (...) {
-    // Silent error handling - don't spam logs
-  }
-}
-
-// **FIXED: Subscription management without deadlock**
-
-// **FIXED: Replace your SubscribeToFrames method with this safe version**
 
 void CameraManager::SubscribeToFrames(std::shared_ptr<CameraFrameSubscriber> subscriber) {
-  std::string subscriberId = subscriber->GetSubscriberId();
-  std::vector<std::string> grabbingCameras;
+  if (!subscriber) {
+    return;
+  }
 
-  // **STEP 1: Handle subscription in a limited scope**
-  {
-    std::lock_guard<std::mutex> lock(m_subscribersMutex);
+  std::lock_guard<std::mutex> lock(m_subscribersMutex);
+  m_subscribers[subscriber->GetSubscriberId()] = SubscriberInfo(subscriber);
 
-    // Remove existing subscription directly
-    auto it = std::remove_if(m_subscribers.begin(), m_subscribers.end(),
-      [&subscriberId](const SubscriberInfo& info) {
-      auto sub = info.subscriber;
-      return !sub || sub->GetSubscriberId() == subscriberId;
-    });
-
-    bool wasRemoved = (it != m_subscribers.end());
-    m_subscribers.erase(it, m_subscribers.end());
-
-    if (wasRemoved) {
-      std::cout << "Removed existing subscription: " << subscriberId << std::endl;
-    }
-
-    // Add new subscription
-    m_subscribers.emplace_back(subscriber);
-
-    std::cout << "Subscribed: " << subscriber->GetSubscriberId()
-      << " (Total subscribers: " << m_subscribers.size() << ")" << std::endl;
-
-    // **STEP 2: Find grabbing cameras while still holding the lock**
-    for (const auto& [cameraId, managedCamera] : m_cameras) {
-      auto& camera = managedCamera->camera->GetCamera();
-      if (camera.IsGrabbing()) {
-        grabbingCameras.push_back(cameraId);
-      }
-    }
-  } // **SAFE: Lock is automatically released here**
-
-  // **STEP 3: Restart grabbing cameras (outside the lock)**
-  if (!grabbingCameras.empty()) {
-    std::cout << "[INFO] Found " << grabbingCameras.size()
-      << " grabbing cameras - restarting with broadcasting..." << std::endl;
-
-    for (const std::string& cameraId : grabbingCameras) {
-      RestartGrabbingWithBroadcast(cameraId);
-    }
-
-    std::cout << "[INFO] All grabbing cameras restarted with broadcasting" << std::endl;
+  Logger* logger = Logger::GetInstance();
+  if (logger) {
+    logger->LogInfo("Subscriber added: " + subscriber->GetSubscriberId());
   }
 }
-
-
 
 void CameraManager::UnsubscribeFromFrames(const std::string& subscriberId) {
   std::lock_guard<std::mutex> lock(m_subscribersMutex);
 
-  auto it = std::remove_if(m_subscribers.begin(), m_subscribers.end(),
-    [&subscriberId](const SubscriberInfo& info) {
-    auto sub = info.subscriber;
-    return !sub || sub->GetSubscriberId() == subscriberId;
-  });
+  auto it = m_subscribers.find(subscriberId);
+  if (it != m_subscribers.end()) {
+    m_subscribers.erase(it);
 
-  bool removed = (it != m_subscribers.end());
-  m_subscribers.erase(it, m_subscribers.end());
-
-  if (removed) {
-    std::cout << "Unsubscribed: " << subscriberId
-      << " (Remaining subscribers: " << m_subscribers.size() << ")" << std::endl;
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      logger->LogInfo("Subscriber removed: " + subscriberId);
+    }
   }
 }
 
-
 void CameraManager::SetGlobalBroadcastRate(float fps) {
-  int intervalMs = (fps > 0) ? (1000 / fps) : 0;
-  m_globalMinFrameInterval = intervalMs;
-  std::cout << "Global broadcast rate set to " << fps << " fps (min interval: "
-    << intervalMs << "ms)" << std::endl;
+  m_globalBroadcastRate = fps;
 }
 
 size_t CameraManager::GetSubscriberCount() const {
@@ -1138,162 +616,433 @@ size_t CameraManager::GetSubscriberCount() const {
 
 std::vector<std::string> CameraManager::GetSubscriberIds() const {
   std::lock_guard<std::mutex> lock(m_subscribersMutex);
+
   std::vector<std::string> ids;
-
-  for (const auto& info : m_subscribers) {
-    if (auto sub = info.subscriber) {
-      ids.push_back(sub->GetSubscriberId());
-    }
+  for (const auto& [id, info] : m_subscribers) {
+    ids.push_back(id);
   }
-
   return ids;
 }
 
-// **NEW: Enhanced StartGrabbing with broadcasting support**
-bool CameraManager::StartGrabbingWithBroadcast(const std::string& cameraId) {
-  auto* managedCamera = FindCamera(cameraId);
-  if (!managedCamera) {
-    std::cerr << "Camera '" << cameraId << "' not found" << std::endl;
-    return false;
-  }
+void CameraManager::BroadcastFrame(const CameraFrameData& frameData) {
+  std::lock_guard<std::mutex> lock(m_subscribersMutex);
 
-  auto& camera = managedCamera->camera->GetCamera();
+  auto now = std::chrono::steady_clock::now();
 
-  if (!camera.IsConnected()) {
-    std::cerr << "Camera '" << cameraId << "' is not connected" << std::endl;
-    return false;
-  }
+  for (auto& [id, subscriberInfo] : m_subscribers) {
+    auto subscriber = subscriberInfo.subscriber;
+    if (!subscriber) {
+      continue;
+    }
 
-  // Set up frame callback for broadcasting
-  camera.SetNewFrameCallback([this, cameraId](const Pylon::CGrabResultPtr& grabResult) {
-    OnCameraFrameReceived(cameraId, grabResult);
-  });
+    // Check if subscriber wants frames from this camera
+    if (!subscriber->WantsFramesFromCamera(frameData.cameraId)) {
+      continue;
+    }
 
-  if (camera.StartGrabbing()) {
-    std::cout << "Started grabbing with broadcasting on camera: " << cameraId << std::endl;
+    // Check rate limiting
+    int minInterval = subscriber->GetMinFrameIntervalMs();
+    if (minInterval > 0) {
+      auto timeSinceLastBroadcast = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now - subscriberInfo.lastBroadcast).count();
 
-
-    // **ADD THIS: Broadcast status change to subscribers**
-    {
-      std::lock_guard<std::mutex> lock(m_subscribersMutex);
-      for (const auto& info : m_subscribers) {
-        if (auto sub = info.subscriber) {
-          try {
-            sub->OnCameraStatusChanged(cameraId, true, true);  // connected=true, grabbing=true
-          }
-          catch (...) {
-            // Ignore subscriber errors for status updates
-          }
-        }
+      if (timeSinceLastBroadcast < minInterval) {
+        continue; // Skip this frame for rate limiting
       }
     }
 
-
-    return true;
-  }
-  else {
-    std::cerr << "Failed to start grabbing on camera: " << cameraId << std::endl;
-    return false;
-  }
-}
-
-void CameraManager::CleanupExpiredSubscribers() {
-  // Remove any expired weak pointers or null subscribers
-  auto it = std::remove_if(m_subscribers.begin(), m_subscribers.end(),
-    [](const SubscriberInfo& info) {
-    return !info.subscriber;
-  });
-
-  if (it != m_subscribers.end()) {
-    size_t removedCount = std::distance(it, m_subscribers.end());
-    m_subscribers.erase(it, m_subscribers.end());
-    std::cout << "Cleaned up " << removedCount << " expired subscribers" << std::endl;
+    // Send frame to subscriber
+    try {
+      subscriber->OnNewFrame(frameData);
+      subscriberInfo.lastBroadcast = now;
+    }
+    catch (const std::exception& e) {
+      Logger* logger = Logger::GetInstance();
+      if (logger) {
+        logger->LogError("Exception in subscriber [" + id + "]: " + std::string(e.what()));
+      }
+    }
   }
 }
 
-// **MODIFY: Update your existing StartGrabbing to use broadcasting**
-// Replace your existing StartGrabbing method with this enhanced version:
-bool CameraManager::StartGrabbing(const std::string& cameraId) {
-  // **FIX: Always start broadcast system first**
-  if (!m_broadcastActive.load()) {
-    StartBroadcastSystem();
+void CameraManager::BroadcastThreadFunction() {
+  Logger* logger = Logger::GetInstance();
+  if (logger) {
+    logger->LogInfo("Camera broadcast thread started");
   }
 
-  // **FIX: Always use the broadcast version**
-  return StartGrabbingWithBroadcast(cameraId);
+  while (!m_shouldStopBroadcast.load()) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    // The actual broadcasting is triggered by frame callbacks
+    // This thread just keeps the system alive
+  }
+
+  if (logger) {
+    logger->LogInfo("Camera broadcast thread stopped");
+  }
 }
 
+// ============================================================================
+// UI RENDERING
+// ============================================================================
 
-// **MODIFY: Update destructor to stop broadcasting**
-// Add this to your existing destructor:
-/*
-CameraManager::~CameraManager() {
-  // Stop broadcasting system first
-  StopBroadcastSystem();
-
-  // Stop all cameras before cleanup
-  StopGrabbingAll();
-  m_cameras.clear();
-  std::cout << "CameraManager destroyed" << std::endl;
-}
-*/
-
-
-// **ALSO ADD: Make sure you have the RestartGrabbingWithBroadcast method**
-bool CameraManager::RestartGrabbingWithBroadcast(const std::string& cameraId) {
-  auto* managedCamera = FindCamera(cameraId);
-  if (!managedCamera) {
-    std::cerr << "Camera '" << cameraId << "' not found" << std::endl;
-    return false;
+void CameraManager::RenderUI() {
+  if (!m_showUI) {
+    return;
   }
 
-  auto& camera = managedCamera->camera->GetCamera();
+  ImGui::Begin("Camera Manager", &m_showUI);
 
-  if (!camera.IsConnected()) {
-    std::cerr << "Camera '" << cameraId << "' is not connected" << std::endl;
-    return false;
-  }
+  // System status
+  ImGui::Text("Cameras: %zu", GetCameraCount());
+  ImGui::Text("Subscribers: %zu", GetSubscriberCount());
+  ImGui::Text("Broadcasting: %s", m_broadcastSystemRunning.load() ? "Active" : "Inactive");
 
-  std::cout << "[DEBUG] Restarting grabbing with broadcasting for: " << cameraId << std::endl;
+  ImGui::Separator();
 
-  // Stop current grabbing
-  if (camera.IsGrabbing()) {
-    camera.StopGrabbing();
-    std::cout << "[DEBUG] Stopped existing grabbing" << std::endl;
-    // Small delay to ensure clean stop
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  }
-
-  // Set up frame callback for broadcasting
-  std::cout << "[DEBUG] Setting frame callback for: " << cameraId << std::endl;
-  camera.SetNewFrameCallback([this, cameraId](const Pylon::CGrabResultPtr& grabResult) {
-    std::cout << "[DEBUG] Frame callback triggered for: " << cameraId << std::endl;
-    OnCameraFrameReceived(cameraId, grabResult);
-  });
-
-  // Start grabbing again
-  if (camera.StartGrabbing()) {
-    std::cout << "[DEBUG] Restarted grabbing with broadcasting on camera: " << cameraId << std::endl;
-
-    // Broadcast status change to subscribers
-    {
-      std::lock_guard<std::mutex> lock(m_subscribersMutex);
-      for (const auto& info : m_subscribers) {
-        if (auto sub = info.subscriber) {
-          try {
-            sub->OnCameraStatusChanged(cameraId, true, true);
-          }
-          catch (...) {
-            // Ignore subscriber errors for status updates
-          }
-        }
+  // Broadcasting controls
+  if (ImGui::CollapsingHeader("Broadcasting System")) {
+    if (!m_broadcastSystemRunning.load()) {
+      if (ImGui::Button("Start Broadcasting")) {
+        StartBroadcastSystem();
+      }
+    }
+    else {
+      if (ImGui::Button("Stop Broadcasting")) {
+        StopBroadcastSystem();
       }
     }
 
-    return true;
+    float rate = m_globalBroadcastRate;
+    if (ImGui::SliderFloat("Broadcast Rate (FPS)", &rate, 1.0f, 60.0f)) {
+      SetGlobalBroadcastRate(rate);
+    }
   }
-  else {
-    std::cerr << "[ERROR] Failed to restart grabbing on camera: " << cameraId << std::endl;
-    return false;
+
+  // Camera list
+  if (ImGui::CollapsingHeader("Camera List", ImGuiTreeNodeFlags_DefaultOpen)) {
+    std::lock_guard<std::mutex> lock(m_camerasMutex);
+
+    for (const auto& [id, managedCamera] : m_cameras) {
+      ImGui::PushID(id.c_str());
+
+      auto status = GetCameraStatus(id);
+      std::string typeName = CameraHardwareFactory::GetCameraTypeName(status.type);
+
+      // Camera header
+      bool nodeOpen = ImGui::TreeNode(id.c_str(), "%s (%s)", id.c_str(), typeName.c_str());
+
+      // Status indicators
+      ImGui::SameLine();
+      if (status.connected) {
+        ImGui::TextColored(ImVec4(0, 1, 0, 1), "[CONNECTED]");
+      }
+      else {
+        ImGui::TextColored(ImVec4(1, 0, 0, 1), "[DISCONNECTED]");
+      }
+
+      if (status.grabbing) {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0, 0, 1, 1), "[GRABBING]");
+      }
+
+      if (nodeOpen) {
+        // Camera details
+        ImGui::Text("Type: %s", typeName.c_str());
+        ImGui::Text("Model: %s", status.modelName.c_str());
+        ImGui::Text("Serial: %s", status.serialNumber.c_str());
+        ImGui::Text("Device Info: %s", status.deviceInfo.c_str());
+
+        // Camera controls
+        if (!status.connected) {
+          if (ImGui::Button("Connect")) {
+            ConnectCamera(id);
+          }
+        }
+        else {
+          if (ImGui::Button("Disconnect")) {
+            DisconnectCamera(id);
+          }
+
+          ImGui::SameLine();
+          if (!status.grabbing) {
+            if (ImGui::Button("Start Grabbing")) {
+              StartGrabbing(id);
+            }
+          }
+          else {
+            if (ImGui::Button("Stop Grabbing")) {
+              StopGrabbing(id);
+            }
+          }
+        }
+
+        // Exposure settings
+        if (status.connected) {
+          ImGui::Separator();
+          ImGui::Text("Exposure Settings:");
+          ImGui::Text("Exposure: %.1f μs", status.currentExposure.exposure_time);
+          ImGui::Text("Gain: %.2f", status.currentExposure.gain);
+          ImGui::Text("Auto Exposure: %s", status.currentExposure.auto_exposure ? "On" : "Off");
+          ImGui::Text("Auto Gain: %s", status.currentExposure.auto_gain ? "On" : "Off");
+        }
+
+        ImGui::TreePop();
+      }
+
+      ImGui::PopID();
+    }
   }
+
+  // Global operations
+
+// Global operations
+  ImGui::Separator();
+  ImGui::Text("Global Operations:");
+
+  if (ImGui::Button("Discover & Add Cameras")) {
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      logger->LogInfo("Manual camera discovery triggered from UI");
+    }
+    DiscoverAndAddAllCameras();
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Initialize All")) {
+    InitializeAllCameras();
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Connect All")) {
+    // Try to connect all cameras
+    std::lock_guard<std::mutex> lock(m_camerasMutex);
+    for (const auto& [id, managedCamera] : m_cameras) {
+      if (managedCamera->camera && !managedCamera->camera->IsConnected()) {
+        if (managedCamera->camera->Initialize()) {
+          managedCamera->camera->Connect();
+        }
+      }
+    }
+  }
+
+  if (ImGui::Button("Start All Grabbing")) {
+    StartGrabbingAll();
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Stop All Grabbing")) {
+    StopGrabbingAll();
+  }
+
+  ImGui::End();
+}
+
+// Add this implementation to CameraManager.cpp
+
+// ============================================================================
+// CAMERA DISCOVERY - Implementation 
+// ============================================================================
+
+std::vector<CameraInfo> CameraManager::DiscoverPylonCameras() {
+  std::vector<CameraInfo> pylonCameras;
+
+  Logger* logger = Logger::GetInstance();
+  if (logger) {
+    logger->LogInfo("Discovering Pylon cameras...");
+  }
+
+  try {
+    // Initialize Pylon if not already done
+    Pylon::PylonInitialize();
+
+    // Get the transport layer factory
+    Pylon::CTlFactory& tlFactory = Pylon::CTlFactory::GetInstance();
+
+    // Enumerate all devices
+    Pylon::DeviceInfoList_t devices;
+    size_t numDevices = tlFactory.EnumerateDevices(devices);
+
+    if (logger) {
+      logger->LogInfo("Found " + std::to_string(numDevices) + " Pylon cameras");
+    }
+
+    for (size_t i = 0; i < numDevices; i++) {
+      const auto& device = devices[i];
+
+      std::string modelName = device.GetModelName().c_str();
+      std::string serialNumber = device.GetSerialNumber().c_str();
+      std::string deviceClass = device.GetDeviceClass().c_str();
+
+      // Create camera info
+      std::string cameraId = "Pylon_" + modelName + "_" + serialNumber;
+      std::string description = modelName + " (" + deviceClass + ")";
+
+      CameraInfo cameraInfo(cameraId, serialNumber, description);
+
+      // Determine connection method based on device class
+      if (deviceClass.find("GigE") != std::string::npos) {
+        // For GigE cameras, try to get IP address
+        try {
+          // Create temporary camera to get IP info
+          Pylon::CInstantCamera tempCamera;
+          tempCamera.Attach(tlFactory.CreateDevice(device));
+          tempCamera.Open();
+
+          if (tempCamera.GetTLNodeMap().GetNode("GevCurrentIPAddress")) {
+            Pylon::CIntegerParameter ipParam(tempCamera.GetTLNodeMap(), "GevCurrentIPAddress");
+            if (ipParam.IsReadable()) {
+              int64_t ipValue = ipParam.GetValue();
+              int a = (ipValue >> 24) & 0xFF;
+              int b = (ipValue >> 16) & 0xFF;
+              int c = (ipValue >> 8) & 0xFF;
+              int d = ipValue & 0xFF;
+              std::string ipAddress = std::to_string(a) + "." + std::to_string(b) + "." +
+                std::to_string(c) + "." + std::to_string(d);
+
+              // Create IP-based camera info
+              cameraInfo = CameraInfo::CreateByIP(cameraId, ipAddress, description);
+            }
+          }
+
+          tempCamera.Close();
+        }
+        catch (...) {
+          // If IP detection fails, use serial number method
+          if (logger) {
+            logger->LogWarning("Failed to get IP for GigE camera " + cameraId + ", using serial");
+          }
+        }
+      }
+
+      pylonCameras.push_back(cameraInfo);
+
+      if (logger) {
+        logger->LogInfo("Discovered Pylon camera: " + cameraId + " [" + cameraInfo.GetConnectionInfo() + "]");
+      }
+    }
+  }
+  catch (const std::exception& e) {
+    if (logger) {
+      logger->LogError("Exception during Pylon camera discovery: " + std::string(e.what()));
+    }
+  }
+
+  return pylonCameras;
+}
+
+
+
+std::vector<ExtendedCameraInfo> CameraManager::DiscoverIDSCameras() {
+  std::vector<ExtendedCameraInfo> idsCameras;
+
+  Logger* logger = Logger::GetInstance();
+  if (logger) {
+    logger->LogInfo("Discovering IDS cameras...");
+  }
+
+  try {
+    // Use IDSCameraTest to get available cameras
+    std::vector<int> availableIds = IDSCameraTest::GetAvailableCameraIds();
+    std::vector<std::string> availableSerials = IDSCameraTest::GetAvailableCameraSerials();
+
+    if (logger) {
+      logger->LogInfo("Found " + std::to_string(availableIds.size()) + " IDS cameras");
+    }
+
+    for (size_t i = 0; i < availableIds.size(); i++) {
+      int deviceId = availableIds[i];
+      std::string serial = (i < availableSerials.size()) ? availableSerials[i] : "Unknown";
+
+      // Create camera info
+      CameraInfo baseInfo("IDS_Camera_" + std::to_string(deviceId),
+        "IDS Camera (ID: " + std::to_string(deviceId) + ")");
+
+      ExtendedCameraInfo cameraInfo(baseInfo, ICameraHardware::CameraType::IDS, std::to_string(deviceId));
+      cameraInfo.serialNumber = serial;
+
+      idsCameras.push_back(cameraInfo);
+
+      if (logger) {
+        logger->LogInfo("Discovered IDS camera: ID=" + std::to_string(deviceId) + ", Serial=" + serial);
+      }
+    }
+  }
+  catch (const std::exception& e) {
+    if (logger) {
+      logger->LogError("Exception during IDS camera discovery: " + std::string(e.what()));
+    }
+  }
+
+  return idsCameras;
+}
+
+std::vector<ExtendedCameraInfo> CameraManager::DiscoverAllCameras() {
+  std::vector<ExtendedCameraInfo> allCameras;
+
+  Logger* logger = Logger::GetInstance();
+  if (logger) {
+    logger->LogInfo("Discovering all cameras...");
+  }
+
+  // Discover Pylon cameras (convert CameraInfo to ExtendedCameraInfo)
+  try {
+    auto pylonCameras = DiscoverPylonCameras();
+    for (const auto& pylonCamera : pylonCameras) {
+      ExtendedCameraInfo extendedInfo(pylonCamera, ICameraHardware::CameraType::PYLON);
+      allCameras.push_back(extendedInfo);
+    }
+  }
+  catch (const std::exception& e) {
+    if (logger) {
+      logger->LogError("Error discovering Pylon cameras: " + std::string(e.what()));
+    }
+  }
+
+  // Discover IDS cameras
+  try {
+    auto idsCameras = DiscoverIDSCameras();
+    allCameras.insert(allCameras.end(), idsCameras.begin(), idsCameras.end());
+  }
+  catch (const std::exception& e) {
+    if (logger) {
+      logger->LogError("Error discovering IDS cameras: " + std::string(e.what()));
+    }
+  }
+
+  if (logger) {
+    logger->LogInfo("Total cameras discovered: " + std::to_string(allCameras.size()));
+  }
+
+  return allCameras;
+}
+
+// ============================================================================
+// CAMERA INITIALIZATION WITH DISCOVERY
+// ============================================================================
+
+bool CameraManager::DiscoverAndAddAllCameras() {
+  Logger* logger = Logger::GetInstance();
+  if (logger) {
+    logger->LogInfo("Starting camera discovery and addition...");
+  }
+
+  auto discoveredCameras = DiscoverAllCameras();
+
+  bool allSuccess = true;
+  for (const auto& cameraInfo : discoveredCameras) {
+    if (!AddCamera(cameraInfo)) {
+      allSuccess = false;
+      if (logger) {
+        logger->LogWarning("Failed to add discovered camera: " + cameraInfo.id);
+      }
+    }
+  }
+
+  if (logger) {
+    logger->LogInfo("Camera discovery completed. Added " +
+      std::to_string(GetCameraCount()) + " cameras.");
+  }
+
+  return allSuccess;
 }

@@ -1,11 +1,10 @@
-﻿// UICameraPanel.cpp - Updated with reorganized left panel layout
+﻿// UICameraPanel.cpp - Main Camera Panel Implementation
 #include "UICameraPanel.h"
 #include "UICameraPanelLiveVideo.h"
 #include "UICameraPanelSingleGrab.h"
 #include "UICameraPanelUtility.h"
 #include "include/camera/CameraManager.h"
-#include "include/camera/pylon_camera_test.h"
-#include "include/camera/pylon_camera.h"
+#include "include/camera/ICameraHardware.h"
 #include "imgui.h"
 #include <iostream>
 
@@ -17,12 +16,12 @@ UICameraPanel::UICameraPanel(CameraManager& cameraManager)
   m_singleGrabPanel = std::make_unique<UICameraPanelSingleGrab>(cameraManager);
   m_utilityPanel = std::make_unique<UICameraPanelUtility>(cameraManager);
 
-  std::cout << "[INFO] UICameraPanel created with sub-panels" << std::endl;
+  std::cout << "[INFO] UICameraPanel created with ICameraHardware interface" << std::endl;
 }
 
 UICameraPanel::~UICameraPanel() {
-  // Clear all panels before destruction
   ClearAllPanels();
+  std::cout << "[INFO] UICameraPanel destroyed" << std::endl;
 }
 
 void UICameraPanel::RenderUI() {
@@ -30,44 +29,69 @@ void UICameraPanel::RenderUI() {
     return;
   }
 
+  ImGui::SetNextWindowSize(ImVec2(1400, 800), ImGuiCond_FirstUseEver);
+  if (ImGui::Begin("Camera Control Panel", &m_showWindow, ImGuiWindowFlags_MenuBar)) {
 
-  // Calculate content size for 3-column layout: 25% / 50% / 25%
-  ImVec2 contentSize = ImGui::GetContentRegionAvail();
-  float leftPanelWidth = contentSize.x * 0.25f;
-  float middlePanelWidth = contentSize.x * 0.50f;
-  float rightPanelWidth = contentSize.x * 0.25f;
+    // Menu bar
+    if (ImGui::BeginMenuBar()) {
+      if (ImGui::BeginMenu("View")) {
+        ImGui::MenuItem("Camera List", nullptr, &m_showWindow);
+        ImGui::EndMenu();
+      }
+      if (ImGui::BeginMenu("Tools")) {
+        if (ImGui::MenuItem("Initialize All Cameras")) {
+          m_cameraManager.InitializeAllCameras();
+        }
+        if (ImGui::MenuItem("Refresh Camera List")) {
+          // Force refresh of camera list
+          std::cout << "[INFO] Refreshing camera list..." << std::endl;
+        }
+        ImGui::EndMenu();
+      }
+      ImGui::EndMenuBar();
+    }
 
-  // Left Panel - Camera List and Global Controls (25% width)
-  ImGui::BeginChild("LeftCameraPanel", ImVec2(leftPanelWidth, contentSize.y), true);
-  RenderLeftPanel();
-  ImGui::EndChild();
+    // Main content area
+    ImVec2 contentSize = ImGui::GetContentRegionAvail();
 
-  ImGui::SameLine();
+    // Calculate panel widths
+    float leftPanelWidth = contentSize.x * 0.25f;   // 25% for camera list and controls
+    float middlePanelWidth = contentSize.x * 0.45f; // 45% for video feeds
+    float rightPanelWidth = contentSize.x * 0.30f;  // 30% for camera settings
 
-  // Middle Panel - Tabbed Camera Feed (50% width)
-  ImGui::BeginChild("MiddleCameraPanel", ImVec2(middlePanelWidth, contentSize.y), true);
-  RenderMiddlePanelTabs();
-  ImGui::EndChild();
+    // Left Panel - Camera list and global controls
+    ImGui::BeginChild("LeftPanel", ImVec2(leftPanelWidth, contentSize.y), true);
+    RenderLeftPanel();
+    ImGui::EndChild();
 
-  ImGui::SameLine();
+    ImGui::SameLine();
 
-  // Right Panel - Camera Utility Controls (25% width)
-  ImGui::BeginChild("RightCameraPanel", ImVec2(rightPanelWidth, contentSize.y), true);
-  RenderRightPanel();
-  ImGui::EndChild();
+    // Middle Panel - Tabbed video display
+    ImGui::BeginChild("MiddlePanel", ImVec2(middlePanelWidth, contentSize.y), true);
+    RenderMiddlePanelTabs();
+    ImGui::EndChild();
+
+    ImGui::SameLine();
+
+    // Right Panel - Camera controls and settings
+    ImGui::BeginChild("RightPanel", ImVec2(rightPanelWidth, contentSize.y), true);
+    RenderRightPanel();
+    ImGui::EndChild();
+  }
+  ImGui::End();
 }
 
 void UICameraPanel::RenderLeftPanel() {
   ImGui::Text("Camera System");
   ImGui::Separator();
 
-  // **REORGANIZED: Camera list first, at the top**
+  // Camera list first, at the top
   RenderCameraList();
 
-  // **REORGANIZED: Separator before global controls**
+  // Separator before global controls
   ImGui::Separator();
 
-  // **REORGANIZED: Global controls moved to bottom**
+  // Global controls moved to bottom
   RenderGlobalControls();
 }
 
@@ -93,6 +117,32 @@ void UICameraPanel::RenderGlobalControls() {
 
   ImGui::Spacing();
   ImGui::Text("Total Cameras: %zu", m_cameraManager.GetCameraCount());
+
+  ImGui::Separator();
+  ImGui::Text("Camera Discovery:");
+
+  // Manual IDS camera addition for testing
+  if (ImGui::Button("Add IDS Camera (ID: 0)")) {
+    CameraInfo testIDSCamera("IDS_Test_Camera", "Test IDS Camera");
+    if (m_cameraManager.AddIDSCamera(testIDSCamera, 0)) {
+      std::cout << "[INFO] Successfully added IDS test camera" << std::endl;
+    }
+    else {
+      std::cout << "[ERROR] Failed to add IDS test camera" << std::endl;
+    }
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Discover All Cameras")) {
+    auto discoveredCameras = CameraManager::DiscoverAllCameras();
+    std::cout << "[INFO] Discovered " << discoveredCameras.size() << " cameras" << std::endl;
+
+    for (const auto& camera : discoveredCameras) {
+      std::cout << "[INFO] Found: " << camera.id << " (Type: "
+        << (camera.type == ICameraHardware::CameraType::IDS ? "IDS" : "Pylon")
+        << ")" << std::endl;
+    }
+  }
 }
 
 void UICameraPanel::RenderMiddlePanelTabs() {
@@ -107,8 +157,8 @@ void UICameraPanel::RenderMiddlePanelTabs() {
     return;
   }
 
-  // Get selected camera
-  PylonCameraTest* camera = GetSelectedCamera();
+  // Get selected camera via ICameraHardware interface
+  ICameraHardware* camera = GetSelectedCamera();
   if (!camera) {
     ImGui::Text("Selected camera not available");
     ClearAllPanels();
@@ -116,19 +166,20 @@ void UICameraPanel::RenderMiddlePanelTabs() {
   }
 
   // Camera info header
-  ImGui::Text("Camera: %s", m_selectedCameraId.c_str());
+  ImGui::Text("Camera: %s (%s)", m_selectedCameraId.c_str(),
+    camera->GetModelName().c_str());
   ImGui::Separator();
 
-  // **Tab Bar for Live Feed vs Single Frame**
+  // Tab Bar for Live Feed vs Single Frame
   if (ImGui::BeginTabBar("CameraFeedTabs", ImGuiTabBarFlags_None)) {
 
-    // **TAB 1: Live Video Feed**
+    // TAB 1: Live Video Feed
     if (ImGui::BeginTabItem("Live Video")) {
       m_liveVideoPanel->RenderTab(camera, m_selectedCameraId);
       ImGui::EndTabItem();
     }
 
-    // **TAB 2: Single Frame Capture**
+    // TAB 2: Single Frame Capture
     if (ImGui::BeginTabItem("Single Frame")) {
       m_singleGrabPanel->RenderTab(camera, m_selectedCameraId);
       ImGui::EndTabItem();
@@ -143,15 +194,164 @@ void UICameraPanel::RenderRightPanel() {
     RenderNoSelectionMessage();
   }
   else {
-    PylonCameraTest* camera = GetSelectedCamera();
+    ICameraHardware* camera = GetSelectedCamera();
+
     if (camera) {
+      // Check connection status and provide appropriate UI
+      if (!camera->IsConnected()) {
+        // Only log once per camera selection change, not every frame
+        static std::string lastDisconnectedCamera = "";
+        if (lastDisconnectedCamera != m_selectedCameraId) {
+          std::cout << "[DEBUG] Camera " << m_selectedCameraId << " found but not connected" << std::endl;
+          lastDisconnectedCamera = m_selectedCameraId;
+        }
+
+        // Header for disconnected camera
+        ImGui::SetWindowFontScale(1.2f);
+        ImGui::Text("Camera: %s", m_selectedCameraId.c_str());
+        ImGui::SetWindowFontScale(1.0f);
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Status information
+        ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Status: Disconnected");
+
+        // Camera type information
+        const char* typeStr = (camera->GetCameraType() == ICameraHardware::CameraType::PYLON) ? "Pylon" : "IDS";
+        ImVec4 typeColor = (camera->GetCameraType() == ICameraHardware::CameraType::PYLON) ?
+          ImVec4(0.3f, 0.8f, 0.3f, 1.0f) : ImVec4(0.3f, 0.3f, 0.8f, 1.0f);
+
+        ImGui::Text("Type: ");
+        ImGui::SameLine();
+        ImGui::TextColored(typeColor, "%s", typeStr);
+
+        // Show connection method for IDS cameras
+        if (camera->GetCameraType() == ICameraHardware::CameraType::IDS) {
+          ImGui::Text("Connection: USB Device Index");
+          ImGui::TextColored(ImVec4(1, 1, 0, 1), "Note: IDS camera requires USB connection");
+        }
+
+        // Try to get model name (might be available even when disconnected)
+        try {
+          std::string modelName = camera->GetModelName();
+          if (!modelName.empty()) {
+            ImGui::Text("Model: %s", modelName.c_str());
+          }
+        }
+        catch (...) {
+          ImGui::Text("Model: Unknown (not connected)");
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Different instructions based on camera type
+        if (camera->GetCameraType() == ICameraHardware::CameraType::IDS) {
+          ImGui::Text("IDS Camera Connection:");
+          ImGui::TextColored(ImVec4(1, 1, 0, 1), "1. Ensure IDS camera is connected via USB");
+          ImGui::TextColored(ImVec4(1, 1, 0, 1), "2. Check that IDS drivers are installed");
+          ImGui::TextColored(ImVec4(1, 1, 0, 1), "3. Verify camera appears in IDS Camera Manager");
+        }
+        else {
+          ImGui::Text("Pylon Camera Connection:");
+          ImGui::TextColored(ImVec4(1, 1, 0, 1), "1. Check network cable connection");
+          ImGui::TextColored(ImVec4(1, 1, 0, 1), "2. Verify IP address is reachable");
+        }
+
+        ImGui::Spacing();
+
+        // Connect button - make it prominent
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.6f, 0.1f, 1.0f));
+
+        if (ImGui::Button("Connect Camera", ImVec2(-1, 40))) {
+          std::cout << "[INFO] Attempting to connect " << typeStr << " camera: " << m_selectedCameraId << std::endl;
+
+          // For IDS cameras, might need special handling
+          if (camera->GetCameraType() == ICameraHardware::CameraType::IDS) {
+            std::cout << "[INFO] Connecting IDS camera via USB device index..." << std::endl;
+          }
+
+          bool success = m_cameraManager.ConnectCamera(m_selectedCameraId);
+
+          if (success) {
+            std::cout << "[INFO] Successfully connected camera: " << m_selectedCameraId << std::endl;
+            lastDisconnectedCamera = ""; // Reset to allow new logging
+          }
+          else {
+            std::cout << "[ERROR] Failed to connect camera: " << m_selectedCameraId << std::endl;
+            if (camera->GetCameraType() == ICameraHardware::CameraType::IDS) {
+              std::cout << "[ERROR] IDS camera connection failed. Check:" << std::endl;
+              std::cout << "[ERROR] - USB cable connection" << std::endl;
+              std::cout << "[ERROR] - IDS driver installation" << std::endl;
+              std::cout << "[ERROR] - Camera power and device index" << std::endl;
+            }
+          }
+        }
+
+        ImGui::PopStyleColor(3);
+
+        ImGui::Spacing();
+
+        // Additional troubleshooting for IDS cameras
+        if (camera->GetCameraType() == ICameraHardware::CameraType::IDS) {
+          ImGui::Separator();
+          ImGui::Text("IDS Camera Troubleshooting:");
+
+          if (ImGui::Button("Check IDS Camera Discovery", ImVec2(-1, 25))) {
+            std::cout << "[INFO] Checking for IDS cameras..." << std::endl;
+            // This would call IDS-specific discovery if available
+            // You might want to add a method to check IDS camera availability
+          }
+
+          if (ImGui::Button("Reinitialize IDS System", ImVec2(-1, 25))) {
+            std::cout << "[INFO] Reinitializing IDS camera system..." << std::endl;
+            // This could reinitialize the IDS camera subsystem
+          }
+        }
+
+        // General actions
+        ImGui::Spacing();
+        ImGui::Text("General Actions:");
+        if (ImGui::Button("Initialize All Cameras", ImVec2(-1, 25))) {
+          std::cout << "[INFO] Initializing all cameras..." << std::endl;
+          m_cameraManager.InitializeAllCameras();
+        }
+
+        return;
+      }
+
+      // Camera is connected - render normal utility panel
       m_utilityPanel->RenderPanel(camera, m_selectedCameraId);
     }
     else {
-      ImGui::Text("Selected camera not found");
+      // Camera not found
+      ImGui::SetWindowFontScale(1.2f);
+      ImGui::Text("Camera: %s", m_selectedCameraId.c_str());
+      ImGui::SetWindowFontScale(1.0f);
+
+      ImGui::Spacing();
+      ImGui::Separator();
+      ImGui::Spacing();
+
+      ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Status: Camera Not Found");
+
+      ImGui::Spacing();
+      ImGui::Text("The selected camera could not be found.");
+      ImGui::Text("Try initializing cameras:");
+
+      if (ImGui::Button("Initialize All Cameras", ImVec2(-1, 30))) {
+        std::cout << "[INFO] Initializing all cameras..." << std::endl;
+        m_cameraManager.InitializeAllCameras();
+      }
     }
   }
 }
+
 
 void UICameraPanel::RenderCameraList() {
   ImGui::Text("Camera Selection");
@@ -161,7 +361,8 @@ void UICameraPanel::RenderCameraList() {
   std::vector<std::string> cameraIds = m_cameraManager.GetCameraIds();
 
   if (cameraIds.empty()) {
-    // **ENLARGED PLACEHOLDER for better visibility**
+    
+    // Enlarged placeholder for better visibility
     ImGui::BeginChild("CameraListPlaceholder", ImVec2(-1, 150), true, ImGuiWindowFlags_NoScrollbar);
 
     ImGui::Spacing();
@@ -170,7 +371,7 @@ void UICameraPanel::RenderCameraList() {
     ImGui::TextWrapped("Use 'Add Camera' to add cameras to the system");
     ImGui::Spacing();
 
-    // **Add helpful instructions**
+    // Add helpful instructions
     ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Steps to add cameras:");
     ImGui::BulletText("Connect camera hardware");
     ImGui::BulletText("Use Initialize All button");
@@ -180,133 +381,53 @@ void UICameraPanel::RenderCameraList() {
     return;
   }
 
-  // **ENLARGED CAMERA LIST - Calculate height for better visibility**
+  // Enlarged camera list - Calculate height for better visibility
   ImVec2 availableSize = ImGui::GetContentRegionAvail();
-  float listHeight = availableSize.y - 200.0f; // Reserve space for global controls
-  listHeight = (std::max)(listHeight, 200.0f);   // Minimum height
-  listHeight = (std::min)(listHeight, 400.0f);   // Maximum height
+  float listHeight = (std::min)(200.0f, availableSize.y * 0.6f);
 
-  // **SCROLLABLE CAMERA LIST with increased height**
-  ImGui::BeginChild("CameraListChild", ImVec2(-1, listHeight), true);
+  ImGui::BeginChild("CameraList", ImVec2(-1, listHeight), true);
 
   for (const std::string& cameraId : cameraIds) {
-    ImGui::PushID(cameraId.c_str());
-
     // Get camera status for display
     auto status = m_cameraManager.GetCameraStatus(cameraId);
+    //std::cout << "[DEBUG] Camera " << cameraId << " type: " << (int)status.type << std::endl;
+    // Color coding based on camera type and status
+    ImVec4 textColor = ImVec4(1, 1, 1, 1); // Default white
+    if (status.type == ICameraHardware::CameraType::PYLON) {
+      textColor = ImVec4(0.3f, 0.8f, 0.3f, 1.0f); // Green for Pylon
+    }
+    else if (status.type == ICameraHardware::CameraType::IDS) {
+      textColor = ImVec4(0.3f, 0.3f, 0.8f, 1.0f); // Blue for IDS
+    }
 
-    // **ENLARGED SELECTABLE ITEMS for easier selection**
+    // Selection button with color coding
     bool isSelected = (m_selectedCameraId == cameraId);
+    if (isSelected) {
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.6f, 0.9f, 1.0f));
+    }
 
-    // **LARGER SELECTABLE HEIGHT for easier clicking**
-    if (ImGui::Selectable(cameraId.c_str(), isSelected, ImGuiSelectableFlags_None, ImVec2(0, 25))) {
+    ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+
+    if (ImGui::Button(cameraId.c_str(), ImVec2(-1, 35))) {
       OnCameraSelectionChanged(cameraId);
     }
 
-    // **STATUS INDICATOR on same line but more prominent**
+    ImGui::PopStyleColor(); // Text color
+    if (isSelected) {
+      ImGui::PopStyleColor(); // Button color
+    }
+
+    // Status indicators
     ImGui::SameLine();
-
-    // Connection status indicator with better colors
-    ImVec4 statusColor;
-    std::string statusText;
-
     if (status.connected) {
-      if (status.grabbing) {
-        statusColor = ImVec4(0, 1, 0, 1);     // Bright green - grabbing
-        statusText = "[LIVE]";
-      }
-      else {
-        statusColor = ImVec4(0, 0.8f, 0, 1);  // Light green - connected
-        statusText = "[CONN]";
-      }
-    }
-    else {
-      statusColor = ImVec4(1, 0.3f, 0.3f, 1); // Bright red - disconnected
-      statusText = "[DISC]";
-    }
-
-    ImGui::TextColored(statusColor, "%s", statusText.c_str());
-
-    // **TOOLTIP with more information on hover**
-    if (ImGui::IsItemHovered()) {
-      ImGui::BeginTooltip();
-      ImGui::Text("Camera: %s", cameraId.c_str());
-      ImGui::Text("Connected: %s", status.connected ? "Yes" : "No");
-      ImGui::Text("Grabbing: %s", status.grabbing ? "Yes" : "No");
-      if (status.connected) {
-        ImGui::Text("Exposure: %.0f μs", status.currentExposure.exposure_time);
-        ImGui::Text("Gain: %.1f", status.currentExposure.gain);
-      }
-      ImGui::Separator();
-      ImGui::Text("Click to select camera");
-      ImGui::Text("Right-click for context menu");
-      ImGui::EndTooltip();
-    }
-
-    // **RIGHT-CLICK CONTEXT MENU**
-    if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
-      ImGui::OpenPopup(("context_" + cameraId).c_str());
-    }
-
-    if (ImGui::BeginPopup(("context_" + cameraId).c_str())) {
-      ImGui::Text("Camera: %s", cameraId.c_str());
-      ImGui::Separator();
-
-      if (ImGui::MenuItem("Connect")) {
-        m_cameraManager.ConnectCamera(cameraId);
-      }
-      if (ImGui::MenuItem("Disconnect")) {
-        m_cameraManager.DisconnectCamera(cameraId);
-        // Clear panels if disconnecting selected camera
-        if (m_selectedCameraId == cameraId) {
-          ClearAllPanels();
-        }
-      }
-      ImGui::Separator();
-      if (ImGui::MenuItem("Start Grabbing")) {
-        m_cameraManager.StartGrabbing(cameraId);
-      }
-      if (ImGui::MenuItem("Stop Grabbing")) {
-        m_cameraManager.StopGrabbing(cameraId);
-      }
-      if (ImGui::MenuItem("Capture Image")) {
-        m_cameraManager.CaptureImage(cameraId);
-      }
-      ImGui::Separator();
-      if (ImGui::MenuItem("Remove Camera")) {
-        // Clear panels if removing selected camera
-        if (m_selectedCameraId == cameraId) {
-          ClearAllPanels();
-          m_selectedCameraId = "";
-        }
-        m_cameraManager.RemoveCamera(cameraId);
-      }
-      ImGui::EndPopup();
-    }
-
-    // **ADD SPACING between camera entries for better readability**
-    ImGui::Spacing();
-
-    ImGui::PopID();
-  }
-
-  ImGui::EndChild();
-
-  // **SHOW SELECTED CAMERA INFO below the list**
-  if (!m_selectedCameraId.empty()) {
-    ImGui::Separator();
-    ImGui::Text("Selected: %s", m_selectedCameraId.c_str());
-
-    auto status = m_cameraManager.GetCameraStatus(m_selectedCameraId);
-    if (status.connected) {
-      ImGui::SameLine();
       ImGui::TextColored(ImVec4(0, 1, 0, 1), status.grabbing ? "[LIVE]" : "[READY]");
     }
     else {
-      ImGui::SameLine();
       ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "[DISCONNECTED]");
     }
   }
+
+  ImGui::EndChild();
 }
 
 void UICameraPanel::RenderNoSelectionMessage() {
@@ -323,7 +444,8 @@ void UICameraPanel::RenderNoSelectionMessage() {
   ImGui::Spacing();
 
   ImGui::Text("Camera System Features:");
-  ImGui::BulletText("Multi-camera support and management");
+  ImGui::BulletText("Multi-camera support (Pylon and IDS)");
+  ImGui::BulletText("Unified interface for all camera types");
   ImGui::BulletText("Individual camera connection control");
   ImGui::BulletText("Real-time image acquisition and viewing");
   ImGui::BulletText("Exposure and gain control per camera");
@@ -338,10 +460,9 @@ void UICameraPanel::RenderNoSelectionMessage() {
   ImGui::BulletText("Right Panel - Camera settings and utilities");
 
   ImGui::Spacing();
-  ImGui::Text("Tabbed Interface:");
-  ImGui::BulletText("Live Video - Real-time camera feed");
-  ImGui::BulletText("Single Frame - Captured still images");
-  ImGui::BulletText("Independent controls for each mode");
+  ImGui::Text("Supported Camera Types:");
+  ImGui::BulletText("Basler Pylon cameras (Green)");
+  ImGui::BulletText("IDS uEye cameras (Blue)");
 
   ImGui::Spacing();
   ImGui::Text("Camera Count: %zu", m_cameraManager.GetCameraCount());
@@ -351,6 +472,9 @@ void UICameraPanel::OnCameraSelectionChanged(const std::string& newCameraId) {
   if (m_selectedCameraId == newCameraId) {
     return; // No change
   }
+
+  std::cout << "[DEBUG] Camera selection changing from '" << m_selectedCameraId
+    << "' to '" << newCameraId << "'" << std::endl;
 
   // Clear previous selection
   if (!m_selectedCameraId.empty()) {
@@ -362,13 +486,33 @@ void UICameraPanel::OnCameraSelectionChanged(const std::string& newCameraId) {
 
   // Update all panels with new camera
   if (!m_selectedCameraId.empty()) {
-    PylonCameraTest* camera = GetSelectedCamera();
+    ICameraHardware* camera = GetSelectedCamera();
+    std::cout << "[DEBUG] GetSelectedCamera() returned: " << (camera ? "valid camera" : "nullptr") << std::endl;
+
     if (camera) {
+      std::cout << "[DEBUG] Camera type from interface: " << (camera->GetCameraType() == ICameraHardware::CameraType::PYLON ? "Pylon" : "IDS") << std::endl;
+      std::cout << "[DEBUG] Camera model: " << camera->GetModelName() << std::endl;
+
+      // Also check camera manager status
+      auto status = m_cameraManager.GetCameraStatus(m_selectedCameraId);
+      std::cout << "[DEBUG] Camera status type: " << (int)status.type << " (0=Pylon, 1=IDS, 2=Unknown)" << std::endl;
+      std::cout << "[DEBUG] Status connected: " << status.connected << ", device info: " << status.deviceInfo << std::endl;
+
       m_liveVideoPanel->SetSelectedCamera(camera, m_selectedCameraId);
       m_singleGrabPanel->SetSelectedCamera(camera, m_selectedCameraId);
       m_utilityPanel->SetSelectedCamera(camera, m_selectedCameraId);
 
-      std::cout << "[INFO] Camera selection changed to: " << m_selectedCameraId << std::endl;
+      std::cout << "[INFO] Camera selection changed to: " << m_selectedCameraId
+        << " (Type: " << (camera->GetCameraType() == ICameraHardware::CameraType::PYLON ? "Pylon" : "IDS")
+        << ")" << std::endl;
+    }
+    else {
+      std::cout << "[ERROR] GetSelectedCamera() returned nullptr for ID: " << m_selectedCameraId << std::endl;
+
+      // Try to get camera status for debugging
+      auto status = m_cameraManager.GetCameraStatus(m_selectedCameraId);
+      std::cout << "[DEBUG] Camera status - connected: " << status.connected
+        << ", type: " << (int)status.type << std::endl;
     }
   }
 }
@@ -385,11 +529,11 @@ void UICameraPanel::ClearAllPanels() {
   }
 }
 
-PylonCameraTest* UICameraPanel::GetSelectedCamera() const {
+ICameraHardware* UICameraPanel::GetSelectedCamera() const {
   if (m_selectedCameraId.empty()) {
     return nullptr;
   }
-  return m_cameraManager.GetCamera(m_selectedCameraId);
+  return m_cameraManager.GetCameraHardware(m_selectedCameraId);
 }
 
 void UICameraPanel::ToggleWindow() {

@@ -1,44 +1,83 @@
-// Much simpler PylonCameraAdapter.h
+// PylonCameraAdapter.h
+// Adapter wrapping existing PylonCamera for the common interface
 #pragma once
 
-#include "include/ui/VerticalToolbarMenu.h"
-#include "include/camera/pylon_camera_test.h"
+#include "ICameraHardware.h"
+#include "pylon_camera.h"
+#include <memory>
+#include <string>
+#include <functional>
 
-// Adapter for PylonCameraTest that implements the IHierarchicalTogglableUI interface
-class PylonCameraAdapter : public IHierarchicalTogglableUI {
+/**
+ * @brief Adapter that wraps PylonCamera to implement ICameraHardware
+ *
+ * This adapter provides minimal wrapping around the existing PylonCamera
+ * implementation, maintaining compatibility with current code while adding
+ * the common interface.
+ */
+class PylonCameraAdapter : public ICameraHardware {
 public:
-  PylonCameraAdapter(PylonCameraTest& camera, const std::string& name)
-    : m_camera(camera), m_name(name), m_children() {
-  }
+  explicit PylonCameraAdapter(const std::string& cameraId);
+  virtual ~PylonCameraAdapter();
 
-  bool IsVisible() const override {
-    return m_camera.IsVisible();
-  }
+  // Disable copy/move to prevent issues with callbacks
+  PylonCameraAdapter(const PylonCameraAdapter&) = delete;
+  PylonCameraAdapter& operator=(const PylonCameraAdapter&) = delete;
+  PylonCameraAdapter(PylonCameraAdapter&&) = delete;
+  PylonCameraAdapter& operator=(PylonCameraAdapter&&) = delete;
 
-  void ToggleWindow() override {
-    m_camera.ToggleWindow();
-  }
+  // ICameraHardware interface implementation
+  bool Initialize() override;
+  bool Connect() override;
+  bool Disconnect() override;
+  bool StartGrabbing() override;
+  bool StopGrabbing() override;
 
-  const std::string& GetName() const override {
-    return m_name;
-  }
+  bool IsConnected() const override;
+  bool IsGrabbing() const override;
+  bool IsDeviceRemoved() const override;
 
-  bool HasChildren() const override {
-    return false;
-  }
+  bool CaptureFrame(CameraFrameData& frameData) override;
+  bool HasNewFrame() const override;
 
-  const std::vector<std::shared_ptr<IHierarchicalTogglableUI>>& GetChildren() const override {
-    return m_children;
-  }
+  std::string GetCameraId() const override { return m_cameraId; }
+  std::string GetModelName() const override;
+  std::string GetSerialNumber() const override;
+  std::string GetVendorName() const override;
+
+  bool SetExposureSettings(const ExposureSettings& settings) override;
+  ExposureSettings GetExposureSettings() const override;
+
+  void SetFrameCallback(std::function<void(const CameraFrameData&)> callback) override;
+  void ClearFrameCallback() override;
+
+  CameraType GetCameraType() const override { return CameraType::PYLON; }
+
+  std::string GetLastError() const override { return m_lastError; }
+  void ClearLastError() override { m_lastError.clear(); }
+
+  // Pylon-specific configuration
+  bool SetConfiguration(const std::string& key, const std::string& value) override;
+  std::string GetConfiguration(const std::string& key) const override;
+
+  // Access to underlying Pylon camera for backward compatibility
+  PylonCamera* GetPylonCamera() { return m_pylonCamera.get(); }
+  const PylonCamera* GetPylonCamera() const { return m_pylonCamera.get(); }
 
 private:
-  PylonCameraTest& m_camera;
-  std::string m_name;
-  std::vector<std::shared_ptr<IHierarchicalTogglableUI>> m_children;
-};
+  std::string m_cameraId;
+  std::unique_ptr<PylonCamera> m_pylonCamera;
+  std::function<void(const CameraFrameData&)> m_frameCallback;
+  std::string m_lastError;
 
-// Helper function to create a PylonCameraAdapter
-inline std::shared_ptr<IHierarchicalTogglableUI> CreatePylonCameraAdapter(
-  PylonCameraTest& camera, const std::string& name) {
-  return std::make_shared<PylonCameraAdapter>(camera, name);
-}
+  // Internal helper methods
+  void SetError(const std::string& error);
+  void ConvertPylonExposureToCommon(const PylonCamera::ExposureSettings& pylonSettings,
+    ExposureSettings& commonSettings) const;
+  void ConvertCommonExposureToPylon(const ExposureSettings& commonSettings,
+    PylonCamera::ExposureSettings& pylonSettings) const;
+
+  // Frame callback integration with existing PylonCamera
+  void SetupFrameCallbackIntegration();
+  void OnPylonFrameReceived(const Pylon::CGrabResultPtr& grabResult);
+};

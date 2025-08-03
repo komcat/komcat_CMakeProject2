@@ -27,6 +27,7 @@ void PylonDeviceRemovalHandler::OnCameraDeviceRemoved(Pylon::CInstantCamera& /*c
 
 // Implementation of PylonCamera
 
+
 PylonCamera::PylonCamera()
 	: m_initialized(false)
 	, m_connected(false)
@@ -37,17 +38,22 @@ PylonCamera::PylonCamera()
 	, m_pDeviceRemovalHandler(nullptr)
 	, m_deviceRemovalCallback(nullptr)
 	, m_newFrameCallback(nullptr)
-	, m_targetFPS(30) // Default to 30fps - adjust as needed
-	, m_lastIPAddress("")        // NEW: Initialize IP address
-	, m_lastDeviceIndex(-1)      // NEW: Initialize device index to -1 (invalid)
+	, m_targetFPS(30)
+	, m_lastIPAddress("")
+	, m_lastDeviceIndex(-1)
+	, m_hasLatestFrame(false)  // Initialize new member
 {
-	// ... rest of your existing constructor code remains the same
 	// Initialize Pylon runtime
 	Pylon::PylonInitialize();
+
+	// Set up format converter for GetLatestFrameData
+	m_formatConverter.OutputPixelFormat = Pylon::PixelType_RGB8packed;
+	m_formatConverter.OutputBitAlignment = Pylon::OutputBitAlignment_MsbAligned;
 
 	// Create the device removal handler
 	m_pDeviceRemovalHandler = new PylonDeviceRemovalHandler(this);
 }
+
 
 PylonCamera::~PylonCamera()
 {
@@ -483,6 +489,96 @@ void PylonCamera::StopGrabbing()
 	}
 }
 
+
+
+
+bool PylonCamera::DisconnectWithResult()
+{
+	std::lock_guard<std::mutex> lock(m_cameraMutex);
+
+	if (!m_connected)
+	{
+		return true; // Already disconnected - success
+	}
+
+	bool success = true;
+
+	try
+	{
+		// First, stop grabbing if we're grabbing
+		if (m_threadRunning.load())
+		{
+			if (!StopGrabbingWithResult()) {
+				success = false;
+				std::cerr << "Warning: Failed to stop grabbing during disconnect" << std::endl;
+			}
+		}
+
+		// Close camera
+		if (m_camera.IsOpen())
+		{
+			m_camera.Close();
+		}
+
+		m_connected = false;
+
+		if (success) {
+			std::cout << "Camera disconnected successfully" << std::endl;
+		}
+		else {
+			std::cout << "Camera disconnected with warnings" << std::endl;
+		}
+
+		return success;
+	}
+	catch (const Pylon::GenericException& e)
+	{
+		std::cerr << "Error disconnecting camera: " << e.GetDescription() << std::endl;
+		m_connected = false; // Still mark as disconnected even if there was an error
+		return false;
+	}
+}
+
+// Also add a bool-returning version of StopGrabbing if needed:
+bool PylonCamera::StopGrabbingWithResult()
+{
+	bool success = true;
+
+	try
+	{
+		// First, if we have a grab thread running, stop it properly
+		if (m_threadRunning.load())
+		{
+			std::cout << "Stopping grab thread..." << std::endl;
+			m_threadRunning.store(false);
+
+			// Wait for thread to complete
+			if (m_grabThread.joinable())
+			{
+				m_grabThread.join();
+				std::cout << "Grab thread joined successfully" << std::endl;
+			}
+		}
+
+		// Then stop camera grabbing
+		std::lock_guard<std::mutex> lock(m_cameraMutex);
+		if (m_camera.IsGrabbing())
+		{
+			std::cout << "Stopping camera grabbing..." << std::endl;
+			m_camera.StopGrabbing();
+			std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Give it time to stop
+		}
+
+		return success;
+	}
+	catch (const Pylon::GenericException& e)
+	{
+		std::cerr << "Error stopping grabbing: " << e.GetDescription() << std::endl;
+		return false;
+	}
+}
+
+
 std::string PylonCamera::GetDeviceInfo() const
 {
 	if (!m_connected || !m_camera.IsPylonDeviceAttached())
@@ -814,7 +910,7 @@ bool PylonCamera::ValidateConnection() const {
 // Helper method to validate connection for read operations
 bool PylonCamera::ValidateConnectionForRead() const {
 	if (!m_connected) {
-		std::cerr << "Camera operation failed: Camera is not connected" << std::endl;
+		//std::cerr << "Camera operation failed: Camera is not connected" << std::endl;
 		return false;
 	}
 
@@ -1739,4 +1835,69 @@ bool PylonCamera::ConnectToIPWithFallback(const std::string& ipAddress, const st
 
 	std::cout << "❌ All connection methods failed" << std::endl;
 	return false;
+}
+
+
+
+bool PylonCamera::GetLatestFrameData(uint8_t*& imageData, uint32_t& width, uint32_t& height, bool& newFrame) {
+	std::lock_guard<std::mutex> lock(m_frameDataMutex);
+
+	// Initialize output parameters
+	imageData = nullptr;
+	width = 0;
+	height = 0;
+	newFrame = false;
+
+	if (!m_connected || !IsGrabbing()) {
+		return false;
+	}
+
+	// Check if we have a valid grab result from the grabbing thread
+	{
+		std::lock_guard<std::mutex> cameraLock(m_cameraMutex);
+
+		if (!m_ptrGrabResult || !m_ptrGrabResult->GrabSucceeded()) {
+			return false;
+		}
+
+		// Check if this is a new frame
+		newFrame = m_newFrameReady.load();
+
+		try {
+			// Get frame dimensions
+			width = m_ptrGrabResult->GetWidth();
+			height = m_ptrGrabResult->GetHeight();
+
+			// Convert the grab result to RGB format
+			// Release previous images
+			if (m_latestPylonImage.IsValid()) {
+				m_latestPylonImage.Release();
+			}
+			if (m_latestConvertedImage.IsValid()) {
+				m_latestConvertedImage.Release();
+			}
+
+			// Attach grab result to pylon image
+			m_latestPylonImage.AttachGrabResultBuffer(m_ptrGrabResult);
+
+			// Convert to RGB format for easier use
+			m_formatConverter.Convert(m_latestConvertedImage, m_latestPylonImage);
+
+			// Get pointer to the converted image data
+			imageData = static_cast<uint8_t*>(m_latestConvertedImage.GetBuffer());
+
+			m_hasLatestFrame.store(true);
+
+			// Mark that we've consumed this frame
+			if (newFrame) {
+				m_newFrameReady.store(false);
+			}
+
+			return (imageData != nullptr && width > 0 && height > 0);
+		}
+		catch (const Pylon::GenericException& e) {
+			std::cerr << "Error converting frame data: " << e.GetDescription() << std::endl;
+			return false;
+		}
+	}
 }

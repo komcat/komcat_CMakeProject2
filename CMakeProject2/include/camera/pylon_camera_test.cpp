@@ -742,14 +742,36 @@ bool PylonCameraTest::GrabSingleFrame()
     return false;
   }
 
-  // If already grabbing continuously, don't do anything
+  // FIXED: If already grabbing continuously, use the current frame instead of trying to grab a new one
   if (m_camera.IsGrabbing()) {
-    std::cerr << "Already grabbing continuously" << std::endl;
+    std::cout << "Camera already grabbing continuously - using current frame" << std::endl;
+
+    // Check if we have a valid current frame
+    {
+      std::lock_guard<std::mutex> lock(m_imageMutex);
+      if (m_ptrGrabResult && m_ptrGrabResult->GrabSucceeded() && m_formatConverterOutput.IsValid()) {
+        std::cout << "Using current frame from continuous grabbing" << std::endl;
+        m_hasValidImage = true;
+        m_newFrameReady = true;
+
+        // Force texture creation for display
+        for (int attempt = 0; attempt < 3; attempt++) {
+          if (CreateTexture()) {
+            std::cout << "[DEBUG] Texture updated from continuous frame on attempt " << (attempt + 1) << std::endl;
+            break;
+          }
+        }
+
+        return true;
+      }
+    }
+
+    std::cerr << "No valid frame available from continuous grabbing" << std::endl;
     return false;
   }
 
   try {
-    // Start single frame acquisition
+    // Original single frame acquisition code (only when NOT grabbing continuously)
     std::cout << "Grabbing single frame..." << std::endl;
 
     // Create a temporary grab result
@@ -782,7 +804,7 @@ bool PylonCameraTest::GrabSingleFrame()
     if (grabResult && grabResult->GrabSucceeded()) {
       std::cout << "Single frame grabbed successfully" << std::endl;
 
-      // **ENHANCED: Process the frame immediately and create texture**
+      // Process the frame immediately and create texture
       {
         // Lock mutex while updating the image
         std::lock_guard<std::mutex> lock(m_imageMutex);
@@ -815,19 +837,6 @@ bool PylonCameraTest::GrabSingleFrame()
         std::cout << "[DEBUG] Single frame processed: " << m_lastFrameWidth << "x" << m_lastFrameHeight << std::endl;
       }
 
-      // **CRITICAL: Force texture creation immediately**
-      std::cout << "[DEBUG] Creating texture for single frame..." << std::endl;
-
-      // Force texture update multiple times if needed
-      for (int attempt = 0; attempt < 5; attempt++) {
-        if (CreateTexture()) {
-          std::cout << "[DEBUG] Single frame texture created successfully on attempt " << (attempt + 1) << std::endl;
-          std::cout << "[DEBUG] Texture ID: " << m_textureID << ", Valid: " << (m_textureInitialized && m_hasValidImage) << std::endl;
-          break;
-        }
-        std::cout << "[DEBUG] Texture creation failed, attempt " << (attempt + 1) << std::endl;
-      }
-
       return true;
     }
     else {
@@ -836,15 +845,14 @@ bool PylonCameraTest::GrabSingleFrame()
     }
   }
   catch (const Pylon::GenericException& e) {
-    std::cerr << "Pylon exception during single frame grab: " << e.GetDescription() << std::endl;
+    std::cerr << "Pylon error during single frame grab: " << e.GetDescription() << std::endl;
     return false;
   }
   catch (const std::exception& e) {
-    std::cerr << "Exception during single frame grab: " << e.what() << std::endl;
+    std::cerr << "Error during single frame grab: " << e.what() << std::endl;
     return false;
   }
 }
-
 
 
 

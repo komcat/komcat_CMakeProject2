@@ -7,7 +7,7 @@
 
 // Forward declarations
 class CameraManager;
-class PylonCameraTest;
+class ICameraHardware;
 class UICameraPanelLiveVideo;
 class UICameraPanelSingleGrab;
 class UICameraPanelUtility;
@@ -31,7 +31,7 @@ public:
 
   // Camera selection management
   const std::string& GetSelectedCameraId() const { return m_selectedCameraId; }
-  PylonCameraTest* GetSelectedCamera() const;
+  ICameraHardware* GetSelectedCamera() const;
 
 private:
   // Reference to camera manager
@@ -41,7 +41,7 @@ private:
   bool m_showWindow = true;
   std::string m_selectedCameraId;
 
-  // **NEW: Sub-panel components**
+  // Sub-panel components
   std::unique_ptr<UICameraPanelLiveVideo> m_liveVideoPanel;
   std::unique_ptr<UICameraPanelSingleGrab> m_singleGrabPanel;
   std::unique_ptr<UICameraPanelUtility> m_utilityPanel;
