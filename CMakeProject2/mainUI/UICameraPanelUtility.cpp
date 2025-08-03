@@ -119,16 +119,6 @@ void UICameraPanelUtility::RenderCameraHeader() {
     ImGui::Text("Serial: (Connect camera to view)");
   }
 
-  // Legacy Pylon-specific controls (only for Pylon cameras and when connected)
-  if (m_currentCamera->GetCameraType() == ICameraHardware::CameraType::PYLON && m_currentCamera->IsConnected()) {
-    ImGui::Spacing();
-    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Pylon Legacy Features:");
-
-    if (ImGui::Button("Open Exposure Manager", ImVec2(200, 30))) {
-      // This would need to access the legacy PylonCameraTest for backward compatibility
-      std::cout << "[INFO] Exposure Manager access requires legacy PylonCameraTest" << std::endl;
-    }
-  }
 }
 
 void UICameraPanelUtility::RenderConnectionControls() {
@@ -307,7 +297,7 @@ void UICameraPanelUtility::RenderExposureControls() {
   ImGui::Spacing();
   ImGui::Text("Quick Presets:");
 
-  if (ImGui::Button("Bright (Fast)", ImVec2(120, 25))) {
+  if (ImGui::Button("Dark (Fast)", ImVec2(120, 25))) {
     m_exposureTimeUI = 1000.0f;
     m_gainUI = 1.0f;
     m_autoExposureUI = false;
@@ -324,7 +314,7 @@ void UICameraPanelUtility::RenderExposureControls() {
     ApplyExposureSettingsFromUI();
   }
 
-  if (ImGui::Button("Dark (Slow)", ImVec2(120, 25))) {
+  if (ImGui::Button("Bright (Slow)", ImVec2(120, 25))) {
     m_exposureTimeUI = 50000.0f;
     m_gainUI = 2.0f;
     m_autoExposureUI = false;

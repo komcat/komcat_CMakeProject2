@@ -265,13 +265,13 @@ void RaylibDebugWindow::RenderUI() {
 
   // Settings panel
   ImGui::Text("Debug Settings:");
-  ImGui::Checkbox("Advanced Diagnostics", &m_advancedDiagnostics);
+  ImGui::Checkbox("Show Advanced##AdvancedCheckbox", &m_advancedDiagnostics);
   ImGui::SameLine();
-  ImGui::Checkbox("Performance Metrics", &m_showPerformanceMetrics);
+  ImGui::Checkbox("Show Performance##PerformanceCheckbox", &m_showPerformanceMetrics);
   ImGui::SameLine();
-  ImGui::Checkbox("Broadcasting Details", &m_showBroadcastingDetails);
+  ImGui::Checkbox("Show Broadcasting##BroadcastingCheckbox", &m_showBroadcastingDetails);
   ImGui::SameLine();
-  ImGui::Checkbox("Interface Validation", &m_showInterfaceValidation);
+  ImGui::Checkbox("Show Interface##InterfaceCheckbox", &m_showInterfaceValidation);
 
   ImGui::Separator();
 
@@ -310,40 +310,28 @@ void RaylibDebugWindow::RenderUI() {
   }
 }
 
+// REPLACE IT WITH this enhanced version:
 void RaylibDebugWindow::RenderCameraSelection() {
   auto cameraIds = m_cameraManager->GetCameraIds();
 
   if (cameraIds.empty()) {
     ImGui::Text("No cameras available");
-    if (ImGui::Button("Refresh Camera List")) {
-      m_cameraManager->InitializeAllCameras();
-      LogInfo("Refreshed camera list");
-    }
     return;
   }
 
-  // Initialize selection if empty
-  if (m_selectedCameraId.empty() && !cameraIds.empty()) {
-    SelectCamera(cameraIds[0]);
-  }
+  // Camera selection dropdown
+  const char* currentCameraName = m_selectedCameraId.empty() ?
+    "Select Camera..." : m_selectedCameraId.c_str();
 
-  ImGui::Text("Select Camera:");
-  if (ImGui::BeginCombo("##CameraSelection", m_selectedCameraId.c_str())) {
+  if (ImGui::BeginCombo("Select Camera", currentCameraName)) {
     for (const auto& cameraId : cameraIds) {
-      bool isSelected = (m_selectedCameraId == cameraId);
-      auto status = m_cameraManager->GetCameraStatus(cameraId);
+      bool isSelected = (cameraId == m_selectedCameraId);
 
-      // Enhanced display with camera type and status
-      std::string displayName = cameraId + " [" + CameraHardwareFactory::GetCameraTypeName(status.type) + "]";
-      if (status.connected) {
-        displayName += " ✓ Connected";
-      }
-      else {
-        displayName += " ✗ Disconnected";
-      }
-
-      if (ImGui::Selectable(displayName.c_str(), isSelected)) {
-        SelectCamera(cameraId);
+      if (ImGui::Selectable(cameraId.c_str(), isSelected)) {
+        // THIS IS THE KEY FIX - Switch camera feed when selection changes
+        if (m_selectedCameraId != cameraId) {
+          SwitchCameraFeed(cameraId);
+        }
       }
 
       if (isSelected) {
@@ -352,19 +340,37 @@ void RaylibDebugWindow::RenderCameraSelection() {
     }
     ImGui::EndCombo();
   }
+}
 
-  // Show selected camera details
-  if (!m_selectedCameraId.empty()) {
-    auto status = m_cameraManager->GetCameraStatus(m_selectedCameraId);
-    ImGui::Separator();
-    ImGui::Text("Camera Details:");
-    ImGui::Text("  Type: %s", CameraHardwareFactory::GetCameraTypeName(status.type).c_str());
-    ImGui::Text("  Model: %s", status.modelName.c_str());
-    ImGui::Text("  Serial: %s", status.serialNumber.c_str());
-    ImGui::Text("  Device Info: %s", status.deviceInfo.c_str());
-    ImGui::Text("  Device Removed: %s", status.deviceRemoved ? "Yes" : "No");
+
+
+void RaylibDebugWindow::SwitchCameraFeed(const std::string& cameraId) {
+  if (m_logger) {
+    m_logger->LogInfo("Switching raylib camera feed to: " + cameraId);
+  }
+
+  m_selectedCameraId = cameraId;
+
+  // Switch the CameraFeedDisplay to the new camera
+  if (m_cameraFeedDisplay) {
+    // Clear current source first
+    m_cameraFeedDisplay->ClearSource();
+
+    // Set new camera source - THIS IS THE CRITICAL LINE
+    m_cameraFeedDisplay->SetTargetCamera(cameraId);
+
+    if (m_logger) {
+      m_logger->LogInfo("Camera feed display switched to: " + cameraId);
+    }
+  }
+  else {
+    if (m_logger) {
+      m_logger->LogError("CameraFeedDisplay is null - cannot switch camera");
+    }
   }
 }
+
+
 
 void RaylibDebugWindow::RenderCameraControls() {
   if (m_selectedCameraId.empty()) {
@@ -438,7 +444,12 @@ void RaylibDebugWindow::RenderCameraControls() {
       }
     }
   }
-
+  // ADD THIS BUTTON for debugging:
+  if (ImGui::Button("Force Update Feed")) {
+    ForceUpdateCameraFeed();
+  }
+  ImGui::SameLine();
+  ImGui::Text("(Debug: Force texture update)");
   // Enhanced exposure controls using ICameraHardware interface
   if (status.connected && m_selectedCameraHardware) {
     ImGui::Separator();
@@ -958,9 +969,38 @@ void RaylibDebugWindow::SelectCamera(const std::string& cameraId) {
     LogWarning("ICameraHardware interface not available for: " + cameraId);
   }
 
+  // **ADD THIS: Switch the camera feed display to the new camera**
+  if (m_cameraFeedDisplay) {
+    LogInfo("Switching raylib camera feed from subscriber mode...");
+    m_cameraFeedDisplay->ClearSource();
+    m_cameraFeedDisplay->SetTargetCamera(cameraId);
+    LogInfo("Raylib camera feed switched to: " + cameraId);
+  }
+  else {
+    LogWarning("CameraFeedDisplay not available for camera switch");
+  }
+
   // Setup debug subscriber for new camera
   if (!cameraId.empty()) {
     SetupDebugSubscriber(cameraId);
+  }
+}
+
+
+
+// 2. ALSO ADD this method for explicit force update:
+void RaylibDebugWindow::ForceUpdateCameraFeed() {
+  if (m_cameraFeedDisplay && !m_selectedCameraId.empty()) {
+    LogInfo("Force updating camera feed for: " + m_selectedCameraId);
+
+    // Force the camera feed display to update its texture
+    m_cameraFeedDisplay->UpdateTexture();
+
+    LogInfo("Camera feed display status after update:");
+    LogInfo("  Has Source: " + std::string(m_cameraFeedDisplay->HasSource() ? "Yes" : "No"));
+    LogInfo("  Has Valid Texture: " + std::string(m_cameraFeedDisplay->HasValidTexture() ? "Yes" : "No"));
+    LogInfo("  Is Receiving Frames: " + std::string(m_cameraFeedDisplay->IsReceivingFrames() ? "Yes" : "No"));
+    LogInfo("  Status: " + m_cameraFeedDisplay->GetStatusText());
   }
 }
 

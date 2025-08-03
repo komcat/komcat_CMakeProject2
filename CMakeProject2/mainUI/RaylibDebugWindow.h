@@ -66,7 +66,9 @@ public:
     std::chrono::milliseconds maxProcessingTime{ 0 };
   };
   PerformanceMetrics GetPerformanceMetrics() const;
-
+  // ... existing members ...
+  
+  
 private:
   std::string m_targetCameraId;
   std::string m_subscriberId;
@@ -125,14 +127,27 @@ public:
   // Enhanced diagnostics
   void EnableAdvancedDiagnostics(bool enable) { m_advancedDiagnostics = enable; }
   bool IsAdvancedDiagnosticsEnabled() const { return m_advancedDiagnostics; }
+  void SwitchCameraFeed(const std::string& cameraId);  // ADD THIS LINE
+  void ForceUpdateCameraFeed();
 
+  // Enhanced camera operations
+  void SelectCamera(const std::string& cameraId);
+  void ConnectCameraWithBroadcasting(const std::string& cameraId);
+  void StartGrabbingWithBroadcasting(const std::string& cameraId);
+  void StopGrabbingAndBroadcasting(const std::string& cameraId);
+  void RefreshCameraConnection(const std::string& cameraId);
+
+ 
+  // ... existing methods ...
+  bool IsVisible() const { return m_isVisible; }  // ADD THIS LINE
+  void SetVisible(bool visible) { m_isVisible = visible; }  // ADD THIS LINE
 private:
   // Core components
   CameraManager* m_cameraManager = nullptr;
   RaylibWindow* m_raylibWindow = nullptr;
   CameraFeedDisplay* m_cameraFeedDisplay = nullptr;
   Logger* m_logger = nullptr;
-
+  bool m_isVisible = true;  // ADD THIS LINE
   // Enhanced state management
   std::string m_selectedCameraId;
   ICameraHardware* m_selectedCameraHardware = nullptr;
@@ -160,12 +175,7 @@ private:
   void RenderQuickActions();
   void RenderAdvancedDebugInfo();
 
-  // Enhanced camera operations
-  void SelectCamera(const std::string& cameraId);
-  void ConnectCameraWithBroadcasting(const std::string& cameraId);
-  void StartGrabbingWithBroadcasting(const std::string& cameraId);
-  void StopGrabbingAndBroadcasting(const std::string& cameraId);
-  void RefreshCameraConnection(const std::string& cameraId);
+
 
   // Broadcasting management
   void SetupDebugSubscriber(const std::string& cameraId);

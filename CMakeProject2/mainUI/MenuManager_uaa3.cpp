@@ -52,13 +52,13 @@ void MenuManagerUaa3::RenderRaylibMenu() {
 
     ImGui::Separator();
 
-    // Add IDS Camera Test option
-    if (ImGui::MenuItem("IDS Camera Test", nullptr,
-      m_idsCameraUI ? m_idsCameraUI->IsVisible() : false)) {
-      if (m_idsCameraUI) {
-        m_idsCameraUI->ToggleVisibility();
-      }
-    }
+    //// Add IDS Camera Test option
+    //if (ImGui::MenuItem("IDS Camera Test", nullptr,
+    //  m_idsCameraUI ? m_idsCameraUI->IsVisible() : false)) {
+    //  if (m_idsCameraUI) {
+    //    m_idsCameraUI->ToggleVisibility();
+    //  }
+    //}
 
     ImGui::EndMenu();
   }

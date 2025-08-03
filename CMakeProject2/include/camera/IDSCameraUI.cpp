@@ -11,7 +11,7 @@
 
 IDSCameraUI::IDSCameraUI()
   : m_camera(std::make_unique<IDSCameraTest>()),
-  m_isVisible(true),
+  m_isVisible(false),
   m_selectedCameraIdIndex(0),
   m_textureID(0),
   m_textureInitialized(false),
