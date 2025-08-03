@@ -597,6 +597,10 @@ void RunPageUI::RenderColumn3() {
 
 // REPLACE the RenderLiveViewTab() method in RunPageUI.cpp with this UIConfigVisualizer-style implementation
 
+// ENHANCED RenderLiveViewTab() method with crosshair overlay
+// Replace the existing RenderLiveViewTab() method in RunPageUI.cpp
+
+
 void RunPageUI::RenderLiveViewTab() {
   ImGui::Text("Live Camera Feed");
   ImGui::Separator();
@@ -616,7 +620,10 @@ void RunPageUI::RenderLiveViewTab() {
     return;
   }
 
-  // Camera selection dropdown (similar to UIConfigVisualizer)
+  // First row: Camera selection and controls
+  ImGui::BeginGroup();
+
+  // Camera selection dropdown
   ImGui::Text("Camera:");
 
   // Find current selection index
@@ -641,12 +648,151 @@ void RunPageUI::RenderLiveViewTab() {
     cameraNames.push_back(id.c_str());
   }
 
-  ImGui::SetNextItemWidth(200);
+  ImGui::SetNextItemWidth(150);
   if (ImGui::Combo("##CameraSelection", &currentCameraIndex, cameraNames.data(), (int)cameraNames.size())) {
     SetSelectedCamera(cameraIds[currentCameraIndex]);
   }
 
-  // Camera status and controls (similar to UIConfigVisualizer)
+  // Crosshair overlay controls
+  ImGui::SameLine();
+  ImGui::Spacing();
+  ImGui::SameLine();
+  if (ImGui::Checkbox("Show Crosshair", &m_showCrosshair)) {
+    UpdateStatus(m_showCrosshair ? "Crosshair overlay enabled" : "Crosshair overlay disabled");
+  }
+
+  ImGui::EndGroup();
+
+  // NEW: Second row: Data channel selection with spec input
+  ImGui::BeginGroup();
+  ImGui::Text("Data Channel:");
+
+  // Get available data channels from GlobalDataStore
+  GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+  std::vector<std::string> dataChannels;
+
+  if (dataStore) {
+    dataChannels = dataStore->GetAvailableChannels();
+  }
+
+  if (!dataChannels.empty()) {
+    // Find current data channel selection index
+    int currentDataChannelIndex = 0;
+    if (!m_selectedDataChannel.empty()) {
+      auto it = std::find(dataChannels.begin(), dataChannels.end(), m_selectedDataChannel);
+      if (it != dataChannels.end()) {
+        currentDataChannelIndex = static_cast<int>(std::distance(dataChannels.begin(), it));
+      }
+    }
+    else {
+      // Select first channel by default
+      m_selectedDataChannel = dataChannels[0];
+    }
+
+    // Create data channel selection array
+    std::vector<const char*> dataChannelNames;
+    for (const auto& channel : dataChannels) {
+      dataChannelNames.push_back(channel.c_str());
+    }
+
+    ImGui::SetNextItemWidth(200);
+    if (ImGui::Combo("##DataChannelSelection", &currentDataChannelIndex, dataChannelNames.data(), (int)dataChannelNames.size())) {
+      m_selectedDataChannel = dataChannels[currentDataChannelIndex];
+      UpdateStatus("Selected data channel: " + m_selectedDataChannel);
+    }
+
+    // Show data overlay checkbox
+    ImGui::SameLine();
+    ImGui::Spacing();
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Show Data Overlay", &m_showDataOverlay)) {
+      UpdateStatus(m_showDataOverlay ? "Data overlay enabled" : "Data overlay disabled");
+    }
+
+    // NEW: Add spec value input on the next line
+    if (m_showDataOverlay && !m_selectedDataChannel.empty()) {
+      ImGui::Text("Spec Value:");
+      ImGui::SameLine();
+
+      // Create unique ID for the input based on channel name
+      std::string inputId = "##SpecValue_" + m_selectedDataChannel;
+
+      // Get or initialize spec value for this channel
+      if (m_specValues.find(m_selectedDataChannel) == m_specValues.end()) {
+        m_specValues[m_selectedDataChannel] = 0.0f;
+        m_specValueStrings[m_selectedDataChannel] = "";
+      }
+
+      // Use a string buffer for the input
+      char specBuffer[64];
+      if (m_specValueStrings[m_selectedDataChannel].empty()) {
+        strcpy(specBuffer, "");
+      }
+      else {
+        strncpy(specBuffer, m_specValueStrings[m_selectedDataChannel].c_str(), sizeof(specBuffer) - 1);
+        specBuffer[sizeof(specBuffer) - 1] = '\0';
+      }
+
+      ImGui::SetNextItemWidth(120);
+      if (ImGui::InputText(inputId.c_str(), specBuffer, sizeof(specBuffer), ImGuiInputTextFlags_CharsDecimal)) {
+        m_specValueStrings[m_selectedDataChannel] = std::string(specBuffer);
+
+        // Try to parse the value
+        if (strlen(specBuffer) > 0) {
+          try {
+            m_specValues[m_selectedDataChannel] = std::stof(specBuffer);
+            m_hasValidSpec[m_selectedDataChannel] = true;
+          }
+          catch (...) {
+            m_hasValidSpec[m_selectedDataChannel] = false;
+          }
+        }
+        else {
+          m_hasValidSpec[m_selectedDataChannel] = false;
+        }
+      }
+
+      // Show clear button
+      ImGui::SameLine();
+      if (ImGui::Button("Clear##SpecClear")) {
+        m_specValueStrings[m_selectedDataChannel] = "";
+        m_hasValidSpec[m_selectedDataChannel] = false;
+        UpdateStatus("Cleared spec value for: " + m_selectedDataChannel);
+      }
+
+      // Show current percentage if spec is valid
+      if (m_hasValidSpec[m_selectedDataChannel] && dataStore) {
+        float currentValue = dataStore->GetValue(m_selectedDataChannel, 0.0f);
+        float specValue = m_specValues[m_selectedDataChannel];
+
+        if (specValue != 0.0f) {
+          float percentage = (currentValue / specValue) * 100.0f;
+          ImGui::SameLine();
+          ImGui::Text("(%.1f%%)", percentage);
+
+          // Color code the percentage based on deviation
+          float deviation = std::abs(percentage - 100.0f);
+          if (deviation > 10.0f) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "OUT OF SPEC");
+          }
+          else if (deviation > 5.0f) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "WARNING");
+          }
+        }
+      }
+    }
+  }
+  else {
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No data channels available");
+    m_selectedDataChannel = "";
+    m_showDataOverlay = false;
+  }
+
+  ImGui::EndGroup();
+
+  // Camera status and controls
   if (!m_selectedCameraId.empty()) {
     ImGui::Spacing();
     auto status = m_cameraManager->GetCameraStatus(m_selectedCameraId);
@@ -710,7 +856,7 @@ void RunPageUI::RenderLiveViewTab() {
   ImVec2 availableSize = ImGui::GetContentRegionAvail();
   float feedHeight = availableSize.y - 60.0f; // Leave space for statistics
 
-  // Calculate canvas size with aspect ratio (similar to UIConfigVisualizer)
+  // Calculate canvas size with aspect ratio
   const float CAMERA_ASPECT_RATIO = 1280.0f / 1024.0f;
   ImVec2 canvasSize;
   canvasSize.x = availableSize.x;
@@ -728,15 +874,29 @@ void RunPageUI::RenderLiveViewTab() {
     canvasSize.y = 160.0f / CAMERA_ASPECT_RATIO;
   }
 
-  // Create camera canvas (similar to UIConfigVisualizer)
+  // Create camera canvas with overlays
   ImGui::BeginChild("CameraCanvas", canvasSize, true, ImGuiWindowFlags_NoScrollbar);
+
+  // Store canvas position for overlays
+  ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+  ImVec2 canvasMax = ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y);
 
   // Render camera feed using existing method
   RenderCameraFeedFromSubscriber(canvasSize);
 
+  // Render crosshair overlay if enabled
+  if (m_showCrosshair) {
+    RenderCrosshairOverlay(canvasPos, canvasSize);
+  }
+
+  // NEW: Render data value overlay if enabled
+  if (m_showDataOverlay && !m_selectedDataChannel.empty()) {
+    RenderDataValueOverlay(canvasPos, canvasSize);
+  }
+
   ImGui::EndChild();
 
-  // Display statistics below the feed (similar to UIConfigVisualizer)
+  // Display statistics below the feed
   if (m_cameraSubscriber) {
     ImGui::Text("Frames: %llu | Subscriber: %s",
       m_cameraSubscriber->GetTotalFramesReceived(),
@@ -772,6 +932,17 @@ void RunPageUI::RenderLiveViewTab() {
       m_cameraSubscriber->IsCameraConnected() ? "Yes" : "No",
       m_cameraSubscriber->IsCameraGrabbing() ? "Yes" : "No");
 
+    // Show overlay status
+    if (m_showCrosshair) {
+      ImGui::SameLine();
+      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "| Crosshair: ON");
+    }
+
+    if (m_showDataOverlay && !m_selectedDataChannel.empty()) {
+      ImGui::SameLine();
+      ImGui::TextColored(ImVec4(0.0f, 0.5f, 1.0f, 1.0f), "| Data: %s", m_selectedDataChannel.c_str());
+    }
+
     // Debug: Show if subscriber is receiving frames
     if (m_cameraSubscriber->GetTotalFramesReceived() == 0) {
       ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No frames received - check camera connection and grabbing status");
@@ -785,6 +956,349 @@ void RunPageUI::RenderLiveViewTab() {
     }
   }
 }
+
+// NEW: Data value overlay rendering method
+
+// ENHANCED: Update the RenderDataValueOverlay method to include percentage
+void RunPageUI::RenderDataValueOverlay(const ImVec2& canvasPos, const ImVec2& canvasSize) {
+  if (m_selectedDataChannel.empty()) return;
+
+  GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+  if (!dataStore) return;
+
+  // Get current value
+  float currentValue = dataStore->GetValue(m_selectedDataChannel, 0.0f);
+
+  // Format value with appropriate units
+  char valueText[128];
+  FormatDataValueWithUnit(m_selectedDataChannel, currentValue, valueText, sizeof(valueText));
+
+  // Check if we have a valid spec value for percentage calculation
+  bool hasSpec = (m_hasValidSpec.find(m_selectedDataChannel) != m_hasValidSpec.end() &&
+    m_hasValidSpec[m_selectedDataChannel] &&
+    m_specValues[m_selectedDataChannel] != 0.0f);
+
+  float percentage = 0.0f;
+  char percentageText[64] = "";
+
+  if (hasSpec) {
+    float specValue = m_specValues[m_selectedDataChannel];
+    percentage = (currentValue / specValue) * 100.0f;
+    snprintf(percentageText, sizeof(percentageText), "%.1f%%", percentage);
+  }
+
+  ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+  // Overlay dimensions - make it taller if we have percentage
+  const float padding = 10.0f;
+  const float overlayWidth = 220.0f;
+  const float overlayHeight = hasSpec ? 85.0f : 60.0f; // Taller with percentage
+
+  ImVec2 overlayPos = ImVec2(canvasPos.x + padding, canvasPos.y + padding);
+  ImVec2 overlayMax = ImVec2(overlayPos.x + overlayWidth, overlayPos.y + overlayHeight);
+
+  // Background with transparency
+  const ImU32 bgColor = IM_COL32(0, 0, 0, 180); // Semi-transparent black
+  const ImU32 borderColor = IM_COL32(100, 150, 255, 200); // Light blue border
+
+  drawList->AddRectFilled(overlayPos, overlayMax, bgColor, 5.0f);
+  drawList->AddRect(overlayPos, overlayMax, borderColor, 5.0f, 0, 2.0f);
+
+  // Channel name text
+  ImVec2 channelTextPos = ImVec2(overlayPos.x + 8, overlayPos.y + 8);
+  const ImU32 channelTextColor = IM_COL32(200, 200, 200, 255); // Light gray
+
+  // Use smaller font for channel name
+  ImFont* font = ImGui::GetFont();
+  float originalScale = font->Scale;
+  font->Scale = 0.8f;
+  ImGui::PushFont(font);
+
+  drawList->AddText(channelTextPos, channelTextColor, m_selectedDataChannel.c_str());
+
+  ImGui::PopFont();
+  font->Scale = originalScale;
+
+  // Value text (larger)
+  ImVec2 valueTextPos = ImVec2(overlayPos.x + 8, overlayPos.y + 28);
+  const ImU32 valueTextColor = IM_COL32(255, 255, 255, 255); // White
+
+  // Check if value changed for highlighting
+  bool valueChanged = HasDataValueChanged(m_selectedDataChannel, currentValue);
+  const ImU32 highlightColor = IM_COL32(0, 255, 100, 255); // Bright green for changes
+
+  // Use larger font for value
+  font->Scale = 1.2f;
+  ImGui::PushFont(font);
+
+  drawList->AddText(valueTextPos, valueChanged ? highlightColor : valueTextColor, valueText);
+
+  ImGui::PopFont();
+  font->Scale = originalScale;
+
+  // NEW: Percentage text if we have spec
+  if (hasSpec) {
+    ImVec2 percentageTextPos = ImVec2(overlayPos.x + 8, overlayPos.y + 50);
+
+    // Color code based on deviation from 100%
+    float deviation = std::abs(percentage - 100.0f);
+    ImU32 percentageColor;
+
+    if (deviation > 10.0f) {
+      percentageColor = IM_COL32(255, 100, 100, 255); // Red for large deviation
+    }
+    else if (deviation > 5.0f) {
+      percentageColor = IM_COL32(255, 200, 0, 255);   // Yellow for moderate deviation
+    }
+    else {
+      percentageColor = IM_COL32(100, 255, 100, 255); // Green for good values
+    }
+
+    // Use medium font for percentage
+    font->Scale = 1.1f;
+    ImGui::PushFont(font);
+
+    drawList->AddText(percentageTextPos, percentageColor, percentageText);
+
+    ImGui::PopFont();
+    font->Scale = originalScale;
+  }
+
+  // Timestamp (adjusted position based on whether we have percentage)
+  auto now = std::chrono::system_clock::now();
+  auto time_t = std::chrono::system_clock::to_time_t(now);
+  auto tm = *std::localtime(&time_t);
+
+  char timeStr[32];
+  std::strftime(timeStr, sizeof(timeStr), "%H:%M:%S", &tm);
+
+  ImVec2 timeTextPos = ImVec2(overlayPos.x + overlayWidth - 60, overlayPos.y + (hasSpec ? 67 : 45));
+  const ImU32 timeTextColor = IM_COL32(150, 150, 150, 200); // Dim gray
+
+  font->Scale = 0.7f;
+  ImGui::PushFont(font);
+
+  drawList->AddText(timeTextPos, timeTextColor, timeStr);
+
+  ImGui::PopFont();
+  font->Scale = originalScale;
+}
+
+
+// NEW: Format data value with units (adapted from GlobalDataStoreViewerUI)
+void RunPageUI::FormatDataValueWithUnit(const std::string& channel, float value, char* buffer, size_t bufferSize) {
+  float absValue = std::abs(value);
+
+  // Try to determine unit from channel name or use generic formatting
+  std::string lowerChannel = channel;
+  std::transform(lowerChannel.begin(), lowerChannel.end(), lowerChannel.begin(), ::tolower);
+
+  if (lowerChannel.find("current") != std::string::npos || lowerChannel.find("amp") != std::string::npos || lowerChannel.back() == 'a') {
+    // Current formatting
+    if (absValue == 0.0f) {
+      snprintf(buffer, bufferSize, "0.00 A");
+    }
+    else if (absValue < 1e-12f) {
+      snprintf(buffer, bufferSize, "%.3e A", value);
+    }
+    else if (absValue < 1e-9f) {
+      float pAValue = value * 1e12f;
+      snprintf(buffer, bufferSize, "%.2f pA", pAValue);
+    }
+    else if (absValue < 1e-6f) {
+      float nAValue = value * 1e9f;
+      snprintf(buffer, bufferSize, "%.2f nA", nAValue);
+    }
+    else if (absValue < 1e-3f) {
+      float uAValue = value * 1e6f;
+      snprintf(buffer, bufferSize, "%.2f µA", uAValue);
+    }
+    else if (absValue < 1.0f) {
+      float mAValue = value * 1e3f;
+      snprintf(buffer, bufferSize, "%.3f mA", mAValue);
+    }
+    else {
+      snprintf(buffer, bufferSize, "%.3f A", value);
+    }
+  }
+  else if (lowerChannel.find("voltage") != std::string::npos || lowerChannel.find("volt") != std::string::npos || lowerChannel.back() == 'v') {
+    // Voltage formatting
+    if (absValue == 0.0f) {
+      snprintf(buffer, bufferSize, "0.00 V");
+    }
+    else if (absValue < 1e-6f) {
+      float uVValue = value * 1e6f;
+      snprintf(buffer, bufferSize, "%.2f µV", uVValue);
+    }
+    else if (absValue < 1e-3f) {
+      float mVValue = value * 1e3f;
+      snprintf(buffer, bufferSize, "%.2f mV", mVValue);
+    }
+    else {
+      snprintf(buffer, bufferSize, "%.3f V", value);
+    }
+  }
+  else if (lowerChannel.find("temp") != std::string::npos) {
+    // Temperature formatting
+    snprintf(buffer, bufferSize, "%.1f °C", value);
+  }
+  else if (lowerChannel.find("pressure") != std::string::npos) {
+    // Pressure formatting
+    snprintf(buffer, bufferSize, "%.2f Pa", value);
+  }
+  else {
+    // Generic formatting
+    if (absValue == 0.0f) {
+      snprintf(buffer, bufferSize, "0.00");
+    }
+    else if (absValue < 1e-6f) {
+      snprintf(buffer, bufferSize, "%.3e", value);
+    }
+    else if (absValue < 0.001f) {
+      snprintf(buffer, bufferSize, "%.6f", value);
+    }
+    else {
+      snprintf(buffer, bufferSize, "%.3f", value);
+    }
+  }
+}
+
+// NEW: Check if data value changed (for highlighting)
+bool RunPageUI::HasDataValueChanged(const std::string& channel, float currentValue) {
+  bool valueChanged = false;
+
+  if (m_lastDataValues.find(channel) != m_lastDataValues.end()) {
+    valueChanged = (std::abs(m_lastDataValues[channel] - currentValue) > 1e-9f); // Small threshold for float comparison
+  }
+  else {
+    valueChanged = true; // First time seeing this channel
+  }
+
+  m_lastDataValues[channel] = currentValue;
+
+  // Reset highlight after a short time
+  static auto lastChangeTime = std::chrono::steady_clock::now();
+  auto now = std::chrono::steady_clock::now();
+  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastChangeTime).count();
+
+  if (valueChanged) {
+    lastChangeTime = now;
+    return true;
+  }
+
+  // Show highlight for 500ms after change
+  return elapsed < 500;
+}
+
+
+// NEW: Crosshair overlay rendering method
+void RunPageUI::RenderCrosshairOverlay(const ImVec2& canvasPos, const ImVec2& canvasSize) {
+  ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+  // Calculate center point
+  ImVec2 center = ImVec2(
+    canvasPos.x + canvasSize.x * 0.5f,
+    canvasPos.y + canvasSize.y * 0.5f
+  );
+
+  // Crosshair parameters
+  const float crosshairLength = 20.0f;
+  const float crosshairThickness = 2.0f;
+  const ImU32 crosshairColor = IM_COL32(0, 255, 0, 200); // Green with transparency
+  const ImU32 crosshairOutlineColor = IM_COL32(0, 0, 0, 150); // Black outline
+
+  // Draw crosshair outline (black) for better visibility
+  // Horizontal line outline
+  drawList->AddLine(
+    ImVec2(center.x - crosshairLength - 1, center.y - 1),
+    ImVec2(center.x + crosshairLength + 1, center.y + 1),
+    crosshairOutlineColor,
+    crosshairThickness + 2.0f
+  );
+
+  // Vertical line outline
+  drawList->AddLine(
+    ImVec2(center.x - 1, center.y - crosshairLength - 1),
+    ImVec2(center.x + 1, center.y + crosshairLength + 1),
+    crosshairOutlineColor,
+    crosshairThickness + 2.0f
+  );
+
+  // Draw main crosshair (green)
+  // Horizontal line
+  drawList->AddLine(
+    ImVec2(center.x - crosshairLength, center.y),
+    ImVec2(center.x + crosshairLength, center.y),
+    crosshairColor,
+    crosshairThickness
+  );
+
+  // Vertical line
+  drawList->AddLine(
+    ImVec2(center.x, center.y - crosshairLength),
+    ImVec2(center.x, center.y + crosshairLength),
+    crosshairColor,
+    crosshairThickness
+  );
+
+  // Optional: Add center dot
+  drawList->AddCircleFilled(center, 2.0f, crosshairColor);
+
+  // Optional: Add corner markers for better visibility
+  const float cornerOffset = 40.0f;
+  const float cornerLength = 8.0f;
+  const ImU32 cornerColor = IM_COL32(255, 255, 0, 150); // Yellow corners
+
+  // Top-left corner
+  drawList->AddLine(
+    ImVec2(center.x - cornerOffset, center.y - cornerOffset),
+    ImVec2(center.x - cornerOffset + cornerLength, center.y - cornerOffset),
+    cornerColor, 1.5f
+  );
+  drawList->AddLine(
+    ImVec2(center.x - cornerOffset, center.y - cornerOffset),
+    ImVec2(center.x - cornerOffset, center.y - cornerOffset + cornerLength),
+    cornerColor, 1.5f
+  );
+
+  // Top-right corner
+  drawList->AddLine(
+    ImVec2(center.x + cornerOffset, center.y - cornerOffset),
+    ImVec2(center.x + cornerOffset - cornerLength, center.y - cornerOffset),
+    cornerColor, 1.5f
+  );
+  drawList->AddLine(
+    ImVec2(center.x + cornerOffset, center.y - cornerOffset),
+    ImVec2(center.x + cornerOffset, center.y - cornerOffset + cornerLength),
+    cornerColor, 1.5f
+  );
+
+  // Bottom-left corner
+  drawList->AddLine(
+    ImVec2(center.x - cornerOffset, center.y + cornerOffset),
+    ImVec2(center.x - cornerOffset + cornerLength, center.y + cornerOffset),
+    cornerColor, 1.5f
+  );
+  drawList->AddLine(
+    ImVec2(center.x - cornerOffset, center.y + cornerOffset),
+    ImVec2(center.x - cornerOffset, center.y + cornerOffset - cornerLength),
+    cornerColor, 1.5f
+  );
+
+  // Bottom-right corner
+  drawList->AddLine(
+    ImVec2(center.x + cornerOffset, center.y + cornerOffset),
+    ImVec2(center.x + cornerOffset - cornerLength, center.y + cornerOffset),
+    cornerColor, 1.5f
+  );
+  drawList->AddLine(
+    ImVec2(center.x + cornerOffset, center.y + cornerOffset),
+    ImVec2(center.x + cornerOffset, center.y + cornerOffset - cornerLength),
+    cornerColor, 1.5f
+  );
+}
+
+
 
 // ALSO ADD: Update the SetCameraManager method to ensure proper initialization
 void RunPageUI::SetCameraManager(CameraManager* cameraManager) {

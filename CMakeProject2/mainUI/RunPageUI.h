@@ -140,4 +140,28 @@ private:
   // Process management
   std::unique_ptr<SequenceStep> BuildSelectedProcess();
   void ProcessThreadFunc(const std::string& processName);
+
+  // NEW: Crosshair overlay control
+  bool m_showCrosshair = false;
+
+
+
+  // NEW: Add this method declaration with other camera rendering methods
+  void RenderCrosshairOverlay(const ImVec2& canvasPos, const ImVec2& canvasSize);
+
+  // NEW: Data overlay members
+  std::string m_selectedDataChannel;
+  bool m_showDataOverlay = false;
+  std::map<std::string, float> m_lastDataValues; // For change detection
+
+
+  // NEW: Spec value members
+  std::map<std::string, float> m_specValues;        // Parsed spec values per channel
+  std::map<std::string, std::string> m_specValueStrings; // String input per channel
+  std::map<std::string, bool> m_hasValidSpec;      // Whether spec is valid per channel
+
+  // NEW: Add these method declarations with other rendering methods
+  void RenderDataValueOverlay(const ImVec2& canvasPos, const ImVec2& canvasSize);
+  void FormatDataValueWithUnit(const std::string& channel, float value, char* buffer, size_t bufferSize);
+  bool HasDataValueChanged(const std::string& channel, float currentValue);
 };
