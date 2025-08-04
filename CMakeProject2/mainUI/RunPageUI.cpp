@@ -1327,7 +1327,7 @@ void RunPageUI::InitializeCameraFeed() {
     UpdateStatus("Cannot initialize camera feed: no camera selected or manager unavailable");
     return;
   }
-
+  
   // Clear existing subscription
   ClearCameraFeed();
 
@@ -2103,24 +2103,40 @@ void RunPageUI::SetImguiFont(ImFont* font) {
 
 // NEW: Camera management methods
 
+
+// Also fix the RunPageUI version for consistency
 void RunPageUI::SetSelectedCamera(const std::string& cameraId) {
   if (m_selectedCameraId == cameraId) {
     return; // No change
   }
 
+  std::string previousCamera = m_selectedCameraId;
   m_selectedCameraId = cameraId;
 
   if (m_cameraSubscriber) {
-    // Update existing subscriber target
+    // CRITICAL FIX: Re-register subscriber when changing cameras
+    std::string oldId = m_cameraSubscriber->GetSubscriberId();
+    m_logger->LogInfo("RunPageUI: Re-registering subscriber - Old ID: " + oldId);
+
+    // 1. Unsubscribe with old ID
+    m_cameraManager->UnsubscribeFromFrames(oldId);
+    m_logger->LogInfo("RunPageUI: Unsubscribed old subscriber ID: " + oldId);
+
+    // 2. Update subscriber target camera (this changes the internal ID)
     m_cameraSubscriber->SetTargetCamera(cameraId);
-    m_logger->LogInfo("RunPageUI: Camera switched to: " + cameraId);
+    std::string newId = m_cameraSubscriber->GetSubscriberId();
+    m_logger->LogInfo("RunPageUI: Subscriber target updated - New ID: " + newId);
+
+    // 3. Re-subscribe with new ID
+    m_cameraManager->SubscribeToFrames(m_cameraSubscriber);
+    m_logger->LogInfo("RunPageUI: Re-subscribed with new ID: " + newId);
+    m_logger->LogInfo("RunPageUI: Camera switched from " + previousCamera + " to " + cameraId);
   }
   else {
     // Initialize new feed
     InitializeCameraFeed();
   }
 }
-
 
 void RunPageUI::ClearCameraFeed() {
   if (m_cameraSubscriber && m_cameraManager) {

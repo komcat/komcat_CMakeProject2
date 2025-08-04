@@ -1,4 +1,6 @@
-// UICameraPanelLiveVideo.h - Live Video Feed Panel
+// UICameraPanelLiveVideo.h - UPDATED VERSION
+// Added validation method for debugging subscription issues
+
 #pragma once
 
 #include <memory>
@@ -27,6 +29,9 @@ public:
   // Camera management
   void SetSelectedCamera(ICameraHardware* camera, const std::string& cameraId);
   void ClearCamera();
+
+  // NEW: Debugging and validation
+  void ValidateSubscriptionState();
 
 private:
   // Reference to camera manager

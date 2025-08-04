@@ -220,6 +220,7 @@ void UICameraPanelLiveVideo::RenderTab(ICameraHardware* camera, const std::strin
   ImGui::EndChild();
 }
 
+
 void UICameraPanelLiveVideo::SetSelectedCamera(ICameraHardware* camera, const std::string& cameraId) {
   // Clear previous camera
   if (m_currentCamera != camera) {
@@ -236,20 +237,68 @@ void UICameraPanelLiveVideo::SetSelectedCamera(ICameraHardware* camera, const st
 
     // Create or update subscriber
     if (!m_subscriber) {
+      // First time setup - create new subscriber
       m_subscriber = std::make_shared<LiveVideoSubscriber>(cameraId);
-      // Subscribe to camera manager's broadcasting system
       m_cameraManager.SubscribeToFrames(m_subscriber);
       std::cout << "[INFO] Created and subscribed LiveVideoSubscriber for " << cameraId << std::endl;
     }
     else {
-      // Update existing subscriber to watch new camera
+      // CRITICAL FIX: Properly re-register subscriber when changing cameras
+      std::string oldId = m_subscriber->GetSubscriberId();
+      std::cout << "[INFO] Re-registering subscriber - Old ID: " << oldId << std::endl;
+
+      // 1. Unsubscribe with old ID
+      m_cameraManager.UnsubscribeFromFrames(oldId);
+      std::cout << "[INFO] Unsubscribed old subscriber ID: " << oldId << std::endl;
+
+      // 2. Update subscriber target camera (this changes the internal ID)
       m_subscriber->SetTargetCamera(cameraId);
-      std::cout << "[INFO] Updated LiveVideoSubscriber target to " << cameraId << std::endl;
+      std::string newId = m_subscriber->GetSubscriberId();
+      std::cout << "[INFO] Subscriber target updated - New ID: " << newId << std::endl;
+
+      // 3. Re-subscribe with new ID
+      m_cameraManager.SubscribeToFrames(m_subscriber);
+      std::cout << "[INFO] Re-subscribed with new ID: " << newId << std::endl;
     }
 
     UpdateGrabbingState();
   }
 }
+
+// Helper function to validate subscription state (add to header file)
+void UICameraPanelLiveVideo::ValidateSubscriptionState() {
+  if (!m_subscriber) {
+    std::cout << "[DEBUG] No subscriber present" << std::endl;
+    return;
+  }
+
+  std::string currentId = m_subscriber->GetSubscriberId();
+  std::string targetCamera = m_subscriber->GetTargetCamera();
+  size_t totalSubscribers = m_cameraManager.GetSubscriberCount();
+  auto subscriberIds = m_cameraManager.GetSubscriberIds();
+
+  std::cout << "[DEBUG] Subscription validation:" << std::endl;
+  std::cout << "  Current subscriber ID: " << currentId << std::endl;
+  std::cout << "  Target camera: " << targetCamera << std::endl;
+  std::cout << "  Total subscribers in manager: " << totalSubscribers << std::endl;
+
+  bool foundSubscriber = false;
+  for (const auto& id : subscriberIds) {
+    std::cout << "  Registered subscriber: " << id << std::endl;
+    if (id == currentId) {
+      foundSubscriber = true;
+    }
+  }
+
+  if (!foundSubscriber) {
+    std::cout << "[ERROR] Subscriber ID not found in manager registry!" << std::endl;
+  }
+  else {
+    std::cout << "[OK] Subscriber properly registered" << std::endl;
+  }
+}
+
+
 
 void UICameraPanelLiveVideo::ClearCamera() {
   // Unsubscribe from broadcasting
