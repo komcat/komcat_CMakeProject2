@@ -83,69 +83,157 @@ void TCPDataManagerUI::RenderServerCard(const ServerDisplayInfo& serverInfo, int
   // Create a styled card for each server
   ImGui::PushID(clientIndex);
 
-  // Card background
-  ImVec2 cardSize(0, 120); // Auto width, fixed height
+  // Card styling - make it more card-like with rounded corners and shadow effect
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+
+  // Card colors based on connection status
+  ImVec4 cardBgColor;
+  ImVec4 borderColor;
+  if (clientInfo.connected) {
+    cardBgColor = ImVec4(0.15f, 0.25f, 0.15f, 0.9f);  // Dark green tint
+    borderColor = ImVec4(0.0f, 0.8f, 0.0f, 0.6f);     // Green border
+  }
+  else {
+    cardBgColor = ImVec4(0.25f, 0.15f, 0.15f, 0.9f);  // Dark red tint
+    borderColor = ImVec4(0.8f, 0.0f, 0.0f, 0.6f);     // Red border
+  }
+
+  ImGui::PushStyleColor(ImGuiCol_ChildBg, cardBgColor);
+  ImGui::PushStyleColor(ImGuiCol_Border, borderColor);
+
+  // Card dimensions
+  ImVec2 cardSize(320, 180); // Fixed size for consistent card layout
   ImGui::BeginChild("ServerCard", cardSize, true, ImGuiWindowFlags_NoScrollbar);
 
-  // Header with server name
-  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 1.0f, 1.0f));
-  ImGui::SetWindowFontScale(1.2f);
-  ImGui::Text("%s", serverInfo.name.c_str());
+  // === CARD HEADER ===
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+  ImGui::SetWindowFontScale(1.3f);
+
+  // Channel icon + name
+  const char* icon = clientInfo.connected ? "📡" : "📴";
+  ImGui::Text("%s %s", icon, serverInfo.name.c_str());
   ImGui::SetWindowFontScale(1.0f);
   ImGui::PopStyleColor();
 
-  // Connection status indicator
-  ImGui::SameLine();
+  // Connection status badge
+  ImGui::SameLine(ImGui::GetWindowWidth() - 90);
   if (clientInfo.connected) {
-    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "● Connected");
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.6f, 0.0f, 0.8f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.0f, 0.7f, 0.0f, 0.9f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+    ImGui::Button("ONLINE", ImVec2(80, 0));
+    ImGui::PopStyleColor(3);
   }
   else {
-    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "● Disconnected");
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.0f, 0.0f, 0.8f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.7f, 0.0f, 0.0f, 0.9f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+    ImGui::Button("OFFLINE", ImVec2(80, 0));
+    ImGui::PopStyleColor(3);
   }
-
-  ImGui::Separator();
-
-  // Description
-  ImGui::TextWrapped("%s", serverInfo.description.c_str());
 
   ImGui::Spacing();
 
-  // Connection details
-  ImGui::Text("Address: %s:%d", serverInfo.host.c_str(), serverInfo.port);
+  // Separator line
+  ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.5f, 0.5f, 0.5f, 0.5f));
+  ImGui::Separator();
+  ImGui::PopStyleColor();
+  ImGui::Spacing();
+
+  // === CARD BODY ===
+
+  // Description with icon
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
+  ImGui::Text("📋 Description:");
+  ImGui::PopStyleColor();
+
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
+  ImGui::TextWrapped("   %s", serverInfo.description.c_str());
+  ImGui::PopStyleColor();
+
+  ImGui::Spacing();
+
+  // Connection details with icon
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
+  ImGui::Text("🌐 Address:");
+  ImGui::PopStyleColor();
+
+  ImGui::SameLine();
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.9f, 1.0f, 1.0f));
+  ImGui::Text("%s:%d", serverInfo.host.c_str(), serverInfo.port);
+  ImGui::PopStyleColor();
 
   // Show unit if available
   if (!serverInfo.unit.empty()) {
     ImGui::SameLine();
-    ImGui::TextColored(ImVec4(0.7f, 0.7f, 1.0f, 1.0f), "(%s)", serverInfo.unit.c_str());
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.4f, 1.0f));
+    ImGui::Text("(%s)", serverInfo.unit.c_str());
+    ImGui::PopStyleColor();
   }
 
   ImGui::Spacing();
 
-  // Action buttons
+  // Status indicators row
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
+  ImGui::Text("⚙️  Status:");
+  ImGui::PopStyleColor();
+
+  ImGui::SameLine();
+
+  // Auto-connect badge
+  if (serverInfo.autoConnect) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.4f, 0.8f, 0.7f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+    ImGui::SmallButton("AUTO");
+    ImGui::PopStyleColor(2);
+    ImGui::SameLine();
+  }
+
+  // Data logging badge
+  if (serverInfo.logData) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.4f, 0.0f, 0.7f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+    ImGui::SmallButton("LOG");
+    ImGui::PopStyleColor(2);
+  }
+
+  ImGui::Spacing();
+
+  // === CARD FOOTER - Action Buttons ===
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  // Center the buttons
+  float buttonWidth = 100.0f;
+  float availWidth = ImGui::GetContentRegionAvail().x;
+  float offset = (availWidth - buttonWidth) * 0.5f;
+  if (offset > 0.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
+
   if (clientInfo.connected) {
-    if (ImGui::Button("Disconnect")) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.9f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
+    if (ImGui::Button("Disconnect", ImVec2(buttonWidth, 0))) {
       m_dataClientManager->DisconnectClient(clientIndex);
     }
+    ImGui::PopStyleColor(3);
   }
   else {
-    if (ImGui::Button("Connect")) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 0.8f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 0.9f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.9f, 0.4f, 1.0f));
+    if (ImGui::Button("Connect", ImVec2(buttonWidth, 0))) {
       m_dataClientManager->ConnectClient(clientIndex);
     }
-  }
-
-  // Show auto-connect status
-  if (serverInfo.autoConnect) {
-    ImGui::SameLine();
-    ImGui::TextColored(ImVec4(0.0f, 0.8f, 1.0f, 1.0f), "[Auto]");
-  }
-
-  // Show data logging status
-  if (serverInfo.logData) {
-    ImGui::SameLine();
-    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "[Log]");
+    ImGui::PopStyleColor(3);
   }
 
   ImGui::EndChild();
+
+  // Pop all style modifications
+  ImGui::PopStyleColor(2); // ChildBg, Border
+  ImGui::PopStyleVar(2);   // Rounding, BorderSize
   ImGui::PopID();
 }
 
@@ -226,9 +314,11 @@ void TCPDataManagerUI::Render() {
     ImGui::Text("Server Channels:");
     ImGui::Spacing();
 
-    // Display server cards in a grid layout (2 columns)
-    int columns = 2;
-    float cardWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * (columns - 1)) / columns;
+    // Display server cards in a responsive grid layout
+    float availableWidth = ImGui::GetContentRegionAvail().x;
+    float cardWidth = 320.0f;
+    float cardSpacing = ImGui::GetStyle().ItemSpacing.x;
+    int columns = (std::max)(1, (int)((availableWidth + cardSpacing) / (cardWidth + cardSpacing)));
 
     // Convert map to vector for index-based access
     std::vector<ServerDisplayInfo> serverConfigs;
@@ -255,21 +345,32 @@ void TCPDataManagerUI::Render() {
         serverInfo.logData = false;
       }
 
-      // Column layout
+      // Column layout with proper spacing
       if (i > 0 && i % columns != 0) {
         ImGui::SameLine();
       }
 
-      ImGui::BeginGroup();
-      ImGui::PushItemWidth(cardWidth);
-
       RenderServerCard(serverInfo, static_cast<int>(i));
 
-      ImGui::PopItemWidth();
-      ImGui::EndGroup();
+      // Add extra spacing between rows
+      if ((i + 1) % columns == 0 && i < clientCount - 1) {
+        ImGui::Spacing();
+      }
     }
   }
   else {
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No servers configured in DataServerConfig.json");
+    // No servers message with styling
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.7f, 0.3f, 1.0f));
+    ImGui::SetWindowFontScale(1.2f);
+    ImGui::Text("📋 No TCP Data Servers");
+    ImGui::SetWindowFontScale(1.0f);
+    ImGui::PopStyleColor();
+
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
+    ImGui::Text("• Check that DataServerConfig.json exists and contains server configurations");
+    ImGui::Text("• Ensure the DataClientManager is properly initialized");
+    ImGui::Text("• Click 'Reload Config' to refresh the configuration");
+    ImGui::PopStyleColor();
   }
 }

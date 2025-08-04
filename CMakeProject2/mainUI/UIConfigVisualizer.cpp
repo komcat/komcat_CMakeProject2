@@ -415,44 +415,81 @@ void UIConfigVisualizer::RenderLeftPanel() {
           ImGui::TextColored(ImVec4(0.8f, 0.3f, 0.3f, 1.0f), "No device/position assigned");
         }
 
+
         ImGui::Separator();
         ImGui::Text("Actions:");
 
-        // Move Device To Node button
+        // Move Device To Node button (using MoveToNode function)
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.6f, 0.1f, 1.0f));
 
         if (ImGui::Button("-> Move Device To Node", ImVec2(-1, 30))) {
-          if (m_machineOperations && !selectedNode->Device.empty() && !selectedNode->Position.empty()) {
-            // Execute actual movement using MachineOperations
-            m_logger->LogInfo(">>> Executing MoveDeviceToPosition for node: " + m_selectedNodeId +
-              " (Device: " + selectedNode->Device +
-              ", Position: " + selectedNode->Position + ")");
+          if (m_machineOperations && !selectedNode->Device.empty()) {
+            // Use MoveToNode function with device, graph, and node ID
+            m_logger->LogInfo(">>> Executing MoveToNode for node: " + m_selectedNodeId +
+              " (Device: " + selectedNode->Device + ", Graph: " + m_activeGraph + ")");
 
-            // Call the machine operations method
-            m_machineOperations->MoveToPointName(selectedNode->Device, selectedNode->Position, false, "UIConfigVisualizer");
-
+            // Call the correct MoveToNode method
+            m_machineOperations->MoveDeviceToNode(selectedNode->Device, m_activeGraph, m_selectedNodeId);
           }
-          else if (!selectedNode->Device.empty() && !selectedNode->Position.empty()) {
+          else if (!selectedNode->Device.empty()) {
             // MachineOperations not available - log only
-            m_logger->LogInfo(">>> MoveDeviceToNode SELECTED for node: " + m_selectedNodeId +
-              " (Device: " + selectedNode->Device +
-              ", Position: " + selectedNode->Position + ") - MachineOperations not available");
+            m_logger->LogInfo(">>> MoveToNode SELECTED for node: " + m_selectedNodeId +
+              " (Device: " + selectedNode->Device + ", Graph: " + m_activeGraph + ") - MachineOperations not available");
           }
           else {
-            // No device/position assigned
-            m_logger->LogWarning("Cannot move device: Node " + m_selectedNodeId +
-              " has no device or position assigned");
+            // No device assigned
+            m_logger->LogWarning("Cannot move device: Node " + m_selectedNodeId + " has no device assigned");
           }
         }
 
         ImGui::PopStyleColor(3);
 
-        // Show tooltip to indicate functionality status
+        // Show tooltip for Move To Node button
         if (ImGui::IsItemHovered()) {
           if (m_machineOperations) {
-            ImGui::SetTooltip("Execute movement to this node position\n(MachineOperations available)");
+            ImGui::SetTooltip("Move device to this node using graph navigation\n(MachineOperations available)");
+          }
+          else {
+            ImGui::SetTooltip("Movement functionality not available\n(MachineOperations not set)");
+          }
+        }
+
+        // Add some spacing between buttons
+        ImGui::Spacing();
+
+        // Move To Point Name button (using MoveToPointName function)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.8f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.9f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.5f, 0.7f, 1.0f));
+
+        if (ImGui::Button("-> Move To Point Name", ImVec2(-1, 30))) {
+          if (m_machineOperations && !selectedNode->Device.empty() && !selectedNode->Position.empty()) {
+            // Use MoveToPointName function with device and position name
+            m_logger->LogInfo(">>> Executing MoveToPointName for node: " + m_selectedNodeId +
+              " (Device: " + selectedNode->Device + ", Position: " + selectedNode->Position + ")");
+
+            // Call the MoveToPointName method
+            m_machineOperations->MoveToPointName(selectedNode->Device, selectedNode->Position, false, "UIConfigVisualizer");
+          }
+          else if (!selectedNode->Device.empty() && !selectedNode->Position.empty()) {
+            // MachineOperations not available - log only
+            m_logger->LogInfo(">>> MoveToPointName SELECTED for node: " + m_selectedNodeId +
+              " (Device: " + selectedNode->Device + ", Position: " + selectedNode->Position + ") - MachineOperations not available");
+          }
+          else {
+            // No device/position assigned
+            m_logger->LogWarning("Cannot move to point: Node " + m_selectedNodeId + " has no device or position assigned");
+          }
+        }
+
+        ImGui::PopStyleColor(3);
+
+        // Show tooltip for Move To Point Name button
+        if (ImGui::IsItemHovered()) {
+          if (m_machineOperations) {
+            ImGui::SetTooltip("Move device directly to the named position\n(MachineOperations available)");
           }
           else {
             ImGui::SetTooltip("Movement functionality not available\n(MachineOperations not set)");

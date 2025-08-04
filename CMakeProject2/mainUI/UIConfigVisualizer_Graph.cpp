@@ -124,49 +124,369 @@ void UIConfigVisualizer::RenderNodes(ImDrawList* drawList, const ImVec2& canvasP
       posInfo.c_str()
     );
 
+    // Replace the crosshair section in UIConfigVisualizer_Graph.cpp RenderNodes function
+    // This goes in place of the "NEW: Draw device crosshair if a device is currently at this node" section
+
     // NEW: Draw device crosshair if a device is currently at this node
     auto deviceIt = deviceCurrentNodes.find(node.Id);
     if (deviceIt != deviceCurrentNodes.end()) {
       const std::string& deviceName = deviceIt->second;
 
-      // Draw crosshair
+      // Get actual device position and node position for comparison
+      bool showOffset = false;
+      float offsetMM_X = 0.0f;
+      float offsetMM_Y = 0.0f;
+      ImVec2 actualCrosshairPos = canvasNodePos; // Default to node position
+
+
+      // SEPARATE LOOP: Draw device crosshairs (after all nodes are rendered)
+      if (m_machineOperations) {
+        auto currentPositions = m_machineOperations->GetCurrentPositions();
+
+        for (const auto& [deviceName, currentPos] : currentPositions) {
+          std::string assignedNodeId = "";
+          bool deviceAtExactNode = false;
+
+          // First, try to get the exact node the device is at
+          try {
+            assignedNodeId = m_machineOperations->GetDeviceCurrentNode(deviceName, m_activeGraph);
+            if (!assignedNodeId.empty()) {
+              deviceAtExactNode = true;
+            }
+          }
+          catch (...) {
+            // GetDeviceCurrentNode failed, we'll find closest manually
+          }
+
+          // If device is not at an exact node, find the closest node manually
+          if (assignedNodeId.empty()) {
+            float closestDistance = FLT_MAX;
+            const Node* closestNode = nullptr;
+
+            for (const auto& node : graph.Nodes) {
+              // Only consider nodes that have this device assigned
+              if (node.Device != deviceName) continue;
+
+              // Get the expected position for this node
+              if (!node.Position.empty()) {
+                auto expectedPosOpt = configManager.GetNamedPosition(node.Device, node.Position);
+                if (expectedPosOpt.has_value()) {
+                  const auto& expectedPos = expectedPosOpt.value().get();
+
+                  // Calculate distance from current position to this node's expected position
+                  float deltaX = static_cast<float>(currentPos.x - expectedPos.x);
+                  float deltaY = static_cast<float>(currentPos.y - expectedPos.y);
+                  float deltaZ = static_cast<float>(currentPos.z - expectedPos.z);
+                  float distance = sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ);
+
+                  if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestNode = &node;
+                    assignedNodeId = node.Id;
+                  }
+                }
+              }
+            }
+          }
+
+          // If we found a node (either exact or closest), draw the crosshair
+          if (!assignedNodeId.empty()) {
+            // Find the node object
+            const Node* targetNode = nullptr;
+            for (const auto& node : graph.Nodes) {
+              if (node.Id == assignedNodeId) {
+                targetNode = &node;
+                break;
+              }
+            }
+
+            if (!targetNode) continue;
+
+            // Get node canvas position
+            ImVec2 nodePos = GetNodePosition(*targetNode);
+            ImVec2 canvasNodePos = GraphToCanvas(nodePos, canvasPos);
+
+            // Calculate offset from expected position
+            bool showOffset = false;
+            float offsetMM_X = 0.0f;
+            float offsetMM_Y = 0.0f;
+            ImVec2 actualCrosshairPos = canvasNodePos; // Default to node position
+
+            if (!targetNode->Position.empty()) {
+              auto expectedPosOpt = configManager.GetNamedPosition(targetNode->Device, targetNode->Position);
+              if (expectedPosOpt.has_value()) {
+                const auto& expectedPos = expectedPosOpt.value().get();
+
+                // Calculate offset in millimeters
+                offsetMM_X = static_cast<float>(currentPos.x - expectedPos.x);
+                offsetMM_Y = static_cast<float>(currentPos.y - expectedPos.y);
+
+                // Check if there's a significant offset (more than 0.0001mm tolerance)
+                float totalOffsetMM = sqrt(offsetMM_X * offsetMM_X + offsetMM_Y * offsetMM_Y);
+                if (totalOffsetMM > 0.0001f) {  // 0.1 micron tolerance
+                  showOffset = true;
+
+                  // Calculate pixel offset with max 2mm = 100 pixels scale
+                  const float maxOffsetMM = 2.0f;
+                  const float maxOffsetPixels = 100.0f;
+                  float scaleFactor = maxOffsetPixels / maxOffsetMM;
+
+                  // Clamp offset to maximum
+                  float clampedOffsetX = (std::max)(-maxOffsetMM, (std::min)(maxOffsetMM, offsetMM_X));
+                  float clampedOffsetY = (std::max)(-maxOffsetMM, (std::min)(maxOffsetMM, offsetMM_Y));
+
+                  // Apply offset to crosshair position
+                  actualCrosshairPos = ImVec2(
+                    canvasNodePos.x + clampedOffsetX * scaleFactor,
+                    canvasNodePos.y + clampedOffsetY * scaleFactor
+                  );
+                }
+              }
+            }
+
+            // Draw crosshair at actual position (offset if needed)
+            const float crosshairSize = 20.0f;
+            const float crosshairThickness = 3.0f;
+
+            // Color coding: Green if at exact node, Orange if offset, Red if at wrong node
+            ImU32 crosshairColor;
+            if (deviceAtExactNode) {
+              crosshairColor = IM_COL32(0, 255, 0, 255); // Green - at exact node
+            }
+            else if (showOffset) {
+              crosshairColor = IM_COL32(255, 165, 0, 255); // Orange - offset from assigned node  
+            }
+            else {
+              crosshairColor = IM_COL32(255, 255, 0, 255); // Yellow - at assigned node
+            }
+
+            // If device is at wrong node (closest node), use red color
+            if (!deviceAtExactNode && targetNode->Device == deviceName) {
+              crosshairColor = IM_COL32(255, 100, 100, 255); // Red - at wrong node but closest
+            }
+
+            // Horizontal line
+            drawList->AddLine(
+              ImVec2(actualCrosshairPos.x - crosshairSize, actualCrosshairPos.y),
+              ImVec2(actualCrosshairPos.x + crosshairSize, actualCrosshairPos.y),
+              crosshairColor, crosshairThickness
+            );
+
+            // Vertical line
+            drawList->AddLine(
+              ImVec2(actualCrosshairPos.x, actualCrosshairPos.y - crosshairSize),
+              ImVec2(actualCrosshairPos.x, actualCrosshairPos.y + crosshairSize),
+              crosshairColor, crosshairThickness
+            );
+
+            // Center dot
+            drawList->AddCircleFilled(actualCrosshairPos, 4.0f, crosshairColor);
+
+            // If there's an offset, draw a line connecting the expected and actual positions
+            if (showOffset) {
+              const ImU32 connectionLineColor = IM_COL32(255, 100, 100, 150); // Semi-transparent red
+              drawList->AddLine(canvasNodePos, actualCrosshairPos, connectionLineColor, 2.0f);
+
+              // Draw small circle at expected position
+              drawList->AddCircle(canvasNodePos, 6.0f, IM_COL32(255, 255, 255, 200), 0, 1.5f);
+            }
+
+            // Calculate node rectangle for text positioning
+            ImVec2 nodeMin = ImVec2(canvasNodePos.x - NODE_WIDTH / 2, canvasNodePos.y - NODE_HEIGHT / 2);
+
+            // Device name label above the node (or offset position)
+            ImVec2 deviceNameSize = ImGui::CalcTextSize(deviceName.c_str());
+
+            // Prepare the device text with offset information
+            std::string deviceText = deviceName;
+            std::string offsetText = "";
+
+            if (showOffset) {
+              // Calculate total distance
+              float totalOffsetMM = sqrt(offsetMM_X * offsetMM_X + offsetMM_Y * offsetMM_Y);
+
+              // Create direction arrows
+              std::string xArrow = "";
+              std::string yArrow = "";
+
+              if (abs(offsetMM_X) > 0.0001f) {  // 0.1 micron threshold
+                xArrow = (offsetMM_X > 0) ? "X→" : "X←";
+              }
+              if (abs(offsetMM_Y) > 0.0001f) {  // 0.1 micron threshold
+                yArrow = (offsetMM_Y > 0) ? "Y↑" : "Y↓";
+              }
+
+              // Format offset text: "0.1mm X← Y↑"
+              char offsetBuffer[64];
+              snprintf(offsetBuffer, sizeof(offsetBuffer), "%.3fmm %s%s",
+                totalOffsetMM, xArrow.c_str(), yArrow.c_str());
+              offsetText = offsetBuffer;
+            }
+
+            // Add node info if this is closest node (not exact)
+            if (!deviceAtExactNode) {
+              offsetText = "→" + targetNode->Id + (offsetText.empty() ? "" : " " + offsetText);
+            }
+
+            // Calculate positions for both lines of text
+            ImVec2 offsetTextSize = (!offsetText.empty()) ? ImGui::CalcTextSize(offsetText.c_str()) : ImVec2(0, 0);
+            float maxTextWidth = (std::max)(deviceNameSize.x, offsetTextSize.x);
+
+            ImVec2 deviceNamePos = ImVec2(
+              actualCrosshairPos.x - deviceNameSize.x / 2,
+              nodeMin.y - deviceNameSize.y - (!offsetText.empty() ? offsetTextSize.y + 5 : 0) - 15.0f
+            );
+
+            ImVec2 offsetTextPos = ImVec2(
+              actualCrosshairPos.x - offsetTextSize.x / 2,
+              deviceNamePos.y + deviceNameSize.y + 3.0f
+            );
+
+            // Draw background for device name and offset text
+            if (!offsetText.empty()) {
+              // Background for both lines
+              ImVec2 bgMin = ImVec2(
+                actualCrosshairPos.x - maxTextWidth / 2 - 6,
+                deviceNamePos.y - 3
+              );
+              ImVec2 bgMax = ImVec2(
+                actualCrosshairPos.x + maxTextWidth / 2 + 6,
+                offsetTextPos.y + offsetTextSize.y + 3
+              );
+
+              drawList->AddRectFilled(bgMin, bgMax, IM_COL32(0, 0, 0, 200), 4.0f);
+              drawList->AddRect(bgMin, bgMax, crosshairColor, 4.0f, 0, 1.5f);
+
+              // Draw device name
+              drawList->AddText(deviceNamePos, IM_COL32(255, 255, 255, 255), deviceName.c_str());
+
+              // Draw offset/node information in orange/red
+              drawList->AddText(offsetTextPos, IM_COL32(255, 150, 100, 255), offsetText.c_str());
+            }
+            else {
+              // Background for device name only
+              ImVec2 bgMin = ImVec2(deviceNamePos.x - 4, deviceNamePos.y - 2);
+              ImVec2 bgMax = ImVec2(deviceNamePos.x + deviceNameSize.x + 4, deviceNamePos.y + deviceNameSize.y + 2);
+
+              drawList->AddRectFilled(bgMin, bgMax, IM_COL32(0, 0, 0, 180), 3.0f);
+              drawList->AddRect(bgMin, bgMax, crosshairColor, 3.0f, 0, 1.5f);
+
+              // Draw device name
+              drawList->AddText(deviceNamePos, IM_COL32(255, 255, 255, 255), deviceName.c_str());
+            }
+          }
+        }
+      }
+      // Draw crosshair at actual position (offset if needed)
       const float crosshairSize = 20.0f;
       const float crosshairThickness = 3.0f;
-      const ImU32 crosshairColor = IM_COL32(255, 255, 0, 255); // Bright yellow
+      const ImU32 crosshairColor = showOffset ? IM_COL32(255, 165, 0, 255) : IM_COL32(255, 255, 0, 255); // Orange if offset, yellow if exact
 
       // Horizontal line
       drawList->AddLine(
-        ImVec2(canvasNodePos.x - crosshairSize, canvasNodePos.y),
-        ImVec2(canvasNodePos.x + crosshairSize, canvasNodePos.y),
+        ImVec2(actualCrosshairPos.x - crosshairSize, actualCrosshairPos.y),
+        ImVec2(actualCrosshairPos.x + crosshairSize, actualCrosshairPos.y),
         crosshairColor, crosshairThickness
       );
 
       // Vertical line
       drawList->AddLine(
-        ImVec2(canvasNodePos.x, canvasNodePos.y - crosshairSize),
-        ImVec2(canvasNodePos.x, canvasNodePos.y + crosshairSize),
+        ImVec2(actualCrosshairPos.x, actualCrosshairPos.y - crosshairSize),
+        ImVec2(actualCrosshairPos.x, actualCrosshairPos.y + crosshairSize),
         crosshairColor, crosshairThickness
       );
 
       // Center dot
-      drawList->AddCircleFilled(canvasNodePos, 4.0f, crosshairColor);
+      drawList->AddCircleFilled(actualCrosshairPos, 4.0f, crosshairColor);
 
-      // Device name label above the node
+      // If there's an offset, draw a line connecting the expected and actual positions
+      if (showOffset) {
+        const ImU32 connectionLineColor = IM_COL32(255, 100, 100, 150); // Semi-transparent red
+        drawList->AddLine(canvasNodePos, actualCrosshairPos, connectionLineColor, 2.0f);
+
+        // Draw small circle at expected position
+        drawList->AddCircle(canvasNodePos, 6.0f, IM_COL32(255, 255, 255, 200), 0, 1.5f);
+      }
+
+      // Device name label above the node (or offset position)
       ImVec2 deviceNameSize = ImGui::CalcTextSize(deviceName.c_str());
+
+      // Prepare the device text with offset information
+      std::string deviceText = deviceName;
+      std::string offsetText = "";
+
+      if (showOffset) {
+        // Calculate total distance
+        float totalOffsetMM = sqrt(offsetMM_X * offsetMM_X + offsetMM_Y * offsetMM_Y);
+
+        // Create direction arrows
+        std::string xArrow = "";
+        std::string yArrow = "";
+
+        if (abs(offsetMM_X) > 0.0001f) {  // 0.1 micron threshold
+          xArrow = (offsetMM_X > 0) ? "X→" : "X←";
+        }
+        if (abs(offsetMM_Y) > 0.0001f) {  // 0.1 micron threshold
+          yArrow = (offsetMM_Y > 0) ? "Y↑" : "Y↓";
+        }
+
+        // Format offset text: "0.1mm X← Y↑"
+        char offsetBuffer[64];
+        snprintf(offsetBuffer, sizeof(offsetBuffer), "%.3fmm %s%s",
+          totalOffsetMM, xArrow.c_str(), yArrow.c_str());
+        offsetText = offsetBuffer;
+      }
+
+      // Calculate positions for both lines of text
+      ImVec2 offsetTextSize = (!offsetText.empty()) ? ImGui::CalcTextSize(reinterpret_cast<const char*>(offsetText.c_str())) : ImVec2(0, 0);
+      float maxTextWidth = (std::max)(deviceNameSize.x, offsetTextSize.x);
+
       ImVec2 deviceNamePos = ImVec2(
-        canvasNodePos.x - deviceNameSize.x / 2,
-        nodeMin.y - deviceNameSize.y - 10.0f // 10 pixels above node
+        actualCrosshairPos.x - deviceNameSize.x / 2,
+        nodeMin.y - deviceNameSize.y - (showOffset ? offsetTextSize.y + 5 : 0) - 15.0f
       );
 
-      // Draw background for device name
-      ImVec2 bgMin = ImVec2(deviceNamePos.x - 4, deviceNamePos.y - 2);
-      ImVec2 bgMax = ImVec2(deviceNamePos.x + deviceNameSize.x + 4, deviceNamePos.y + deviceNameSize.y + 2);
-      drawList->AddRectFilled(bgMin, bgMax, IM_COL32(0, 0, 0, 180), 3.0f);
-      drawList->AddRect(bgMin, bgMax, crosshairColor, 3.0f, 0, 1.5f);
+      ImVec2 offsetTextPos = ImVec2(
+        actualCrosshairPos.x - offsetTextSize.x / 2,
+        deviceNamePos.y + deviceNameSize.y + 3.0f
+      );
 
-      // Draw device name text
-      drawList->AddText(deviceNamePos, IM_COL32(255, 255, 255, 255), deviceName.c_str());
+      // Draw background for device name and offset text
+      if (showOffset && !offsetText.empty()) {
+        // Background for both lines
+        ImVec2 bgMin = ImVec2(
+          actualCrosshairPos.x - maxTextWidth / 2 - 6,
+          deviceNamePos.y - 3
+        );
+        ImVec2 bgMax = ImVec2(
+          actualCrosshairPos.x + maxTextWidth / 2 + 6,
+          offsetTextPos.y + offsetTextSize.y + 3
+        );
+
+        drawList->AddRectFilled(bgMin, bgMax, IM_COL32(0, 0, 0, 200), 4.0f);
+        drawList->AddRect(bgMin, bgMax, crosshairColor, 4.0f, 0, 1.5f);
+
+        // Draw device name
+        drawList->AddText(deviceNamePos, IM_COL32(255, 255, 255, 255), deviceName.c_str());
+
+        // Draw offset information in orange/red
+        drawList->AddText(offsetTextPos, IM_COL32(255, 150, 100, 255), offsetText.c_str());
+      }
+      else {
+        // Background for device name only
+        ImVec2 bgMin = ImVec2(deviceNamePos.x - 4, deviceNamePos.y - 2);
+        ImVec2 bgMax = ImVec2(deviceNamePos.x + deviceNameSize.x + 4, deviceNamePos.y + deviceNameSize.y + 2);
+
+        drawList->AddRectFilled(bgMin, bgMax, IM_COL32(0, 0, 0, 180), 3.0f);
+        drawList->AddRect(bgMin, bgMax, crosshairColor, 3.0f, 0, 1.5f);
+
+        // Draw device name
+        drawList->AddText(deviceNamePos, IM_COL32(255, 255, 255, 255), deviceName.c_str());
+      }
     }
+
+
+
   }
 }
 void UIConfigVisualizer::RenderEdges(ImDrawList* drawList, const ImVec2& canvasPos) {
@@ -288,7 +608,7 @@ void UIConfigVisualizer::RenderEdges(ImDrawList* drawList, const ImVec2& canvasP
     float maxWidth = 0;
     for (const auto& line : lines) {
       ImVec2 lineSize = ImGui::CalcTextSize(line.c_str());
-      maxWidth = (std::max)(maxWidth, lineSize.x);
+      maxWidth = ((std::max))(maxWidth, lineSize.x);
     }
 
     float lineHeight = ImGui::GetTextLineHeight();

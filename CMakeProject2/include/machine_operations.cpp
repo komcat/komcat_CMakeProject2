@@ -2451,9 +2451,13 @@ std::string MachineOperations::GetDeviceCurrentPositionName(const std::string& d
   }
 
   // If no position is close enough, return empty string
-  m_logger->LogInfo("MachineOperations: Device " + deviceName +
-    " is not at any named position (closest: " + closestPosName +
-    ", distance: " + std::to_string(minDistance) + " mm)");
+  if (false)
+  {
+    m_logger->LogInfo("MachineOperations: Device " + deviceName +
+      " is not at any named position (closest: " + closestPosName +
+      ", distance: " + std::to_string(minDistance) + " mm)");
+  }
+
   return "";
 }
 // Get the current position for a device
