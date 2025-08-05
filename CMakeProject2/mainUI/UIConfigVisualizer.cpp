@@ -431,7 +431,7 @@ void UIConfigVisualizer::RenderLeftPanel() {
               " (Device: " + selectedNode->Device + ", Graph: " + m_activeGraph + ")");
 
             // Call the correct MoveToNode method
-            m_machineOperations->MoveDeviceToNode(selectedNode->Device, m_activeGraph, m_selectedNodeId);
+            m_machineOperations->MoveDeviceToNode(selectedNode->Device, m_activeGraph, m_selectedNodeId,false, "UIConfigVisualizer");
           }
           else if (!selectedNode->Device.empty()) {
             // MachineOperations not available - log only

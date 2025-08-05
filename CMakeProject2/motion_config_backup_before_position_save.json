@@ -463,28 +463,6 @@
           "Label": "actual disp2",
           "Source": "node_2644",
           "Target": "dispense2"
-        },
-        {
-          "Conditions": {
-            "IsBidirectional": true,
-            "RequiresOperatorApproval": false,
-            "TimeoutSeconds": 0
-          },
-          "Id": "edge_4464",
-          "Label": "clear vision ",
-          "Source": "node_4423",
-          "Target": "node_5480"
-        },
-        {
-          "Conditions": {
-            "IsBidirectional": true,
-            "RequiresOperatorApproval": false,
-            "TimeoutSeconds": 0
-          },
-          "Id": "edge_4488",
-          "Label": "clear vision",
-          "Source": "node_5136",
-          "Target": "node_4448"
         }
       ],
       "Nodes": [
@@ -573,8 +551,8 @@
           "Id": "node_4500",
           "Label": "SN view",
           "Position": "snviewing",
-          "X": -240,
-          "Y": 1248
+          "X": -226,
+          "Y": 1290
         },
         {
           "Device": "hex-left",
@@ -677,8 +655,8 @@
           "Id": "caldot",
           "Label": "caldot",
           "Position": "caldot",
-          "X": 286,
-          "Y": 28
+          "X": 287,
+          "Y": 42
         },
         {
           "Device": "gantry-main",
@@ -741,24 +719,8 @@
           "Id": "node_2644",
           "Label": "Disp2Safe",
           "Position": "dispense2safe",
-          "X": -45,
+          "X": -201,
           "Y": -164
-        },
-        {
-          "Device": "hex-left",
-          "Id": "node_4423",
-          "Label": "l clear vision",
-          "Position": "clear_vision",
-          "X": 1951,
-          "Y": -772
-        },
-        {
-          "Device": "hex-right",
-          "Id": "node_4448",
-          "Label": "r clear vision",
-          "Position": "clear_vision",
-          "X": 1956,
-          "Y": -2455
         }
       ]
     }
@@ -831,9 +793,9 @@
           "u": 0.0,
           "v": 0.0,
           "w": 0.0,
-          "x": 76.13102572919466,
-          "y": 93.57641061561918,
-          "z": 44.294765000000055
+          "x": 76.53794991733172,
+          "y": 93.32286098765945,
+          "z": 46.794765000000005
         },
         "fiducial1": {
           "u": 0.0,
@@ -1049,14 +1011,6 @@
           "y": 7.99999455736,
           "z": 9.06757038239e-07
         },
-        "clear_vision": {
-          "u": -3e-06,
-          "v": 0.0,
-          "w": 3e-06,
-          "x": 4.640003,
-          "y": 14.499992,
-          "z": 1e-06
-        },
         "home": {
           "u": -8.63582253746e-07,
           "v": 5.01522321609e-07,
@@ -1147,14 +1101,6 @@
           "x": 4.64000497644,
           "y": -7.99999744005,
           "z": -1.19999947306
-        },
-        "clear_vision": {
-          "u": 1e-06,
-          "v": 2e-06,
-          "w": -3e-06,
-          "x": 4.640003,
-          "y": -9.999994,
-          "z": -1.2
         },
         "home": {
           "u": 3.42387907228e-06,
