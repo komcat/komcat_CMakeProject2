@@ -92,6 +92,11 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 	// NEW: Initialize IO Control Panel as nullptr - will be created when IO manager is set
 	m_ioControlPanel = nullptr;  // <-- ADD THIS LINE
 	
+
+	// Initialize Vision Panel UI
+	m_visionPanelUI = std::make_unique<UIVisionPanel>();
+	std::cout << "MainUIManager: Vision Panel UI created successfully" << std::endl;
+
 }
 
 
@@ -958,38 +963,29 @@ void MainUIManager::RenderConfigPage() {
 }
 
 
+// REPLACE the existing RenderVisionPage() method with:
 void MainUIManager::RenderVisionPage() {
-	ImGui::SetWindowFontScale(1.5f);
-	ImGui::Text("Vision & Image Processing");
-	ImGui::SetWindowFontScale(1.0f);
-
-	ImGui::Spacing();
-	ImGui::Text("Computer vision and image processing tools will be implemented here");
-
-	// Placeholder Vision controls
-	ImGui::Separator();
-	ImGui::Text("Image Processing Controls:");
-
-	static float threshold = 128.0f;
-	static float blur = 1.0f;
-	static bool enableEdgeDetection = false;
-
-	ImGui::SliderFloat("Threshold", &threshold, 0.0f, 255.0f);
-	ImGui::SliderFloat("Blur Radius", &blur, 0.0f, 10.0f);
-	ImGui::Checkbox("Enable Edge Detection", &enableEdgeDetection);
-
-	ImGui::Spacing();
-	if (ImGui::Button("Process Image")) {
-		std::cout << "Processing image with threshold: " << threshold
-			<< ", blur: " << blur
-			<< ", edge detection: " << (enableEdgeDetection ? "ON" : "OFF") << std::endl;
+	if (m_visionPanelUI) {
+		m_visionPanelUI->RenderUI();
 	}
+	else {
+		// Fallback when vision panel is not available
+		ImGui::SetWindowFontScale(1.5f);
+		ImGui::Text("Vision & Image Processing");
+		ImGui::SetWindowFontScale(1.0f);
 
-	ImGui::SameLine();
-	if (ImGui::Button("Capture & Analyze")) {
-		std::cout << "Capturing and analyzing image..." << std::endl;
+		ImGui::Spacing();
+		ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Vision Panel UI not available");
+		ImGui::Text("Check console for error messages");
+		ImGui::Spacing();
+		ImGui::Text("This typically means:");
+		ImGui::BulletText("Vision panel failed to initialize");
+		ImGui::BulletText("HALCON libraries not found");
+		ImGui::BulletText("Image processing dependencies missing");
 	}
 }
+
+
 
 void MainUIManager::RenderConfigSubPage() {
 	switch (currentConfigSubPage) {
@@ -1178,6 +1174,14 @@ void MainUIManager::SetCameraManager(CameraManager* cameraManager) {
 		m_runPageUI->SetCameraManager(m_cameraManager);
 		std::cout << "MainUIManager: RunPageUI updated with Camera Manager" << std::endl;
 	}
+
+
+	// ADD THIS: Connect camera manager to vision panel
+	if (m_visionPanelUI && m_cameraManager) {
+		m_visionPanelUI->SetCameraManager(m_cameraManager);
+		std::cout << "MainUIManager: Vision Panel connected to Camera Manager" << std::endl;
+	}
+
 }
 
 

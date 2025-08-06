@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "description": "VisionCircleDetection default parameters"
+  },
+  "roi": {
+    "size": 200,
+    "offsetX": 0,
+    "offsetY": 0
+  },
+  "threshold": {
+    "low": 180,
+    "high": 255,
+    "invertImage": true
+  },
+  "filter": {
+    "minArea": 500,
+    "maxArea": 99999,
+    "minCircularity": 0.7,
+    "maxCircularity": 1.0,
+    "minRadius": 40.0,
+    "maxRadius": 60.0,
+    "targetRadius": 50.0
+  },
+  "advanced": {
+    "useCompactnessFilter": false,
+    "minCompactness": 1.0,
+    "maxCompactness": 10.0,
+    "useNoiseReduction": false,
+    "medianKernelSize": 3,
+    "enableFallback": true,
+    "fallbackMinRadius": 30.0,
+    "fallbackMaxRadius": 80.0
+  }
+}

@@ -20,7 +20,7 @@
 #include "Processes/SAA3ProcessBuilders/NewProcesses_SAA3.h"
 #include <SDL.h>
 #include "include/eziio/IOControlPanel.h"
-
+#include "UIVisionPanel.h"
 // Forward declarations
 class MotionConfigManager;
 class UIConfigEditor;
@@ -114,6 +114,10 @@ public:
 
   // Add this method for keyboard input processing
   void ProcessKeyInput(SDL_Keycode key, bool pressed);
+
+  UIVisionPanel* GetVisionPanel() const {
+    return m_visionPanelUI.get();
+  }
 
 private:
   MainPage currentMainPage = MainPage::MAIN;
@@ -223,4 +227,6 @@ private:
 
   // NEW: Helper methods for IO Control Panel
   void CreateIOControlPanel();  // Helper to create IO panel when manager is available
+
+  std::unique_ptr<UIVisionPanel> m_visionPanelUI;
 };
