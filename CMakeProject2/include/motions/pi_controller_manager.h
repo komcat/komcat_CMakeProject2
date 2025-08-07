@@ -12,6 +12,10 @@ public:
   PIControllerManager(MotionConfigManager& configManager);
   ~PIControllerManager();
 
+
+  // Get the number of controllers managed
+  size_t GetControllerCount() const { return m_controllers.size(); }
+
   // Initialize controllers from configuration
   void InitializeControllers();
 

@@ -26,6 +26,8 @@ public:
     ACSControllerManager& acsControllerManager);
   ~MotionControlLayer();
 
+  bool StopAllMovement();
+
   // Path planning and execution
   bool PlanPath(const std::string& graphName, const std::string& startNodeId, const std::string& endNodeId);
   bool ExecutePath(bool blocking = false);

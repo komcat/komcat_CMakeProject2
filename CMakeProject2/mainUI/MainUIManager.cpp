@@ -1245,6 +1245,19 @@ void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
 				m_runPageUI->SetCameraManager(m_cameraManager);
 				std::cout << "MainUIManager: Camera Manager set on RunPageUI" << std::endl;
 			}
+
+			// NEW: Connect to vision panel
+			if (m_visionPanelUI) {
+				m_visionPanelUI->SetMachineOperations(m_machineOperations);
+				std::cout << "MainUIManager: Vision Panel updated with MachineOperations" << std::endl;
+			}
+
+			// Also connect MotionConfigManager if available
+			if (m_visionPanelUI) {
+				m_visionPanelUI->SetMotionConfigManager(&motionConfigManager);
+				std::cout << "MainUIManager: Vision Panel updated with MotionConfigManager" << std::endl;
+			}
+
 		}
 	}
 	else {
@@ -1470,5 +1483,29 @@ void MainUIManager::ProcessKeyInput(SDL_Keycode key, bool pressed) {
 	// Forward keyboard input to UIJogWindow if it exists
 	if (m_uiJogWindow) {
 		m_uiJogWindow->ProcessKeyInput(key, pressed);
+	}
+}
+
+// Alternative: Add a dedicated method for setting up vision panel
+void MainUIManager::SetupVisionPanel() {
+	if (!m_visionPanelUI) {
+		std::cout << "MainUIManager: Vision Panel not created" << std::endl;
+		return;
+	}
+
+	// Connect MotionConfigManager
+	m_visionPanelUI->SetMotionConfigManager(&motionConfigManager);
+	std::cout << "MainUIManager: Connected MotionConfigManager to Vision Panel" << std::endl;
+
+	// Connect MachineOperations if available
+	if (m_machineOperations) {
+		m_visionPanelUI->SetMachineOperations(m_machineOperations);
+		std::cout << "MainUIManager: Connected MachineOperations to Vision Panel" << std::endl;
+	}
+
+	// Connect CameraManager if available
+	if (m_cameraManager) {
+		m_visionPanelUI->SetCameraManager(m_cameraManager);
+		std::cout << "MainUIManager: Connected CameraManager to Vision Panel" << std::endl;
 	}
 }

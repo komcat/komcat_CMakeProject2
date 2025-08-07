@@ -3658,6 +3658,8 @@ extern "C" {
 
 }
 
+
+
 // In machine_operations.cpp
 void MachineOperations::SetLaserOperations(CLD101xOperations* ops) {
   m_laserOps = ops;
@@ -3674,4 +3676,9 @@ void MachineOperations::SetSMUOperations(Keithley2400Operations* ops) {
   else {
     m_logger->LogInfo("MachineOperations: SMU operations module set to NULL");
   }
+}
+
+bool MachineOperations::StopAllMovement() {
+  m_logger->LogInfo("MachineOperations: Emergency stop requested");
+  return m_motionLayer.StopAllMovement();
 }

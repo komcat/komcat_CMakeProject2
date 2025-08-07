@@ -119,6 +119,8 @@ public:
     return m_visionPanelUI.get();
   }
 
+  void SetupVisionPanel();
+
 private:
   MainPage currentMainPage = MainPage::MAIN;
   ManualSubPage currentManualSubPage = ManualSubPage::NONE;

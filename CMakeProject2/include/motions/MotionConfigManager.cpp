@@ -565,3 +565,14 @@ bool MotionConfigManager::ReloadConfig() {
     return false;
   }
 }
+
+std::vector<std::string> MotionConfigManager::GetAllGraphNames() const {
+  std::vector<std::string> graphNames;
+  graphNames.reserve(m_graphs.size()); // Reserve space for efficiency
+
+  for (const auto& [name, graph] : m_graphs) {
+    graphNames.push_back(name);
+  }
+
+  return graphNames;
+}

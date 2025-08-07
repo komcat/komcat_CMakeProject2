@@ -15,7 +15,7 @@ class MotionConfigManager {
 public:
     // Constructor that takes a path to the JSON configuration file
     MotionConfigManager(const std::string& configFilePath);
-
+    std::vector<std::string> GetAllGraphNames() const;
     // Get all motion devices
     const std::map<std::string, MotionDevice>& GetAllDevices() const;
 

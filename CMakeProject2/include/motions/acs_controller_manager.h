@@ -24,6 +24,9 @@ public:
   // Get a specific controller by device name
   ACSController* GetController(const std::string& deviceName);
 
+  // Get the number of controllers managed  
+  size_t GetControllerCount() const { return m_controllers.size(); }
+
   // Check if a device has a controller
   bool HasController(const std::string& deviceName) const;
 

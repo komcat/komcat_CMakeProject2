@@ -87,6 +87,8 @@ public:
 
 	~MachineOperations();
 
+
+
 	// Add these public methods for result access
 	std::shared_ptr<OperationResultsManager> GetResultsManager() { return m_resultsManager; }
 	std::shared_ptr<DatabaseManager> GetDatabaseManager() { return m_dbManager; }
@@ -433,6 +435,8 @@ public:
 	// Add this method declaration
 	void SetSMUOperations(Keithley2400Operations* ops);
 
+
+	bool StopAllMovement();
 private:
 	Logger* m_logger;
 	bool m_enableDebug = false;
@@ -442,6 +446,8 @@ private:
 	PIControllerManager& m_piControllerManager;
 	EziIOManager& m_ioManager;
 	PneumaticManager& m_pneumaticManager;
+
+
 
 	// Optional components
 	CLD101xOperations* m_laserOps;
