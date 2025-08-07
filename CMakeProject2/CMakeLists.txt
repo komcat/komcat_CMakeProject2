@@ -590,7 +590,7 @@ add_executable(CMakeProject2
   "include/camera/ids_camera_test.cpp"
   "include/camera/IDSCameraUI.h" 
   "include/camera/IDSCameraUI.cpp"
-   "include/camera/ICameraHardware.h" "include/camera/PylonCameraAdapter.cpp" "include/camera/IDSCameraAdapter.h" "include/camera/IDSCameraAdapter.cpp" "include/camera/CameraHardwareFactory.h" "include/camera/CameraHardwareFactory.cpp" "mainUI/UIVisionPanel.h" "mainUI/UIVisionPanel.cpp" "include/halcon/VisionCircleDetection.h" "include/halcon/VisionCircleDetection.cpp" "mainUI/UINodeListWindow.h" "mainUI/UINodeListWindow.cpp")
+   "include/camera/ICameraHardware.h" "include/camera/PylonCameraAdapter.cpp" "include/camera/IDSCameraAdapter.h" "include/camera/IDSCameraAdapter.cpp" "include/camera/CameraHardwareFactory.h" "include/camera/CameraHardwareFactory.cpp" "mainUI/UIVisionPanel.h"  "include/halcon/VisionCircleDetection.h" "include/halcon/VisionCircleDetection.cpp" "mainUI/UINodeListWindow.h" "mainUI/UINodeListWindow.cpp" "include/vision/VisionPresetManager.h" "include/vision/VisionPresetManager.cpp" "mainUI/UIVisionPanel_Main.cpp" "mainUI/UIVisionPanel_Initialization.cpp" "mainUI/UIVisionPanel_Camera.cpp" "mainUI/UIVisionPanel_Detection.cpp" "mainUI/UIVisionPanel_Parameters.cpp" "mainUI/UIVisionPanel_Presets.cpp" "mainUI/UIVisionPanel_AutoExecution.cpp" "mainUI/UIVisionPanel_Nodes.cpp" "mainUI/UIVisionPanel_Image.cpp")
 
 
 
@@ -613,6 +613,9 @@ else()
     message(WARNING "Icon file not found at: ${ICON_SOURCE_PATH}")
 endif()
 
+
+set(INCLUDE_HALCON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/halcon")
+set(INCLUDE_VISION_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/vision")
 # Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
 target_include_directories(CMakeProject2 PRIVATE
     ${SDL2_INCLUDE_DIR}
@@ -635,6 +638,8 @@ target_include_directories(CMakeProject2 PRIVATE
      ${FREETYPE_INCLUDE_DIR}
      ${FREETYPE_INCLUDE_DIR}
      ${IDS_UEYE_INCLUDE_DIR}
+     ${INCLUDE_HALCON_DIR}
+     ${INCLUDE_VISION_DIR}
 )
 
 # Link libraries - directly reference libraries
@@ -973,7 +978,7 @@ add_executable(uaa3App
   "include/camera/ids_camera_test.cpp"
   "include/camera/IDSCameraUI.h" 
   "include/camera/IDSCameraUI.cpp"
-   "include/camera/ICameraHardware.h" "include/camera/PylonCameraAdapter.cpp" "include/camera/IDSCameraAdapter.h" "include/camera/IDSCameraAdapter.cpp" "include/camera/CameraHardwareFactory.h" "include/camera/CameraHardwareFactory.cpp" "mainUI/UIVisionPanel.h" "mainUI/UIVisionPanel.cpp" "include/halcon/VisionCircleDetection.h" "include/halcon/VisionCircleDetection.cpp" "mainUI/UINodeListWindow.h" "mainUI/UINodeListWindow.cpp")
+   "include/camera/ICameraHardware.h" "include/camera/PylonCameraAdapter.cpp" "include/camera/IDSCameraAdapter.h" "include/camera/IDSCameraAdapter.cpp" "include/camera/CameraHardwareFactory.h" "include/camera/CameraHardwareFactory.cpp" "mainUI/UIVisionPanel.h"  "include/halcon/VisionCircleDetection.h" "include/halcon/VisionCircleDetection.cpp" "mainUI/UINodeListWindow.h" "mainUI/UINodeListWindow.cpp" "include/vision/VisionPresetManager.h" "include/vision/VisionPresetManager.cpp" "mainUI/UIVisionPanel_Main.cpp" "mainUI/UIVisionPanel_Initialization.cpp" "mainUI/UIVisionPanel_Camera.cpp" "mainUI/UIVisionPanel_Detection.cpp" "mainUI/UIVisionPanel_Parameters.cpp" "mainUI/UIVisionPanel_Presets.cpp" "mainUI/UIVisionPanel_AutoExecution.cpp" "mainUI/UIVisionPanel_Nodes.cpp" "mainUI/UIVisionPanel_Image.cpp")
 
 
 
@@ -1000,6 +1005,8 @@ target_include_directories(uaa3App PRIVATE
   ${INCL_Uaa3_PROCESSES}
   ${FREETYPE_INCLUDE_DIR}
   ${IDS_UEYE_INCLUDE_DIR}
+       ${INCLUDE_HALCON_DIR}
+     ${INCLUDE_VISION_DIR}
 )
 
 # Link libraries - directly reference libraries

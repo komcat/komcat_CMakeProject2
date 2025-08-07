@@ -292,9 +292,9 @@ public:
 
         // Calculate confidence based on how close radius is to target
         double radiusDiff = std::abs(result.radius - m_params.targetRadius);
-        double maxDiff =(std::max)(m_params.targetRadius - m_params.minRadius,
+        double maxDiff = (std::max)(m_params.targetRadius - m_params.minRadius,
           m_params.maxRadius - m_params.targetRadius);
-        result.confidence =(std::max)(0.0, 1.0 - (radiusDiff / maxDiff));
+        result.confidence = (std::max)(0.0, 1.0 - (radiusDiff / maxDiff));
       }
       else {
         result.found = false;
@@ -326,31 +326,31 @@ public:
 
   void clampParameters() {
     // Clamp values to reasonable ranges
-    m_params.roiSize =(std::max)(10, (std::min)(1000, m_params.roiSize));
-    m_params.thresholdLow =(std::max)(0, (std::min)(255, m_params.thresholdLow));
-    m_params.thresholdHigh =(std::max)(0, (std::min)(255, m_params.thresholdHigh));
+    m_params.roiSize = (std::max)(10, (std::min)(1000, m_params.roiSize));
+    m_params.thresholdLow = (std::max)(0, (std::min)(255, m_params.thresholdLow));
+    m_params.thresholdHigh = (std::max)(0, (std::min)(255, m_params.thresholdHigh));
 
     // Ensure low <= high
     if (m_params.thresholdLow > m_params.thresholdHigh) {
       std::swap(m_params.thresholdLow, m_params.thresholdHigh);
     }
 
-    m_params.minArea =(std::max)(1, m_params.minArea);
-    m_params.maxArea =(std::max)(m_params.minArea, m_params.maxArea);
+    m_params.minArea = (std::max)(1, m_params.minArea);
+    m_params.maxArea = (std::max)(m_params.minArea, m_params.maxArea);
 
-    m_params.minCircularity =(std::max)(0.0f, (std::min)(1.0f, m_params.minCircularity));
-    m_params.maxCircularity =(std::max)(0.0f, (std::min)(1.0f, m_params.maxCircularity));
+    m_params.minCircularity = (std::max)(0.0f, (std::min)(1.0f, m_params.minCircularity));
+    m_params.maxCircularity = (std::max)(0.0f, (std::min)(1.0f, m_params.maxCircularity));
 
     // Ensure min <= max
     if (m_params.minCircularity > m_params.maxCircularity) {
       std::swap(m_params.minCircularity, m_params.maxCircularity);
     }
 
-    m_params.minRadius =(std::max)(1.0f, m_params.minRadius);
-    m_params.maxRadius =(std::max)(m_params.minRadius, m_params.maxRadius);
+    m_params.minRadius = (std::max)(1.0f, m_params.minRadius);
+    m_params.maxRadius = (std::max)(m_params.minRadius, m_params.maxRadius);
 
     // Clamp target radius to be within min/max
-    m_params.targetRadius =(std::max)(m_params.minRadius,
+    m_params.targetRadius = (std::max)(m_params.minRadius,
       (std::min)(m_params.maxRadius, m_params.targetRadius));
 
     // Clamp median kernel size to valid values
@@ -451,6 +451,28 @@ public:
       setError("Error parsing JSON parameters: " + std::string(e.what()));
     }
   }
+
+  // NEW: Get parameters as JSON object
+  nlohmann::json getParametersAsJson() const {
+    nlohmann::json j;
+    parametersToJson(j);
+    return j;
+  }
+
+  // NEW: Load parameters from JSON object
+  bool loadParametersFromJson(const nlohmann::json& jsonParams) {
+    try {
+      parametersFromJson(jsonParams);
+      clampParameters(); // Ensure parameters are within valid ranges
+      clearError();
+      std::cout << "[VisionCircleDetection] Parameters loaded from JSON object" << std::endl;
+      return true;
+    }
+    catch (const std::exception& e) {
+      setError("Error loading parameters from JSON: " + std::string(e.what()));
+      return false;
+    }
+  }
 };
 
 // ============================================================================
@@ -521,6 +543,16 @@ bool VisionCircleDetection::SaveParameters(const std::string& jsonPath) const {
     std::cout << "[VisionCircleDetection] Error saving parameters: " << e.what() << std::endl;
     return false;
   }
+}
+
+// NEW: Load parameters from JSON object directly
+bool VisionCircleDetection::LoadParametersFromJson(const nlohmann::json& jsonParams) {
+  return m_impl->loadParametersFromJson(jsonParams);
+}
+
+// NEW: Get current parameters as JSON object
+nlohmann::json VisionCircleDetection::GetParametersAsJson() const {
+  return m_impl->getParametersAsJson();
 }
 
 void VisionCircleDetection::SetParameters(const Parameters& params) {

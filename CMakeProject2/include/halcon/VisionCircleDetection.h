@@ -113,6 +113,19 @@ public:
   bool SaveParameters(const std::string& jsonPath) const;
 
   /**
+   * @brief Load parameters from JSON object directly
+   * @param jsonParams JSON object containing parameters
+   * @return True if loaded successfully
+   */
+  bool LoadParametersFromJson(const nlohmann::json& jsonParams);
+
+  /**
+   * @brief Get current parameters as JSON object
+   * @return JSON object containing all current parameters
+   */
+  nlohmann::json GetParametersAsJson() const;
+
+  /**
    * @brief Set detection parameters directly
    * @param params Parameter structure
    */
