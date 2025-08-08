@@ -21,6 +21,8 @@
 #include <SDL.h>
 #include "include/eziio/IOControlPanel.h"
 #include "UIVisionPanel.h"
+#include "DatumUI.h"  // ADD THIS LINE - Include new DatumUI class
+
 // Forward declarations
 class MotionConfigManager;
 class UIConfigEditor;
@@ -127,6 +129,11 @@ public:
   }
 
   void SetupVisionPanel();
+
+  // ADD THIS: Getter for DatumUI
+  DatumUI* GetDatumUI() const {
+    return m_datumUI.get();
+  }
 
 private:
   MainPage currentMainPage = MainPage::MAIN;
@@ -238,6 +245,9 @@ private:
   void CreateIOControlPanel();  // Helper to create IO panel when manager is available
 
   std::unique_ptr<UIVisionPanel> m_visionPanelUI;
+
+  // ADD THIS: DatumUI member variable
+  std::unique_ptr<DatumUI> m_datumUI;
 
   VisionSubPage currentVisionSubPage = VisionSubPage::NONE;
 

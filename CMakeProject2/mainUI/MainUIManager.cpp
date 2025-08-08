@@ -1,4 +1,5 @@
 ﻿#include "MainUIManager.h"
+#include "DatumUI.h"
 #include "UIConfigEditor.h"
 #include "UIConfigVisualizer.h"
 #include "UIJogWindow.h"
@@ -32,6 +33,8 @@
 #include <string>
 #include <ctime>
 
+
+// UPDATE the constructor to initialize DatumUI:
 MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 	: motionConfigManager(configMgr),
 	m_piControllerManager(nullptr),
@@ -72,11 +75,6 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 		std::cout << "MainUIManager: MacroPanelUI connected to MacroManager and MachineBlockUI" << std::endl;
 	}
 
-	// STEP 5: Connect prompt UI to MachineBlockUI as well (if it has this method)
-	// if (m_machineBlockUI) {
-	//     m_machineBlockUI->SetPromptUI(m_promptUI.get());
-	// }
-
 	// Initialize TCP Data Manager UI
 	m_tcpDataManagerUI = std::make_unique<TCPDataManagerUI>();
 	if (!m_tcpDataManagerUI->Initialize(m_dataClientManager)) {
@@ -91,11 +89,15 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 	m_runPageUI = nullptr;
 	// NEW: Initialize IO Control Panel as nullptr - will be created when IO manager is set
 	m_ioControlPanel = nullptr;  // <-- ADD THIS LINE
-	
+
 
 	// Initialize Vision Panel UI
 	m_visionPanelUI = std::make_unique<UIVisionPanel>();
 	std::cout << "MainUIManager: Vision Panel UI created successfully" << std::endl;
+
+	// ADD THIS: Initialize DatumUI
+	m_datumUI = std::make_unique<DatumUI>();
+	std::cout << "MainUIManager: DatumUI created successfully" << std::endl;
 
 }
 
@@ -1025,19 +1027,25 @@ void MainUIManager::RenderFiducialPage() {
 }
 
 // 7. ADD Datum Reference page method (placeholder for now):
+
+// REPLACE the existing RenderDatumReferencePage() method with:
 void MainUIManager::RenderDatumReferencePage() {
-	ImGui::SetWindowFontScale(1.5f);
-	ImGui::Text("Datum Reference");
-	ImGui::SetWindowFontScale(1.0f);
+	if (m_datumUI) {
+		m_datumUI->RenderUI();
+	}
+	else {
+		// Fallback if DatumUI is not initialized
+		ImGui::SetWindowFontScale(1.5f);
+		ImGui::Text("Datum Reference");
+		ImGui::SetWindowFontScale(1.0f);
 
-	ImGui::Spacing();
-	ImGui::Text("Datum reference functionality will be implemented here.");
-	ImGui::Spacing();
-
-	// Placeholder content
-	ImGui::TextWrapped("This page will contain tools for establishing and managing datum reference points for precise positioning and alignment.");
+		ImGui::Spacing();
+		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Datum Reference System not available");
+		ImGui::Text("DatumUI has not been initialized.");
+		ImGui::Spacing();
+		ImGui::Text("This is an internal error - please check the console for details.");
+	}
 }
-
 
 void MainUIManager::RenderConfigSubPage() {
 	switch (currentConfigSubPage) {
