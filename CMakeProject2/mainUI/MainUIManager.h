@@ -79,6 +79,13 @@ public:
     SMU_MANAGER
   };
 
+
+  enum class VisionSubPage {
+    NONE = 0,
+    FIDUCIAL,
+    DATUM_REFERENCE
+  };
+
 public:
   // Constructor takes MotionConfigManager reference only
   MainUIManager(MotionConfigManager& configManager);
@@ -231,4 +238,12 @@ private:
   void CreateIOControlPanel();  // Helper to create IO panel when manager is available
 
   std::unique_ptr<UIVisionPanel> m_visionPanelUI;
+
+  VisionSubPage currentVisionSubPage = VisionSubPage::NONE;
+
+  // 3. ADD method declarations in private section:
+  void RenderVisionSubPage();
+  void RenderFiducialPage();
+  void RenderDatumReferencePage();
+
 };

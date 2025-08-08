@@ -1,4 +1,4 @@
-// UIVisionPanel_Main.cpp - Constructor, destructor, and main UI logic
+﻿// UIVisionPanel_Main.cpp - Constructor, destructor, and main UI logic
 #include "UIVisionPanel.h"
 #include "include/halcon/VisionCircleDetection.h"
 #include "include/camera/CameraManager.h"
@@ -20,6 +20,9 @@ UIVisionPanel::UIVisionPanel() {
   // Initialize systems
   InitializeCircleDetection();
   InitializePresetManager();
+  // Initialize node-preset system
+  CreateNodePresetTable();
+  LoadNodePresetMappings();
 }
 
 UIVisionPanel::~UIVisionPanel() {
@@ -160,66 +163,57 @@ void UIVisionPanel::RenderUI() {
 
 }
 
+
+// UPDATE: Modify RenderLeftPanel() to include node-preset controls
 void UIVisionPanel::RenderLeftPanel() {
   ImGui::Text("Vision & Navigation");
   ImGui::Separator();
 
-  // Toggle node list panel with debug info
-  bool oldState = m_showNodeList;
+  // Toggle node list panel
   if (ImGui::Checkbox("Show Node List", &m_showNodeList)) {
     std::cout << "[UIVisionPanel] Node list toggled: " << (m_showNodeList ? "ON" : "OFF") << std::endl;
-
-    if (m_showNodeList && m_configManager && oldState != m_showNodeList) {
-      std::cout << "[UIVisionPanel] Refreshing nodes from config..." << std::endl;
-      LoadNodesFromConfig();
-      std::cout << "[UIVisionPanel] Now have " << m_nodes.size() << " nodes" << std::endl;
-    }
   }
 
-  // Show status
-  if (m_showNodeList) {
-    ImGui::SameLine();
-    ImGui::TextColored(ImVec4(0, 1, 0, 1), "(%zu nodes)", m_nodes.size());
-  }
+  ImGui::Spacing();
+
+  // === NEW: Node-Preset Controls ===
+  RenderNodePresetControls();
 
   ImGui::Spacing();
   ImGui::Separator();
-  ImGui::Spacing();
 
-  // Camera Selection
+  // Camera selection
   RenderCameraSelection();
 
   ImGui::Spacing();
   ImGui::Separator();
-  ImGui::Spacing();
 
-  // Circle Detection Controls
+  // Detection controls
   RenderCircleDetectionControls();
 
   ImGui::Spacing();
   ImGui::Separator();
+
+  // Preset controls
+  RenderPresetControls();
+
   ImGui::Spacing();
+  ImGui::Separator();
+
+  // Parameter controls
+  RenderCircleParameterControls();
+
+  ImGui::Spacing();
+  ImGui::Separator();
 
   // Auto-execution controls
   RenderAutoExecutionControls();
 
-  ImGui::Spacing();
-  ImGui::Separator();
-  ImGui::Spacing();
-
-  // Parameter Controls (enhanced with preset management)
-  if (ImGui::CollapsingHeader("Parameters & Presets", ImGuiTreeNodeFlags_DefaultOpen)) {
-    // Preset controls integrated into parameter section
-    RenderPresetControls();
-
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    // Your existing parameter controls
-    RenderCircleParameterControls();
-  }
+  // Node-Preset Dialog
+  RenderNodePresetDialog();
 }
+
+// NEW: Node-Preset Controls UI
 
 void UIVisionPanel::RenderRightPanel() {
   ImGui::Text("Detection Results");

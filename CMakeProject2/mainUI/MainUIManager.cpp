@@ -172,6 +172,9 @@ void MainUIManager::RenderBackButton() {
 		else if (currentProgrammingSubPage != ProgrammingSubPage::NONE) {
 			currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Handle programming sub-pages
 		}
+		else if (currentVisionSubPage != VisionSubPage::NONE) {  // ADD THIS LINE
+			currentVisionSubPage = VisionSubPage::NONE;           // ADD THIS LINE
+		}                                                         // ADD THIS LINE
 		else {
 			currentMainPage = MainPage::MAIN;
 		}
@@ -226,7 +229,8 @@ void MainUIManager::RenderTopMenuBar() {
 		currentManualSubPage = ManualSubPage::NONE;
 		currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
 		currentConfigSubPage = ConfigSubPage::NONE;
-		currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
+		currentProgrammingSubPage = ProgrammingSubPage::NONE;
+		currentVisionSubPage = VisionSubPage::NONE;  // ADD THIS LINE
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("Programming", ImVec2(130, 40))) {
@@ -438,9 +442,16 @@ void MainUIManager::RenderBreadcrumbs() {
 		break;
 	case MainPage::VISION:
 		breadcrumb += " > Vision";
+		switch (currentVisionSubPage) {
+		case VisionSubPage::FIDUCIAL:
+			breadcrumb += " > Fiducial";
+			break;
+		case VisionSubPage::DATUM_REFERENCE:
+			breadcrumb += " > Datum Reference";
+			break;
+		}
 		break;
 	}
-
 	ImGui::Text("%s", breadcrumb.c_str());
 }
 
@@ -481,7 +492,12 @@ void MainUIManager::RenderMainContent() {
 		}
 	}
 	else if (currentMainPage == MainPage::VISION) {
-		RenderVisionPage();
+		if (currentVisionSubPage == VisionSubPage::NONE) {
+			RenderVisionPage();
+		}
+		else {
+			RenderVisionSubPage();
+		}
 	}
 	else if (currentMainPage == MainPage::PROGRAMMING) {
 		if (currentProgrammingSubPage == ProgrammingSubPage::NONE) {
@@ -964,27 +980,63 @@ void MainUIManager::RenderConfigPage() {
 
 
 // REPLACE the existing RenderVisionPage() method with:
-void MainUIManager::RenderVisionPage() {
-	if (m_visionPanelUI) {
-		m_visionPanelUI->RenderUI();
-	}
-	else {
-		// Fallback when vision panel is not available
-		ImGui::SetWindowFontScale(1.5f);
-		ImGui::Text("Vision & Image Processing");
-		ImGui::SetWindowFontScale(1.0f);
 
-		ImGui::Spacing();
-		ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Vision Panel UI not available");
-		ImGui::Text("Check console for error messages");
-		ImGui::Spacing();
-		ImGui::Text("This typically means:");
-		ImGui::BulletText("Vision panel failed to initialize");
-		ImGui::BulletText("HALCON libraries not found");
-		ImGui::BulletText("Image processing dependencies missing");
+// 4. REPLACE existing RenderVisionPage() with this landing page:
+void MainUIManager::RenderVisionPage() {
+	ImGui::SetWindowFontScale(1.5f);
+	ImGui::Text("Vision System");
+	ImGui::SetWindowFontScale(1.0f);
+
+	ImGui::Spacing();
+	ImGui::Text("Select a vision processing option:");
+	ImGui::Spacing();
+
+	if (ImGui::Button("1. Fiducial Detection", ImVec2(250, 50))) {
+		currentVisionSubPage = VisionSubPage::FIDUCIAL;
+	}
+
+	if (ImGui::Button("2. Datum Reference", ImVec2(250, 50))) {
+		currentVisionSubPage = VisionSubPage::DATUM_REFERENCE;
 	}
 }
 
+
+// 5. ADD new method to handle Vision sub-pages:
+void MainUIManager::RenderVisionSubPage() {
+	switch (currentVisionSubPage) {
+	case VisionSubPage::FIDUCIAL:
+		RenderFiducialPage();
+		break;
+	case VisionSubPage::DATUM_REFERENCE:
+		RenderDatumReferencePage();
+		break;
+	default:
+		break;
+	}
+}
+
+
+// 6. ADD Fiducial page method (move current UIVisionPanel here):
+void MainUIManager::RenderFiducialPage() {
+	// Move the current UIVisionPanel rendering here
+	if (m_visionPanelUI) {
+		m_visionPanelUI->RenderUI();
+	}
+}
+
+// 7. ADD Datum Reference page method (placeholder for now):
+void MainUIManager::RenderDatumReferencePage() {
+	ImGui::SetWindowFontScale(1.5f);
+	ImGui::Text("Datum Reference");
+	ImGui::SetWindowFontScale(1.0f);
+
+	ImGui::Spacing();
+	ImGui::Text("Datum reference functionality will be implemented here.");
+	ImGui::Spacing();
+
+	// Placeholder content
+	ImGui::TextWrapped("This page will contain tools for establishing and managing datum reference points for precise positioning and alignment.");
+}
 
 
 void MainUIManager::RenderConfigSubPage() {

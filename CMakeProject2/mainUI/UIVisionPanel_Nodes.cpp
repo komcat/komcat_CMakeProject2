@@ -77,115 +77,79 @@ void UIVisionPanel::RenderNodeListControls() {
   ImGui::Text("Total: %zu nodes", m_nodes.size());
 }
 
+
+// UPDATE: Modify RenderNodeListTable() to show preset associations
 void UIVisionPanel::RenderNodeListTable() {
   if (m_nodes.empty()) {
-    ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "No nodes found");
-
-    if (!m_configManager) {
-      ImGui::Text("Config Manager not connected");
-    }
-    else {
-      ImGui::Text("Check motion configuration");
-      ImGui::Text("Ensure graphs have nodes defined");
-
-      if (ImGui::Button("Try Load Again", ImVec2(-1, 30))) {
-        LoadNodesFromConfig();
-      }
-    }
+    ImGui::Text("No nodes available");
     return;
   }
 
-  std::vector<NodeInfo*> filteredNodes;
-  for (auto& node : m_nodes) {
-    if (m_filterText.empty() ||
-      node.name.find(m_filterText) != std::string::npos ||
-      node.graphName.find(m_filterText) != std::string::npos) {
-      filteredNodes.push_back(&node);
-    }
-  }
+  if (ImGui::BeginTable("NodeTable", 4,
+    ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable)) {
 
-  ImGui::Text("Showing: %zu of %zu", filteredNodes.size(), m_nodes.size());
-
-  if (ImGui::BeginTable("Nodes", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-    ImGuiTableFlags_ScrollY, ImVec2(-1, -50))) {
-
-    ImGui::TableSetupColumn("Node", ImGuiTableColumnFlags_WidthStretch);
-    ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 50);
+    ImGui::TableSetupColumn("Node", ImGuiTableColumnFlags_WidthFixed, 100);
+    ImGui::TableSetupColumn("Position", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableSetupColumn("Preset", ImGuiTableColumnFlags_WidthFixed, 80);  // NEW COLUMN
+    ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 60);
     ImGui::TableHeadersRow();
 
-    for (auto* node : filteredNodes) {
+    for (size_t i = 0; i < m_nodes.size(); i++) {
+      const auto& node = m_nodes[i];
+
+      // Skip filtered nodes
+      if (!m_filterText.empty() &&
+        node.id.find(m_filterText) == std::string::npos &&
+        node.name.find(m_filterText) == std::string::npos) {
+        continue;
+      }
+
       ImGui::TableNextRow();
 
+      // Node ID/Name
       ImGui::TableNextColumn();
-
-      ImVec4 textColor = ImVec4(1, 1, 1, 1);
-      if (node->isCurrentPosition) {
-        textColor = ImVec4(0.5f, 1.0f, 0.5f, 1.0f);
+      if (node.isCurrentPosition) {
+        ImGui::TextColored(ImVec4(0, 1, 0, 1), "%s", node.id.c_str());
       }
-      else if (!node->isReachable) {
-        textColor = ImVec4(1.0f, 0.5f, 0.5f, 1.0f);
+      else if (!node.isReachable) {
+        ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", node.id.c_str());
       }
-
-      ImGui::TextColored(textColor, "%s", node->name.c_str());
-
-      if (!node->graphName.empty()) {
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "(%s)", node->graphName.c_str());
+      else {
+        ImGui::Text("%s", node.id.c_str());
       }
 
+      // Position info
       ImGui::TableNextColumn();
+      ImGui::Text("%s", node.positionName.c_str());
 
-      bool canNavigate = m_machineOperations && node->isReachable && !node->isCurrentPosition;
-
-      if (!canNavigate) {
-        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
-      }
-
-      if (ImGui::Button(("Go##" + node->id).c_str(), ImVec2(40, 20))) {
-        if (canNavigate) {
-          std::cout << "[UIVisionPanel] Navigation button clicked for: " << node->id << std::endl;
-          if (NavigateToNode(node->id)) {
-            std::cout << "[UIVisionPanel] Navigation command sent successfully" << std::endl;
-          }
-          else {
-            std::cout << "[UIVisionPanel] Navigation command failed" << std::endl;
+      // NEW: Preset association
+      ImGui::TableNextColumn();
+      auto it = m_nodeToPresetMap.find(node.id);
+      if (it != m_nodeToPresetMap.end()) {
+        // Find preset name
+        std::string presetName = "?";
+        for (const auto& preset : m_availablePresets) {
+          if (preset.id == it->second) {
+            presetName = preset.name.substr(0, 8); // Truncate for space
+            break;
           }
         }
+        ImGui::TextColored(ImVec4(0, 1, 0, 1), "%s", presetName.c_str());
+      }
+      else {
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "-");
       }
 
-      if (!canNavigate) {
-        ImGui::PopStyleVar();
-      }
-
-      if (ImGui::IsItemHovered()) {
-        std::string tooltip = "Node: " + node->name;
-        tooltip += "\nID: " + node->id;
-        tooltip += "\nGraph: " + node->graphName;
-        if (!node->deviceName.empty()) {
-          tooltip += "\nDevice: " + node->deviceName;
-        }
-        if (!node->positionName.empty()) {
-          tooltip += "\nPosition: " + node->positionName;
-        }
-        if (node->isCurrentPosition) {
-          tooltip += "\nStatus: Current Position";
-        }
-        else if (!node->isReachable) {
-          tooltip += "\nStatus: Not Reachable";
-        }
-        else if (!m_machineOperations) {
-          tooltip += "\nStatus: Navigation Disabled";
-        }
-        else {
-          tooltip += "\nStatus: Ready to Navigate";
-        }
-        ImGui::SetTooltip("%s", tooltip.c_str());
+      // Go button
+      ImGui::TableNextColumn();
+      if (ImGui::Button(("Go##" + std::to_string(i)).c_str(), ImVec2(50, 20))) {
+        NavigateToNode(node.id);
       }
     }
-
     ImGui::EndTable();
   }
 }
+
 
 void UIVisionPanel::LoadNodesFromConfig() {
   m_nodes.clear();
@@ -238,6 +202,8 @@ void UIVisionPanel::LoadNodesFromConfig() {
   }
 }
 
+
+// UPDATE: Modify NavigateToNode() to auto-load preset (using your actual implementation pattern)
 bool UIVisionPanel::NavigateToNode(const std::string& nodeId) {
   std::cout << "[UIVisionPanel] NavigateToNode called with ID: " << nodeId << std::endl;
 
@@ -248,6 +214,7 @@ bool UIVisionPanel::NavigateToNode(const std::string& nodeId) {
     return false;
   }
 
+  // Find the node
   NodeInfo* targetNode = nullptr;
   for (auto& node : m_nodes) {
     if (node.id == nodeId) {
@@ -262,7 +229,8 @@ bool UIVisionPanel::NavigateToNode(const std::string& nodeId) {
   }
 
   if (!targetNode->isReachable) {
-    std::cout << "[UIVisionPanel] Node not reachable: " << nodeId << " (Device: " << targetNode->deviceName << ")" << std::endl;
+    std::cout << "[UIVisionPanel] Node not reachable: " << nodeId
+      << " (Device: " << targetNode->deviceName << ")" << std::endl;
     return false;
   }
 
@@ -274,14 +242,15 @@ bool UIVisionPanel::NavigateToNode(const std::string& nodeId) {
   try {
     bool success = false;
 
+    // METHOD 1: Try MoveDeviceToNode first (preferred - follows graph navigation)
     if (!targetNode->graphName.empty() && !targetNode->deviceName.empty()) {
       std::cout << "[UIVisionPanel] Trying MoveDeviceToNode..." << std::endl;
       success = m_machineOperations->MoveDeviceToNode(
-        targetNode->deviceName,
-        targetNode->graphName,
-        targetNode->id,
-        false,
-        "UIVisionPanel"
+        targetNode->deviceName,  // Device name
+        targetNode->graphName,   // Graph name
+        targetNode->id,          // Node ID
+        false,                   // waitForCompletion
+        "UIVisionPanel"          // caller
       );
 
       if (success) {
@@ -292,13 +261,14 @@ bool UIVisionPanel::NavigateToNode(const std::string& nodeId) {
       }
     }
 
+    // METHOD 2: Try MoveToPointName as fallback (direct position movement)
     if (!success && !targetNode->positionName.empty() && !targetNode->deviceName.empty()) {
       std::cout << "[UIVisionPanel] Trying MoveToPointName fallback..." << std::endl;
       success = m_machineOperations->MoveToPointName(
-        targetNode->deviceName,
-        targetNode->positionName,
-        false,
-        "UIVisionPanel"
+        targetNode->deviceName,   // Device name
+        targetNode->positionName, // Position name
+        false,                    // waitForCompletion
+        "UIVisionPanel"           // caller
       );
 
       if (success) {
@@ -312,8 +282,38 @@ bool UIVisionPanel::NavigateToNode(const std::string& nodeId) {
     if (success) {
       std::cout << "[UIVisionPanel] Navigation command sent successfully for: " << nodeId << std::endl;
 
+      // Update current position tracking
       for (auto& node : m_nodes) {
         node.isCurrentPosition = false;
+      }
+      targetNode->isCurrentPosition = true;
+      m_selectedNodeId = nodeId;
+
+      // NEW: Auto-load associated preset
+      auto it = m_nodeToPresetMap.find(nodeId);
+      if (it != m_nodeToPresetMap.end()) {
+        // Find if auto-load is enabled
+        bool shouldAutoLoad = true;
+        for (const auto& mapping : m_nodePresetMappings) {
+          if (mapping.nodeId == nodeId) {
+            shouldAutoLoad = mapping.autoLoad;
+            break;
+          }
+        }
+
+        if (shouldAutoLoad) {
+          if (LoadPreset(it->second)) {
+            m_selectedPresetId = it->second;
+            std::cout << "[UIVisionPanel] Auto-loaded preset " << it->second
+              << " for node " << nodeId << std::endl;
+          }
+          else {
+            std::cerr << "[UIVisionPanel] Failed to auto-load preset for node " << nodeId << std::endl;
+          }
+        }
+        else {
+          std::cout << "[UIVisionPanel] Auto-load disabled for node " << nodeId << std::endl;
+        }
       }
 
       return true;
