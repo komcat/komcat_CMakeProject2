@@ -28,11 +28,18 @@ public:
   void SetMotionConfigManager(MotionConfigManager* configManager);
   void SetMachineOperations(MachineOperations* machineOps);
 
+  // NEW: Camera exposure preset structure
+  struct CameraExposurePreset {
+    float exposureTime = 10000.0f;
+    float gain = 1.0f;
+    bool autoExposure = false;
+    bool autoGain = false;
+  };
+
 private:
   // UI state
   bool m_showWindow = true;
   bool m_showNodeList = false;
-
 
   // Core systems
   std::unique_ptr<VisionCircleDetection> m_circleDetector;
@@ -57,6 +64,12 @@ private:
   // Camera integration
   CameraManager* m_cameraManager = nullptr;
   std::string m_selectedCameraId = "";
+
+  // NEW: Camera exposure controls
+  float m_exposureTimeUI = 10000.0f;  // microseconds
+  float m_gainUI = 1.0f;              // gain value
+  bool m_autoExposureUI = false;      // auto exposure enabled
+  bool m_autoGainUI = false;          // auto gain enabled
 
   // Motion system integration
   MotionConfigManager* m_configManager = nullptr;
@@ -125,6 +138,17 @@ private:
   void UpdateAutoExecution();
   void RenderAutoExecutionControls();
 
+  // NEW: Camera exposure controls
+  void RenderExposureControls();
+  void ApplyExposureSettings();
+  void UpdateExposureUIFromCamera();
+
+  // NEW: Camera exposure preset methods
+  CameraExposurePreset GetCurrentExposureSettings() const;
+  void ApplyExposurePreset(const CameraExposurePreset& preset);
+  nlohmann::json ExposurePresetToJson(const CameraExposurePreset& preset) const;
+  CameraExposurePreset ExposurePresetFromJson(const nlohmann::json& j) const;
+
   // === NODE NAVIGATION ===
   void RenderNodeListControls();
   void RenderNodeListTable();
@@ -146,7 +170,6 @@ private:
   std::vector<uint8_t> m_originalImageData;
   bool m_hasOriginalData = false;
 
-
   bool m_showInvertPreview = false;
   unsigned int m_invertedTextureId = 0;
   std::vector<unsigned char> m_invertedImageData;
@@ -154,5 +177,4 @@ private:
   void RenderInvertPreviewDialog();
   void CreateInvertedTexture();
   void CleanupInvertedTexture();
-
 };
