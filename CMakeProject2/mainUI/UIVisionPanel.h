@@ -6,6 +6,7 @@
 
 #include "include/halcon/VisionCircleDetection.h"
 #include "VisionPresetManager.h"
+#include "VisionCoordinateCalculator.h"
 #include "imgui.h"
 #include <memory>
 #include <string>
@@ -234,4 +235,34 @@ private:
   bool UpdateGuidanceImagePath(const std::string& nodeId, const std::string& imagePath);
   std::vector<std::string> GetSupportedImageFormats() const;
   bool IsImageReadyForSaving() const;
+
+
+
+
+  // Coordinate calculation utility
+  std::unique_ptr<VisionCoordinateCalculator> m_coordinateCalculator;
+
+  // Enhanced results display options
+  bool m_showEnhancedResults = true;      // Toggle between enhanced/basic results
+  bool m_showPixelCoordinates = true;     // Show pixel coordinate section
+  bool m_showOffsetFromCenter = true;     // Show offset from center section
+  bool m_showRobotPosition = true;        // Show robot position section
+  bool m_showTargetPosition = true;       // Show target position section
+
+  // ADD these method declarations in the appropriate sections
+
+    // ============================================================================
+    // ENHANCED RESULTS METHODS (NEW)
+    // ============================================================================
+
+    // Enhanced results rendering (ADD to DETECTION METHODS section)
+  void RenderEnhancedResultsTable();           // Main enhanced table
+  void RenderBasicResultsTable();              // Simple pixel-only table
+  void RenderResultsDisplayOptions();          // Toggle options for what to show
+  void RenderCoordinateActions();              // Action buttons for coordinates
+  void RenderCoordinateSystemInfo();           // Show calibration and robot status
+
+  // Coordinate calculation helper (ADD to new section)
+  bool GetCurrentRobotPosition(double& x, double& y, double& z) const;
+
 };

@@ -3682,3 +3682,22 @@ bool MachineOperations::StopAllMovement() {
   m_logger->LogInfo("MachineOperations: Emergency stop requested");
   return m_motionLayer.StopAllMovement();
 }
+
+
+
+// Simple position access methods - no caching, direct from motion layer
+//const std::map<std::string, PositionStruct>& MachineOperations::GetRealtimePositions() const {
+//  return m_motionLayer.GetRealtimePositions();
+//}
+//
+//bool MachineOperations::GetRealtimePosition(const std::string& deviceName, PositionStruct& position) const {
+//  return m_motionLayer.GetRealtimePosition(deviceName, position);
+//}
+
+//void MachineOperations::ForceUpdatePositions() {
+//  m_motionLayer.UpdateRealtimePositions();
+//
+//  if (m_enableDebug) {
+//    m_logger->LogInfo("MachineOperations: Forced position update completed");
+//  }
+//}

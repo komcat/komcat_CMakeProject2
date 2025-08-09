@@ -437,6 +437,23 @@ public:
 
 
 	bool StopAllMovement();
+
+
+
+	// Simple realtime position access
+	const std::map<std::string, PositionStruct>& GetRealtimePositions() const {
+		return m_motionLayer.GetRealtimePositions();
+	}
+
+	bool GetRealtimePosition(const std::string& deviceName, PositionStruct& position) const {
+		return m_motionLayer.GetRealtimePosition(deviceName, position);
+	}
+
+	void ForceUpdatePositions() {
+		m_motionLayer.UpdateRealtimePositions();
+	}
+
+
 private:
 	Logger* m_logger;
 	bool m_enableDebug = false;

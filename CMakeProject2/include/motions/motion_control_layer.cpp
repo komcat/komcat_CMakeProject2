@@ -189,6 +189,9 @@ double MotionControlLayer::GetPathProgress() const {
 	return static_cast<double>(m_currentNodeIndex) / static_cast<double>(m_plannedPath.size() - 1);
 }
 
+// motion_control_layer.cpp - UPDATE ExecutionThreadFunc method
+// Add this inside the execution loop to keep positions updated
+
 void MotionControlLayer::ExecutionThreadFunc() {
 	m_logger->LogInfo("MotionControlLayer: Execution thread started");
 
@@ -233,7 +236,7 @@ void MotionControlLayer::ExecutionThreadFunc() {
 				}
 			}
 
-			// Log node execution start with detailed information
+			// Log node execution start
 			std::stringstream nodeInfoLog;
 			nodeInfoLog << "MotionControlLayer: Executing node " << i + 1 << "/" << m_plannedPath.size()
 				<< ": " << currentNode.Id;
@@ -251,6 +254,9 @@ void MotionControlLayer::ExecutionThreadFunc() {
 				success = false;
 				break;
 			}
+
+			// ADD: Update realtime positions after each successful move
+			UpdateRealtimePositions();
 
 			// Log successful movement completion
 			m_logger->LogInfo("MotionControlLayer: Successfully moved to node " + currentNode.Id);
@@ -270,6 +276,9 @@ void MotionControlLayer::ExecutionThreadFunc() {
 
 		// Set execution complete
 		m_isExecuting = false;
+
+		// Final position update
+		UpdateRealtimePositions();
 
 		// Call completion callback if set
 		CompletionCallback callback = nullptr;
@@ -298,6 +307,8 @@ void MotionControlLayer::ExecutionThreadFunc() {
 
 	m_logger->LogInfo("MotionControlLayer: Execution thread stopped");
 }
+
+
 
 bool MotionControlLayer::MoveToNode(const Node& node) {
 	// Skip if no device or position specified

@@ -6,11 +6,19 @@
 #include "include/machine_operations.h"
 #include <iostream>
 
-UIVisionPanel::UIVisionPanel() {
-  std::cout << "[UIVisionPanel] Initializing Vision Panel with Circle Detection, Node Navigation, and Preset Management" << std::endl;
+UIVisionPanel::UIVisionPanel()
+{
+  std::cout << "[UIVisionPanel] Initializing Vision Panel with Circle Detection, Node Navigation, Preset Management, and Enhanced Results" << std::endl;
 
   // Initialize UI state
   m_showNodeList = false;
+
+  // Initialize enhanced results display options (NEW)
+  m_showEnhancedResults = true;
+  m_showPixelCoordinates = true;
+  m_showOffsetFromCenter = true;
+  m_showRobotPosition = true;
+  m_showTargetPosition = true;
 
   // Initialize auto-execution settings
   m_autoExecute = false;
@@ -20,9 +28,16 @@ UIVisionPanel::UIVisionPanel() {
   // Initialize systems
   InitializeCircleDetection();
   InitializePresetManager();
+
+  // Initialize coordinate calculator (NEW)
+  m_coordinateCalculator = std::make_unique<VisionCoordinateCalculator>();
+  std::cout << "[UIVisionPanel] Coordinate calculator initialized" << std::endl;
+
   // Initialize node-preset system
   CreateNodePresetTable();
   LoadNodePresetMappings();
+
+  std::cout << "[UIVisionPanel] Vision Panel initialization complete" << std::endl;
 }
 
 UIVisionPanel::~UIVisionPanel() {
@@ -64,6 +79,11 @@ void UIVisionPanel::SetMachineOperations(MachineOperations* machineOps) {
   }
   else {
     std::cout << "[UIVisionPanel] Machine Operations is NULL!" << std::endl;
+  }
+
+  // ADD this line to connect coordinate calculator to machine operations:
+  if (m_coordinateCalculator) {
+    m_coordinateCalculator->SetMachineOperations(machineOps);
   }
 }
 

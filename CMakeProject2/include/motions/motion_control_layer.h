@@ -134,6 +134,44 @@ public:
   bool acsc_StopAllBuffers(const std::string& deviceName);
   bool acsc_IsBufferRunning(const std::string& deviceName, int bufferNumber);
 
+
+  // Real-time position tracking - PUBLIC ACCESS
+  std::map<std::string, PositionStruct> m_realtimePositions;
+  mutable std::mutex m_realtimePositionsMutex;
+  std::chrono::steady_clock::time_point m_lastRealtimeUpdate;
+
+  // Simple public methods to get/update positions
+  const std::map<std::string, PositionStruct>& GetRealtimePositions() const {
+    std::lock_guard<std::mutex> lock(m_realtimePositionsMutex);
+    return m_realtimePositions;
+  }
+
+  // Force update all device positions
+  void UpdateRealtimePositions() {
+    std::lock_guard<std::mutex> lock(m_realtimePositionsMutex);
+
+    auto deviceList = GetAvailableDevices();
+    for (const auto& deviceName : deviceList) {
+      PositionStruct currentPos;
+      if (GetCurrentPosition(deviceName, currentPos)) {
+        m_realtimePositions[deviceName] = currentPos;
+      }
+    }
+
+    m_lastRealtimeUpdate = std::chrono::steady_clock::now();
+  }
+
+  // Get single device position (thread-safe)
+  bool GetRealtimePosition(const std::string& deviceName, PositionStruct& position) const {
+    std::lock_guard<std::mutex> lock(m_realtimePositionsMutex);
+    auto it = m_realtimePositions.find(deviceName);
+    if (it != m_realtimePositions.end()) {
+      position = it->second;
+      return true;
+    }
+    return false;
+  }
+
 private:
   // References to managers
   MotionConfigManager& m_configManager;
@@ -196,6 +234,18 @@ private:
     return xOk && yOk && zOk && uOk && vOk && wOk;
   }
 
+
+  // Add this to ExecutionThreadFunc() to auto-update positions during motion
+  void AutoUpdatePositionsDuringMotion() {
+    // Call this periodically in ExecutionThreadFunc
+    if (m_isExecuting) {
+      auto now = std::chrono::steady_clock::now();
+      // Update every 100ms during motion
+      if (now - m_lastRealtimeUpdate > std::chrono::milliseconds(100)) {
+        UpdateRealtimePositions();
+      }
+    }
+  }
   // Friend declaration for the adapter class
   friend class MotionControlHierarchicalAdapter;
 

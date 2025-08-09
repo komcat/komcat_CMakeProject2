@@ -53,75 +53,76 @@ void UIVisionPanel::RenderCircleDetectionControls() {
   }
 }
 
-void UIVisionPanel::RenderCircleDetectionResults() {
-  if (!m_hasResult) {
-    ImGui::Text("No detection results yet.");
-    ImGui::Text("Execute circle detection to see results.");
-    return;
-  }
-
-  const auto& result = m_lastResult;
-
-  ImGui::SetWindowFontScale(1.2f);
-  if (result.found) {
-    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Circle Detected");
-  }
-  else {
-    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ No Circle Found");
-  }
-  ImGui::SetWindowFontScale(1.0f);
-
-  ImGui::Spacing();
-
-  if (result.found) {
-    if (ImGui::BeginTable("Results", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-      ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-      ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-      ImGui::TableHeadersRow();
-
-      ImGui::TableNextRow();
-      ImGui::TableNextColumn();
-      ImGui::Text("Center X");
-      ImGui::TableNextColumn();
-      ImGui::Text("%.1f pixels", result.centerX);
-
-      ImGui::TableNextRow();
-      ImGui::TableNextColumn();
-      ImGui::Text("Center Y");
-      ImGui::TableNextColumn();
-      ImGui::Text("%.1f pixels", result.centerY);
-
-      ImGui::TableNextRow();
-      ImGui::TableNextColumn();
-      ImGui::Text("Radius");
-      ImGui::TableNextColumn();
-      ImGui::Text("%.1f pixels", result.radius);
-
-      ImGui::TableNextRow();
-      ImGui::TableNextColumn();
-      ImGui::Text("Confidence");
-      ImGui::TableNextColumn();
-      ImGui::Text("%.1f%%", result.confidence * 100.0);
-
-      ImGui::EndTable();
-    }
-
-    ImGui::Spacing();
-
-    if (ImGui::Button("Send to Robot", ImVec2(-1, 30))) {
-      std::cout << "[UIVisionPanel] Sending coordinates to robot: ("
-        << result.centerX << ", " << result.centerY << ")" << std::endl;
-    }
-  }
-  else {
-    ImGui::Text("Detection failed:");
-    ImGui::BulletText("Candidates found: %d", result.numCandidates);
-
-    if (!result.errorMessage.empty()) {
-      ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Error: %s", result.errorMessage.c_str());
-    }
-  }
-}
+//use RenderCircleDetectionResults in the UIvisionPanel_enhancedResults
+//void UIVisionPanel::RenderCircleDetectionResults() {
+//  if (!m_hasResult) {
+//    ImGui::Text("No detection results yet.");
+//    ImGui::Text("Execute circle detection to see results.");
+//    return;
+//  }
+//
+//  const auto& result = m_lastResult;
+//
+//  ImGui::SetWindowFontScale(1.2f);
+//  if (result.found) {
+//    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Circle Detected");
+//  }
+//  else {
+//    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "✗ No Circle Found");
+//  }
+//  ImGui::SetWindowFontScale(1.0f);
+//
+//  ImGui::Spacing();
+//
+//  if (result.found) {
+//    if (ImGui::BeginTable("Results", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+//      ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+//      ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+//      ImGui::TableHeadersRow();
+//
+//      ImGui::TableNextRow();
+//      ImGui::TableNextColumn();
+//      ImGui::Text("Center X");
+//      ImGui::TableNextColumn();
+//      ImGui::Text("%.1f pixels", result.centerX);
+//
+//      ImGui::TableNextRow();
+//      ImGui::TableNextColumn();
+//      ImGui::Text("Center Y");
+//      ImGui::TableNextColumn();
+//      ImGui::Text("%.1f pixels", result.centerY);
+//
+//      ImGui::TableNextRow();
+//      ImGui::TableNextColumn();
+//      ImGui::Text("Radius");
+//      ImGui::TableNextColumn();
+//      ImGui::Text("%.1f pixels", result.radius);
+//
+//      ImGui::TableNextRow();
+//      ImGui::TableNextColumn();
+//      ImGui::Text("Confidence");
+//      ImGui::TableNextColumn();
+//      ImGui::Text("%.1f%%", result.confidence * 100.0);
+//
+//      ImGui::EndTable();
+//    }
+//
+//    ImGui::Spacing();
+//
+//    if (ImGui::Button("Send to Robot", ImVec2(-1, 30))) {
+//      std::cout << "[UIVisionPanel] Sending coordinates to robot: ("
+//        << result.centerX << ", " << result.centerY << ")" << std::endl;
+//    }
+//  }
+//  else {
+//    ImGui::Text("Detection failed:");
+//    ImGui::BulletText("Candidates found: %d", result.numCandidates);
+//
+//    if (!result.errorMessage.empty()) {
+//      ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Error: %s", result.errorMessage.c_str());
+//    }
+//  }
+//}
 
 void UIVisionPanel::ExecuteCircleDetection() {
   if (!m_circleDetector || !m_cameraManager || m_selectedCameraId.empty()) {
