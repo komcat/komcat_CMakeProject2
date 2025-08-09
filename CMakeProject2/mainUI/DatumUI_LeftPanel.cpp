@@ -1,4 +1,4 @@
-// DatumUI_LeftPanel.cpp - Product list and management controls
+﻿// DatumUI_LeftPanel.cpp - Product list and management controls with ID support
 #include "DatumUI.h"
 
 // =============================================================================
@@ -29,7 +29,7 @@ void DatumUI::RenderProductCreationControls() {
   ImGui::Spacing();
 }
 
-// NEW: Save/Load Controls
+// UPDATED: Save/Load Controls with ID information
 void DatumUI::RenderSaveLoadControls() {
   ImGui::Text("Save/Load Products");
   ImGui::Separator();
@@ -94,12 +94,16 @@ void DatumUI::RenderSaveLoadControls() {
   }
   ImGui::EndDisabled();
 
-  // Show file count
+  // Show file count and helpful info about ID-based filenames
   if (!availableFiles.empty()) {
     ImGui::TextDisabled("(%zu saved files)", availableFiles.size());
   }
+
+  ImGui::Spacing();
+  ImGui::TextWrapped("💡 Tip: Individual products are saved with their ID in the filename (e.g., myproduct_PROD_000001.json)");
 }
 
+// UPDATED: Product List with ID Display
 void DatumUI::RenderProductList() {
   ImGui::Text("Existing Products:");
 
@@ -110,12 +114,21 @@ void DatumUI::RenderProductList() {
     return;
   }
 
-  // Product selection list
+  // Product selection list with ID display
   if (ImGui::BeginListBox("##ProductList", ImVec2(-1, 200))) {
     for (const auto& product : products) {
       bool isSelected = (m_selectedProductName == product.name);
 
-      if (ImGui::Selectable(product.name.c_str(), isSelected)) {
+      // Format: "ProductName (PROD_000001)" if ID exists, otherwise just name
+      std::string displayText;
+      if (!product.id.empty()) {
+        displayText = product.name + " (" + product.id + ")";
+      }
+      else {
+        displayText = product.name + " (No ID)";
+      }
+
+      if (ImGui::Selectable(displayText.c_str(), isSelected)) {
         OnProductSelectionChanged(product.name);
       }
 
@@ -137,6 +150,7 @@ void DatumUI::RenderProductList() {
   }
 }
 
+// UPDATED: Selected Product Info with Prominent ID Display
 void DatumUI::RenderSelectedProductInfo() {
   if (m_selectedProductName.empty()) {
     ImGui::TextDisabled("No product selected");
@@ -151,6 +165,15 @@ void DatumUI::RenderSelectedProductInfo() {
 
   ImGui::Separator();
   ImGui::Text("Product Info:");
+
+  // Display Product ID (read-only, highlighted in green)
+  if (!product->id.empty()) {
+    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "ID: %s", product->id.c_str());
+  }
+  else {
+    ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "ID: Not assigned");
+  }
+
   ImGui::Text("Name: %s", product->name.c_str());
 
   if (!product->description.empty()) {
@@ -189,13 +212,19 @@ void DatumUI::RenderSelectedProductInfo() {
     ImGui::TextDisabled("Created: %s", product->createdDate.c_str());
   }
 
-  // NEW: Individual product save option
+  // UPDATED: Individual product save option - now includes ID in filename automatically
   ImGui::Spacing();
   ImGui::Separator();
   if (ImGui::Button("Save This Product Only", ImVec2(-1, 0))) {
+    // Filename will automatically include ID: productname_PROD_000001.json
     std::string filename = product->name + "_product";
     if (m_referenceManager->SaveProductToFile(product->name, filename)) {
-      ShowSuccessMessage("Product '" + product->name + "' saved!");
+      if (!product->id.empty()) {
+        ShowSuccessMessage("Product '" + product->name + "' saved with ID " + product->id + "!");
+      }
+      else {
+        ShowSuccessMessage("Product '" + product->name + "' saved!");
+      }
     }
     else {
       ShowErrorMessage("Failed to save product");

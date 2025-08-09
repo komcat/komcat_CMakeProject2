@@ -2,6 +2,7 @@
 #include "ProductReferenceManager.h"
 #include <algorithm>
 #include <iostream>
+#include <chrono>
 
 // =============================================================================
 // CORE ACCESSOR METHODS
@@ -27,28 +28,48 @@ bool ProductReferenceManager::HasProductReference(const std::string& name) const
 // PRODUCT REFERENCE MANAGEMENT
 // =============================================================================
 
-bool ProductReferenceManager::CreateProductReference(const std::string& name, const std::string& description) {
-  if (name.empty()) {
-    std::cout << "CreateProductReference: Product name cannot be empty" << std::endl;
-    return false;
+
+// Modify the CreateProductReference method to auto-generate ID
+bool ProductReferenceManager::CreateProductReference(const std::string& name,
+  const std::string& description) {
+  // Check if product already exists
+  if (GetProductReference(name) != nullptr) {
+    return false; // Product with this name already exists
   }
 
-  // Check if product already exists
-  if (HasProductReference(name)) {
-    std::cout << "CreateProductReference: Product already exists: " << name << std::endl;
-    return false;
-  }
+  // Generate unique ID
+  int nextId = LoadNextProductId();
+  std::string productId = GenerateProductId(nextId);
 
   // Create new product reference
-  ProductReference product(name);
-  product.description = description;
-  product.createdDate = GetCurrentTimestamp();
-  product.lastModified = product.createdDate;
+  ProductReference newProduct;
+  newProduct.name = name;
+  newProduct.description = description;
+  newProduct.id = productId;                    // NEW: Set auto-generated ID
 
-  m_productReferences.push_back(std::move(product));
-  std::cout << "CreateProductReference: Product created successfully: " << name << std::endl;
+  // Set creation date
+  auto now = std::chrono::system_clock::now();
+  auto time_t = std::chrono::system_clock::to_time_t(now);
+
+  std::ostringstream dateStream;
+  dateStream << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+  newProduct.createdDate = dateStream.str();
+
+  // Initialize empty datum system
+  newProduct.datum.constructionMethod = DatumReference::ConstructionMethod::NONE;
+
+  // Add to collection
+  m_productReferences.push_back(newProduct);
+
+  // Update counter for next product
+  SaveNextProductId(nextId + 1);
+
+  std::cout << "[ProductReferenceManager] Created product '" << name
+    << "' with ID: " << productId << std::endl;
+
   return true;
 }
+
 
 bool ProductReferenceManager::DeleteProductReference(const std::string& name) {
   auto it = std::find_if(m_productReferences.begin(), m_productReferences.end(),

@@ -7,6 +7,11 @@
 #include <memory>
 #include <optional>
 #include <array>      // Added for CalculateVector return type
+#include <fstream>    // Added for ID counter file operations
+#include <iomanip>    // Added for ID formatting
+#include <sstream>    // Added for ID formatting
+#include <algorithm>  // Added for max() in ID generation
+#include "nlohmann/json.hpp"
 
 /**
  * @brief Core logic class for managing product references and datum coordinate systems
@@ -17,6 +22,7 @@
  * - Coordinate system calculations from 2-point or 3-point datum creation
  * - JSON persistence in /products folder
  * - Validation and error checking
+ * - Automatic sequential ID generation
  */
 class ProductReferenceManager {
 public:
@@ -120,6 +126,7 @@ public:
   struct ProductReference {
     std::string name;
     std::string description;
+    std::string id;              // NEW: Auto-generated sequential ID (PROD_000001, etc.)
 
     // Geometry data
     std::vector<Point3D> points;
@@ -381,6 +388,9 @@ private:
   /// Storage for all product references
   std::vector<ProductReference> m_productReferences;
 
+  /// Static constant for ID counter file
+  static const std::string ID_COUNTER_FILE;
+
   // =============================================================================
   // PRIVATE HELPER METHODS
   // =============================================================================
@@ -421,4 +431,28 @@ private:
    * @brief Get current timestamp string
    */
   std::string GetCurrentTimestamp() const;
+
+  // =============================================================================
+  // NEW: ID GENERATION METHODS
+  // =============================================================================
+
+  /**
+   * @brief Load next product ID from counter file
+   */
+  static int LoadNextProductId();
+
+  /**
+   * @brief Save next product ID to counter file
+   */
+  static void SaveNextProductId(int nextId);
+
+  /**
+   * @brief Generate formatted product ID (PROD_000001 format)
+   */
+  static std::string GenerateProductId(int idNumber);
+
+  /**
+   * @brief Helper method to load product from JSON with ID handling
+   */
+  void LoadProductFromJson(const nlohmann::json& productJson);
 };

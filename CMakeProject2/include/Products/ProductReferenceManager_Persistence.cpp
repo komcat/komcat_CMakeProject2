@@ -1,4 +1,4 @@
-// ProductReferenceManager_Persistence.cpp - Complete JSON Save/Load Implementation
+// ProductReferenceManager_Persistence.cpp - Complete JSON Save/Load Implementation with ID Support
 #include "ProductReferenceManager.h"
 #include <nlohmann/json.hpp>
 #include <iostream>
@@ -9,6 +9,13 @@
 #include <chrono>
 
 using json = nlohmann::json;
+
+// =============================================================================
+// STATIC MEMBER DEFINITIONS
+// =============================================================================
+
+// Add this static member definition
+const std::string ProductReferenceManager::ID_COUNTER_FILE = "product_id_counter.txt";
 
 // =============================================================================
 // HELPER METHODS FOR JSON CONVERSION
@@ -123,11 +130,12 @@ namespace {
     return datum;
   }
 
-  // Convert ProductReference to JSON
+  // Convert ProductReference to JSON (UPDATED with ID support)
   json ProductReferenceToJson(const ProductReferenceManager::ProductReference& product) {
     json j;
     j["name"] = product.name;
     j["description"] = product.description;
+    j["id"] = product.id;                    // NEW: Include ID in JSON
     j["createdDate"] = product.createdDate;
     j["lastModified"] = product.lastModified;
 
@@ -157,11 +165,12 @@ namespace {
     return j;
   }
 
-  // Convert JSON to ProductReference
+  // Convert JSON to ProductReference (UPDATED with ID support)
   ProductReferenceManager::ProductReference ProductReferenceFromJson(const json& j) {
     ProductReferenceManager::ProductReference product;
     product.name = j.value("name", "");
     product.description = j.value("description", "");
+    product.id = j.value("id", "");           // NEW: Load ID from JSON
     product.createdDate = j.value("createdDate", "");
     product.lastModified = j.value("lastModified", "");
 
@@ -210,6 +219,41 @@ namespace {
       std::cout << "[ProductReferenceManager] Error creating products directory: " << e.what() << std::endl;
     }
   }
+}
+
+// =============================================================================
+// ID GENERATION METHODS
+// =============================================================================
+
+// Helper method to load the next ID number from file
+int ProductReferenceManager::LoadNextProductId() {
+  std::ifstream file(ID_COUNTER_FILE);
+  if (!file.is_open()) {
+    // File doesn't exist, start with 1
+    return 1;
+  }
+
+  int nextId = 1;
+  file >> nextId;
+  file.close();
+
+  return std::max(1, nextId); // Ensure minimum of 1
+}
+
+// Helper method to save the next ID number to file
+void ProductReferenceManager::SaveNextProductId(int nextId) {
+  std::ofstream file(ID_COUNTER_FILE);
+  if (file.is_open()) {
+    file << nextId;
+    file.close();
+  }
+}
+
+// Helper method to generate formatted product ID
+std::string ProductReferenceManager::GenerateProductId(int idNumber) {
+  std::ostringstream oss;
+  oss << "PROD_" << std::setfill('0') << std::setw(6) << idNumber;
+  return oss.str();
 }
 
 // =============================================================================
@@ -298,13 +342,7 @@ bool ProductReferenceManager::LoadFromFile(const std::string& filename) {
 
       for (const auto& productJson : masterJson["products"]) {
         try {
-          ProductReference product = ProductReferenceFromJson(productJson);
-          product.lastModified = GetCurrentTimestamp();
-          m_productReferences.push_back(product);
-
-          std::cout << "[ProductReferenceManager] Loaded product: " << product.name
-            << " (Points: " << product.points.size()
-            << ", Edges: " << product.edges.size() << ")" << std::endl;
+          LoadProductFromJson(productJson);
         }
         catch (const std::exception& e) {
           std::cout << "[ProductReferenceManager] Error loading individual product: " << e.what() << std::endl;
@@ -316,13 +354,7 @@ bool ProductReferenceManager::LoadFromFile(const std::string& filename) {
       std::cout << "[ProductReferenceManager] Loading SingleProductReference format" << std::endl;
 
       try {
-        ProductReference product = ProductReferenceFromJson(masterJson["product"]);
-        product.lastModified = GetCurrentTimestamp();
-        m_productReferences.push_back(product);
-
-        std::cout << "[ProductReferenceManager] Loaded product: " << product.name
-          << " (Points: " << product.points.size()
-          << ", Edges: " << product.edges.size() << ")" << std::endl;
+        LoadProductFromJson(masterJson["product"]);
       }
       catch (const std::exception& e) {
         std::cout << "[ProductReferenceManager] Error loading product: " << e.what() << std::endl;
@@ -334,16 +366,7 @@ bool ProductReferenceManager::LoadFromFile(const std::string& filename) {
       std::cout << "[ProductReferenceManager] Loading legacy format" << std::endl;
 
       try {
-        ProductReference product = ProductReferenceFromJson(masterJson);
-        product.lastModified = GetCurrentTimestamp();
-        if (product.createdDate.empty()) {
-          product.createdDate = product.lastModified;
-        }
-        m_productReferences.push_back(product);
-
-        std::cout << "[ProductReferenceManager] Loaded product: " << product.name
-          << " (Points: " << product.points.size()
-          << ", Edges: " << product.edges.size() << ")" << std::endl;
+        LoadProductFromJson(masterJson);
       }
       catch (const std::exception& e) {
         std::cout << "[ProductReferenceManager] Error loading legacy format: " << e.what() << std::endl;
@@ -363,7 +386,37 @@ bool ProductReferenceManager::LoadFromFile(const std::string& filename) {
 }
 
 // =============================================================================
-// ADDITIONAL CONVENIENCE METHODS
+// NEW: HELPER METHOD FOR LOADING PRODUCTS WITH ID HANDLING
+// =============================================================================
+
+void ProductReferenceManager::LoadProductFromJson(const nlohmann::json& productJson) {
+  ProductReference product = ProductReferenceFromJson(productJson);
+
+  // If no ID exists in old files, generate one
+  if (product.id.empty()) {
+    int nextId = LoadNextProductId();
+    product.id = GenerateProductId(nextId);
+    SaveNextProductId(nextId + 1);
+    std::cout << "[ProductReferenceManager] Generated ID for legacy product: "
+      << product.id << std::endl;
+  }
+
+  // Update timestamps
+  product.lastModified = GetCurrentTimestamp();
+  if (product.createdDate.empty()) {
+    product.createdDate = product.lastModified;
+  }
+
+  // Add to collection
+  m_productReferences.push_back(product);
+
+  std::cout << "[ProductReferenceManager] Loaded product: " << product.name
+    << " (ID: " << product.id << ", Points: " << product.points.size()
+    << ", Edges: " << product.edges.size() << ")" << std::endl;
+}
+
+// =============================================================================
+// ADDITIONAL CONVENIENCE METHODS (UPDATED with ID support)
 // =============================================================================
 
 bool ProductReferenceManager::SaveProductToFile(const std::string& productName, const std::string& filename) const {
@@ -376,11 +429,9 @@ bool ProductReferenceManager::SaveProductToFile(const std::string& productName, 
 
     EnsureProductsDirectoryExists();
 
-    // Build full path
-    std::string fullPath = "products/" + filename;
-    if (fullPath.find(".json") == std::string::npos) {
-      fullPath += ".json";
-    }
+    // Build full path with ID in filename: filename_PROD_000001.json
+    std::string baseFilename = filename;
+    std::string fullPath = "products/" + baseFilename + "_" + product->id + ".json";
 
     // Create JSON for single product
     json productJson = ProductReferenceToJson(*product);
@@ -406,7 +457,7 @@ bool ProductReferenceManager::SaveProductToFile(const std::string& productName, 
     file.close();
 
     std::cout << "[ProductReferenceManager] Successfully saved product '" << productName
-      << "' to: " << fullPath << std::endl;
+      << "' (ID: " << product->id << ") to: " << fullPath << std::endl;
 
     return true;
   }
@@ -457,6 +508,15 @@ bool ProductReferenceManager::LoadProductFromFile(const std::string& filename) {
       product = ProductReferenceFromJson(fileJson);
     }
 
+    // Handle ID for loaded product
+    if (product.id.empty()) {
+      int nextId = LoadNextProductId();
+      product.id = GenerateProductId(nextId);
+      SaveNextProductId(nextId + 1);
+      std::cout << "[ProductReferenceManager] Generated ID for loaded product: "
+        << product.id << std::endl;
+    }
+
     // Check if product already exists
     if (HasProductReference(product.name)) {
       std::cout << "[ProductReferenceManager] Product '" << product.name
@@ -474,7 +534,7 @@ bool ProductReferenceManager::LoadProductFromFile(const std::string& filename) {
     m_productReferences.push_back(product);
 
     std::cout << "[ProductReferenceManager] Successfully loaded product: " << product.name
-      << " (Points: " << product.points.size()
+      << " (ID: " << product.id << ", Points: " << product.points.size()
       << ", Edges: " << product.edges.size() << ")" << std::endl;
 
     return true;

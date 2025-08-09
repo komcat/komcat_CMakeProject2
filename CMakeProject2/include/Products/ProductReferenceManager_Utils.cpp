@@ -40,3 +40,5 @@ std::string ProductReferenceManager::GetCurrentTimestamp() const {
   ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
   return ss.str();
 }
+
+
