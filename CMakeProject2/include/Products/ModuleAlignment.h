@@ -285,6 +285,58 @@ public:
    */
   const PositionStruct& GetCenterPosition() const { return m_alignmentResult.centerPosition; }
 
+
+
+  // =============================================================================
+  // LOCAL COORDINATE MOVEMENT
+  // =============================================================================
+
+  /**
+   * @brief Move device to specified local coordinate position
+   * @param localPosition Local coordinate position (relative to alignment center)
+   * @param deviceName Name of device to move (e.g., "gantry-main")
+   * @param waitForCompletion If true, waits for movement to complete
+   * @return True if movement command successful
+   */
+  bool MoveToLocalCoordinate(const PositionStruct& localPosition,
+    const std::string& deviceName = "gantry-main",
+    bool waitForCompletion = true);
+
+  /**
+   * @brief Move device to specified local coordinate position (convenience overload)
+   * @param x Local X coordinate (mm)
+   * @param y Local Y coordinate (mm)
+   * @param z Local Z coordinate (mm)
+   * @param deviceName Name of device to move (e.g., "gantry-main")
+   * @param waitForCompletion If true, waits for movement to complete
+   * @return True if movement command successful
+   */
+  bool MoveToLocalCoordinate(double x, double y, double z,
+    const std::string& deviceName = "gantry-main",
+    bool waitForCompletion = true);
+
+  /**
+   * @brief Get current device position in local coordinates
+   * @param deviceName Name of device to query
+   * @param localPosition Output local coordinate position
+   * @return True if position retrieved successfully
+   */
+  bool GetCurrentLocalPosition(const std::string& deviceName,
+    PositionStruct& localPosition);
+
+  /**
+   * @brief Move device relative to current position in local coordinates
+   * @param deltaX Change in local X coordinate (mm)
+   * @param deltaY Change in local Y coordinate (mm)
+   * @param deltaZ Change in local Z coordinate (mm)
+   * @param deviceName Name of device to move
+   * @param waitForCompletion If true, waits for movement to complete
+   * @return True if movement command successful
+   */
+  bool MoveToLocalCoordinateRelative(double deltaX, double deltaY, double deltaZ,
+    const std::string& deviceName = "gantry-main",
+    bool waitForCompletion = true);
+
 private:
   // =============================================================================
   // MEMBER VARIABLES

@@ -177,6 +177,79 @@ double MachineOperations::GetSequenceSuccessRate(const std::string& sequenceName
 }
 
 
+bool MachineOperations::MoveDeviceToPosition(const std::string& deviceName,
+  const PositionStruct& position,
+  bool waitForCompletion,
+  const std::string& callerContext) {
+
+  // Start operation tracking
+  std::string opId;
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"x", std::to_string(position.x)},
+        {"y", std::to_string(position.y)},
+        {"z", std::to_string(position.z)},
+        {"blocking", waitForCompletion ? "true" : "false"}
+    };
+    opId = m_resultsManager->StartOperation("MoveDeviceToPosition", deviceName, callerContext, "", parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Moving device " + deviceName + " to absolute position");
+
+  // Store start position for tracking
+  PositionStruct startPos;
+  bool hasStartPos = false;
+  if (m_resultsManager && !opId.empty()) {
+    if (m_motionLayer.GetCurrentPosition(deviceName, startPos)) {
+      StorePositionResult(opId, "start", startPos);
+      hasStartPos = true;
+    }
+  }
+
+  // Check device connection
+  if (!IsDeviceConnected(deviceName)) {
+    m_logger->LogError("MachineOperations: Device not connected: " + deviceName);
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", "Device not connected");
+    }
+    return false;
+  }
+
+  // Store target position
+  if (m_resultsManager && !opId.empty()) {
+    StorePositionResult(opId, "target", position);
+  }
+
+  // Use motion layer to move
+  bool success = m_motionLayer.MoveToPosition(deviceName, position, waitForCompletion);
+
+  // Store final results
+  if (m_resultsManager && !opId.empty()) {
+    if (success) {
+      PositionStruct finalPos;
+      if (m_motionLayer.GetCurrentPosition(deviceName, finalPos)) {
+        StorePositionResult(opId, "final", finalPos);
+        if (hasStartPos) {
+          double distance = GetDistanceBetweenPositions(startPos, finalPos);
+          m_resultsManager->StoreResult(opId, "distance_moved", std::to_string(distance));
+        }
+      }
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_resultsManager->EndOperation(opId, "failed", "Move operation failed");
+    }
+  }
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully moved device " + deviceName + " to position");
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to move device " + deviceName + " to position");
+  }
+
+  return success;
+}
 
 
 // machine_operations.cpp - REPLACE your MoveDeviceToNode method with this:

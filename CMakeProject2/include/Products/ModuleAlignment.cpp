@@ -1406,3 +1406,136 @@ bool ModuleAlignment::PerformMockDetection(const std::string& nodeName, VisionCi
 
   return true;
 }
+
+// Add this method to ModuleAlignment.cpp
+
+bool ModuleAlignment::MoveToLocalCoordinate(const PositionStruct& localPosition,
+  const std::string& deviceName,
+  bool waitForCompletion) {
+  if (m_logger) {
+    m_logger->LogInfo("ModuleAlignment: Moving to local coordinate (" +
+      std::to_string(localPosition.x) + ", " +
+      std::to_string(localPosition.y) + ", " +
+      std::to_string(localPosition.z) + ")");
+  }
+
+  // Check if we have a valid alignment
+  if (!m_hasValidAlignment) {
+    SetError("No valid alignment available - perform alignment first");
+    return false;
+  }
+
+  // Check if MachineOperations is available
+  if (!m_machineOperations) {
+    SetError("MachineOperations not set - call SetMachineOperations() first");
+    return false;
+  }
+
+  // Transform local coordinates to machine coordinates
+  PositionStruct machinePosition;
+  if (!TransformAlignmentToMachine(localPosition, machinePosition)) {
+    SetError("Failed to transform local coordinates to machine coordinates");
+    return false;
+  }
+
+  if (m_logger) {
+    m_logger->LogInfo("ModuleAlignment: Transformed local (" +
+      std::to_string(localPosition.x) + ", " +
+      std::to_string(localPosition.y) + ", " +
+      std::to_string(localPosition.z) + ") to machine (" +
+      std::to_string(machinePosition.x) + ", " +
+      std::to_string(machinePosition.y) + ", " +
+      std::to_string(machinePosition.z) + ")");
+  }
+
+  // Move the device to the calculated machine position
+  bool moveSuccess = m_machineOperations->MoveDeviceToPosition(deviceName, machinePosition, waitForCompletion);
+
+  if (!moveSuccess) {
+    SetError("Failed to move device '" + deviceName + "' to calculated machine position");
+    return false;
+  }
+
+  if (m_logger) {
+    m_logger->LogInfo("ModuleAlignment: Successfully moved " + deviceName +
+      " to local coordinate (" + std::to_string(localPosition.x) + ", " +
+      std::to_string(localPosition.y) + ", " + std::to_string(localPosition.z) + ")");
+  }
+
+  return true;
+}
+
+bool ModuleAlignment::MoveToLocalCoordinate(double x, double y, double z,
+  const std::string& deviceName,
+  bool waitForCompletion) {
+  PositionStruct localPos = { x, y, z, 0, 0, 0 };
+  return MoveToLocalCoordinate(localPos, deviceName, waitForCompletion);
+}
+
+bool ModuleAlignment::GetCurrentLocalPosition(const std::string& deviceName,
+  PositionStruct& localPosition) {
+  if (m_logger) {
+    m_logger->LogInfo("ModuleAlignment: Getting current local position for " + deviceName);
+  }
+
+  // Check if we have a valid alignment
+  if (!m_hasValidAlignment) {
+    SetError("No valid alignment available - perform alignment first");
+    return false;
+  }
+
+  // Check if MachineOperations is available
+  if (!m_machineOperations) {
+    SetError("MachineOperations not set - call SetMachineOperations() first");
+    return false;
+  }
+
+  // Get current machine position
+  PositionStruct machinePosition;
+  if (!m_machineOperations->GetDeviceCurrentPosition(deviceName, machinePosition)) {
+    SetError("Failed to get current machine position for device: " + deviceName);
+    return false;
+  }
+
+  // Transform machine coordinates to local coordinates
+  if (!TransformMachineToAlignment(machinePosition, localPosition)) {
+    SetError("Failed to transform machine coordinates to local coordinates");
+    return false;
+  }
+
+  if (m_logger) {
+    m_logger->LogInfo("ModuleAlignment: Current local position for " + deviceName + ": (" +
+      std::to_string(localPosition.x) + ", " +
+      std::to_string(localPosition.y) + ", " +
+      std::to_string(localPosition.z) + ")");
+  }
+
+  return true;
+}
+
+bool ModuleAlignment::MoveToLocalCoordinateRelative(double deltaX, double deltaY, double deltaZ,
+  const std::string& deviceName,
+  bool waitForCompletion) {
+  if (m_logger) {
+    m_logger->LogInfo("ModuleAlignment: Moving relative by local delta (" +
+      std::to_string(deltaX) + ", " + std::to_string(deltaY) + ", " + std::to_string(deltaZ) + ")");
+  }
+
+  // Get current local position
+  PositionStruct currentLocalPos;
+  if (!GetCurrentLocalPosition(deviceName, currentLocalPos)) {
+    return false; // Error already set
+  }
+
+  // Calculate target local position
+  PositionStruct targetLocalPos;
+  targetLocalPos.x = currentLocalPos.x + deltaX;
+  targetLocalPos.y = currentLocalPos.y + deltaY;
+  targetLocalPos.z = currentLocalPos.z + deltaZ;
+  targetLocalPos.u = currentLocalPos.u; // Keep rotational axes unchanged
+  targetLocalPos.v = currentLocalPos.v;
+  targetLocalPos.w = currentLocalPos.w;
+
+  // Move to the target position
+  return MoveToLocalCoordinate(targetLocalPos, deviceName, waitForCompletion);
+}

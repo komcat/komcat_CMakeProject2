@@ -106,7 +106,11 @@ public:
 
 	//update method with caller Context
 	//updated
-
+	// Add this method declaration in the public section
+	bool MoveDeviceToPosition(const std::string& deviceName,
+		const PositionStruct& position,
+		bool waitForCompletion = true,
+		const std::string& callerContext = "");
 	// NEW: Methods that accept caller context for tracking
 	bool MoveDeviceToNode(const std::string& deviceName, const std::string& graphName,
 		const std::string& targetNodeId, bool blocking = true,

@@ -465,6 +465,109 @@ void ModuleAlignmentUI::RenderTransformationTestSection() {
     return;
   }
 
+  // =============================================================================
+  // MOVE TO LOCAL COORDINATE SECTION
+  // =============================================================================
+
+  ImGui::Text("🎯 Move to Local Coordinate");
+  ImGui::Separator();
+
+  // Input fields for target local position
+  ImGui::Text("Target Local Position (mm):");
+  ImGui::InputFloat3("##TargetLocalPos", m_targetLocalPos);
+
+  // Device selection
+  ImGui::Text("Device:");
+  ImGui::SameLine();
+  ImGui::InputText("##DeviceName", m_deviceName, sizeof(m_deviceName));
+
+  // Wait for completion option
+  ImGui::Checkbox("Wait for completion", &m_waitForCompletion);
+  ImGui::SameLine();
+  ImGui::TextDisabled("(?)");
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("If checked, waits for movement to complete before returning");
+  }
+
+  // Move button
+  bool canMove = m_moduleAlignment && m_moduleAlignment->HasValidAlignment() &&
+    m_moduleAlignment->IsReadyForAlignment();
+
+  if (!canMove) {
+    ImGui::BeginDisabled();
+  }
+
+  if (ImGui::Button("Move to Local Position", ImVec2(180, 30))) {
+    ExecuteMoveToLocal();
+  }
+
+  if (!canMove) {
+    ImGui::EndDisabled();
+    ImGui::TextColored(ImVec4(1, 0, 0, 1), "System not ready for movement");
+  }
+
+  // Quick position buttons
+  ImGui::Spacing();
+  ImGui::Text("Quick Positions:");
+
+  if (ImGui::Button("Go to Center (0,0,0)", ImVec2(140, 25))) {
+    m_targetLocalPos[0] = 0.0f;
+    m_targetLocalPos[1] = 0.0f;
+    m_targetLocalPos[2] = 0.0f;
+    ExecuteMoveToLocal();
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Move +5mm X", ImVec2(100, 25))) {
+    m_targetLocalPos[0] += 5.0f;
+    ExecuteMoveToLocal();
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Move -5mm X", ImVec2(100, 25))) {
+    m_targetLocalPos[0] -= 5.0f;
+    ExecuteMoveToLocal();
+  }
+
+  if (ImGui::Button("Move +5mm Y", ImVec2(100, 25))) {
+    m_targetLocalPos[1] += 5.0f;
+    ExecuteMoveToLocal();
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Move -5mm Y", ImVec2(100, 25))) {
+    m_targetLocalPos[1] -= 5.0f;
+    ExecuteMoveToLocal();
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Get Current Position", ImVec2(150, 25))) {
+    GetCurrentLocalPosition();
+  }
+
+  // Show current local position
+  ImGui::Spacing();
+  ImGui::Text("Current Local Position:");
+  ImGui::InputFloat3("##CurrentLocalPos", m_currentLocalPos);
+  ImGui::SameLine();
+  ImGui::TextDisabled("(Read-only)");
+
+  // Movement status
+  if (!m_lastMoveStatus.empty()) {
+    ImVec4 statusColor = m_lastMoveSuccess ? ImVec4(0, 1, 0, 1) : ImVec4(1, 0, 0, 1);
+    ImGui::TextColored(statusColor, "Last Move: %s", m_lastMoveStatus.c_str());
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+
+  // =============================================================================
+  // COORDINATE TRANSFORMATION TESTING (EXISTING)
+  // =============================================================================
+
+  ImGui::Text("📐 Coordinate Transformation Testing");
+  ImGui::Separator();
+
   // Machine to Alignment transformation
   ImGui::Text("Machine → Alignment Coordinates");
   ImGui::InputFloat3("Machine Position (mm)", m_testMachinePos);
@@ -529,7 +632,6 @@ void ModuleAlignmentUI::RenderTransformationTestSection() {
     m_testAlignmentPos[2] = 0.0f;
   }
 }
-
 void ModuleAlignmentUI::RenderAdvancedSettings() {
   ImGui::Text("Advanced Settings & Diagnostics");
   ImGui::Separator();
@@ -771,7 +873,7 @@ void ModuleAlignmentUI::UpdateProgress() {
     return;
   }
 
-  std::cout << "UpdateProgress: Checking alignment future..." << std::endl;
+  //std::cout << "UpdateProgress: Checking alignment future..." << std::endl;
 
   // Check if alignment is complete
   if (m_alignmentFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
@@ -959,4 +1061,73 @@ double ModuleAlignmentUI::CalculateAngleBetweenVectors(const ModuleAlignment::Ve
   cosAngle = (std::max)(-1.0, (std::min)(1.0, cosAngle)); // Clamp to [-1, 1]
 
   return std::acos(cosAngle) * 180.0 / M_PI;
+}
+
+// Add these methods to ModuleAlignmentUI.cpp:
+
+void ModuleAlignmentUI::ExecuteMoveToLocal() {
+  if (!m_moduleAlignment || !m_moduleAlignment->HasValidAlignment()) {
+    m_lastMoveStatus = "No valid alignment available";
+    m_lastMoveSuccess = false;
+    return;
+  }
+
+  if (!m_moduleAlignment->IsReadyForAlignment()) {
+    m_lastMoveStatus = "System not ready for movement";
+    m_lastMoveSuccess = false;
+    return;
+  }
+
+  // Execute the move
+  bool success = m_moduleAlignment->MoveToLocalCoordinate(
+    m_targetLocalPos[0],
+    m_targetLocalPos[1],
+    m_targetLocalPos[2],
+    m_deviceName,
+    m_waitForCompletion
+  );
+
+  // Update status
+  m_lastMoveSuccess = success;
+
+  if (success) {
+    m_lastMoveStatus = "Move to (" +
+      std::to_string(m_targetLocalPos[0]) + ", " +
+      std::to_string(m_targetLocalPos[1]) + ", " +
+      std::to_string(m_targetLocalPos[2]) + ") completed";
+
+    // Update current position display
+    GetCurrentLocalPosition();
+
+    std::cout << "ModuleAlignmentUI: Successfully moved to local position ("
+      << m_targetLocalPos[0] << ", " << m_targetLocalPos[1] << ", " << m_targetLocalPos[2] << ")" << std::endl;
+  }
+  else {
+    m_lastMoveStatus = "Move failed: " + m_moduleAlignment->GetLastError();
+    std::cout << "ModuleAlignmentUI: Move to local position failed: " << m_moduleAlignment->GetLastError() << std::endl;
+  }
+}
+
+void ModuleAlignmentUI::GetCurrentLocalPosition() {
+  if (!m_moduleAlignment || !m_moduleAlignment->HasValidAlignment()) {
+    m_currentLocalPos[0] = 0.0f;
+    m_currentLocalPos[1] = 0.0f;
+    m_currentLocalPos[2] = 0.0f;
+    return;
+  }
+
+  PositionStruct localPos;
+  bool success = m_moduleAlignment->GetCurrentLocalPosition(m_deviceName, localPos);
+
+  if (success) {
+    m_currentLocalPos[0] = static_cast<float>(localPos.x);
+    m_currentLocalPos[1] = static_cast<float>(localPos.y);
+    m_currentLocalPos[2] = static_cast<float>(localPos.z);
+
+    std::cout << "ModuleAlignmentUI: Current local position: ("
+      << localPos.x << ", " << localPos.y << ", " << localPos.z << ")" << std::endl;
+  }
+  else {
+    std::cout << "ModuleAlignmentUI: Failed to get current local position: " << m_moduleAlignment->GetLastError() << std::endl;
+  }
 }

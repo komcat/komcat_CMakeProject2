@@ -160,4 +160,25 @@ private:
   // Helper function for angle calculation
   double CalculateAngleBetweenVectors(const ModuleAlignment::Vector3D& v1,
     const ModuleAlignment::Vector3D& v2) const;
+
+
+  // =============================================================================
+// MEMBER VARIABLES (ADD THESE)
+// =============================================================================
+
+// Move to Local Coordinate functionality
+  float m_targetLocalPos[3] = { 0.0f, 0.0f, 0.0f };     // Target local position
+  float m_currentLocalPos[3] = { 0.0f, 0.0f, 0.0f };    // Current local position (read-only)
+  char m_deviceName[64] = "gantry-main";                  // Device name for movement
+  bool m_waitForCompletion = true;                        // Wait for movement completion
+  std::string m_lastMoveStatus = "";                      // Status of last move operation
+  bool m_lastMoveSuccess = false;                         // Success flag for last move
+
+  // =============================================================================
+  // PRIVATE METHODS (ADD THESE)
+  // =============================================================================
+
+  // Movement execution methods
+  void ExecuteMoveToLocal();
+  void GetCurrentLocalPosition();
 };
