@@ -22,6 +22,7 @@
 #include "include/eziio/IOControlPanel.h"
 #include "UIVisionPanel.h"
 #include "DatumUI.h"  // ADD THIS LINE - Include new DatumUI class
+#include "ModuleAlignmentUI.h"
 
 // Forward declarations
 class MotionConfigManager;
@@ -85,7 +86,8 @@ public:
   enum class VisionSubPage {
     NONE = 0,
     FIDUCIAL,
-    DATUM_REFERENCE
+    DATUM_REFERENCE,
+    MODULE_ALIGNMENT
   };
 
 public:
@@ -161,6 +163,7 @@ private:
   std::unique_ptr<UICameraPanel> m_cameraPanelUI;
   std::unique_ptr<GlobalDataStoreViewerUI> m_globalDataStoreViewerUI;
   std::unique_ptr<MacroPanelUI> m_macroPanelUI;
+  std::unique_ptr<ModuleAlignmentUI> m_moduleAlignmentUI;
 
   CLD101xManager* m_cld101xManager = nullptr;
 
@@ -170,7 +173,7 @@ private:
   DataClientManager* m_dataClientManager = nullptr;
   Keithley2400Manager* m_keithleyManager = nullptr;
   ConfigFileWatchdog* m_configWatchdog = nullptr;
-
+  
   // Jog window
   bool m_showGlobalJogWindow = false;
 
@@ -255,5 +258,5 @@ private:
   void RenderVisionSubPage();
   void RenderFiducialPage();
   void RenderDatumReferencePage();
-
+  void RenderModuleAlignmentPage();
 };

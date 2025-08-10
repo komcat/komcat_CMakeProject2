@@ -87,7 +87,7 @@ public:
 
 	~MachineOperations();
 
-
+	Logger* m_logger;
 
 	// Add these public methods for result access
 	std::shared_ptr<OperationResultsManager> GetResultsManager() { return m_resultsManager; }
@@ -455,7 +455,7 @@ public:
 
 
 private:
-	Logger* m_logger;
+	
 	bool m_enableDebug = false;
 	
 	// Core system references

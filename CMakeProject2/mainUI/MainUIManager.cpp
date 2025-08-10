@@ -98,6 +98,9 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 	// ADD THIS: Initialize DatumUI
 	m_datumUI = std::make_unique<DatumUI>();
 	std::cout << "MainUIManager: DatumUI created successfully" << std::endl;
+	// ADD THIS: Initialize ModuleAlignmentUI
+	m_moduleAlignmentUI = std::make_unique<ModuleAlignmentUI>();
+	std::cout << "MainUIManager: ModuleAlignmentUI created successfully" << std::endl;
 
 }
 
@@ -451,6 +454,9 @@ void MainUIManager::RenderBreadcrumbs() {
 		case VisionSubPage::DATUM_REFERENCE:
 			breadcrumb += " > Datum Reference";
 			break;
+		case VisionSubPage::MODULE_ALIGNMENT:     // ADD THIS CASE
+			breadcrumb += " > Module Alignment";  // ADD THIS CASE
+			break;                                // ADD THIS CASE
 		}
 		break;
 	}
@@ -981,9 +987,8 @@ void MainUIManager::RenderConfigPage() {
 }
 
 
-// REPLACE the existing RenderVisionPage() method with:
 
-// 4. REPLACE existing RenderVisionPage() with this landing page:
+// Update RenderVisionPage() to include the third button:
 void MainUIManager::RenderVisionPage() {
 	ImGui::SetWindowFontScale(1.5f);
 	ImGui::Text("Vision System");
@@ -1000,10 +1005,15 @@ void MainUIManager::RenderVisionPage() {
 	if (ImGui::Button("2. Datum Reference", ImVec2(250, 50))) {
 		currentVisionSubPage = VisionSubPage::DATUM_REFERENCE;
 	}
+
+	// ADD THIS: Third button for Module Alignment
+	if (ImGui::Button("3. Module Alignment", ImVec2(250, 50))) {
+		currentVisionSubPage = VisionSubPage::MODULE_ALIGNMENT;
+	}
 }
 
 
-// 5. ADD new method to handle Vision sub-pages:
+// Update RenderVisionSubPage() to handle Module Alignment:
 void MainUIManager::RenderVisionSubPage() {
 	switch (currentVisionSubPage) {
 	case VisionSubPage::FIDUCIAL:
@@ -1012,11 +1022,13 @@ void MainUIManager::RenderVisionSubPage() {
 	case VisionSubPage::DATUM_REFERENCE:
 		RenderDatumReferencePage();
 		break;
+	case VisionSubPage::MODULE_ALIGNMENT:       // ADD THIS CASE
+		RenderModuleAlignmentPage();             // ADD THIS CASE
+		break;                                   // ADD THIS CASE
 	default:
 		break;
 	}
 }
-
 
 // 6. ADD Fiducial page method (move current UIVisionPanel here):
 void MainUIManager::RenderFiducialPage() {
@@ -1242,6 +1254,12 @@ void MainUIManager::SetCameraManager(CameraManager* cameraManager) {
 		std::cout << "MainUIManager: Vision Panel connected to Camera Manager" << std::endl;
 	}
 
+	// ADD THIS: Connect camera manager to ModuleAlignmentUI
+	if (m_moduleAlignmentUI && m_cameraManager) {
+		m_moduleAlignmentUI->SetCameraManager(m_cameraManager);
+		std::cout << "MainUIManager: ModuleAlignmentUI updated with Camera Manager" << std::endl;
+	}
+
 }
 
 
@@ -1281,6 +1299,12 @@ void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
 			// 1. Create UserPromptUI
 			m_userPromptUI = std::make_unique<UserPromptUI>();
 			std::cout << "MainUIManager: UserPromptUI created" << std::endl;
+		}
+
+		// ADD THIS: Connect to ModuleAlignmentUI
+		if (m_moduleAlignmentUI) {
+			m_moduleAlignmentUI->SetMachineOperations(m_machineOperations);
+			std::cout << "MainUIManager: ModuleAlignmentUI updated with MachineOperations" << std::endl;
 		}
 
 		if (!m_runPageUI) {
@@ -1568,4 +1592,26 @@ void MainUIManager::SetupVisionPanel() {
 		m_visionPanelUI->SetCameraManager(m_cameraManager);
 		std::cout << "MainUIManager: Connected CameraManager to Vision Panel" << std::endl;
 	}
+
+
 }
+
+// Add the new RenderModuleAlignmentPage() method:
+void MainUIManager::RenderModuleAlignmentPage() {
+	if (m_moduleAlignmentUI) {
+		m_moduleAlignmentUI->RenderUI();
+	}
+	else {
+		// Fallback if ModuleAlignmentUI is not initialized
+		ImGui::SetWindowFontScale(1.5f);
+		ImGui::Text("Module Alignment");
+		ImGui::SetWindowFontScale(1.0f);
+
+		ImGui::Spacing();
+		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Module Alignment System not available");
+		ImGui::Text("ModuleAlignmentUI has not been initialized.");
+		ImGui::Spacing();
+		ImGui::Text("This is an internal error - please check the console for details.");
+	}
+}
+
