@@ -144,7 +144,7 @@ private:
   bool m_showAdvancedSettings = false;
   bool m_showResultDetails = false;
   // UI Tab Control
-  int m_activeTab = 0;                   // 0=Config, 1=Results, 2=Saved, 3=Transform, 4=Advanced
+  int m_activeTab = 0;                   // 0=Config, 1=Results, 2=Saved, 3=Transform, 4=Points, 5=Advanced
   bool m_autoSwitchToResults = true;     // Automatically switch to Results tab when alignment completes
 
   // Move to Local Coordinate functionality
@@ -165,6 +165,7 @@ private:
   void RenderResultsSection();
   void RenderSavedAlignmentsSection();
   void RenderTransformationTestSection();
+  void RenderPointsNavigationSection(); // NEW: Points navigation tab
   void RenderAdvancedSettings();
 
   // ADD: ProductReference UI sections
@@ -204,4 +205,9 @@ private:
   void ApplyProductNodesToAlignment(const std::string& productName);
   bool GetProductFiducialNodes(const std::string& productName,
     std::string& node1, std::string& node2, std::string& node3);
+
+  // NEW: Points navigation helper methods
+  void NavigateToPoint(const std::string& productName, const std::string& pointName);
+  void NavigateToAlignmentCoordinate(double x, double y, double z);
+  std::string GetActionTypeString(const std::string& actionType);
 };
