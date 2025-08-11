@@ -231,12 +231,12 @@ void DatumUI::RenderVisualDisplay() {
       DrawPoint(drawList, point, canvasPos, canvasSize, pointColor);
 
       // Draw point labels if enabled
-      if (m_showPointLabels) {
-        ImVec2 pointPos = WorldToScreen(point, canvasPos, canvasSize);
-        pointPos.y -= 15; // Offset label above point
-        ImU32 labelColor = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-        drawList->AddText(pointPos, labelColor, point.name.c_str());
-      }
+      //if (m_showPointLabels) {
+      //  ImVec2 pointPos = WorldToScreen(point, canvasPos, canvasSize);
+      //  pointPos.y -= 15; // Offset label above point
+      //  ImU32 labelColor = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+      //  drawList->AddText(pointPos, labelColor, point.name.c_str());
+      //}
     }
   }
 
