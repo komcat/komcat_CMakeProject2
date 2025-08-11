@@ -404,7 +404,10 @@ bool ModuleAlignment::CalculateCoordinateSystem() {
   Vector3D pos3 = realWorldPositions[2];  // Node 3
 
   // Calculate center position: ctr = (pos1 + pos2 + pos3) / 3
-  Vector3D center = (pos1 + pos2 + pos3) * (1.0 / 3.0);
+  Vector3D pos4 = pos2 + pos3 - pos1;  // Calculate 4th corner
+  Vector3D center = (pos1 + pos4) * 0.5;  // Rectangle center
+
+
   m_alignmentResult.centerPosition.x = center.x;
   m_alignmentResult.centerPosition.y = center.y;
   m_alignmentResult.centerPosition.z = center.z;

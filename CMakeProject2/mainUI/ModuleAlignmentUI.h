@@ -2,6 +2,7 @@
 #pragma once
 
 #include "ModuleAlignment.h"
+#include "ProductReferenceManager.h"  // ADD: ProductReference integration
 #include "imgui.h"
 #include <memory>
 #include <string>
@@ -18,6 +19,7 @@
  * - Saving/loading alignment configurations
  * - Displaying alignment results and coordinate transformations
  * - Testing coordinate conversions
+ * - ProductReference file loading for automatic node selection
  */
 class ModuleAlignmentUI {
 public:
@@ -66,6 +68,14 @@ public:
    */
   void SetCameraManager(CameraManager* cameraManager);
 
+  // ADD: ProductReference integration
+  /**
+   * @brief Set ProductReferenceManager for automatic node selection
+   */
+  void SetProductReferenceManager(std::shared_ptr<ProductReferenceManager> manager) {
+    m_productReferenceManager = manager;
+  }
+
 private:
   // =============================================================================
   // UI STATE MANAGEMENT
@@ -85,6 +95,9 @@ private:
   // Core system
   std::unique_ptr<ModuleAlignment> m_moduleAlignment;
 
+  // ADD: ProductReference manager
+  std::shared_ptr<ProductReferenceManager> m_productReferenceManager;
+
   // UI state
   bool m_showWindow = true;
   AlignmentState m_currentState = AlignmentState::IDLE;
@@ -94,6 +107,14 @@ private:
   char m_node2Name[64] = "calib_node_2";
   char m_node3Name[64] = "calib_node_3";
   bool m_useRobotZ = false;
+
+  // ADD: ProductReference file loading
+  bool m_showProductFileSection = false;
+  std::vector<std::string> m_availableProductFiles;
+  std::vector<std::string> m_loadedProducts;
+  int m_selectedProductIndex = -1;
+  std::string m_selectedProductName = "";
+  char m_productFilePath[256] = "products/";
 
   // Progress tracking
   std::future<ModuleAlignment::AlignmentResult> m_alignmentFuture;
@@ -126,6 +147,14 @@ private:
   int m_activeTab = 0;                   // 0=Config, 1=Results, 2=Saved, 3=Transform, 4=Advanced
   bool m_autoSwitchToResults = true;     // Automatically switch to Results tab when alignment completes
 
+  // Move to Local Coordinate functionality
+  float m_targetLocalPos[3] = { 0.0f, 0.0f, 0.0f };     // Target local position
+  float m_currentLocalPos[3] = { 0.0f, 0.0f, 0.0f };    // Current local position (read-only)
+  char m_deviceName[64] = "gantry-main";                  // Device name for movement
+  bool m_waitForCompletion = true;                        // Wait for movement completion
+  std::string m_lastMoveStatus = "";                      // Status of last move operation
+  bool m_lastMoveSuccess = false;                         // Success flag for last move
+
   // =============================================================================
   // PRIVATE METHODS
   // =============================================================================
@@ -137,6 +166,10 @@ private:
   void RenderSavedAlignmentsSection();
   void RenderTransformationTestSection();
   void RenderAdvancedSettings();
+
+  // ADD: ProductReference UI sections
+  void RenderProductFileSection();
+  void RenderProductSelection();
 
   // Dialog rendering
   void RenderSaveDialog();
@@ -156,29 +189,19 @@ private:
   ImVec4 GetStateColor(AlignmentState state) const;
   const char* GetStateText(AlignmentState state) const;
 
-
   // Helper function for angle calculation
   double CalculateAngleBetweenVectors(const ModuleAlignment::Vector3D& v1,
     const ModuleAlignment::Vector3D& v2) const;
 
-
-  // =============================================================================
-// MEMBER VARIABLES (ADD THESE)
-// =============================================================================
-
-// Move to Local Coordinate functionality
-  float m_targetLocalPos[3] = { 0.0f, 0.0f, 0.0f };     // Target local position
-  float m_currentLocalPos[3] = { 0.0f, 0.0f, 0.0f };    // Current local position (read-only)
-  char m_deviceName[64] = "gantry-main";                  // Device name for movement
-  bool m_waitForCompletion = true;                        // Wait for movement completion
-  std::string m_lastMoveStatus = "";                      // Status of last move operation
-  bool m_lastMoveSuccess = false;                         // Success flag for last move
-
-  // =============================================================================
-  // PRIVATE METHODS (ADD THESE)
-  // =============================================================================
-
   // Movement execution methods
   void ExecuteMoveToLocal();
   void GetCurrentLocalPosition();
+
+  // ADD: ProductReference helper methods
+  void RefreshProductFileList();
+  void LoadProductFile(const std::string& filePath);
+  void RefreshLoadedProducts();
+  void ApplyProductNodesToAlignment(const std::string& productName);
+  bool GetProductFiducialNodes(const std::string& productName,
+    std::string& node1, std::string& node2, std::string& node3);
 };

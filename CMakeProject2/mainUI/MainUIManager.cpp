@@ -102,6 +102,10 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 	m_moduleAlignmentUI = std::make_unique<ModuleAlignmentUI>();
 	std::cout << "MainUIManager: ModuleAlignmentUI created successfully" << std::endl;
 
+	// ADD these lines right after:
+	auto productReferenceManager = std::make_shared<ProductReferenceManager>();
+	m_moduleAlignmentUI->SetProductReferenceManager(productReferenceManager);
+
 }
 
 

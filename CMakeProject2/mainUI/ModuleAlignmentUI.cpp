@@ -1,9 +1,10 @@
-﻿// ModuleAlignmentUI.cpp - Implementation of module alignment user interface
+﻿// ModuleAlignmentUI.cpp - Implementation with ProductReference integration
 #include "ModuleAlignmentUI.h"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
+#include <filesystem>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -16,6 +17,9 @@
 ModuleAlignmentUI::ModuleAlignmentUI() {
   m_moduleAlignment = std::make_unique<ModuleAlignment>();
   RefreshSavedAlignments();
+
+  // Initialize ProductReference file path
+  strcpy_s(m_productFilePath, "products/");
 }
 
 ModuleAlignmentUI::~ModuleAlignmentUI() {
@@ -47,9 +51,8 @@ void ModuleAlignmentUI::SetCameraManager(CameraManager* cameraManager) {
 void ModuleAlignmentUI::RenderUI() {
   if (!m_showWindow) return;
 
-  // FIXED: Update progress if alignment is running OR if we have a ready future to collect
+  // Update progress if alignment is running
   bool shouldUpdateProgress = (m_currentState == AlignmentState::RUNNING) && m_alignmentFuture.valid();
-
   if (shouldUpdateProgress) {
     UpdateProgress();
   }
@@ -144,12 +147,18 @@ void ModuleAlignmentUI::RenderUI() {
 
   ImGui::End();
 }
+
 // =============================================================================
 // UI SECTION RENDERING
 // =============================================================================
 
 void ModuleAlignmentUI::RenderAlignmentConfiguration() {
   ImGui::Text("3-Point Alignment Configuration");
+  ImGui::Separator();
+
+  // ADD: ProductReference file section
+  RenderProductFileSection();
+
   ImGui::Separator();
 
   // Node configuration
@@ -241,6 +250,297 @@ void ModuleAlignmentUI::RenderAlignmentConfiguration() {
   }
 }
 
+// =============================================================================
+// ADD: PRODUCTREFERENCE FILE SECTION
+// =============================================================================
+
+void ModuleAlignmentUI::RenderProductFileSection() {
+  ImGui::Text("📁 ProductReference Files");
+
+  // Toggle section visibility
+  if (ImGui::Button(m_showProductFileSection ? "Hide Files ▼" : "Show Files ▶")) {
+    m_showProductFileSection = !m_showProductFileSection;
+    if (m_showProductFileSection) {
+      RefreshProductFileList();
+      RefreshLoadedProducts();
+    }
+  }
+
+  if (!m_showProductFileSection) {
+    return;
+  }
+
+  ImGui::Indent();
+
+  // Directory path
+  ImGui::Text("Directory:");
+  ImGui::SameLine();
+  ImGui::InputText("##ProductDir", m_productFilePath, sizeof(m_productFilePath));
+  ImGui::SameLine();
+  if (ImGui::Button("Scan")) {
+    RefreshProductFileList();
+  }
+
+  // Available files
+  ImGui::Text("Available Files:");
+  if (m_availableProductFiles.empty()) {
+    ImGui::TextColored(ImVec4(1, 1, 0, 1), "No .json files found in directory");
+  }
+  else {
+    if (ImGui::BeginListBox("##ProductFiles", ImVec2(-1, 100))) {
+      for (size_t i = 0; i < m_availableProductFiles.size(); i++) {
+        if (ImGui::Selectable(m_availableProductFiles[i].c_str())) {
+          // FIX: Pass just the filename, not the full path
+          std::string fileName = m_availableProductFiles[i]; // Just filename, no "products/" prefix
+          std::cout << "Loading file: " << fileName << std::endl;
+          LoadProductFile(fileName);
+        }
+      }
+      ImGui::EndListBox();
+    }
+  }
+
+  // Loaded products section
+  ImGui::Spacing();
+  RenderProductSelection();
+
+  ImGui::Unindent();
+}
+
+void ModuleAlignmentUI::RenderProductSelection() {
+  ImGui::Text("Loaded Products:");
+
+
+  // DEBUG: Add status check
+  if (!m_productReferenceManager) {
+    ImGui::TextColored(ImVec4(1, 0, 0, 1), "ProductReferenceManager not set");
+    std::cout << "DEBUG: ProductReferenceManager is null in RenderProductSelection" << std::endl;
+    return;
+  }
+
+  // DEBUG: Show product count
+  const auto& allProducts = m_productReferenceManager->GetAllProductReferences();
+  ImGui::Text("DEBUG: Manager has %zu products", allProducts.size());
+
+
+  if (!m_productReferenceManager) {
+    ImGui::TextColored(ImVec4(1, 0, 0, 1), "ProductReferenceManager not set");
+    return;
+  }
+
+  if (m_loadedProducts.empty()) {
+    // DEBUG: Add manual refresh button
+    if (ImGui::Button("DEBUG: Manual Refresh")) {
+      std::cout << "Manual refresh triggered" << std::endl;
+      RefreshLoadedProducts();
+    }
+    ImGui::TextColored(ImVec4(1, 1, 0, 1), "No products loaded");
+    return;
+  }
+
+  // Product selection dropdown
+  if (ImGui::BeginCombo("##LoadedProducts",
+    m_selectedProductIndex >= 0 ? m_loadedProducts[m_selectedProductIndex].c_str() : "Select Product...")) {
+
+    for (int i = 0; i < static_cast<int>(m_loadedProducts.size()); i++) {
+      bool isSelected = (i == m_selectedProductIndex);
+      if (ImGui::Selectable(m_loadedProducts[i].c_str(), isSelected)) {
+        m_selectedProductIndex = i;
+        m_selectedProductName = m_loadedProducts[i];
+      }
+      if (isSelected) {
+        ImGui::SetItemDefaultFocus();
+      }
+    }
+    ImGui::EndCombo();
+  }
+
+  // Apply button
+  if (m_selectedProductIndex >= 0) {
+    ImGui::SameLine();
+    if (ImGui::Button("Apply Nodes")) {
+      ApplyProductNodesToAlignment(m_selectedProductName);
+    }
+
+    // Show product info
+    if (m_productReferenceManager) {
+      const auto* product = m_productReferenceManager->GetProductReference(m_selectedProductName);
+      if (product) {
+        ImGui::Text("Product: %s", product->name.c_str());
+        if (!product->id.empty()) {
+          ImGui::SameLine();
+          ImGui::TextColored(ImVec4(0, 1, 0, 1), "ID: %s", product->id.c_str());
+        }
+        ImGui::Text("Points: %zu", product->points.size());
+      }
+    }
+  }
+}
+
+// =============================================================================
+// PRODUCTREFERENCE HELPER METHODS
+// =============================================================================
+
+void ModuleAlignmentUI::RefreshProductFileList() {
+  m_availableProductFiles.clear();
+
+  try {
+    std::string dirPath = m_productFilePath;
+    if (std::filesystem::exists(dirPath) && std::filesystem::is_directory(dirPath)) {
+      for (const auto& entry : std::filesystem::directory_iterator(dirPath)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".json") {
+          m_availableProductFiles.push_back(entry.path().filename().string());
+        }
+      }
+      std::sort(m_availableProductFiles.begin(), m_availableProductFiles.end());
+    }
+  }
+  catch (const std::exception& e) {
+    std::cout << "Error scanning directory: " << e.what() << std::endl;
+  }
+}
+
+
+
+void ModuleAlignmentUI::LoadProductFile(const std::string& filePath) {
+  std::cout << "=== LoadProductFile called with: " << filePath << std::endl;
+
+  if (!m_productReferenceManager) {
+    std::cout << "ERROR: ProductReferenceManager is null!" << std::endl;
+    return;
+  }
+
+  try {
+    // FIX: Remove the directory prefix since ProductReferenceManager adds it internally
+    std::string fileName = filePath;
+
+    // If filePath starts with "products/", remove it
+    if (fileName.substr(0, 9) == "products/") {
+      fileName = fileName.substr(9); // Remove "products/" prefix
+      std::cout << "Removed prefix, using filename: " << fileName << std::endl;
+    }
+
+    std::cout << "Attempting to load file: " << fileName << std::endl;
+    bool loadResult = m_productReferenceManager->LoadFromFile(fileName);
+
+    std::cout << "LoadFromFile result: " << (loadResult ? "SUCCESS" : "FAILED") << std::endl;
+
+    if (loadResult) {
+      std::cout << "Successfully loaded: " << fileName << std::endl;
+      RefreshLoadedProducts();
+
+      // Debug: Check what products are now loaded
+      const auto& allProducts = m_productReferenceManager->GetAllProductReferences();
+      std::cout << "Total products loaded: " << allProducts.size() << std::endl;
+      for (const auto& product : allProducts) {
+        std::cout << "  - Product: " << product.name << " (ID: " << product.id << ")" << std::endl;
+      }
+    }
+    else {
+      std::cout << "Failed to load: " << fileName << std::endl;
+    }
+  }
+  catch (const std::exception& e) {
+    std::cout << "Exception loading file: " << e.what() << std::endl;
+  }
+}
+
+
+// Also add debugging to RefreshLoadedProducts method
+void ModuleAlignmentUI::RefreshLoadedProducts() {
+  std::cout << "=== RefreshLoadedProducts called" << std::endl;
+
+  m_loadedProducts.clear();
+  m_selectedProductIndex = -1;
+
+  if (!m_productReferenceManager) {
+    std::cout << "ERROR: ProductReferenceManager is null in RefreshLoadedProducts!" << std::endl;
+    return;
+  }
+
+  const auto& allProducts = m_productReferenceManager->GetAllProductReferences();
+  std::cout << "Found " << allProducts.size() << " products in manager" << std::endl;
+
+  for (const auto& product : allProducts) {
+    std::cout << "Adding product to list: " << product.name << std::endl;
+    m_loadedProducts.push_back(product.name);
+  }
+
+  std::cout << "m_loadedProducts now has " << m_loadedProducts.size() << " entries" << std::endl;
+}
+
+
+void ModuleAlignmentUI::ApplyProductNodesToAlignment(const std::string& productName) {
+  std::string node1, node2, node3;
+
+  if (GetProductFiducialNodes(productName, node1, node2, node3)) {
+    strcpy_s(m_node1Name, node1.c_str());
+    strcpy_s(m_node2Name, node2.c_str());
+    strcpy_s(m_node3Name, node3.c_str());
+
+    std::cout << "Applied nodes from " << productName << ": "
+      << node1 << ", " << node2 << ", " << node3 << std::endl;
+  }
+  else {
+    std::cout << "Failed to get fiducial nodes from " << productName << std::endl;
+  }
+}
+
+bool ModuleAlignmentUI::GetProductFiducialNodes(const std::string& productName,
+  std::string& node1, std::string& node2, std::string& node3) {
+  if (!m_productReferenceManager) {
+    return false;
+  }
+
+  const auto* product = m_productReferenceManager->GetProductReference(productName);
+  if (!product) {
+    return false;
+  }
+
+  // Check if product has 3-point datum system
+  if (product->datum.constructionMethod == ProductReferenceManager::DatumReference::ConstructionMethod::THREE_POINT) {
+    // Get nodes from datum system
+    node1 = product->datum.originPointName;
+
+    // Get second point from X-axis edge
+    const auto* xAxisEdge = m_productReferenceManager->GetEdge(productName, product->datum.xAxisEdgeName);
+    if (xAxisEdge) {
+      node2 = (xAxisEdge->point1Name == node1) ? xAxisEdge->point2Name : xAxisEdge->point1Name;
+    }
+
+    // Get third point from Y-axis edge
+    const auto* yAxisEdge = m_productReferenceManager->GetEdge(productName, product->datum.yAxisEdgeName);
+    if (yAxisEdge) {
+      node3 = (yAxisEdge->point1Name == node1) ? yAxisEdge->point2Name : yAxisEdge->point1Name;
+    }
+
+    return !node1.empty() && !node2.empty() && !node3.empty();
+  }
+  else {
+    // Fallback: find first 3 fiducial points
+    std::vector<std::string> fiducialNodes;
+    for (const auto& point : product->points) {
+      if (point.actionType == ProductReferenceManager::Point3D::ActionType::FIDUCIAL) {
+        fiducialNodes.push_back(point.name);
+        if (fiducialNodes.size() >= 3) break;
+      }
+    }
+
+    if (fiducialNodes.size() >= 3) {
+      node1 = fiducialNodes[0];
+      node2 = fiducialNodes[1];
+      node3 = fiducialNodes[2];
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// =============================================================================
+// EXISTING UI SECTIONS (Unchanged from baseline)
+// =============================================================================
+
 void ModuleAlignmentUI::RenderProgressSection() {
   ImGui::Text("Alignment Progress");
   ImGui::Separator();
@@ -260,29 +560,11 @@ void ModuleAlignmentUI::RenderProgressSection() {
 
   // Cancel button
   if (ImGui::Button("Cancel Alignment")) {
-    // Note: This would need proper thread-safe cancellation mechanism
     ResetAlignment();
   }
 }
 
 void ModuleAlignmentUI::RenderResultsSection() {
-  // DEBUG: Add manual controls at the top
-  ImGui::Text("DEBUG INFO:");
-  ImGui::Text("m_hasResult: %s", m_hasResult ? "TRUE" : "FALSE");
-  ImGui::Text("m_activeTab: %d", m_activeTab);
-  ImGui::Text("m_currentState: %d", (int)m_currentState);
-
-  if (ImGui::Button("Force Refresh Results")) {
-    if (m_moduleAlignment && m_moduleAlignment->HasValidAlignment()) {
-      m_lastResult = m_moduleAlignment->GetAlignmentResult();
-      m_hasResult = true;
-      m_currentState = AlignmentState::COMPLETED;
-      std::cout << "Manual refresh: Got alignment results" << std::endl;
-    }
-  }
-
-  ImGui::Separator();
-  // END DEBUG
   if (!m_hasResult) {
     ImGui::Text("No alignment results available.");
     ImGui::Text("Run a 3-point alignment to see results here.");
@@ -310,7 +592,7 @@ void ModuleAlignmentUI::RenderResultsSection() {
 
   ImGui::Separator();
 
-  // Key Results in a more prominent format
+  // Key Results
   ImGui::Text("📍 CENTER POSITION:");
   ImGui::Indent();
   ImGui::Text("X: %.4f mm", result.centerPosition.x);
@@ -323,89 +605,22 @@ void ModuleAlignmentUI::RenderResultsSection() {
   ImGui::Indent();
   ImGui::Text("X-axis length: %.4f mm", result.xAxisLength);
   ImGui::Text("Y-axis length: %.4f mm", result.yAxisLength);
-
-  // Calculate and show the angle between X and Y axes (should be ~90°)
   double axisAngleBetween = CalculateAngleBetweenVectors(result.xAxisDirection, result.yAxisDirection);
   ImGui::Text("Angle between axes: %.2f° (should be ~90°)", axisAngleBetween);
-
   ImGui::Text("Rotation from global X: %.2f°", result.axisAngle);
   ImGui::Unindent();
 
-  ImGui::Spacing();
-
-  // Validation status
-  bool geometryValid = (axisAngleBetween >= 10.0 && axisAngleBetween <= 170.0);
-  ImGui::Text("🔍 VALIDATION:");
-  ImGui::Indent();
-  ImGui::TextColored(geometryValid ? ImVec4(0, 1, 0, 1) : ImVec4(1, 0, 0, 1),
-    "Geometry: %s", geometryValid ? "VALID" : "INVALID");
-
-  // Check confidence
-  bool allHighConfidence = true;
-  for (const auto& point : result.points) {
-    if (point.confidence < 0.7) {
-      allHighConfidence = false;
-      break;
-    }
-  }
-  ImGui::TextColored(allHighConfidence ? ImVec4(0, 1, 0, 1) : ImVec4(1, 1, 0, 1),
-    "Detection Quality: %s", allHighConfidence ? "HIGH" : "MEDIUM");
-  ImGui::Unindent();
-
-  ImGui::Spacing();
-  ImGui::Separator();
-
-  // Detailed results in collapsible sections
-  if (ImGui::CollapsingHeader("🔧 Detailed Measurements", ImGuiTreeNodeFlags_DefaultOpen)) {
-
-    if (ImGui::TreeNode("Axis Directions (Unit Vectors)")) {
-      ImGui::Text("X-Axis: %s", FormatVector(result.xAxisDirection).c_str());
-      ImGui::Text("Y-Axis: %s", FormatVector(result.yAxisDirection).c_str());
-      ImGui::Text("Z-Axis: %s", FormatVector(result.zAxisDirection).c_str());
-      ImGui::TreePop();
-    }
-
-    if (ImGui::TreeNode("Detection Points Details")) {
-      for (size_t i = 0; i < result.points.size(); i++) {
-        const auto& point = result.points[i];
-
-        std::string nodeName = "Node " + std::to_string(i + 1) + ": " + point.nodeName;
-        if (ImGui::TreeNode(nodeName.c_str())) {
-          ImGui::Text("Robot Position:    %s mm", FormatPosition(point.machinePosition).c_str());
-          ImGui::Text("Detected Position: %s mm", FormatPosition(point.detectedPosition).c_str());
-
-          // Color-code confidence
-          ImVec4 confColor = ImVec4(1, 0, 0, 1); // Red
-          if (point.confidence > 0.8) confColor = ImVec4(0, 1, 0, 1); // Green
-          else if (point.confidence > 0.6) confColor = ImVec4(1, 1, 0, 1); // Yellow
-
-          ImGui::TextColored(confColor, "Confidence: %.1f%%", point.confidence * 100.0);
-          ImGui::TreePop();
-        }
-      }
-      ImGui::TreePop();
-    }
-
-    // Timestamp
-    if (!result.timestamp.empty()) {
-      ImGui::Text("⏰ Completed: %s", result.timestamp.c_str());
-    }
-  }
-
-  ImGui::Spacing();
-  ImGui::Separator();
-
   // Action buttons
+  ImGui::Spacing();
+  ImGui::Separator();
   ImGui::Text("💾 Actions:");
   if (ImGui::Button("Save This Alignment", ImVec2(150, 30))) {
     m_showSaveDialog = true;
   }
-
   ImGui::SameLine();
   if (ImGui::Button("Test Coordinates", ImVec2(130, 30))) {
     m_activeTab = 3; // Switch to Transform Test tab
   }
-
   ImGui::SameLine();
   if (ImGui::Button("New Alignment", ImVec2(120, 30))) {
     ResetAlignment();
@@ -465,10 +680,7 @@ void ModuleAlignmentUI::RenderTransformationTestSection() {
     return;
   }
 
-  // =============================================================================
-  // MOVE TO LOCAL COORDINATE SECTION
-  // =============================================================================
-
+  // Move to Local Coordinate section
   ImGui::Text("🎯 Move to Local Coordinate");
   ImGui::Separator();
 
@@ -561,10 +773,7 @@ void ModuleAlignmentUI::RenderTransformationTestSection() {
   ImGui::Spacing();
   ImGui::Separator();
 
-  // =============================================================================
-  // COORDINATE TRANSFORMATION TESTING (EXISTING)
-  // =============================================================================
-
+  // Coordinate transformation testing
   ImGui::Text("📐 Coordinate Transformation Testing");
   ImGui::Separator();
 
@@ -632,6 +841,7 @@ void ModuleAlignmentUI::RenderTransformationTestSection() {
     m_testAlignmentPos[2] = 0.0f;
   }
 }
+
 void ModuleAlignmentUI::RenderAdvancedSettings() {
   ImGui::Text("Advanced Settings & Diagnostics");
   ImGui::Separator();
@@ -656,6 +866,14 @@ void ModuleAlignmentUI::RenderAdvancedSettings() {
   ImGui::Spacing();
   ImGui::Separator();
 
+  // ProductReference directory setting
+  ImGui::Text("ProductReference Settings:");
+  ImGui::InputText("Products Directory", m_productFilePath, sizeof(m_productFilePath));
+  ImGui::SameLine();
+  if (ImGui::Button("Scan Directory")) {
+    RefreshProductFileList();
+  }
+
   // Mock detection option
   static bool useMockDetection = false;
   ImGui::Checkbox("Use Mock Detection (for testing)", &useMockDetection);
@@ -670,7 +888,6 @@ void ModuleAlignmentUI::RenderAdvancedSettings() {
   ImGui::Text("Database Operations:");
 
   if (ImGui::Button("Clear All Saved Alignments")) {
-    // Note: This would need confirmation dialog
     RefreshSavedAlignments();
   }
 
@@ -679,7 +896,6 @@ void ModuleAlignmentUI::RenderAdvancedSettings() {
   ImGui::Text("Diagnostics:");
 
   if (ImGui::Button("Test Movement Only") && isReady) {
-    // Test movement without detection
     ImGui::OpenPopup("Movement Test");
   }
 
@@ -689,7 +905,6 @@ void ModuleAlignmentUI::RenderAdvancedSettings() {
     ImGui::Text("Nodes: %s, %s, %s", m_node1Name, m_node2Name, m_node3Name);
 
     if (ImGui::Button("Start Test", ImVec2(120, 0))) {
-      // Implementation would go here
       ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine();
@@ -713,7 +928,6 @@ void ModuleAlignmentUI::RenderSaveDialog() {
     ImGui::Text("Save current alignment configuration:");
     ImGui::Spacing();
 
-    // Input field for alignment name
     ImGui::InputText("Alignment Name", m_saveAlignmentName, sizeof(m_saveAlignmentName));
 
     ImGui::Spacing();
@@ -853,7 +1067,6 @@ void ModuleAlignmentUI::StartAlignment() {
   m_statusMessage = "Starting 3-point alignment process";
   m_hasResult = false;
 
-  // Reset the static timer by storing start time as member variable
   m_alignmentStartTime = std::chrono::steady_clock::now();
 
   std::cout << "ModuleAlignmentUI: Starting alignment with nodes: "
@@ -867,25 +1080,16 @@ void ModuleAlignmentUI::StartAlignment() {
 }
 
 void ModuleAlignmentUI::UpdateProgress() {
-  // FIXED: Check if we're in RUNNING state with a valid future
-  // This will catch both "still running" and "just completed" cases
   if (m_currentState != AlignmentState::RUNNING || !m_alignmentFuture.valid()) {
     return;
   }
 
-  //std::cout << "UpdateProgress: Checking alignment future..." << std::endl;
-
   // Check if alignment is complete
   if (m_alignmentFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-
-    std::cout << "UpdateProgress: Alignment future is ready, getting results..." << std::endl;
-
     // Get results
     try {
       m_lastResult = m_alignmentFuture.get();
       m_hasResult = true;
-
-      std::cout << "UpdateProgress: Got alignment result, success = " << m_lastResult.success << std::endl;
 
       // Update state
       if (m_lastResult.success) {
@@ -894,18 +1098,11 @@ void ModuleAlignmentUI::UpdateProgress() {
         m_currentStep = "Alignment completed successfully";
         m_statusMessage = "✓ 3-point alignment finished successfully!";
 
-        // AUTOMATICALLY SWITCH TO RESULTS TAB
         if (m_autoSwitchToResults) {
-          std::cout << "UpdateProgress: Switching to Results tab (m_activeTab = 1)" << std::endl;
           m_activeTab = 1; // Switch to Results tab
         }
 
         std::cout << "ModuleAlignmentUI: Alignment completed successfully" << std::endl;
-        std::cout << "Center: (" << m_lastResult.centerPosition.x
-          << ", " << m_lastResult.centerPosition.y
-          << ", " << m_lastResult.centerPosition.z << ")" << std::endl;
-        std::cout << "X-axis length: " << m_lastResult.xAxisLength << " mm" << std::endl;
-        std::cout << "Y-axis length: " << m_lastResult.yAxisLength << " mm" << std::endl;
       }
       else {
         m_currentState = AlignmentState::FAILED;
@@ -913,9 +1110,7 @@ void ModuleAlignmentUI::UpdateProgress() {
         m_currentStep = "Alignment failed";
         m_statusMessage = "❌ " + m_lastResult.errorMessage;
 
-        // Also switch to Results tab to show error
         if (m_autoSwitchToResults) {
-          std::cout << "UpdateProgress: Switching to Results tab (m_activeTab = 1) for error display" << std::endl;
           m_activeTab = 1;
         }
 
@@ -932,20 +1127,14 @@ void ModuleAlignmentUI::UpdateProgress() {
       std::cout << "ModuleAlignmentUI: Alignment failed with exception: " << e.what() << std::endl;
     }
 
-    std::cout << "UpdateProgress: Final state - m_hasResult=" << m_hasResult
-      << ", m_activeTab=" << m_activeTab
-      << ", m_currentState=" << (int)m_currentState << std::endl;
-
-    // Reset the future to indicate completion
+    // Reset the future
     m_alignmentFuture = std::future<ModuleAlignment::AlignmentResult>();
-
   }
   else {
-    // Update progress (simulate since we don't have real progress feedback)
+    // Update progress simulation
     auto elapsed = std::chrono::steady_clock::now() - m_alignmentStartTime;
     auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 
-    // Estimate progress based on typical alignment time (e.g., 30 seconds)
     m_progressValue = (std::min)(0.95f, elapsedMs / 30000.0f);
 
     // Update step messages
@@ -980,13 +1169,6 @@ void ModuleAlignmentUI::ResetAlignment() {
   m_progressValue = 0.0f;
   m_currentStep = "";
   m_statusMessage = "";
-
-  // Cancel any running alignment (note: this is simplified, real implementation 
-  // would need proper thread-safe cancellation)
-  if (IsAlignmentRunning()) {
-    // In a real implementation, you'd need to signal the alignment thread to stop
-    // For now, we just reset the UI state
-  }
 }
 
 bool ModuleAlignmentUI::IsAlignmentRunning() const {
@@ -995,22 +1177,8 @@ bool ModuleAlignmentUI::IsAlignmentRunning() const {
   bool futureNotReady = futureValid &&
     (m_alignmentFuture.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready);
 
-  bool result = stateRunning && futureValid && futureNotReady;
-
-  // Add debug output occasionally
-  static auto lastDebug = std::chrono::steady_clock::now();
-  auto now = std::chrono::steady_clock::now();
-  if (std::chrono::duration_cast<std::chrono::seconds>(now - lastDebug).count() >= 2) {
-    std::cout << "IsAlignmentRunning: state=" << stateRunning
-      << ", futureValid=" << futureValid
-      << ", futureNotReady=" << futureNotReady
-      << ", result=" << result << std::endl;
-    lastDebug = now;
-  }
-
-  return result;
+  return stateRunning && futureValid && futureNotReady;
 }
-
 
 std::string ModuleAlignmentUI::FormatPosition(const PositionStruct& pos) const {
   std::ostringstream oss;
@@ -1046,7 +1214,6 @@ const char* ModuleAlignmentUI::GetStateText(AlignmentState state) const {
   }
 }
 
-// Helper function to calculate angle between vectors
 double ModuleAlignmentUI::CalculateAngleBetweenVectors(const ModuleAlignment::Vector3D& v1,
   const ModuleAlignment::Vector3D& v2) const {
   double dot = v1.dot(v2);
@@ -1058,12 +1225,10 @@ double ModuleAlignmentUI::CalculateAngleBetweenVectors(const ModuleAlignment::Ve
   }
 
   double cosAngle = dot / (mag1 * mag2);
-  cosAngle = (std::max)(-1.0, (std::min)(1.0, cosAngle)); // Clamp to [-1, 1]
+  cosAngle = (std::max)(-1.0, (std::min)(1.0, cosAngle));
 
   return std::acos(cosAngle) * 180.0 / M_PI;
 }
-
-// Add these methods to ModuleAlignmentUI.cpp:
 
 void ModuleAlignmentUI::ExecuteMoveToLocal() {
   if (!m_moduleAlignment || !m_moduleAlignment->HasValidAlignment()) {
@@ -1087,7 +1252,6 @@ void ModuleAlignmentUI::ExecuteMoveToLocal() {
     m_waitForCompletion
   );
 
-  // Update status
   m_lastMoveSuccess = success;
 
   if (success) {
@@ -1096,7 +1260,6 @@ void ModuleAlignmentUI::ExecuteMoveToLocal() {
       std::to_string(m_targetLocalPos[1]) + ", " +
       std::to_string(m_targetLocalPos[2]) + ") completed";
 
-    // Update current position display
     GetCurrentLocalPosition();
 
     std::cout << "ModuleAlignmentUI: Successfully moved to local position ("
