@@ -1,6 +1,6 @@
 ﻿// pi_controller.cpp
 #include "../include/motions/pi_controller.h"
-#include "include/data/global_data_store.h"  // Add this include
+#include "../include/data/global_data_store.h"  // Add this include
 
 #include "imgui.h"
 #include <iostream>
