@@ -59,6 +59,9 @@
 #include "ConfigFileWatchdog.h"
 
 #include "IDSCameraUI.h"
+#include "AppContext.h"
+
+
 
 bool g_deugMode = false; // Global debug mode flag
 
@@ -1042,54 +1045,85 @@ int main(int argc, char* argv[])
 
 
 
+
+
+
+
 #pragma endregion
 
 
 
+	// ================================================================
+	// NEW: PARALLEL REGISTRATION WITH APPCONTEXT
+	// Just add these lines - no changes to existing code!
+	// ================================================================
 
-	// Create the main UI manager
-	MainUIManager uiManager(*motionConfigManager);
-	logger->LogInfo("MainUIManager created with MotionConfigManager");
-	// NEW: Setup UserPromptUI and connect to RunPageUI
-	std::unique_ptr<UserPromptUI> userPromptUI = std::make_unique<UserPromptUI>();
+	logger->LogInfo("=== Registering services with AppContext ===");
+	auto& context = AppContext::GetInstance();
 
-	// Set all managers in UI
+	// Register existing services (simple one-liner for each)
+	if (motionConfigManager) {
+		context.RegisterExistingMotionConfig(motionConfigManager.get());
+	}
 	if (piControllerManager) {
-		uiManager.SetPIControllerManager(piControllerManager.get());
+		context.RegisterExistingPIController(piControllerManager.get());
 	}
 	if (acsControllerManager) {
-		uiManager.SetACSControllerManager(acsControllerManager.get());
+		context.RegisterExistingACSController(acsControllerManager.get());
 	}
 	if (ioManager) {
-		uiManager.SetIOManager(ioManager.get(), ioconfigManager.get());
+		context.RegisterExistingIOManager(ioManager.get());
 	}
-
-
-
+	if (ioconfigManager) {
+		context.RegisterExistingIOConfig(ioconfigManager.get());
+	}
 	if (pneumaticManager) {
-		uiManager.SetPneumaticManager(pneumaticManager.get());
+		context.RegisterExistingPneumatic(pneumaticManager.get());
 	}
-	if (cameraManager && cameraManager->GetCameraCount() > 0) {
-		uiManager.SetCameraManager(cameraManager.get());
+	if (cameraManager) {
+		context.RegisterExistingCameraManager(cameraManager.get());
+	}
+	if (cameraConfigManager) {
+		context.RegisterExistingCameraConfig(cameraConfigManager.get());
 	}
 	if (dataClientManager) {
-		uiManager.SetDataClientManager(dataClientManager.get());
+		context.RegisterExistingDataClient(dataClientManager.get());
 	}
 	if (cld101xManager) {
-		uiManager.SetCLD101xManager(cld101xManager.get());
+		context.RegisterExistingCLD101x(cld101xManager.get());
 	}
 	if (keithleyManager) {
-		uiManager.SetKeithley2400Manager(keithleyManager.get());
+		context.RegisterExistingKeithley(keithleyManager.get());
 	}
 	if (machineOps) {
-		uiManager.SetMachineOperations(machineOps.get());
-		logger->LogInfo("MachineOperations set in MainUIManager");
+		context.RegisterExistingMachineOps(machineOps.get());
+	}
+	if (motionOps) {
+		context.RegisterExistingMotionOps(motionOps.get());
+	}
+	if (ioOps) {
+		context.RegisterExistingIOOps(ioOps.get());
+	}
+	if (visionOps) {
+		context.RegisterExistingVisionOps(visionOps.get());
 	}
 
-	if (dataClientManager) {
-		uiManager.SetDataClientManager(dataClientManager.get());
-		logger->LogInfo("DataClientManager passed to MainUIManager");
-	}
+	logger->LogInfo("✅ All services registered with AppContext");
+	context.LogInitializationStatus();
+
+
+
+	// ================================================================
+// FIXED: Clean AppContext usage
+// ================================================================
+
+	logger->LogInfo("✅ All services registered with AppContext");
+	context.LogInitializationStatus();
+
+	// CREATE MainUIManager with AppContext
+	MainUIManager uiManager(context);
+	logger->LogInfo("MainUIManager created with AppContext approach");
+
 
 
 
@@ -1412,11 +1446,8 @@ int main(int argc, char* argv[])
 		// Render the main UI
 		uiManager.RenderUI();
 
-		// IMPORTANT: Render UserPromptUI to handle UAA3 prompts
-		if (userPromptUI) {
-			userPromptUI->Render();
-		}
 
+		
 #pragma region rayLibwindow
 		// REPLACE WITH THIS:
 		if (menuManager->IsRaylibDebugVisible() && raylibDebugWindow->IsVisible()) {

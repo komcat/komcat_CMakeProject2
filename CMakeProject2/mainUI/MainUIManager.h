@@ -23,6 +23,7 @@
 #include "UIVisionPanel.h"
 #include "DatumUI.h"  // ADD THIS LINE - Include new DatumUI class
 #include "ModuleAlignmentUI.h"
+#include "AppContext.h" 
 
 // Forward declarations
 class MotionConfigManager;
@@ -31,7 +32,7 @@ class UIConfigVisualizer;
 class UIJogWindow;
 class PIControllerManager;
 class ACSControllerManager;
-
+class VisionOps;
 class PneumaticManager;
 class EziIOManager;
 class IOConfigManager;
@@ -82,7 +83,6 @@ public:
     SMU_MANAGER
   };
 
-
   enum class VisionSubPage {
     NONE = 0,
     FIDUCIAL,
@@ -91,13 +91,19 @@ public:
   };
 
 public:
-  // Constructor takes MotionConfigManager reference only
+  // DUAL CONSTRUCTORS - Both supported for smooth migration
+
+  // Constructor 1: Original constructor (backward compatibility)
   MainUIManager(MotionConfigManager& configManager);
+
+  // Constructor 2: New AppContext constructor
+  explicit MainUIManager(AppContext& context);
+
   ~MainUIManager();
 
   void RenderUI();
 
-  // Method to set motion managers separately for cleaner initialization
+  // KEEP ALL EXISTING SETTER METHODS (for backward compatibility with Constructor 1)
   void SetPIControllerManager(PIControllerManager* piManager);
   void SetACSControllerManager(ACSControllerManager* acsManager);
   void SetIOManager(EziIOManager* ioManager, IOConfigManager* ioConfigManager = nullptr);
@@ -105,53 +111,66 @@ public:
   void SetCameraManager(CameraManager* cameraManager);
   void SetDataClientManager(DataClientManager* dataClientManager);
   void SetCLD101xManager(CLD101xManager* cld101xManager);
+  void SetKeithley2400Manager(Keithley2400Manager* keithleyManager);
+  void SetMachineOperations(MachineOperations* machineOps);
+  void SetConfigWatchdog(ConfigFileWatchdog* watchdog);
+
+  // Keep utility methods
   void SetImguiFont(ImFont* font);
   ImFont* GetImguiFont() const { return m_imguiFont; }
 
-  // Add this method in the public section with other setter methods:
-  void SetKeithley2400Manager(Keithley2400Manager* keithleyManager);
-
-  // Add this method declaration
-  void SetMachineOperations(MachineOperations* machineOps);
+  // Keep getters
+  RunPageUI* GetRunPageUI() const { return m_runPageUI.get(); }
+  UserPromptUI* GetUserPromptUI() const { return m_promptUI.get(); }
+  UIVisionPanel* GetVisionPanel() const { return m_visionPanelUI.get(); }
+  DatumUI* GetDatumUI() const { return m_datumUI.get(); }
   MachineOperations* GetMachineOperations();
 
-  // NEW: Add getter for RunPageUI
-  RunPageUI* GetRunPageUI() const { return m_runPageUI.get(); }
-
-  // NEW: Add getter for UserPromptUI (optional, for debugging)
-  UserPromptUI* GetUserPromptUI() const { return m_userPromptUI.get(); }
-  void SetConfigWatchdog(ConfigFileWatchdog* watchdog);
+  void SetupVisionPanel();
   void RenderWatchdogStatus(ConfigFileWatchdog* watchdog);
-
-  // Add this method for keyboard input processing
   void ProcessKeyInput(SDL_Keycode key, bool pressed);
 
-  UIVisionPanel* GetVisionPanel() const {
-    return m_visionPanelUI.get();
-  }
-
-  void SetupVisionPanel();
-
-  // ADD THIS: Getter for DatumUI
-  DatumUI* GetDatumUI() const {
-    return m_datumUI.get();
-  }
-
 private:
+  // UI State
   MainPage currentMainPage = MainPage::MAIN;
   ManualSubPage currentManualSubPage = ManualSubPage::NONE;
   ConfigSubPage currentConfigSubPage = ConfigSubPage::NONE;
   DataInstrumentSubPage currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
+  ProgrammingSubPage currentProgrammingSubPage = ProgrammingSubPage::NONE;
+  VisionSubPage currentVisionSubPage = VisionSubPage::NONE;
 
-  // ADD THIS LINE with other UI components:
-  std::unique_ptr<UserPromptUI> m_promptUI;
-
-  ImFont* m_imguiFont = nullptr; // Pointer to ImGui font 
-
-  // Reference to the config manager (owned by main)
+  // DUAL APPROACH MEMBERS
+  // Reference to MotionConfigManager (always required)
   MotionConfigManager& motionConfigManager;
 
-  // UI components we own
+  // Optional pointer to AppContext (nullptr if using old constructor)
+  AppContext* m_context = nullptr;
+
+  // === SMART GETTER METHODS ===
+  // These try AppContext first, then fall back to old member variables
+  PIControllerManager* GetPIController() const;
+  ACSControllerManager* GetACSController() const;
+  CameraManager* GetCameraManagerSmart() const;
+  EziIOManager* GetIOManager() const;
+  IOConfigManager* GetIOConfig() const;
+  PneumaticManager* GetPneumaticManager() const;
+  DataClientManager* GetDataClient() const;
+  Keithley2400Manager* GetKeithley() const;
+
+  // === KEEP OLD MEMBER VARIABLES (for backward compatibility) ===
+  PIControllerManager* m_piControllerManager = nullptr;
+  ACSControllerManager* m_acsControllerManager = nullptr;
+  EziIOManager* m_ioManager = nullptr;
+  IOConfigManager* m_ioConfigManager = nullptr;
+  PneumaticManager* m_pneumaticManager = nullptr;
+  CameraManager* m_cameraManager = nullptr;
+  DataClientManager* m_dataClientManager = nullptr;
+  CLD101xManager* m_cld101xManager = nullptr;
+  Keithley2400Manager* m_keithleyManager = nullptr;
+  MachineOperations* m_machineOperations = nullptr;
+  ConfigFileWatchdog* m_configWatchdog = nullptr;
+
+  // === UI COMPONENTS (unchanged) ===
   std::unique_ptr<UIConfigEditor> uiConfigEditor;
   std::unique_ptr<UIConfigVisualizer> uiConfigVisualizer;
   std::unique_ptr<TCPDataManagerUI> m_tcpDataManagerUI;
@@ -164,45 +183,31 @@ private:
   std::unique_ptr<GlobalDataStoreViewerUI> m_globalDataStoreViewerUI;
   std::unique_ptr<MacroPanelUI> m_macroPanelUI;
   std::unique_ptr<ModuleAlignmentUI> m_moduleAlignmentUI;
-
-  CLD101xManager* m_cld101xManager = nullptr;
-
-  // Motion managers (optional, set later)
-  PIControllerManager* m_piControllerManager = nullptr;
-  ACSControllerManager* m_acsControllerManager = nullptr;
-  DataClientManager* m_dataClientManager = nullptr;
-  Keithley2400Manager* m_keithleyManager = nullptr;
-  ConfigFileWatchdog* m_configWatchdog = nullptr;
-  
-  // Jog window
-  bool m_showGlobalJogWindow = false;
-
-  // Add this member variable in the private section with other UI components:
   std::unique_ptr<UISMUPanel> m_smuPanelUI;
-
-  EziIOManager* m_ioManager = nullptr;
-  IOConfigManager* m_ioConfigManager = nullptr;
-
-  // NEW: Add IO Control Panel for Q-IO button
   std::unique_ptr<IOControlPanel> m_ioControlPanel;
-
-  // Add these member variables in the private section (with other panel UIs):
-  PneumaticManager* m_pneumaticManager = nullptr;
-  CameraManager* m_cameraManager = nullptr;
-  MachineOperations* m_machineOperations = nullptr;
-
-  // Add in private section with other member variables:
-  ProgrammingSubPage currentProgrammingSubPage = ProgrammingSubPage::NONE;
   std::unique_ptr<MachineBlockUI> m_machineBlockUI;
   std::unique_ptr<MacroManager> m_macroManager;
+  std::unique_ptr<RunPageUI> m_runPageUI;
+  std::unique_ptr<UserPromptUI> m_userPromptUI;
+  std::unique_ptr<UserPromptUI> m_promptUI;
+  std::unique_ptr<UIVisionPanel> m_visionPanelUI;
+  std::unique_ptr<DatumUI> m_datumUI;
 
+  // Utility members
+  ImFont* m_imguiFont = nullptr;
+  bool m_showGlobalJogWindow = false;
+
+  // === HELPER METHODS ===
+  void InitializeUIComponents();
+  void ConnectUIToServices();
+
+  // All your existing render methods (unchanged)
   void RenderTopMenuBar();
-  void RenderDateTime();  // This is where JOG and Q-IO buttons are rendered
+  void RenderDateTime();
   void RenderBreadcrumbs();
   void RenderMainContent();
   void RenderBackButton();
 
-  // Main pages
   void RenderMainPage();
   void RenderManualPage();
   void RenderDataInstrumentPage();
@@ -211,25 +216,17 @@ private:
   void RenderVisionPage();
   void RenderProgrammingPage();
 
-  // Manual sub-pages
   void RenderManualSubPage();
   void RenderPIPage();
   void RenderGantryPage();
   void RenderIOPage();
   void RenderCameraPage();
+  void RenderPneumaticPage();
 
-  // Config sub-pages
   void RenderConfigSubPage();
   void RenderConfigEditorPage();
   void RenderNodeVisualizerPage();
 
-  // Jog window
-  void RenderGlobalJogWindow();
-
-  // Add this method declaration (with other render methods):
-  void RenderPneumaticPage();
-
-  // Data Instrument sub-pages
   void RenderDataInstrumentSubPage();
   void RenderGlobalDataStorePage();
   void RenderTcpDataManagerPage();
@@ -240,23 +237,11 @@ private:
   void RenderMachineBlockPage();
   void RenderMacroManagerPage();
 
-  // NEW: Add these members if not already present
-  std::unique_ptr<RunPageUI> m_runPageUI;
-  std::unique_ptr<UserPromptUI> m_userPromptUI;
-
-  // NEW: Helper methods for IO Control Panel
-  void CreateIOControlPanel();  // Helper to create IO panel when manager is available
-
-  std::unique_ptr<UIVisionPanel> m_visionPanelUI;
-
-  // ADD THIS: DatumUI member variable
-  std::unique_ptr<DatumUI> m_datumUI;
-
-  VisionSubPage currentVisionSubPage = VisionSubPage::NONE;
-
-  // 3. ADD method declarations in private section:
   void RenderVisionSubPage();
   void RenderFiducialPage();
   void RenderDatumReferencePage();
   void RenderModuleAlignmentPage();
+
+  void RenderGlobalJogWindow();
+  void CreateIOControlPanel();
 };

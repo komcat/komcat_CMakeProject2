@@ -21,7 +21,7 @@
 
 #include "include/data/global_data_store.h" // Add this with your other includes
 #include "include/machine_operations.h"  // Add this include at the top
-
+#include "AppContext.h"
 #include <SDL.h>
 #include "implot/implot.h"
 #include <deque>
@@ -32,6 +32,9 @@
 #include <iostream>
 #include <string>
 #include <ctime>
+
+
+
 
 
 // UPDATE the constructor to initialize DatumUI:
@@ -112,6 +115,219 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 MainUIManager::~MainUIManager() = default;
 
 
+
+
+
+
+// 1. UPDATE the existing AppContext constructor (around line 165)
+// REPLACE the existing constructor with this:
+MainUIManager::MainUIManager(AppContext& context)
+	: m_context(&context),  // Store as pointer
+	motionConfigManager(*context.GetMotionConfig()) {  // Initialize reference
+
+	auto* logger = Logger::GetInstance();
+	logger->LogInfo("MainUIManager: Initializing with pure AppContext approach");
+
+	// Verify we have essential services
+	if (!context.GetMotionConfig()) {
+		logger->LogError("MainUIManager: MotionConfigManager not available in AppContext!");
+		throw std::runtime_error("MotionConfigManager required but not available in AppContext");
+	}
+
+	logger->LogInfo("MainUIManager: AppContext validation passed");
+
+	// Initialize all UI components
+	InitializeUIComponents();
+
+	// Connect UI components to services from AppContext
+	ConnectUIToServices();
+
+	logger->LogInfo("MainUIManager: Initialization complete with AppContext");
+}
+
+
+
+// TO THIS:
+void MainUIManager::InitializeUIComponents() {
+	auto* logger = Logger::GetInstance();
+	logger->LogInfo("MainUIManager: Creating base UI components...");
+
+	// Create base UI components that don't depend on services
+	m_visionPanelUI = std::make_unique<UIVisionPanel>();
+	m_datumUI = std::make_unique<DatumUI>();
+	m_moduleAlignmentUI = std::make_unique<ModuleAlignmentUI>();
+	m_tcpDataManagerUI = std::make_unique<TCPDataManagerUI>();
+	m_globalDataStoreViewerUI = std::make_unique<GlobalDataStoreViewerUI>();
+
+	// Programming UI components - CREATE ONLY ONE UserPromptUI
+	m_promptUI = std::make_unique<UserPromptUI>();
+	// m_userPromptUI will be created separately if needed for backward compatibility
+
+	m_machineBlockUI = std::make_unique<MachineBlockUI>();
+	m_macroManager = std::make_unique<MacroManager>();
+	m_macroPanelUI = std::make_unique<MacroPanelUI>();
+
+	// Connect programming components to each other
+	if (m_macroManager && m_machineBlockUI) {
+		m_macroManager->SetMachineBlockUI(m_machineBlockUI.get());
+		logger->LogInfo("MainUIManager: MacroManager connected to MachineBlockUI");
+	}
+
+	if (m_macroPanelUI && m_macroManager && m_machineBlockUI) {
+		m_macroPanelUI->SetMacroManager(m_macroManager.get());
+		m_macroPanelUI->SetMachineBlockUI(m_machineBlockUI.get());
+		m_macroPanelUI->SetPromptUI(m_promptUI.get());
+		logger->LogInfo("MainUIManager: MacroPanelUI connected to MacroManager and MachineBlockUI");
+	}
+
+	// Module alignment setup
+	if (m_moduleAlignmentUI) {
+		auto productReferenceManager = std::make_shared<ProductReferenceManager>();
+		m_moduleAlignmentUI->SetProductReferenceManager(productReferenceManager);
+	}
+
+	logger->LogInfo("MainUIManager: Base UI components created");
+}
+// MainUIManager.cpp - Complete methods to ADD or UPDATE
+
+
+
+// 2. UPDATE the ConnectUIToServices() method
+// REPLACE the existing method with this:
+void MainUIManager::ConnectUIToServices() {
+	auto* logger = Logger::GetInstance();
+	logger->LogInfo("MainUIManager: Connecting UI to services...");
+
+	// Get MotionConfigManager (required) - works for both constructors
+	MotionConfigManager* motionConfig = &motionConfigManager;
+
+	// Create UIConfigEditor and UIConfigVisualizer
+	uiConfigEditor = std::make_unique<UIConfigEditor>(*motionConfig);
+
+	// For UIConfigVisualizer, use smart getter for camera
+	auto* camera = GetCameraManagerSmart();
+	uiConfigVisualizer = std::make_unique<UIConfigVisualizer>(*motionConfig, camera);
+
+	// Create UIJogWindow
+	m_uiJogWindow = std::make_unique<UIJogWindow>(*motionConfig);
+
+	// Connect PI Controller UI using smart getter
+	if (auto* pi = GetPIController()) {
+		if (!m_piPanelUI) {  // Only create if not already created
+			m_piPanelUI = std::make_unique<PIPanelUI>(*pi);
+		}
+
+		// Connect to jog window
+		if (m_uiJogWindow) {
+			m_uiJogWindow->SetPIControllerManager(pi);
+		}
+
+		logger->LogInfo("MainUIManager: PI Controller UI connected");
+	}
+
+	// Connect ACS Controller UI using smart getter
+	if (auto* acs = GetACSController()) {
+		if (!m_acsPanelUI) {
+			m_acsPanelUI = std::make_unique<ACSPanelUI>(*acs);
+		}
+
+		// Connect to jog window
+		if (m_uiJogWindow) {
+			m_uiJogWindow->SetACSControllerManager(acs);
+		}
+
+		logger->LogInfo("MainUIManager: ACS Controller UI connected");
+	}
+
+	// Connect IO UI using smart getter
+	if (auto* io = GetIOManager()) {
+		if (!m_ioPanelUI) {
+			m_ioPanelUI = std::make_unique<IOPanelUI>(*io);
+
+			// Set IO config if available
+			if (auto* ioConfig = GetIOConfig()) {
+				m_ioPanelUI->SetConfigManager(ioConfig);
+			}
+		}
+
+		// Create IO Control Panel
+		if (!m_ioControlPanel) {
+			m_ioControlPanel = std::make_unique<IOControlPanel>(*io);
+			m_ioControlPanel->LoadConfiguration("io_panel_config.json");
+		}
+
+		logger->LogInfo("MainUIManager: IO Panel UI connected");
+	}
+
+	// Connect Pneumatic UI using smart getter
+	if (auto* pneumatic = GetPneumaticManager()) {
+		if (!m_pneumaticPanelUI) {
+			m_pneumaticPanelUI = std::make_unique<UIPneumaticPanel>(*pneumatic);
+		}
+		logger->LogInfo("MainUIManager: Pneumatic Panel UI connected");
+	}
+
+	// Connect Camera UI using smart getter
+	if (auto* cameraManager = GetCameraManagerSmart()) {
+		if (!m_cameraPanelUI) {
+			m_cameraPanelUI = std::make_unique<UICameraPanel>(*cameraManager);
+		}
+
+		// Setup vision panel connections
+		if (m_visionPanelUI) {
+			m_visionPanelUI->SetCameraManager(cameraManager);
+			m_visionPanelUI->SetMotionConfigManager(motionConfig);
+
+			// Connect machine operations using smart getter
+			if (m_context) {
+				if (auto* machineOps = m_context->GetMachineOperations()) {
+					m_visionPanelUI->SetMachineOperations(machineOps);
+				}
+			}
+			else if (m_machineOperations) {
+				m_visionPanelUI->SetMachineOperations(m_machineOperations);
+			}
+		}
+
+		logger->LogInfo("MainUIManager: Camera Panel UI connected");
+	}
+
+	// Connect Data Services UI using smart getter
+	if (auto* dataClient = GetDataClient()) {
+		if (m_tcpDataManagerUI) {
+			m_tcpDataManagerUI->Initialize(dataClient);
+		}
+		if (m_globalDataStoreViewerUI) {
+			m_globalDataStoreViewerUI->SetDataClientManager(dataClient);
+		}
+		logger->LogInfo("MainUIManager: Data services UI connected");
+	}
+
+	// Connect Equipment UI using smart getter
+	if (auto* keithley = GetKeithley()) {
+		if (!m_smuPanelUI) {
+			m_smuPanelUI = std::make_unique<UISMUPanel>(*keithley);
+		}
+		logger->LogInfo("MainUIManager: SMU Panel UI connected");
+	}
+
+	// Connect RunPageUI using smart getter for MachineOperations
+	auto* machineOps = m_context ? m_context->GetMachineOperations() : m_machineOperations;
+	if (machineOps && !m_runPageUI) {
+		// RunPageUI constructor needs MachineOperations reference
+		m_runPageUI = std::make_unique<RunPageUI>(*machineOps);  // Pass as reference
+
+		// No SetPromptUI method - RunPageUI probably handles prompts differently
+		// Check if RunPageUI has other methods for UserPromptUI or if it gets it from MachineOperations
+
+		logger->LogInfo("MainUIManager: Run Page UI connected");
+	}
+
+	logger->LogInfo("MainUIManager: Service connections complete");
+}
+
+
+
 void MainUIManager::RenderUI() {
 	// Main window that fills the entire screen
 	ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -151,8 +367,8 @@ void MainUIManager::RenderUI() {
 	}
 
 	// Render UserPromptUI (handles prompts from UAA3 sequences)
-	if (m_userPromptUI) {
-		m_userPromptUI->Render();
+	if (m_promptUI) {
+		m_promptUI->Render();
 	}
 }
 
@@ -1619,3 +1835,59 @@ void MainUIManager::RenderModuleAlignmentPage() {
 	}
 }
 
+// 1. ADD the smart getter methods implementations
+PIControllerManager* MainUIManager::GetPIController() const {
+	if (m_context) {
+		if (auto* pi = m_context->GetPIController()) return pi;
+	}
+	return m_piControllerManager;  // Fallback to old way
+}
+
+ACSControllerManager* MainUIManager::GetACSController() const {
+	if (m_context) {
+		if (auto* acs = m_context->GetACSController()) return acs;
+	}
+	return m_acsControllerManager;  // Fallback to old way
+}
+
+CameraManager* MainUIManager::GetCameraManagerSmart() const {
+	if (m_context) {
+		if (auto* camera = m_context->GetCameraManager()) return camera;
+	}
+	return m_cameraManager;  // Fallback to old way
+}
+
+EziIOManager* MainUIManager::GetIOManager() const {
+	if (m_context) {
+		if (auto* io = m_context->GetIOManager()) return io;
+	}
+	return m_ioManager;  // Fallback to old way
+}
+
+IOConfigManager* MainUIManager::GetIOConfig() const {
+	if (m_context) {
+		if (auto* ioConfig = m_context->GetIOConfig()) return ioConfig;
+	}
+	return m_ioConfigManager;  // Fallback to old way
+}
+
+PneumaticManager* MainUIManager::GetPneumaticManager() const {
+	if (m_context) {
+		if (auto* pneumatic = m_context->GetPneumaticManager()) return pneumatic;
+	}
+	return m_pneumaticManager;  // Fallback to old way
+}
+
+DataClientManager* MainUIManager::GetDataClient() const {
+	if (m_context) {
+		if (auto* dataClient = m_context->GetDataClient()) return dataClient;
+	}
+	return m_dataClientManager;  // Fallback to old way
+}
+
+Keithley2400Manager* MainUIManager::GetKeithley() const {
+	if (m_context) {
+		if (auto* keithley = m_context->GetKeithley()) return keithley;
+	}
+	return m_keithleyManager;  // Fallback to old way
+}
