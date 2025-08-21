@@ -732,7 +732,7 @@ class Keithley2400Server:
 class Keithley2400GUI:
     def __init__(self, auto_start=False, host='127.0.0.101', port=8888, gpib='GPIB1::24::INSTR', fast_mode=True):
         self.root = tk.Tk()
-        self.root.title("Keithley 2400 Server Control Panel")
+        self.root.title("Keithley 2400 Server Control Panel : Update 2025.08.21")
         self.root.geometry("800x500")
         
         # Server instance
