@@ -1,7 +1,8 @@
-#include "include/SMU/keithley2400_client.h"
+﻿#include "include/SMU/keithley2400_client.h"
 #include "include/logger.h"
 #include "imgui.h"
 #include <sstream>
+#include <iostream>
 #include <iomanip>
 #include <algorithm>
 #include <cmath>
@@ -502,6 +503,70 @@ bool Keithley2400Client::VoltageSweep(double start, double stop, int steps, doub
 
 
 
+bool Keithley2400Client::CurrentSweep(double start, double stop, int steps, double compliance, double delay,
+  std::vector<CurrentSweepResult>& results) {
+
+  Logger* logger = Logger::GetInstance();
+  logger->LogInfo("Keithley2400Client: Starting current sweep from " +
+    std::to_string(start) + "A to " + std::to_string(stop) + "A with " +
+    std::to_string(steps) + " steps");
+
+  json data;
+  data["start"] = start;
+  data["stop"] = stop;
+  data["steps"] = steps;
+  data["compliance"] = compliance;
+  data["delay"] = delay;
+
+  std::string response;
+  bool result = SendJsonCommand("current_sweep", data.dump(), &response);
+
+  if (result) {
+    logger->LogInfo("Keithley2400Client: Received current sweep response, parsing...");
+
+    try {
+      json jsonResponse = json::parse(response);
+
+      if (jsonResponse["status"] == "success" && jsonResponse.contains("data")) {
+        results.clear();
+        auto sweepData = jsonResponse["data"];
+
+        logger->LogInfo("Keithley2400Client: Parsing " + std::to_string(sweepData.size()) + " sweep points");
+
+        for (const auto& point : sweepData) {
+          CurrentSweepResult sweepResult;
+          sweepResult.setCurrent = point.value("set_current", 0.0);
+          sweepResult.measuredVoltage = point.value("measured_voltage", 0.0);
+          sweepResult.measuredCurrent = point.value("measured_current", 0.0);
+          sweepResult.resistance = point.value("resistance", 0.0);
+          sweepResult.power = point.value("power", 0.0);
+          sweepResult.timestamp = std::chrono::steady_clock::now();
+          results.push_back(sweepResult);
+        }
+
+        logger->LogInfo("Keithley2400Client: Current sweep completed successfully with " +
+          std::to_string(results.size()) + " points");
+        return true;
+      }
+      else {
+        m_lastError = jsonResponse.value("message", "Unknown error in current sweep response");
+        logger->LogError("Keithley2400Client: Current sweep failed - " + m_lastError);
+        return false;
+      }
+    }
+    catch (const std::exception& e) {
+      m_lastError = "Failed to parse current sweep response: " + std::string(e.what());
+      logger->LogError("Keithley2400Client: " + m_lastError);
+      return false;
+    }
+  }
+
+  logger->LogError("Keithley2400Client: Failed to send current sweep command - " + m_lastError);
+  return false;
+}
+
+
+
 Keithley2400Reading Keithley2400Client::GetLatestReading() const {
   std::lock_guard<std::mutex> lock(m_dataMutex);
   return m_latestReading;
@@ -608,7 +673,7 @@ void Keithley2400Client::RenderUI() {
     return;
   }
 
-  ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(900, 700), ImGuiCond_FirstUseEver);
   if (ImGui::Begin(m_name.c_str(), &m_showWindow)) {
     // Connection status
     if (!m_isConnected) {
@@ -760,77 +825,261 @@ void Keithley2400Client::RenderUI() {
 
       ImGui::Separator();
 
-      // Voltage sweep section
-      ImGui::Text("Voltage Sweep:");
+      // ENHANCED: Tabbed sweep interface
+      ImGui::Text("Measurement Sweeps:");
 
-      // Start voltage with manual input
-      static float sweepStartFloat = static_cast<float>(m_uiState.sweepStart);
-      if (ImGui::SliderFloat("Start (V)", &sweepStartFloat, -20.0f, 20.0f, "%.2f")) {
-        m_uiState.sweepStart = static_cast<double>(sweepStartFloat);
-      }
-      ImGui::SameLine();
-      ImGui::PushItemWidth(80);
-      if (ImGui::InputFloat("##SweepStartInput", &sweepStartFloat, 0.0f, 0.0f, "%.2f")) {
-        sweepStartFloat = (std::max)(-20.0f, (std::min)(20.0f, sweepStartFloat));
-        m_uiState.sweepStart = static_cast<double>(sweepStartFloat);
-      }
-      ImGui::PopItemWidth();
+      if (ImGui::BeginTabBar("SweepTypeTabs", ImGuiTabBarFlags_None)) {
 
-      // Stop voltage with manual input
-      static float sweepStopFloat = static_cast<float>(m_uiState.sweepStop);
-      if (ImGui::SliderFloat("Stop (V)", &sweepStopFloat, -20.0f, 20.0f, "%.2f")) {
-        m_uiState.sweepStop = static_cast<double>(sweepStopFloat);
-      }
-      ImGui::SameLine();
-      ImGui::PushItemWidth(80);
-      if (ImGui::InputFloat("##SweepStopInput", &sweepStopFloat, 0.0f, 0.0f, "%.2f")) {
-        sweepStopFloat = (std::max)(-20.0f, (std::min)(20.0f, sweepStopFloat));
-        m_uiState.sweepStop = static_cast<double>(sweepStopFloat);
-      }
-      ImGui::PopItemWidth();
+        // VOLTAGE SWEEP TAB
+        if (ImGui::BeginTabItem("⚡ Voltage Sweep")) {
+          ImGui::Spacing();
 
-      // Steps with manual input
-      ImGui::SliderInt("Steps", &m_uiState.sweepSteps, 2, 100);
-      ImGui::SameLine();
-      ImGui::PushItemWidth(80);
-      ImGui::InputInt("##SweepStepsInput", &m_uiState.sweepSteps, 0, 0);
-      m_uiState.sweepSteps = (std::max)(2, (std::min)(100, m_uiState.sweepSteps)); // Clamp
-      ImGui::PopItemWidth();
+          // Voltage sweep parameter controls
+          static float sweepStartFloat = static_cast<float>(m_uiState.sweepStart);
+          if (ImGui::SliderFloat("Start (V)", &sweepStartFloat, -20.0f, 20.0f, "%.2f")) {
+            m_uiState.sweepStart = static_cast<double>(sweepStartFloat);
+          }
+          ImGui::SameLine();
+          ImGui::PushItemWidth(80);
+          if (ImGui::InputFloat("##VSweepStartInput", &sweepStartFloat, 0.0f, 0.0f, "%.2f")) {
+            sweepStartFloat = (std::max)(-20.0f, (std::min)(20.0f, sweepStartFloat));
+            m_uiState.sweepStart = static_cast<double>(sweepStartFloat);
+          }
+          ImGui::PopItemWidth();
 
-      // Compliance with manual input
-      static float sweepComplianceFloat = static_cast<float>(m_uiState.sweepCompliance);
-      if (ImGui::SliderFloat("Compliance (A)", &sweepComplianceFloat, 0.001f, 1.0f, "%.3f")) {
-        m_uiState.sweepCompliance = static_cast<double>(sweepComplianceFloat);
-      }
-      ImGui::SameLine();
-      ImGui::PushItemWidth(80);
-      if (ImGui::InputFloat("##SweepComplianceInput", &sweepComplianceFloat, 0.0f, 0.0f, "%.3f")) {
-        sweepComplianceFloat = (std::max)(0.001f, (std::min)(1.0f, sweepComplianceFloat));
-        m_uiState.sweepCompliance = static_cast<double>(sweepComplianceFloat);
-      }
-      ImGui::PopItemWidth();
+          static float sweepStopFloat = static_cast<float>(m_uiState.sweepStop);
+          if (ImGui::SliderFloat("Stop (V)", &sweepStopFloat, -20.0f, 20.0f, "%.2f")) {
+            m_uiState.sweepStop = static_cast<double>(sweepStopFloat);
+          }
+          ImGui::SameLine();
+          ImGui::PushItemWidth(80);
+          if (ImGui::InputFloat("##VSweepStopInput", &sweepStopFloat, 0.0f, 0.0f, "%.2f")) {
+            sweepStopFloat = (std::max)(-20.0f, (std::min)(20.0f, sweepStopFloat));
+            m_uiState.sweepStop = static_cast<double>(sweepStopFloat);
+          }
+          ImGui::PopItemWidth();
 
-      // Delay with manual input
-      static float sweepDelayFloat = static_cast<float>(m_uiState.sweepDelay);
-      if (ImGui::SliderFloat("Delay (s)", &sweepDelayFloat, 0.01f, 1.0f, "%.3f")) {
-        m_uiState.sweepDelay = static_cast<double>(sweepDelayFloat);
-      }
-      ImGui::SameLine();
-      ImGui::PushItemWidth(80);
-      if (ImGui::InputFloat("##SweepDelayInput", &sweepDelayFloat, 0.0f, 0.0f, "%.3f")) {
-        sweepDelayFloat = (std::max)(0.01f, (std::min)(1.0f, sweepDelayFloat));
-        m_uiState.sweepDelay = static_cast<double>(sweepDelayFloat);
-      }
-      ImGui::PopItemWidth();
+          ImGui::SliderInt("Steps", &m_uiState.sweepSteps, 2, 100);
+          ImGui::SameLine();
+          ImGui::PushItemWidth(80);
+          ImGui::InputInt("##VSweepStepsInput", &m_uiState.sweepSteps, 0, 0);
+          m_uiState.sweepSteps = (std::max)(2, (std::min)(100, m_uiState.sweepSteps));
+          ImGui::PopItemWidth();
 
-      // Complete corrected section:
-      if (ImGui::Button("Perform Voltage Sweep")) {
-        std::vector<VoltageSweepResult> sweepResults;
-        if (VoltageSweep(m_uiState.sweepStart, m_uiState.sweepStop, m_uiState.sweepSteps,
-          m_uiState.sweepCompliance, m_uiState.sweepDelay, sweepResults)) {
-          Logger::GetInstance()->LogInfo("Voltage sweep completed with " + std::to_string(sweepResults.size()) + " points");
-          // Could store results for plotting
+          static float sweepComplianceFloat = static_cast<float>(m_uiState.sweepCompliance);
+          if (ImGui::SliderFloat("Current Compliance (A)", &sweepComplianceFloat, 0.001f, 1.0f, "%.3f")) {
+            m_uiState.sweepCompliance = static_cast<double>(sweepComplianceFloat);
+          }
+          ImGui::SameLine();
+          ImGui::PushItemWidth(80);
+          if (ImGui::InputFloat("##VSweepComplianceInput", &sweepComplianceFloat, 0.0f, 0.0f, "%.3f")) {
+            sweepComplianceFloat = (std::max)(0.001f, (std::min)(1.0f, sweepComplianceFloat));
+            m_uiState.sweepCompliance = static_cast<double>(sweepComplianceFloat);
+          }
+          ImGui::PopItemWidth();
+
+          static float sweepDelayFloat = static_cast<float>(m_uiState.sweepDelay);
+          if (ImGui::SliderFloat("Delay (s)", &sweepDelayFloat, 0.01f, 1.0f, "%.3f")) {
+            m_uiState.sweepDelay = static_cast<double>(sweepDelayFloat);
+          }
+          ImGui::SameLine();
+          ImGui::PushItemWidth(80);
+          if (ImGui::InputFloat("##VSweepDelayInput", &sweepDelayFloat, 0.0f, 0.0f, "%.3f")) {
+            sweepDelayFloat = (std::max)(0.01f, (std::min)(1.0f, sweepDelayFloat));
+            m_uiState.sweepDelay = static_cast<double>(sweepDelayFloat);
+          }
+          ImGui::PopItemWidth();
+
+          ImGui::Spacing();
+
+          if (ImGui::Button("🚀 Perform Voltage Sweep", ImVec2(-1, 40))) {
+            Logger::GetInstance()->LogInfo("Starting voltage sweep from " +
+              std::to_string(m_uiState.sweepStart) + "V to " +
+              std::to_string(m_uiState.sweepStop) + "V");
+
+            std::vector<VoltageSweepResult> sweepResults;
+            if (VoltageSweep(m_uiState.sweepStart, m_uiState.sweepStop, m_uiState.sweepSteps,
+              m_uiState.sweepCompliance, m_uiState.sweepDelay, sweepResults)) {
+
+              Logger::GetInstance()->LogInfo("Voltage sweep completed with " + std::to_string(sweepResults.size()) + " points");
+
+              // Print results to console
+              std::cout << "\n" << std::string(70, '=') << std::endl;
+              std::cout << "           VOLTAGE SWEEP RESULTS" << std::endl;
+              std::cout << std::string(70, '=') << std::endl;
+              std::cout << "Points: " << sweepResults.size() << std::endl;
+              std::cout << "Range:  " << m_uiState.sweepStart << "V to " << m_uiState.sweepStop << "V" << std::endl;
+              std::cout << std::string(70, '-') << std::endl;
+
+              std::cout << std::left
+                << std::setw(6) << "Step"
+                << std::setw(12) << "Set V"
+                << std::setw(15) << "Measured V"
+                << std::setw(15) << "Current (A)"
+                << std::setw(15) << "Current (mA)"
+                << "Power (mW)" << std::endl;
+              std::cout << std::string(70, '-') << std::endl;
+
+              for (size_t i = 0; i < sweepResults.size(); ++i) {
+                const auto& point = sweepResults[i];
+                double powerMW = point.measuredVoltage * point.measuredCurrent * 1000.0;
+
+                std::cout << std::left
+                  << std::setw(6) << (i + 1)
+                  << std::setw(12) << std::fixed << std::setprecision(3) << point.setVoltage
+                  << std::setw(15) << std::fixed << std::setprecision(6) << point.measuredVoltage
+                  << std::setw(15) << std::scientific << std::setprecision(3) << point.measuredCurrent
+                  << std::setw(15) << std::fixed << std::setprecision(6) << (point.measuredCurrent * 1000.0)
+                  << std::fixed << std::setprecision(6) << powerMW << std::endl;
+              }
+              std::cout << std::string(70, '=') << "\n" << std::endl;
+            }
+          }
+
+          ImGui::EndTabItem();
         }
+
+        // CURRENT SWEEP TAB
+        if (ImGui::BeginTabItem("🔋 Current Sweep")) {
+          ImGui::Spacing();
+
+          // Current sweep controls
+          static float currentSweepStart = 0.0f;
+          static float currentSweepStop = 0.001f;
+          static int currentSweepSteps = 11;
+          static float currentSweepCompliance = 10.0f;
+          static float currentSweepDelay = 0.1f;
+
+          if (ImGui::SliderFloat("Start (A)", &currentSweepStart, -1.0f, 1.0f, "%.6f")) {
+            // Value updated by slider
+          }
+          ImGui::SameLine();
+          ImGui::PushItemWidth(80);
+          if (ImGui::InputFloat("##CurrentSweepStartInput", &currentSweepStart, 0.0f, 0.0f, "%.6f")) {
+            currentSweepStart = (std::max)(-1.0f, (std::min)(1.0f, currentSweepStart));
+          }
+          ImGui::PopItemWidth();
+
+          if (ImGui::SliderFloat("Stop (A)", &currentSweepStop, -1.0f, 1.0f, "%.6f")) {
+            // Value updated by slider
+          }
+          ImGui::SameLine();
+          ImGui::PushItemWidth(80);
+          if (ImGui::InputFloat("##CurrentSweepStopInput", &currentSweepStop, 0.0f, 0.0f, "%.6f")) {
+            currentSweepStop = (std::max)(-1.0f, (std::min)(1.0f, currentSweepStop));
+          }
+          ImGui::PopItemWidth();
+
+          ImGui::SliderInt("Steps##CSteps", &currentSweepSteps, 2, 100);
+          ImGui::SameLine();
+          ImGui::PushItemWidth(80);
+          ImGui::InputInt("##CurrentSweepStepsInput", &currentSweepSteps, 0, 0);
+          currentSweepSteps = (std::max)(2, (std::min)(100, currentSweepSteps));
+          ImGui::PopItemWidth();
+
+          if (ImGui::SliderFloat("Voltage Compliance (V)", &currentSweepCompliance, 1.0f, 200.0f, "%.1f")) {
+            // Value updated by slider
+          }
+          ImGui::SameLine();
+          ImGui::PushItemWidth(80);
+          if (ImGui::InputFloat("##CurrentSweepComplianceInput", &currentSweepCompliance, 0.0f, 0.0f, "%.1f")) {
+            currentSweepCompliance = (std::max)(1.0f, (std::min)(200.0f, currentSweepCompliance));
+          }
+          ImGui::PopItemWidth();
+
+          if (ImGui::SliderFloat("Delay (s)##CDelay", &currentSweepDelay, 0.01f, 1.0f, "%.3f")) {
+            // Value updated by slider
+          }
+          ImGui::SameLine();
+          ImGui::PushItemWidth(80);
+          if (ImGui::InputFloat("##CurrentSweepDelayInput", &currentSweepDelay, 0.0f, 0.0f, "%.3f")) {
+            currentSweepDelay = (std::max)(0.01f, (std::min)(1.0f, currentSweepDelay));
+          }
+          ImGui::PopItemWidth();
+
+          ImGui::Spacing();
+
+          if (ImGui::Button("🚀 Perform Current Sweep", ImVec2(-1, 40))) {
+            Logger::GetInstance()->LogInfo("Starting current sweep from " +
+              std::to_string(currentSweepStart) + "A to " +
+              std::to_string(currentSweepStop) + "A");
+
+            std::vector<CurrentSweepResult> currentSweepResults;
+            if (CurrentSweep(currentSweepStart, currentSweepStop, currentSweepSteps,
+              currentSweepCompliance, currentSweepDelay, currentSweepResults)) {
+
+              Logger::GetInstance()->LogInfo("Current sweep completed with " + std::to_string(currentSweepResults.size()) + " points");
+
+              // Print results to console
+              std::cout << "\n" << std::string(80, '=') << std::endl;
+              std::cout << "           CURRENT SWEEP RESULTS" << std::endl;
+              std::cout << std::string(80, '=') << std::endl;
+              std::cout << "Points: " << currentSweepResults.size() << std::endl;
+              std::cout << "Range:  " << currentSweepStart << "A to " << currentSweepStop << "A" << std::endl;
+              std::cout << std::string(80, '-') << std::endl;
+
+              std::cout << std::left
+                << std::setw(6) << "Step"
+                << std::setw(15) << "Set I (A)"
+                << std::setw(15) << "Measured V"
+                << std::setw(15) << "Measured I"
+                << std::setw(15) << "Resistance"
+                << "Power (mW)" << std::endl;
+              std::cout << std::string(80, '-') << std::endl;
+
+              for (size_t i = 0; i < currentSweepResults.size(); ++i) {
+                const auto& point = currentSweepResults[i];
+                double powerMW = point.power * 1000.0;
+
+                std::cout << std::left
+                  << std::setw(6) << (i + 1)
+                  << std::setw(15) << std::scientific << std::setprecision(3) << point.setCurrent
+                  << std::setw(15) << std::fixed << std::setprecision(6) << point.measuredVoltage
+                  << std::setw(15) << std::scientific << std::setprecision(3) << point.measuredCurrent
+                  << std::setw(15) << std::scientific << std::setprecision(3) << point.resistance
+                  << std::fixed << std::setprecision(6) << powerMW << std::endl;
+              }
+
+              std::cout << std::string(80, '-') << std::endl;
+
+              // Calculate and display summary statistics
+              double maxVoltage = 0.0, minVoltage = 0.0;
+              double avgResistance = 0.0;
+              int validPoints = 0;
+
+              for (const auto& point : currentSweepResults) {
+                maxVoltage = (std::max)(maxVoltage, std::abs(point.measuredVoltage));
+                minVoltage = (std::min)(minVoltage, std::abs(point.measuredVoltage));
+
+                if (point.resistance > 0 && point.resistance < 1e10) {
+                  avgResistance += point.resistance;
+                  validPoints++;
+                }
+              }
+
+              if (validPoints > 0) {
+                avgResistance /= validPoints;
+              }
+
+              std::cout << "SUMMARY:" << std::endl;
+              std::cout << "  Current range: " << std::scientific << std::setprecision(3)
+                << currentSweepStart << "A to " << currentSweepStop << "A" << std::endl;
+              std::cout << "  Voltage range: " << std::fixed << std::setprecision(6)
+                << minVoltage << "V to " << maxVoltage << "V" << std::endl;
+
+              if (validPoints > 0) {
+                std::cout << "  Average resistance: " << std::scientific << std::setprecision(3)
+                  << avgResistance << " Ohms" << std::endl;
+              }
+
+              std::cout << std::string(80, '=') << "\n" << std::endl;
+            }
+          }
+
+          ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
       }
 
       ImGui::Separator();
@@ -851,19 +1100,19 @@ void Keithley2400Client::RenderUI() {
       }
 
       if (!voltageData.empty()) {
-        float minV = *(std::min_element)(voltageData.begin(), voltageData.end());
-        float maxV = *(std::max_element)(voltageData.begin(), voltageData.end());
+        float minV = *(std::min_element(voltageData.begin(), voltageData.end()));
+        float maxV = *(std::max_element(voltageData.begin(), voltageData.end()));
         float margin = (std::max)(0.1f, (maxV - minV) * 0.1f);
 
         ImGui::PlotLines("Voltage (V)", voltageData.data(), static_cast<int>(voltageData.size()),
-          0, nullptr, minV - margin, maxV + margin, ImVec2(760, 100));
+          0, nullptr, minV - margin, maxV + margin, ImVec2(850, 100));
 
-        float minI = *(std::min_element)(currentData.begin(), currentData.end());
-        float maxI = *(std::max_element)(currentData.begin(), currentData.end());
+        float minI = *(std::min_element(currentData.begin(), currentData.end()));
+        float maxI = *(std::max_element(currentData.begin(), currentData.end()));
         float currentMargin = (std::max)(0.1f, (maxI - minI) * 0.1f);
 
         ImGui::PlotLines("Current (mA)", currentData.data(), static_cast<int>(currentData.size()),
-          0, nullptr, minI - currentMargin, maxI + currentMargin, ImVec2(760, 100));
+          0, nullptr, minI - currentMargin, maxI + currentMargin, ImVec2(850, 100));
       }
       else {
         ImGui::Text("No measurement data available yet");

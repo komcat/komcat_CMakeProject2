@@ -6,6 +6,7 @@
 #include <vector>
 #include "include/logger.h"
 struct VoltageSweepResult; // Forward declaration if not included
+struct CurrentSweepResult; // Forward declaration if not included
 // Forward declarations
 class Keithley2400Manager;
 class Keithley2400Client;
@@ -37,6 +38,15 @@ private:
 		int totalSteps = 0;
 		int currentStep = 0;
 	} m_sweepState;
+
+	struct CurrentSweepState {
+		bool inProgress = false;
+		std::string lastResult = "";
+		std::vector<CurrentSweepResult> lastSweepData;
+		std::chrono::steady_clock::time_point startTime;
+		int totalSteps = 0;
+		int currentStep = 0;
+	} m_currentSweepState;
 
 	// Add this line to your existing private members
 	Logger* m_logger;
@@ -84,6 +94,12 @@ private:
 	void StopPollingWithFeedback(Keithley2400Client* device);
 	bool ValidatePollingRate(int intervalMs);
 
+	// Add method declarations to UISMUPanel.h
+	void RenderCurrentSweepControls(Keithley2400Client* device);
+	void PrintCurrentSweepDataToConsole(const std::vector<CurrentSweepResult>& data);
+	void ExportCurrentSweepDataToFile(const std::vector<CurrentSweepResult>& data);
+
+
 	// UI state for polling controls
 	struct PollingState {
 		bool wasPollingOnConnect = false;
@@ -105,6 +121,14 @@ private:
 		int sweepSteps = 11;
 		float sweepCompliance = 0.01f;
 		float sweepDelay = 0.1f;
+
+
+		// Current sweep parameters
+		float currentSweepStart = 0.0f;
+		float currentSweepStop = 0.001f;
+		int currentSweepSteps = 11;
+		float currentSweepCompliance = 10.0f;
+		float currentSweepDelay = 0.1f;
 
 		// Enhanced polling controls
 		int pollingInterval = 250;  // Default 250ms

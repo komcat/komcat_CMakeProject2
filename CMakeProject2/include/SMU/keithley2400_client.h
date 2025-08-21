@@ -35,6 +35,15 @@ struct Keithley2400Reading {
   std::chrono::steady_clock::time_point timestamp;
 };
 
+struct CurrentSweepResult {
+  double setCurrent;
+  double measuredVoltage;
+  double measuredCurrent;
+  double resistance;
+  double power;
+  std::chrono::steady_clock::time_point timestamp;
+};
+
 struct VoltageSweepResult {
   double setVoltage;
   double measuredVoltage;
@@ -73,6 +82,9 @@ public:
   bool ReadMeasurement(Keithley2400Reading& reading);
   bool VoltageSweep(double start, double stop, int steps, double compliance, double delay,
     std::vector<VoltageSweepResult>& results);
+
+  bool CurrentSweep(double start, double stop, int steps, double compliance, double delay,
+    std::vector<CurrentSweepResult>& results);
 
   // Get latest readings
   Keithley2400Reading GetLatestReading() const;
