@@ -995,75 +995,21 @@ int main(int argc, char* argv[])
 	}
 
 
-#pragma region InitializeSplitOperations
-
-	// NEW: Initialize the split operation classes
-	std::unique_ptr<MotionOps> motionOps;
-	std::unique_ptr<IOOps> ioOps;
-	std::unique_ptr<VisionOps> visionOps;
-
-	// Get shared database managers from MachineOperations if available
-	std::shared_ptr<DatabaseManager> dbManager;
-	std::shared_ptr<OperationResultsManager> resultsManager;
-
-	if (machineOps) {
-		dbManager = machineOps->GetDatabaseManager();
-		resultsManager = machineOps->GetResultsManager();
-	}
-
-	// Initialize MotionOps
-	if (motionControlLayer && piControllerManager) {
-		motionOps = std::make_unique<MotionOps>(
-			*motionControlLayer,
-			*piControllerManager,
-			dbManager,
-			resultsManager
-		);
-		logger->LogInfo("MotionOps initialized");
-	}
-
-	// Initialize IOOps
-	if (ioManager && pneumaticManager) {
-		ioOps = std::make_unique<IOOps>(
-			*ioManager,
-			*pneumaticManager,
-			dbManager,
-			resultsManager
-		);
-		logger->LogInfo("IOOps initialized");
-	}
-
-	// Initialize VisionOps
-	if (cameraManager) {
-		visionOps = std::make_unique<VisionOps>(
-			cameraManager.get(),
-			dbManager,
-			resultsManager
-		);
-		logger->LogInfo("VisionOps initialized");
-	}
-
-
-
-
-
-
-
-#pragma endregion
-
 
 
 	// ================================================================
-	// NEW: PARALLEL REGISTRATION WITH APPCONTEXT
-	// Just add these lines - no changes to existing code!
-	// ================================================================
-
+// NEW: PARALLEL REGISTRATION WITH APPCONTEXT
+// Just add these lines - no changes to existing code!
+// ================================================================
 	logger->LogInfo("=== Registering services with AppContext ===");
 	auto& context = AppContext::GetInstance();
 
 	// Register existing services (simple one-liner for each)
 	if (motionConfigManager) {
 		context.RegisterExistingMotionConfig(motionConfigManager.get());
+	}
+	if (motionControlLayer) {  // ADD THIS - was missing!
+		context.RegisterExistingMotionControlLayer(motionControlLayer.get());
 	}
 	if (piControllerManager) {
 		context.RegisterExistingPIController(piControllerManager.get());
@@ -1097,7 +1043,111 @@ int main(int argc, char* argv[])
 	}
 	if (machineOps) {
 		context.RegisterExistingMachineOps(machineOps.get());
+		// Register database managers from MachineOperations
+		if (machineOps->GetDatabaseManager()) {
+			context.RegisterExistingDatabaseManager(machineOps->GetDatabaseManager().get());
+		}
+		if (machineOps->GetResultsManager()) {
+			context.RegisterExistingOperationResultsManager(machineOps->GetResultsManager().get());
+		}
 	}
+
+	logger->LogInfo("✅ All services registered with AppContext");
+	context.LogInitializationStatus();
+
+	// ================================================================
+	// CREATE NEW OPERATIONS CLASSES USING APPCONTEXT
+	// ================================================================
+	logger->LogInfo("=== Creating Operations Classes ===");
+
+	// NEW: Initialize the split operation classes
+	std::unique_ptr<MotionOps> motionOps;
+	std::unique_ptr<IOOps> ioOps;
+	std::unique_ptr<VisionOps> visionOps;
+
+	// Initialize MotionOps using AppContext
+	if (context.GetMotionControlLayer() && context.GetPIController()) {
+		motionOps = std::make_unique<MotionOps>(
+			*context.GetMotionControlLayer(),     // MotionControlLayer& (reference)
+			*context.GetPIController(),           // PIControllerManager& (reference)
+			context.GetDatabaseManagerShared(),   // std::shared_ptr<DatabaseManager>
+			context.GetResultsManagerShared()     // std::shared_ptr<OperationResultsManager>
+		);
+
+		if (motionOps->Initialize()) {
+			logger->LogInfo("✅ MotionOps initialized successfully");
+			context.RegisterExistingMotionOps(motionOps.get());
+		}
+		else {
+			logger->LogError("❌ MotionOps initialization failed: " + motionOps->GetLastError());
+		}
+	}
+	else {
+		logger->LogError("❌ Cannot create MotionOps - missing required components:");
+		logger->LogError("  - MotionControlLayer: " + std::string(context.GetMotionControlLayer() ? "✅" : "❌"));
+		logger->LogError("  - PIControllerManager: " + std::string(context.GetPIController() ? "✅" : "❌"));
+	}
+
+	// Initialize IOOps using AppContext
+	if (context.GetIOManager() && context.GetPneumaticManager()) {
+		ioOps = std::make_unique<IOOps>(
+			*context.GetIOManager(),              // EziIOManager& (reference)
+			*context.GetPneumaticManager(),       // PneumaticManager& (reference)
+			context.GetDatabaseManagerShared(),   // std::shared_ptr<DatabaseManager>
+			context.GetResultsManagerShared()     // std::shared_ptr<OperationResultsManager>
+		);
+
+		if (ioOps->Initialize()) {
+			logger->LogInfo("✅ IOOps initialized successfully");
+			context.RegisterExistingIOOps(ioOps.get());
+		}
+		else {
+			logger->LogError("❌ IOOps initialization failed: " );
+		}
+	}
+	else {
+		logger->LogError("❌ Cannot create IOOps - missing required components:");
+		logger->LogError("  - IOManager: " + std::string(context.GetIOManager() ? "✅" : "❌"));
+		logger->LogError("  - PneumaticManager: " + std::string(context.GetPneumaticManager() ? "✅" : "❌"));
+	}
+
+	// Initialize VisionOps using AppContext
+	if (context.GetCameraManager()) {
+		visionOps = std::make_unique<VisionOps>(
+			context.GetCameraManager(),           // CameraManager* (pointer)
+			context.GetDatabaseManagerShared(),   // std::shared_ptr<DatabaseManager>
+			context.GetResultsManagerShared()     // std::shared_ptr<OperationResultsManager>
+		);
+
+		if (visionOps->Initialize()) {
+			logger->LogInfo("✅ VisionOps initialized successfully");
+			context.RegisterExistingVisionOps(visionOps.get());
+		}
+		else {
+			logger->LogError("❌ VisionOps initialization failed: ");
+		}
+	}
+	else {
+		logger->LogError("❌ Cannot create VisionOps - missing CameraManager");
+	}
+
+	logger->LogInfo("=== Operations Classes Creation Complete ===");
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 	if (motionOps) {
 		context.RegisterExistingMotionOps(motionOps.get());
 	}
@@ -1491,7 +1541,9 @@ int main(int argc, char* argv[])
 
 #pragma region DebugMode
 		//debug mode smaller ops
-		if (g_deugMode) {
+
+		if (true) {
+		//if (g_deugMode) {
 			// NEW: Add test window for MotionOps
 			static bool showMotionTest = true;
 			if (showMotionTest && motionOps) {

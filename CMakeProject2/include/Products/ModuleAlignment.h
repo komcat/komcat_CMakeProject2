@@ -3,7 +3,7 @@
 
 #include "include/machine_operations.h"
 #include "include/halcon/VisionCircleDetection.h"
-#include "VisionPresetManager.h"
+#include "include/vision/VisionPresetManager.h"
 #include "include/camera/CameraManager.h"
 #include "include/camera/ICameraHardware.h"
 #include "include/camera/CameraFrameData.h"

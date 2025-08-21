@@ -1,7 +1,7 @@
 ﻿// DatumUI.h - Pure UI class for Datum Reference interface
 #pragma once
 
-#include "ProductReferenceManager.h"
+#include "include/Products/ProductReferenceManager.h"
 #include "imgui.h"
 #include <memory>
 #include <string>

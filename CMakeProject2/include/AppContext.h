@@ -1,18 +1,29 @@
 ﻿#pragma once
 
+// === WINSOCK CONFLICT PREVENTION ===
+// Include winsock headers in correct order to prevent conflicts
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
+
 #include <memory>
 #include <functional>
+#include <map>
+#include <vector>
+#include <string>
 #include "logger.h"
-#include "../include/ops/vision_ops.h"  // Add actual header instead of forward declaration
-#include "../include/ops/io_ops.h"  // Add actual header instead of forward declaration
-#include "../include/ops/motion_ops.h"  // Add actual header instead of forward declaration
-#include "../include/SMU/keithley2400_manager.h"
-#include "../include/camera/CameraConfigManager.h"
 
-// Forward declarations for all your managers/services
+// === FORWARD DECLARATIONS ===
+// Use forward declarations to minimize include dependencies
 class MotionConfigManager;
 class PIControllerManager;
 class ACSControllerManager;
+class MotionControlLayer;
 class EziIOManager;
 class IOConfigManager;
 class PneumaticManager;
@@ -29,6 +40,7 @@ class DatabaseManager;
 class OperationResultsManager;
 class Logger;
 class ConfigFileWatchdog;
+class IOperations;
 
 /**
  * Application Context - Centralized service container
@@ -37,209 +49,368 @@ class ConfigFileWatchdog;
 class AppContext {
 public:
   // === Core System Services ===
-  // Note: Logger uses singleton pattern, so we don't store it here
-  std::unique_ptr<MotionConfigManager> motionConfigManager;
-  std::unique_ptr<ConfigFileWatchdog> configWatchdog;
+  MotionConfigManager* motionConfigManager = nullptr;
+  ConfigFileWatchdog* configWatchdog = nullptr;
+
+  // === Motion Control ===
+  MotionControlLayer* motionControlLayer = nullptr;
 
   // === Hardware Managers ===
-  std::unique_ptr<PIControllerManager> piControllerManager;
-  std::unique_ptr<ACSControllerManager> acsControllerManager;
-  std::unique_ptr<EziIOManager> ioManager;
-  std::unique_ptr<IOConfigManager> ioConfigManager;
-  std::unique_ptr<PneumaticManager> pneumaticManager;
+  PIControllerManager* piControllerManager = nullptr;
+  ACSControllerManager* acsControllerManager = nullptr;
+  EziIOManager* ioManager = nullptr;
+  IOConfigManager* ioConfigManager = nullptr;
+  PneumaticManager* pneumaticManager = nullptr;
 
   // === Vision System ===
-  std::unique_ptr<CameraManager> cameraManager;
-  std::unique_ptr<CameraConfigManager> cameraConfigManager;
+  CameraManager* cameraManager = nullptr;
+  CameraConfigManager* cameraConfigManager = nullptr;
 
   // === Data & Communication ===
-  std::unique_ptr<DataClientManager> dataClientManager;
-  std::unique_ptr<DatabaseManager> databaseManager;
-  std::unique_ptr<OperationResultsManager> resultsManager;
+  DataClientManager* dataClientManager = nullptr;
+  DatabaseManager* databaseManager = nullptr;
+  OperationResultsManager* resultsManager = nullptr;
 
   // === Equipment Managers ===
-  std::unique_ptr<CLD101xManager> cld101xManager;
-  std::unique_ptr<Keithley2400Manager> keithleyManager;
+  CLD101xManager* cld101xManager = nullptr;
+  Keithley2400Manager* keithleyManager = nullptr;
 
   // === High-Level Operations ===
-  std::unique_ptr<MachineOperations> machineOperations;
-  std::unique_ptr<MotionOps> motionOps;
-  std::unique_ptr<IOOps> ioOps;
-  std::unique_ptr<VisionOps> visionOps;
+  // Use raw pointers for ops classes to avoid incomplete type issues
+  MachineOperations* machineOperations = nullptr;
+  MotionOps* motionOps = nullptr;
+  IOOps* ioOps = nullptr;
+  VisionOps* visionOps = nullptr;
 
+private:
+  // === Operations Registry for Scripting Interface ===
+  std::map<std::string, IOperations*> m_operationsRegistry;
+
+  // === Non-owning pointers for parallel migration ===
+  MotionConfigManager* m_motionConfigPtr = nullptr;
+  MotionControlLayer* m_motionControlLayerPtr = nullptr;
+  DatabaseManager* m_databaseManagerPtr = nullptr;
+  OperationResultsManager* m_resultsManagerPtr = nullptr;
+  PIControllerManager* m_piControllerPtr = nullptr;
+  ACSControllerManager* m_acsControllerPtr = nullptr;
+  EziIOManager* m_ioManagerPtr = nullptr;
+  IOConfigManager* m_ioConfigPtr = nullptr;
+  PneumaticManager* m_pneumaticPtr = nullptr;
+  CameraManager* m_cameraManagerPtr = nullptr;
+  CameraConfigManager* m_cameraConfigPtr = nullptr;
+  DataClientManager* m_dataClientPtr = nullptr;
+  CLD101xManager* m_cld101xPtr = nullptr;
+  Keithley2400Manager* m_keithleyPtr = nullptr;
+  MachineOperations* m_machineOperationsPtr = nullptr;
+  MotionOps* m_motionOpsPtr = nullptr;
+  IOOps* m_ioOpsPtr = nullptr;
+  VisionOps* m_visionOpsPtr = nullptr;
+
+public:
   // === Singleton Access ===
   static AppContext& GetInstance() {
     static AppContext instance;
     return instance;
   }
 
+  // === NEW: Motion Control Layer Registration ===
+  void RegisterExistingMotionControlLayer(MotionControlLayer* layer) {
+    motionControlLayer = layer;
+    m_motionControlLayerPtr = layer;  // Also store in parallel pointer
+    if (motionControlLayer) {
+      GetLogger()->LogInfo("AppContext: MotionControlLayer registered");
+    }
+  }
+
+  // === Database and Results Manager Registration ===
+  void RegisterDatabaseManager(DatabaseManager* dbManager) {
+    databaseManager = dbManager;
+    m_databaseManagerPtr = dbManager;
+    if (databaseManager) {
+      GetLogger()->LogInfo("AppContext: DatabaseManager registered");
+    }
+  }
+
+  void RegisterOperationResultsManager(OperationResultsManager* resManager) {
+    resultsManager = resManager;
+    m_resultsManagerPtr = resManager;
+    if (resultsManager) {
+      GetLogger()->LogInfo("AppContext: OperationResultsManager registered");
+    }
+  }
+
+  // === Enhanced Operations Registration ===
+  void RegisterMotionOps(MotionOps* ops) {
+    motionOps = ops;
+    if (motionOps) {
+      GetLogger()->LogInfo("AppContext: MotionOps registered");
+    }
+  }
+
+  void RegisterIOOps(IOOps* ops) {
+    ioOps = ops;
+    if (ioOps) {
+      GetLogger()->LogInfo("AppContext: IOOps registered");
+    }
+  }
+
+  void RegisterVisionOps(VisionOps* ops) {
+    visionOps = ops;
+    if (visionOps) {
+      GetLogger()->LogInfo("AppContext: VisionOps registered");
+    }
+  }
+
+  // === Operations Registry Access (for Future Scripting) ===
+  std::vector<std::string> GetAvailableOperationTypes() const {
+    std::vector<std::string> types;
+    if (motionOps) types.push_back("Motion");
+    if (ioOps) types.push_back("IO");
+    if (visionOps) types.push_back("Vision");
+    return types;
+  }
+
   // === Service Registration & Access ===
-
-  // Register core services
-  // Note: Logger is singleton, accessed via Logger::GetInstance()
-
-  void RegisterMotionConfig(std::unique_ptr<MotionConfigManager> service) {
-    motionConfigManager = std::move(service);
+  void RegisterMotionConfig(MotionConfigManager* service) {
+    motionConfigManager = service;
   }
 
-  // NEW: Register existing services by raw pointer (for parallel migration)
-  void RegisterMotionConfigPtr(MotionConfigManager* service) {
-    // Store as non-owning pointer - main app keeps ownership
-    motionConfigManager.reset(service);
-    // TODO: Need to track that we don't own this for proper cleanup
+  // Individual registration methods for existing services
+  void RegisterExistingMotionConfig(MotionConfigManager* service) {
+    motionConfigManager = service;
+    m_motionConfigPtr = service;
   }
-
-  // BETTER: Individual registration methods for existing services (easier to use)
-  void RegisterExistingMotionConfig(MotionConfigManager* service) { m_motionConfigPtr = service; }
-  void RegisterExistingPIController(PIControllerManager* service) { m_piControllerPtr = service; }
-  void RegisterExistingACSController(ACSControllerManager* service) { m_acsControllerPtr = service; }
-  void RegisterExistingIOManager(EziIOManager* service) { m_ioManagerPtr = service; }
-  void RegisterExistingIOConfig(IOConfigManager* service) { m_ioConfigPtr = service; }
-  void RegisterExistingPneumatic(PneumaticManager* service) { m_pneumaticPtr = service; }
-  void RegisterExistingCameraManager(CameraManager* service) { m_cameraManagerPtr = service; }
-  void RegisterExistingCameraConfig(CameraConfigManager* service) { m_cameraConfigPtr = service; }
-  void RegisterExistingDataClient(DataClientManager* service) { m_dataClientPtr = service; }
-  void RegisterExistingCLD101x(CLD101xManager* service) { m_cld101xPtr = service; }
-  void RegisterExistingKeithley(Keithley2400Manager* service) { m_keithleyPtr = service; }
-  void RegisterExistingMachineOps(MachineOperations* service) { m_machineOperationsPtr = service; }
-  void RegisterExistingMotionOps(MotionOps* service) { m_motionOpsPtr = service; }
-  void RegisterExistingIOOps(IOOps* service) { m_ioOpsPtr = service; }
-  void RegisterExistingVisionOps(VisionOps* service) { m_visionOpsPtr = service; }
+  void RegisterExistingPIController(PIControllerManager* service) {
+    piControllerManager = service;
+    m_piControllerPtr = service;
+  }
+  void RegisterExistingACSController(ACSControllerManager* service) {
+    acsControllerManager = service;
+    m_acsControllerPtr = service;
+  }
+  void RegisterExistingDatabaseManager(DatabaseManager* service) {
+    databaseManager = service;
+    m_databaseManagerPtr = service;
+  }
+  void RegisterExistingOperationResultsManager(OperationResultsManager* service) {
+    resultsManager = service;
+    m_resultsManagerPtr = service;
+  }
+  void RegisterExistingIOManager(EziIOManager* service) {
+    ioManager = service;
+    m_ioManagerPtr = service;
+  }
+  void RegisterExistingIOConfig(IOConfigManager* service) {
+    ioConfigManager = service;
+    m_ioConfigPtr = service;
+  }
+  void RegisterExistingPneumatic(PneumaticManager* service) {
+    pneumaticManager = service;
+    m_pneumaticPtr = service;
+  }
+  void RegisterExistingCameraManager(CameraManager* service) {
+    cameraManager = service;
+    m_cameraManagerPtr = service;
+  }
+  void RegisterExistingCameraConfig(CameraConfigManager* service) {
+    cameraConfigManager = service;
+    m_cameraConfigPtr = service;
+  }
+  void RegisterExistingDataClient(DataClientManager* service) {
+    dataClientManager = service;
+    m_dataClientPtr = service;
+  }
+  void RegisterExistingCLD101x(CLD101xManager* service) {
+    cld101xManager = service;
+    m_cld101xPtr = service;
+  }
+  void RegisterExistingKeithley(Keithley2400Manager* service) {
+    keithleyManager = service;
+    m_keithleyPtr = service;
+  }
+  void RegisterExistingMachineOps(MachineOperations* service) {
+    machineOperations = service;
+    m_machineOperationsPtr = service;
+  }
+  void RegisterExistingMotionOps(MotionOps* service) {
+    motionOps = service;
+    m_motionOpsPtr = service;
+  }
+  void RegisterExistingIOOps(IOOps* service) {
+    ioOps = service;
+    m_ioOpsPtr = service;
+  }
+  void RegisterExistingVisionOps(VisionOps* service) {
+    visionOps = service;
+    m_visionOpsPtr = service;
+  }
 
   // Register hardware managers
-  void RegisterPIController(std::unique_ptr<PIControllerManager> service) {
-    piControllerManager = std::move(service);
+  void RegisterPIController(PIControllerManager* service) {
+    piControllerManager = service;
   }
 
-  void RegisterACSController(std::unique_ptr<ACSControllerManager> service) {
-    acsControllerManager = std::move(service);
+  void RegisterACSController(ACSControllerManager* service) {
+    acsControllerManager = service;
   }
 
-  void RegisterIOManager(std::unique_ptr<EziIOManager> service) {
-    ioManager = std::move(service);
+  void RegisterIOManager(EziIOManager* service) {
+    ioManager = service;
   }
 
-  void RegisterIOConfig(std::unique_ptr<IOConfigManager> service) {
-    ioConfigManager = std::move(service);
+  void RegisterIOConfig(IOConfigManager* service) {
+    ioConfigManager = service;
   }
 
-  void RegisterPneumaticManager(std::unique_ptr<PneumaticManager> service) {
-    pneumaticManager = std::move(service);
+  void RegisterPneumaticManager(PneumaticManager* service) {
+    pneumaticManager = service;
   }
 
   // Register vision services
-  void RegisterCameraManager(std::unique_ptr<CameraManager> service) {
-    cameraManager = std::move(service);
+  void RegisterCameraManager(CameraManager* service) {
+    cameraManager = service;
   }
 
-  void RegisterCameraConfig(std::unique_ptr<CameraConfigManager> service) {
-    cameraConfigManager = std::move(service);
+  void RegisterCameraConfig(CameraConfigManager* service) {
+    cameraConfigManager = service;
   }
 
   // Register data services
-  void RegisterDataClient(std::unique_ptr<DataClientManager> service) {
-    dataClientManager = std::move(service);
+  void RegisterDataClient(DataClientManager* service) {
+    dataClientManager = service;
   }
 
-  void RegisterDatabase(std::unique_ptr<DatabaseManager> service) {
-    databaseManager = std::move(service);
+  void RegisterDatabase(DatabaseManager* service) {
+    databaseManager = service;
   }
 
-  void RegisterResultsManager(std::unique_ptr<OperationResultsManager> service) {
-    resultsManager = std::move(service);
+  void RegisterResultsManager(OperationResultsManager* service) {
+    resultsManager = service;
   }
 
   // Register equipment managers
-  void RegisterCLD101x(std::unique_ptr<CLD101xManager> service) {
-    cld101xManager = std::move(service);
+  void RegisterCLD101x(CLD101xManager* service) {
+    cld101xManager = service;
   }
 
-  void RegisterKeithley(std::unique_ptr<Keithley2400Manager> service) {
-    keithleyManager = std::move(service);
+  void RegisterKeithley(Keithley2400Manager* service) {
+    keithleyManager = service;
   }
 
   // Register high-level operations
-  void RegisterMachineOperations(std::unique_ptr<MachineOperations> service) {
-    machineOperations = std::move(service);
+  void RegisterMachineOperations(MachineOperations* service) {
+    machineOperations = service;
   }
 
-  void RegisterMotionOps(std::unique_ptr<MotionOps> service) {
-    motionOps = std::move(service);
-  }
-
-  void RegisterIOOps(std::unique_ptr<IOOps> service) {
-    ioOps = std::move(service);
-  }
-
-  void RegisterVisionOps(std::unique_ptr<VisionOps> service) {
-    visionOps = std::move(service);
-  }
-
-  void RegisterConfigWatchdog(std::unique_ptr<ConfigFileWatchdog> service) {
-    configWatchdog = std::move(service);
+  void RegisterConfigWatchdog(ConfigFileWatchdog* service) {
+    configWatchdog = service;
   }
 
   // === Safe Access Methods ===
+  Logger* GetLogger() const { return Logger::GetInstance(); }
 
-  // Core services
-  Logger* GetLogger() const { return Logger::GetInstance(); }  // Access singleton
   MotionConfigManager* GetMotionConfig() const {
-    return motionConfigManager ? motionConfigManager.get() : m_motionConfigPtr;
+    return motionConfigManager ? motionConfigManager : m_motionConfigPtr;
   }
-  ConfigFileWatchdog* GetConfigWatchdog() const { return configWatchdog.get(); }
+
+  MotionControlLayer* GetMotionControlLayer() const {
+    return motionControlLayer ? motionControlLayer : m_motionControlLayerPtr;
+  }
+
+  DatabaseManager* GetDatabaseManager() const {
+    return databaseManager ? databaseManager : m_databaseManagerPtr;
+  }
+
+  OperationResultsManager* GetResultsManager() const {
+    return resultsManager ? resultsManager : m_resultsManagerPtr;
+  }
+
+  // Shared pointer getters for database services (for compatibility with MachineOperations)
+  std::shared_ptr<DatabaseManager> GetDatabaseManagerShared() const {
+    auto* machineOps = GetMachineOperations();
+    if (machineOps) {
+      // Try to get from MachineOperations first (which returns shared_ptr)
+      return machineOps->GetDatabaseManager();
+    }
+    // Fallback: wrap raw pointer in shared_ptr (use with caution)
+    auto* db = GetDatabaseManager();
+    return db ? std::shared_ptr<DatabaseManager>(db, [](DatabaseManager*) {}) : nullptr;
+  }
+
+  std::shared_ptr<OperationResultsManager> GetResultsManagerShared() const {
+    auto* machineOps = GetMachineOperations();
+    if (machineOps) {
+      // Try to get from MachineOperations first (which returns shared_ptr)
+      return machineOps->GetResultsManager();
+    }
+    // Fallback: wrap raw pointer in shared_ptr (use with caution)
+    auto* results = GetResultsManager();
+    return results ? std::shared_ptr<OperationResultsManager>(results, [](OperationResultsManager*) {}) : nullptr;
+  }
+
+  ConfigFileWatchdog* GetConfigWatchdog() const { return configWatchdog; }
 
   // Hardware managers - check both owned and non-owned pointers
   PIControllerManager* GetPIController() const {
-    return piControllerManager ? piControllerManager.get() : m_piControllerPtr;
+    return piControllerManager ? piControllerManager : m_piControllerPtr;
   }
+
   ACSControllerManager* GetACSController() const {
-    return acsControllerManager ? acsControllerManager.get() : m_acsControllerPtr;
+    return acsControllerManager ? acsControllerManager : m_acsControllerPtr;
   }
+
   EziIOManager* GetIOManager() const {
-    return ioManager ? ioManager.get() : m_ioManagerPtr;
+    return ioManager ? ioManager : m_ioManagerPtr;
   }
+
   IOConfigManager* GetIOConfig() const {
-    return ioConfigManager ? ioConfigManager.get() : m_ioConfigPtr;
+    return ioConfigManager ? ioConfigManager : m_ioConfigPtr;
   }
+
   PneumaticManager* GetPneumaticManager() const {
-    return pneumaticManager ? pneumaticManager.get() : m_pneumaticPtr;
+    return pneumaticManager ? pneumaticManager : m_pneumaticPtr;
   }
 
   // Vision services
   CameraManager* GetCameraManager() const {
-    return cameraManager ? cameraManager.get() : m_cameraManagerPtr;
+    return cameraManager ? cameraManager : m_cameraManagerPtr;
   }
+
   CameraConfigManager* GetCameraConfig() const {
-    return cameraConfigManager ? cameraConfigManager.get() : m_cameraConfigPtr;
+    return cameraConfigManager ? cameraConfigManager : m_cameraConfigPtr;
   }
 
   // Data services
   DataClientManager* GetDataClient() const {
-    return dataClientManager ? dataClientManager.get() : m_dataClientPtr;
+    return dataClientManager ? dataClientManager : m_dataClientPtr;
   }
-  DatabaseManager* GetDatabase() const { return databaseManager.get(); }
-  OperationResultsManager* GetResultsManager() const { return resultsManager.get(); }
+
+  DatabaseManager* GetDatabase() const { return databaseManager; }
 
   // Equipment managers
   CLD101xManager* GetCLD101x() const {
-    return cld101xManager ? cld101xManager.get() : m_cld101xPtr;
+    return cld101xManager ? cld101xManager : m_cld101xPtr;
   }
+
   Keithley2400Manager* GetKeithley() const {
-    return keithleyManager ? keithleyManager.get() : m_keithleyPtr;
+    return keithleyManager ? keithleyManager : m_keithleyPtr;
   }
 
   // High-level operations
   MachineOperations* GetMachineOperations() const {
-    return machineOperations ? machineOperations.get() : m_machineOperationsPtr;
+    return machineOperations ? machineOperations : m_machineOperationsPtr;
   }
+
   MotionOps* GetMotionOps() const {
-    return motionOps ? motionOps.get() : m_motionOpsPtr;
+    return motionOps ? motionOps : m_motionOpsPtr;
   }
+
   IOOps* GetIOOps() const {
-    return ioOps ? ioOps.get() : m_ioOpsPtr;
+    return ioOps ? ioOps : m_ioOpsPtr;
   }
+
   VisionOps* GetVisionOps() const {
-    return visionOps ? visionOps.get() : m_visionOpsPtr;
+    return visionOps ? visionOps : m_visionOpsPtr;
   }
 
   // === Service Status Check ===
@@ -270,32 +441,54 @@ public:
     log->LogInfo("=== AppContext Initialization Status ===");
     log->LogInfo("Core Services:");
     log->LogInfo("  - Logger: " + std::string(Logger::GetInstance() ? "✓" : "✗"));
-    log->LogInfo("  - MotionConfig: " + std::string(motionConfigManager ? "✓" : "✗"));
+    log->LogInfo("  - MotionConfig: " + std::string(GetMotionConfig() ? "✓" : "✗"));
+    log->LogInfo("  - MotionControlLayer: " + std::string(GetMotionControlLayer() ? "✓" : "✗"));
     log->LogInfo("  - ConfigWatchdog: " + std::string(configWatchdog ? "✓" : "✗"));
 
     log->LogInfo("Hardware Managers:");
-    log->LogInfo("  - PI Controller: " + std::string(piControllerManager ? "✓" : "✗"));
-    log->LogInfo("  - ACS Controller: " + std::string(acsControllerManager ? "✓" : "✗"));
-    log->LogInfo("  - IO Manager: " + std::string(ioManager ? "✓" : "✗"));
-    log->LogInfo("  - Pneumatic: " + std::string(pneumaticManager ? "✓" : "✗"));
+    log->LogInfo("  - PI Controller: " + std::string(GetPIController() ? "✓" : "✗"));
+    log->LogInfo("  - ACS Controller: " + std::string(GetACSController() ? "✓" : "✗"));
+    log->LogInfo("  - IO Manager: " + std::string(GetIOManager() ? "✓" : "✗"));
+    log->LogInfo("  - Pneumatic: " + std::string(GetPneumaticManager() ? "✓" : "✗"));
 
     log->LogInfo("Vision System:");
-    log->LogInfo("  - Camera Manager: " + std::string(cameraManager ? "✓" : "✗"));
-    log->LogInfo("  - Camera Config: " + std::string(cameraConfigManager ? "✓" : "✗"));
+    log->LogInfo("  - Camera Manager: " + std::string(GetCameraManager() ? "✓" : "✗"));
+    log->LogInfo("  - Camera Config: " + std::string(GetCameraConfig() ? "✓" : "✗"));
 
     log->LogInfo("Data Services:");
-    log->LogInfo("  - Data Client: " + std::string(dataClientManager ? "✓" : "✗"));
-    log->LogInfo("  - Database: " + std::string(databaseManager ? "✓" : "✗"));
+    log->LogInfo("  - Data Client: " + std::string(GetDataClient() ? "✓" : "✗"));
+    log->LogInfo("  - Database: " + std::string(GetDatabaseManager() ? "✓" : "✗"));
+    log->LogInfo("  - Results Manager: " + std::string(GetResultsManager() ? "✓" : "✗"));
 
     log->LogInfo("Equipment Managers:");
-    log->LogInfo("  - CLD101x: " + std::string(cld101xManager ? "✓" : "✗"));
-    log->LogInfo("  - Keithley: " + std::string(keithleyManager ? "✓" : "✗"));
+    log->LogInfo("  - CLD101x: " + std::string(GetCLD101x() ? "✓" : "✗"));
+    log->LogInfo("  - Keithley: " + std::string(GetKeithley() ? "✓" : "✗"));
 
     log->LogInfo("High-Level Operations:");
-    log->LogInfo("  - Machine Ops: " + std::string(machineOperations ? "✓" : "✗"));
-    log->LogInfo("  - Motion Ops: " + std::string(motionOps ? "✓" : "✗"));
-    log->LogInfo("  - IO Ops: " + std::string(ioOps ? "✓" : "✗"));
-    log->LogInfo("  - Vision Ops: " + std::string(visionOps ? "✓" : "✗"));
+    log->LogInfo("  - Machine Ops: " + std::string(GetMachineOperations() ? "✓" : "✗"));
+    log->LogInfo("  - Motion Ops: " + std::string(GetMotionOps() ? "✓" : "✗"));
+    log->LogInfo("  - IO Ops: " + std::string(GetIOOps() ? "✓" : "✗"));
+    log->LogInfo("  - Vision Ops: " + std::string(GetVisionOps() ? "✓" : "✗"));
+  }
+
+  // === Enhanced Operations Status (Future) ===
+  void LogOperationsStatus() const {
+    auto* log = GetLogger();
+    if (!log) return;
+
+    log->LogInfo("=== Operations Status ===");
+
+    auto types = GetAvailableOperationTypes();
+    if (types.empty()) {
+      log->LogInfo("No operations registered");
+      return;
+    }
+
+    for (const auto& type : types) {
+      log->LogInfo("  - " + type + " Ops: ✓ Registered");
+    }
+
+    log->LogInfo("Summary: " + std::to_string(types.size()) + " operations registered");
   }
 
 private:
@@ -305,22 +498,4 @@ private:
   // Prevent copying
   AppContext(const AppContext&) = delete;
   AppContext& operator=(const AppContext&) = delete;
-
-  // === Non-owning pointers for parallel migration ===
-  // These allow registration of existing services without transferring ownership
-  MotionConfigManager* m_motionConfigPtr = nullptr;
-  PIControllerManager* m_piControllerPtr = nullptr;
-  ACSControllerManager* m_acsControllerPtr = nullptr;
-  EziIOManager* m_ioManagerPtr = nullptr;
-  IOConfigManager* m_ioConfigPtr = nullptr;
-  PneumaticManager* m_pneumaticPtr = nullptr;
-  CameraManager* m_cameraManagerPtr = nullptr;
-  CameraConfigManager* m_cameraConfigPtr = nullptr;
-  DataClientManager* m_dataClientPtr = nullptr;
-  CLD101xManager* m_cld101xPtr = nullptr;
-  Keithley2400Manager* m_keithleyPtr = nullptr;
-  MachineOperations* m_machineOperationsPtr = nullptr;
-  MotionOps* m_motionOpsPtr = nullptr;
-  IOOps* m_ioOpsPtr = nullptr;
-  VisionOps* m_visionOpsPtr = nullptr;
 };

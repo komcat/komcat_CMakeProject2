@@ -43,6 +43,10 @@ VisionOps::~VisionOps() {
   m_logger->LogInfo("VisionOps: Shutting down");
 }
 
+bool VisionOps::Initialize() {
+  return InitializeCamera();
+}
+
 // Camera control methods
 bool VisionOps::InitializeCamera() {
   if (!m_cameraTest) {

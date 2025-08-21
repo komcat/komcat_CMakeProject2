@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ueye.h"
+#include "external/uEye/include/ueye.h"
 #include <string>
 #include <memory>
 #include <functional>

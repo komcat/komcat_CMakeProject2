@@ -8,6 +8,7 @@
 #include "include/logger.h"
 #include "include/data/DatabaseManager.h"
 #include "include/data/OperationResultsManager.h"
+#include "include/ops/BaseOperations.h"
 #include <string>
 #include <vector>
 #include <chrono>
@@ -16,8 +17,9 @@
 #include <map>
 #include <mutex>
 
-class MotionOps {
+class MotionOps : public BaseOperations {
 public:
+
   MotionOps(
     MotionControlLayer& motionLayer,
     PIControllerManager& piControllerManager,
@@ -25,6 +27,16 @@ public:
     std::shared_ptr<OperationResultsManager> resultsManager = nullptr
   );
   ~MotionOps();
+
+
+  // Add these IOperations implementations
+  bool Initialize() override;
+  void Shutdown() override;
+  std::vector<std::string> GetAvailableDevices() const override;
+  bool IsDeviceConnected(const std::string& deviceName) const override;
+  std::string GetOperationType() const override { return "Motion"; }
+  bool SelfTest() override;
+
 
   // Motion control methods with caller context tracking
   bool MoveDeviceToNode(const std::string& deviceName, const std::string& graphName,

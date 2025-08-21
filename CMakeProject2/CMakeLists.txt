@@ -1,4 +1,4 @@
-﻿# Simplified CMakeLists.txt for CMakeProject2 with SDL2, ImGui, Pylon SDK, and PI GCS2 support
+﻿# Simplified CMakeLists.txt for uaa3App with SDL2, ImGui, Pylon SDK, and PI GCS2 support
 cmake_minimum_required(VERSION 3.12)
 project(CMakeProject2)
 
@@ -16,15 +16,11 @@ add_subdirectory(nlohmann_json)
 
 # Define paths to SDL2 and ImGui - adjust these if needed
 set(SDL2_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/sdl2")
-# Set SDL2 paths directly - using simple direct references
-
 set(SDL2_INCLUDE_DIR "${SDL2_DIR}/include")
-
 
 # Add SQLite configuration
 set(SQLITE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/sqlite")
 set(SQLITE_INCLUDE_DIR "${SQLITE_DIR}")
-
 
 # SQLite source files
 set(SQLITE_SOURCES
@@ -34,7 +30,6 @@ set(SQLITE_SOURCES
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/imgui-docking")
 # Define path to ACSC files
 set(ACSC_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-
 
 # Add PI GCS2 paths
 set(PI_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/PI")
@@ -46,7 +41,6 @@ set(PYLON_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/pylon 8")
 set(PYLON_INCLUDE_DIR "${PYLON_ROOT}/Development/include")
 set(PYLON_LIB_DIR "${PYLON_ROOT}/Development/lib/x64")
 
-
 set(RAYLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/raylib")
 set(RAYLIB_INCLUDE_DIR "${RAYLIB_DIR}/include")
 
@@ -56,17 +50,12 @@ if(WIN32)
     endif()
 endif()
 
-
 set(FREETYPE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/freetype")
-# FreeType paths
 set(FREETYPE_INCLUDE_DIR "${FREETYPE_DIR}/include")
 
-
-
-#freetype configuration
+# FreeType configuration
 if(WIN32)
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-
         # FreeType 2.13.3 libraries - 64-bit
         if(FREETYPE_USE_DLL)
             # DLL version (recommended for easier deployment)
@@ -80,7 +69,6 @@ if(WIN32)
             message(STATUS "Using FreeType 2.13.3 Static Library (64-bit)")
         endif()
     else()
- 
         # FreeType 2.13.3 libraries - 32-bit
         if(FREETYPE_USE_DLL)
             set(FREETYPE_LIBRARY "${FREETYPE_DIR}/lib/win32/freetype.lib")
@@ -92,28 +80,20 @@ if(WIN32)
             message(STATUS "Using FreeType 2.13.3 Static Library (32-bit)")
         endif()
     endif()
-
 else()
-
     set(FREETYPE_LIBRARY "freetype")
 endif()
 
 option(FREETYPE_USE_DLL "Use FreeType DLL instead of static library" ON)
 
-
-
-#set eziio
+# Set eziio
 set(EZIIO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/eziio")
 set(EZIIO_DIR_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/external/eziio/include_x86_CPP")
 set(EZIIO_DIR_INCLUDE_x64 "${CMAKE_CURRENT_SOURCE_DIR}/external/eziio/include_x64_CPP")
 
-
-
 # Set HALCON paths based on your installation
 set(HALCON_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/Halcon25.05-Progress")
 set(HALCON_INCLUDE_DIR "${HALCON_ROOT}/include")
-
-
 
 # Handle different platforms for HALCON library files
 if(WIN32)
@@ -155,7 +135,6 @@ endif()
 # Add stb_image path (adjust path as needed)
 set(STB_IMAGE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/stb")
 
-
 # Handle different platforms for library files
 if(WIN32)
     # For Windows, directly set library paths
@@ -190,20 +169,10 @@ if(WIN32)
     # Add PylonGUI for Windows
     set(PYLON_GUI_LIB "${PYLON_LIB_DIR}/PylonGUI_v9.lib")
     list(APPEND PYLON_LIBRARIES ${PYLON_GUI_LIB})
-    
-    # Define the PYLON_WIN_BUILD macro
-    #add_definitions(-DPYLON_WIN_BUILD)
 else()
     # For Linux/Mac - adjust if needed
     set(SDL2_LIBRARY "${SDL2_DIR}/lib/libSDL2.so")
     set(SDL2MAIN_LIBRARY "")
-    
-    # For Linux/Mac, Pylon libraries would need to be configured here
-    # This is a placeholder - adjust as needed for your Linux/Mac environment
-    # set(PYLON_LIBRARIES "")
-    
-    # Set PI library for Linux
-    # set(PI_LIBRARY "${PI_LIB_DIR}/libpi_gcs2_dll.so")
 endif()
 
 # ImGui source files - directly referenced
@@ -215,7 +184,7 @@ set(IMGUI_SOURCES
     "${IMGUI_DIR}/imgui_widgets.cpp"
     "${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp"
     "${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
-    "${IMGUI_DIR}/misc/freetype/imgui_freetype.cpp"  # ADD THIS LINE!
+    "${IMGUI_DIR}/misc/freetype/imgui_freetype.cpp"
 )
 
 # OpenGL - use basic approach rather than find_package
@@ -232,7 +201,6 @@ set(PI_SOURCES
     "include/motions/pi_controller.h"
     "include/motions/pi_controller.cpp"
 )
-
 
 # Set IDS uEye SDK paths
 set(IDS_UEYE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/uEye")
@@ -268,8 +236,7 @@ else()
     set(IDS_UEYE_FOUND TRUE)
 endif()
 
-
-# Set HALCON paths based on your installation
+# Set include directory paths
 set(MAINUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mainUI")
 set(INCL_CAMERA "${CMAKE_CURRENT_SOURCE_DIR}/include/camera")
 set(INCL_OPS "${CMAKE_CURRENT_SOURCE_DIR}/include/ops")
@@ -278,399 +245,9 @@ set(INCL_PROGRAM "${CMAKE_CURRENT_SOURCE_DIR}/Programming")
 set(INCL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
 set(INCL_PROCESSES "${CMAKE_CURRENT_SOURCE_DIR}/Processes")
 set(INCL_Uaa3_PROCESSES "${CMAKE_CURRENT_SOURCE_DIR}/Processes/UAA3ProcessBuilders")
-
-
-
-# Add source to this project's executable
-add_executable(CMakeProject2 
-    "CMakeProject2.cpp" 
-    "CMakeProject2.h" 
-    "Version.h"
-    "include/random.cpp" 
-    "include/random.h"
-    "include/randomwindow.cpp"
-    "include/randomwindow.h"
-    ${IMGUI_SOURCES}
-    ${SQLITE_SOURCES}  # Add SQLite source
-    "include/tcp_client.h"
-    "include/tcp_client.cpp"
-    "include/client_manager.h"
-    "include/client_manager.cpp"
-    "Include/motions/acs_monitor.h" 
-    "include/motions/acs_monitor.cpp"
-    "include/camera/camera_window.h"
-    "include/camera/camera_window.cpp"
-    ${PI_SOURCES}  # Add the PI controller sources
-    # Add your Pylon-related source files here if needed
-    "include/logger.h" 
-    "include/logger.cpp" 
-    "Include/motions/MotionTypes.h" 
-    "Include/motions/MotionConfigManager.h" 
-    "include/motions/MotionConfigManager.cpp"     
-    "Include/motions/MotionConfigEditor.h" 
-    "include/motions/MotionConfigEditor.cpp" 
-    "include/ui/toolbar.h" 
-    "include/ui/toolbar.cpp" 
-    "include/ui/GraphVisualizer.h" 
-    "include/ui/GraphVisualizer.cpp" 
-    "include/ui/DraggableNode.h" 
-    "include/ui/DraggableNode.cpp" 
-    "include/camera/pylon_camera.h" 
-    "include/camera/pylon_camera.cpp" 
-    "include/camera/pylon_camera_test.cpp" 
-    "include/camera/pylon_camera_test.h"
-    "include/motions/pi_controller_manager.h" 
-    "include/motions/pi_controller_manager.cpp" 
-    "include/motions/acs_controller.h" 
-    "include/motions/acs_controller.cpp" 
-     "include/motions/acs_controller_manager.h" 
-     "include/motions/acs_controller_manager.cpp" 
-     "include/eziio/EziIO_Manager.h" 
-     "include/eziio/EziIO_Manager.cpp" 
-     "include/eziio/EziIO_UI.h" 
-     "include/eziio/EziIO_UI.cpp"
-     "IOConfigManager.h"
-     "IOConfigManager.cpp"
-     "include/data/data_client_manager.h" 
-     "include/data/data_client_manager.cpp"
-     "include/eziio/PneumaticSlide.h"
-     "include/eziio/PneumaticSlide.cpp"
-     "include/eziio/PneumaticManager.h"
-     "include/eziio/PneumaticManager.cpp"
-     "include/eziio/PneumaticUI.h"
-     "include/eziio/PneumaticUI.cpp"
-     "include/motions/pi_analog_reader.h"
-     "include/motions/pi_analog_reader.cpp" 
-     "include/motions/pi_analog_manager.h" 
-     "include/motions/pi_analog_manager.cpp" 
-     "include/motions/motion_control_layer.h" 
-     "include/motions/motion_control_layer.cpp"
-     "include/ui/ToolbarMenu.h" 
-     "include/ui/ToolbarMenu.cpp" 
-     "include/ui/ToggleableUIAdapter.h"
-     "include/ui/ControllerAdapters.h" 
-     "include/ui/DataClientManagerAdapter.h"
-     "include/data/product_config_manager.h" 
-     "include/data/product_config_manager.cpp"
-     "include/eziio/IOControlPanel.h"
-     "include/eziio/IOControlPanel.cpp"
-     "include/cld101x_client.h"
-     "include/cld101x_client.cpp"
-     "include/cld101x_manager.h"
-     "include/cld101x_manager.cpp"
-     "include/python_process_managaer.h"
-     "include/motions/global_jog_panel.h"
-     
-     "include/data/global_data_store.h"
-     "include/data/global_data_store.cpp"
-     "implot/implot.h"
-     "implot/implot_internal.h"
-     "implot/implot.cpp"
-     "implot/implot_items.cpp"
-     "implot/implot_demo.cpp"
-     "include/data/DataChartManager.h" 
-     "include/data/DataChartManager.cpp"
-     "include/scanning/scanning_algorithm.h"
-     "include/scanning/scanning_parameters.h"
-     "include/scanning/scan_data_collector.h"
-     "include/scanning/scanning_ui.h"
-     "include/scanning/scanning_algorithm.cpp"
-     "include/scanning/scan_data_collector.cpp"
-     "include/scanning/scanning_ui.cpp"
-     "include/machine_operations.h"
-     "include/machine_operations.cpp"
-     "include/ProcessStep.h"
-     "include/ProcessStep.cpp"
-     "include/SequenceStep.h"
-     "include/SequenceStep.cpp"
-     "InitializationWindow.h"
-     "InitializationWindow.cpp"
-     "include/HexRightControllerWindow.h"
-     "include/HexRightControllerWindow.cpp"
-     "include/HexControllerWindow.h"
-     "include/HexControllerWindow.cpp"
-     "include/ProcessBuilders.h"
-     "include/ProcessBuilders.cpp"
-     "include/MockUserInteractionManager.h"
-     "include/ProcessRunner.cpp"
-     "include/ProcessControlPanel.h"
-     "include/ProcessControlPanel.cpp"
-     "include/cld101x_operations.h"
-     "include/cld101x_operations.cpp"
-     "PerformanceOverlay.h"
-     "FpsDisplay.h" 
-     "include/ui/VerticalToolbarMenu.h"
-     "include/ui/VerticalToolbarMenu.cpp"
-     "include/ui/HierarchicalControllerAdapters.h"
-     "include/ui/MotionControlHierarchicalAdapter.h"
-     "include/camera/PylonCameraAdapter.h"
-     "include/script/script_parser.h"
-     "include/script/script_parser.cpp"
-     "include/script/script_executor.h"
-     "include/script/script_executor.cpp"
-     "include/script/script_editor_ui.h"
-     "include/script/script_editor_ui.cpp"
-     "include/ui/MotionGraphic.h"
-     "include/ui/MotionGraphic.cpp"
-     "include/script/script_runner.h"
-     "include/script/script_runner.cpp" 
-     "include/script/ScriptRunnerAdapter.h"
-     "include/script/script_ui_manager.h"
-     "include/script/print_operation.h"
-     "include/script/print_operation.cpp"
-     "include/script/script_print_viewer.h"
-     "include/script/script_print_viewer.cpp"
-     "include/ui/ToolbarStateManager.h" 
-     "include/camera/CameraExposureManager.h" 
-     "include/camera/CameraExposureManager.cpp" 
-     "include/camera/CameraExposureTestUI.h"
-     "include/camera/CameraExposureTestUI.cpp" 
-     "include/scanning/SequentialOptimizedScanner.h"
-     "include/scanning/SequentialOptimizedScanner.cpp"
-     "include/scanning/optimized_scanning_ui.h"
-     "include/scanning/optimized_scanning_ui.cpp"
-     "include/ModuleConfig.h"
-     "include/scanning/AdaptivePowerScanner.h"
-     "include/scanning/AdaptivePowerScanner.cpp"
-     "include/scanning/AdaptiveScanningUI.h"
-     "include/scanning/AdaptiveScanningUI.cpp"
-     "Programming/MachineBlockUI.h"
-     "Programming/MachineBlockUI.cpp"
-     "Programming/BlockSequenceConverter.h"
-     "Programming/BlockSequenceConverter.cpp"
-     "Programming/BlockPropertyRenderers.h"
-     "Programming/BlockPropertyRenderers.cpp"
-     "Programming/virtual_machine_operations.h"
-     "Programming/virtual_machine_operations_adapter.h"
-     "Programming/ProgramManager.h"
-     "Programming/ProgramManager.cpp"
-     "Programming/FeedbackUI.h" 
-     "Programming/FeedbackUI.cpp"
-     "Programming/UserPromptUI.h"
-     "Programming/UserPromptUI.cpp"
-     "include/SMU/keithley2400_client.h"
-     "include/SMU/keithley2400_client.cpp" 
-     "include/SMU/keithley2400_manager.h"
-     "include/SMU/keithley2400_manager.cpp"
-     "include/data/DigitalDisplayWithChart.h"
-     "include/data/DigitalDisplayWithChart.cpp"
-     "include/SMU/keithley2400_operations.h" 
-     "include/SMU/keithley2400_operations.cpp"
-     "Programming/MacroManager.h" 
-     "Programming/MacroManager.cpp"
-     "Programming/MacroEditState.h"
-     "mainUI/MenuManager_uaa3.h"
-     "include/ui/MenuManager.cpp"
-     "include/data/DatabaseManager.h"
-     "include/data/OperationResultsManager.h"
-     "include/data/DatabaseManager.cpp" 
-     "include/data/OperationResultsManager.cpp"
-     "include/ui/OperationsDisplayUI.h"
-     "include/ui/OperationsDisplayUI.cpp" 
-     "raylibclass.h"
-     "raylibclass.cpp" 
-     "RaylibToggleButton.h"
-     "StatusPage.h"
-     "StatusPage.cpp" 
-     "VisualizePage.h"
-     "VisualizePage.cpp"
-     "RealtimeChartPage.h" 
-     "RealtimeChartPage.cpp"
-     "include/siphog/siphog_client.h"
-     "include/siphog/siphog_client.cpp"
-     "include/halcon/CircleDetectionUI.h" 
-     "include/halcon/CircleDetectionUI.cpp"
- "mainUI/MainUIManager.h"
- "mainUI/MainUIManager.cpp"  
-  "mainUI/UIConfigEditor.h" 
-  "mainUI/UIConfigEditor.cpp" 
-  "mainUI/UIConfigEditor_Devices.cpp" 
-  "mainUI/UIConfigEditor_Positions.cpp" 
-  "mainUI/UIConfigEditor_Helpers.cpp" 
-  "mainUI/UIConfigEditor_Graphs.cpp" 
-  "mainUI/UIConfigEditor_Details.cpp" 
-  "mainUI/UIConfigVisualizer.h" 
-  "mainUI/UIConfigVisualizer.cpp" 
-  "mainUI/UIConfigVisualizer_Graph.cpp" 
-  "mainUI/UIConfigVisualizer_Input.cpp"
-  "mainUI/UIConfigVisualizer_Helpers.cpp"
-  "mainUI/NodePropertiesHandler.h" 
-  "mainUI/NodePropertiesHandler.cpp" 
-  "mainUI/UIJogWindow.h" 
-  "mainUI/UIJogWindow.cpp"
-  "mainUI/PIPanelUI.h"
-  "mainUI/PIPanelUI.cpp"
-  "mainUI/ACSPanelUI.h"
-  "mainUI/ACSPanelUI.cpp"
-  "mainUI/IOPanelUI.h"
-  "mainUI/IOPanelUI.cpp"
-  "mainUI/UIPneumaticPanel.h"
-  "mainUI/UIPneumaticPanel.cpp" 
-  "include/camera/CameraManager.h"
-  "include/camera/CameraManager.cpp"
-  "mainUI/UICameraPanel.h"
-  "mainUI/UICameraPanel.cpp"
-  "mainUI/CameraFeedDisplay.h"
-  "mainUI/CameraFeedDisplay.cpp"
-  "mainUI/UICameraPanelLiveVideo.h"
-  "mainUI/UICameraPanelSingleGrab.h"
-  "mainUI/UICameraPanelUtility.h" 
-  "mainUI/UICameraPanelLiveVideo.cpp"
-  "mainUI/UICameraPanelSingleGrab.cpp"
-  "mainUI/UICameraPanelUtility.cpp" 
-  "include/motions/global_jog_panel_core.cpp"
-  "include/motions/global_jog_panel_movement.cpp"
-  "include/motions/global_jog_panel_device.cpp" 
-  "include/motions/global_jog_panel_ui.cpp" 
-  "include/motions/global_jog_panel_ui_positions.cpp"
-  "mainUI/TCPDataManagerUI.h" 
-  "mainUI/TCPDataManagerUI.cpp"
-  "mainUI/GlobalDataStoreViewerUI.h"
-  "mainUI/GlobalDataStoreViewerUI.cpp"
-  "mainUI/CLD101xEquipmentUI.h" 
-  "mainUI/CLD101xEquipmentUI.cpp"
-  "mainUI/UISMUPanel.h"
-  "mainUI/UISMUPanel.cpp" 
-  "include/ops/motion_ops.h" 
-  "include/ops/motion_ops_movement.cpp"
-  "include/ops/io_ops.h" 
-  "include/ops/vision_ops.h"
-  "include/ops/motion_ops_acsc_specific.cpp"
-  "include/ops/motion_ops_scanning.cpp" 
-  "include/ops/motion_ops_position_related.cpp"
-  "include/ops/motion_ops.cpp"
-  "include/ops/io_ops.cpp"
-  "include/ops/vision_ops.cpp"
-  "mainUI/MacroPanelUI.h"    
- "mainUI/MacroPanelCameraHandler.h"
- "mainUI/MacroPanelCameraHandler.cpp"
- "mainUI/MacroPanelUI_Main.cpp"
- "mainUI/MacroPanelUI_Panels.cpp" 
- "mainUI/MacroPanelUI_Execution.cpp"
- "mainUI/MacroPanelUI_FileDialog.cpp"
- "mainUI/ProgramCardRenderer.h" 
- "mainUI/ProgramCardRenderer.cpp"
- "mainUI/MenuManager_uaa3.h"
- "mainUI/MenuManager_uaa3.cpp"
- "mainUI/RaylibDebugWindow.h" 
- "mainUI/RaylibDebugWindow.cpp"
-  "mainUI/LiveVideoSubscriber.h"
-  "mainUI/LiveVideoSubscriber.cpp" 
-  "include/camera/CameraFrameData.h" 
-  "mainUI/RunPageUI.h"
-  "mainUI/RunPageUI.cpp" 
-  "Processes/ProcessFilterManager.h" 
-  "Processes/ProcessFilterManager.cpp" 
-  "Processes/UAA3ProcessBuilders/uaa3_process_builders.h" 
-  "Processes/UAA3ProcessBuilders/Core/uaa3_probing_sequence.cpp" 
-  "Processes/UAA3ProcessBuilders/Core/uaa3_pick_place_sequences.cpp" 
-  "Processes/UAA3ProcessBuilders/Core/uaa3_uv_curing_sequence.cpp" 
-  "Processes/UAA3ProcessBuilders/Core/uaa3_reject_sequences.cpp" 
-  "Processes/UAA3ProcessBuilders/Calibration/uaa3_needle_calibration.cpp"
-  "Processes/UAA3ProcessBuilders/Calibration/uaa3_dispense_calibration.cpp"
-  "Processes/UAA3ProcessBuilders/Dispensing/uaa3_dispense_epoxy.cpp" 
-  "Processes/UAA3ProcessBuilders/uaa3_utility_functions.cpp"
-  "Processes/UAA3ProcessBuilders/Core/uaa3_initialzation_sequences.cpp" 
-  "include/camera/CameraConfigManager.h" 
-  "include/camera/CameraConfigManager.cpp"
-  "mainUI/UAA3DatabaseManager.h" 
-  "mainUI/UAA3DatabaseManager.cpp"
-  "mainUI/UAA3DatabaseManager_JsonOps.cpp" 
-  "mainUI/UAA3DatabaseManager_Utils.cpp"
-  "mainUI/UAA3DatabaseManager_Global.cpp"
-  "mainUI/ConfigDatabaseUtils.h" 
-  "mainUI/ConfigDatabaseUtils.cpp"
-  "mainUI/ConfigFileWatchdog.h"
-  "mainUI/ConfigFileWatchdog.cpp"
-  "Processes/ProcessRegistry.h"
-  "Processes/ProcessInitializer.cpp"
-  "Processes/NewProcesses_Template.cpp"
-  "Processes/SAA3ProcessBuilders/NewProcesses_SAA3.cpp"
-  "Processes/SAA3ProcessBuilders/NewProcesses_SAA3.h"   
-  "include/camera/ids_camera_test.h"
-  "include/camera/ids_camera_test.cpp"
-  "include/camera/IDSCameraUI.h" 
-  "include/camera/IDSCameraUI.cpp"
-   "include/camera/ICameraHardware.h" "include/camera/PylonCameraAdapter.cpp" "include/camera/IDSCameraAdapter.h" "include/camera/IDSCameraAdapter.cpp" "include/camera/CameraHardwareFactory.h" "include/camera/CameraHardwareFactory.cpp" "mainUI/UIVisionPanel.h"  "include/halcon/VisionCircleDetection.h" "include/halcon/VisionCircleDetection.cpp" "mainUI/UINodeListWindow.h" "mainUI/UINodeListWindow.cpp" "include/vision/VisionPresetManager.h" "include/vision/VisionPresetManager.cpp" "mainUI/UIVisionPanel_Main.cpp" "mainUI/UIVisionPanel_Initialization.cpp" "mainUI/UIVisionPanel_Camera.cpp" "mainUI/UIVisionPanel_Detection.cpp" "mainUI/UIVisionPanel_Parameters.cpp" "mainUI/UIVisionPanel_Presets.cpp" "mainUI/UIVisionPanel_AutoExecution.cpp" "mainUI/UIVisionPanel_Nodes.cpp" "mainUI/UIVisionPanel_Image.cpp" "mainUI/UIVisionPanel_NodePresets.cpp" "mainUI/UIVisionPanel_SaveImages.cpp" "include/Products/ProductReferenceManager.h" "mainUI/DatumUI.h" "include/Products/ProductReferenceManager.cpp"  "mainUI/DatumUI_Main.cpp" "mainUI/DatumUI_LeftPanel.cpp" "mainUI/DatumUI_MiddlePanel.cpp" "mainUI/DatumUI_RightPanel.cpp" "mainUI/DatumUI_Visual.cpp" "mainUI/DatumUI_Events.cpp" "mainUI/DatumUI_Utils.cpp" "mainUI/DatumUI_Dialogs.cpp" "include/Products/ProductReferenceManager_Products.cpp" "include/Products/ProductReferenceManager_Points.cpp" "include/Products/ProductReferenceManager_Edges.cpp" "include/Products/ProductReferenceManager_Datum.cpp" "include/Products/ProductReferenceManager_Validation.cpp" "include/Products/ProductReferenceManager_Utils.cpp" "include/Products/ProductReferenceManager_Calculations.cpp" "include/Products/ProductReferenceManager_Persistence.cpp"  "mainUI/VisionCoordinateCalculator.h" "mainUI/VisionCoordinateCalculator.cpp" "mainUI/UIVisionPanel_EnhancedResults.cpp" "include/Products/ModuleAlignment.h" "include/Products/ModuleAlignment.cpp" "mainUI/ModuleAlignmentUI.h" "mainUI/ModuleAlignmentUI.cpp" "include/AppContext.h")
-
-
-
-
-# Add this section to your existing CMakeLists.txt file
-# (after your add_executable() statement)
-
-# Create resources directory in the build folder
-file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
-
-# Define the source icon file path
-set(ICON_SOURCE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.bmp")
-
-# Check if the icon file exists
-if(EXISTS "${ICON_SOURCE_PATH}")
-    # Copy the icon file to the build directory
-    file(COPY "${ICON_SOURCE_PATH}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/resources")
-    message(STATUS "Icon file will be copied to build directory")
-else()
-    message(WARNING "Icon file not found at: ${ICON_SOURCE_PATH}")
-endif()
-
-
 set(INCLUDE_HALCON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/halcon")
 set(INCLUDE_VISION_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/vision")
-# Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
-target_include_directories(CMakeProject2 PRIVATE
-    ${SDL2_INCLUDE_DIR}
-    ${IMGUI_DIR}
-    ${ACSC_DIR}  # Added to include the directory with ACSC.h
-    ${PYLON_INCLUDE_DIR}  # Added Pylon include directory
-    ${PI_INCLUDE_DIR}  # Added PI GCS2 include directory
-    ${EZIIO_DIR_INCLUDE}
-    ${EZIIO_DIR_INCLUDE_x64}
-    ${SDL2_TTF_INCLUDE_DIR}
-    ${SQLITE_INCLUDE_DIR}  # Add SQLite include
-    ${RAYLIB_INCLUDE_DIR}  # Add this line
-    ${HALCON_INCLUDE_DIR}  # Add this line for HALCON
-     ${STB_IMAGE_DIR}  # Add this line
-     ${INCL_OPS}
-     ${INCL_PROGRAM}
-     ${INCL_DIR}
-     ${INCL_PROCESSES}
-     ${INCL_Uaa3_PROCESSES}
-     ${FREETYPE_INCLUDE_DIR}
-     ${FREETYPE_INCLUDE_DIR}
-     ${IDS_UEYE_INCLUDE_DIR}
-     ${INCLUDE_HALCON_DIR}
-     ${INCLUDE_VISION_DIR}
-     ${INCL_PRODUCTS}
-)
 
-# Link libraries - directly reference libraries
-target_link_libraries(CMakeProject2 PRIVATE
-    ${SDL2MAIN_LIBRARY}
-    ${SDL2_LIBRARY}
-    ${OPENGL_LIBRARIES}
-    ${ACSC_LIBRARY}  # ACSC library
-    ${PYLON_LIBRARIES}  # Added Pylon libraries
-    ${PI_LIBRARY}  # Added PI GCS2 library
-    ${EZIIO_LIBRARY}  # Added EziMOTIONPlusE library
-    ${SDL2_TTF_LIBRARY}  # Added SDL2_ttf library
-    nlohmann_json::nlohmann_json
-    ${HALCON_LIBRARIES}  # Add this line for HALCON
-    ${RAYLIB_LIBRARY}  # Add this line
-        # Raylib Windows dependencies
-    winmm     # For timeBeginPeriod/timeEndPeriod
-    gdi32     # For Windows GDI
-    user32    # For Windows user interface
-    shell32   # For Windows shell
-     ${FREETYPE_LIBRARY}
-     ${IDS_UEYE_LIBRARY}
-)
-
-
-
-
-#------------------------
-# test new executeable.
 # Add source to this project's executable
 add_executable(uaa3App 
   "uaa3App.cpp" 
@@ -681,7 +258,7 @@ add_executable(uaa3App
   "include/randomwindow.cpp"
   "include/randomwindow.h"
   ${IMGUI_SOURCES}
-  ${SQLITE_SOURCES}  # Add SQLite source
+  ${SQLITE_SOURCES}
   "include/tcp_client.h"
   "include/tcp_client.cpp"
   "include/client_manager.h"
@@ -690,8 +267,7 @@ add_executable(uaa3App
   "include/motions/acs_monitor.cpp"
   "include/camera/camera_window.h"
   "include/camera/camera_window.cpp"
-  ${PI_SOURCES}  # Add the PI controller sources
-  # Add your Pylon-related source files here if needed
+  ${PI_SOURCES}
   "include/logger.h" 
   "include/logger.cpp" 
   "Include/motions/MotionTypes.h" 
@@ -750,7 +326,6 @@ add_executable(uaa3App
   "include/cld101x_manager.cpp"
   "include/python_process_managaer.h"
   "include/motions/global_jog_panel.h"
-  
   "include/data/global_data_store.h"
   "include/data/global_data_store.cpp"
   "implot/implot.h"
@@ -961,7 +536,8 @@ add_executable(uaa3App
   "Processes/UAA3ProcessBuilders/Dispensing/uaa3_dispense_epoxy.cpp"
   "Processes/UAA3ProcessBuilders/uaa3_utility_functions.cpp" 
   "Processes/UAA3ProcessBuilders/Core/uaa3_initialzation_sequences.cpp"
-  "include/camera/CameraConfigManager.h" "include/camera/CameraConfigManager.cpp"
+  "include/camera/CameraConfigManager.h" 
+  "include/camera/CameraConfigManager.cpp"
   "mainUI/UAA3DatabaseManager.h"
   "mainUI/UAA3DatabaseManager.cpp"
   "mainUI/UAA3DatabaseManager_JsonOps.cpp" 
@@ -980,24 +556,90 @@ add_executable(uaa3App
   "include/camera/ids_camera_test.cpp"
   "include/camera/IDSCameraUI.h" 
   "include/camera/IDSCameraUI.cpp"
-   "include/camera/ICameraHardware.h" "include/camera/PylonCameraAdapter.cpp" "include/camera/IDSCameraAdapter.h" "include/camera/IDSCameraAdapter.cpp" "include/camera/CameraHardwareFactory.h" "include/camera/CameraHardwareFactory.cpp" "mainUI/UIVisionPanel.h"  "include/halcon/VisionCircleDetection.h" "include/halcon/VisionCircleDetection.cpp" "mainUI/UINodeListWindow.h" "mainUI/UINodeListWindow.cpp" "include/vision/VisionPresetManager.h" "include/vision/VisionPresetManager.cpp" "mainUI/UIVisionPanel_Main.cpp" "mainUI/UIVisionPanel_Initialization.cpp" "mainUI/UIVisionPanel_Camera.cpp" "mainUI/UIVisionPanel_Detection.cpp" "mainUI/UIVisionPanel_Parameters.cpp" "mainUI/UIVisionPanel_Presets.cpp" "mainUI/UIVisionPanel_AutoExecution.cpp" "mainUI/UIVisionPanel_Nodes.cpp" "mainUI/UIVisionPanel_Image.cpp" "mainUI/UIVisionPanel_NodePresets.cpp" "mainUI/UIVisionPanel_SaveImages.cpp" "include/Products/ProductReferenceManager.h" "mainUI/DatumUI.h" "include/Products/ProductReferenceManager.cpp"  "mainUI/DatumUI_Main.cpp" "mainUI/DatumUI_LeftPanel.cpp" "mainUI/DatumUI_MiddlePanel.cpp" "mainUI/DatumUI_RightPanel.cpp" "mainUI/DatumUI_Visual.cpp" "mainUI/DatumUI_Events.cpp" "mainUI/DatumUI_Utils.cpp" "mainUI/DatumUI_Dialogs.cpp" "include/Products/ProductReferenceManager_Products.cpp" "include/Products/ProductReferenceManager_Points.cpp" "include/Products/ProductReferenceManager_Edges.cpp" "include/Products/ProductReferenceManager_Datum.cpp" "include/Products/ProductReferenceManager_Validation.cpp" "include/Products/ProductReferenceManager_Utils.cpp" "include/Products/ProductReferenceManager_Calculations.cpp" "include/Products/ProductReferenceManager_Persistence.cpp"  "mainUI/VisionCoordinateCalculator.h" "mainUI/VisionCoordinateCalculator.cpp" "mainUI/UIVisionPanel_EnhancedResults.cpp" "include/Products/ModuleAlignment.h" "include/Products/ModuleAlignment.cpp" "mainUI/ModuleAlignmentUI.h" "mainUI/ModuleAlignmentUI.cpp" "include/AppContext.h")
+  "include/camera/ICameraHardware.h" 
+  "include/camera/PylonCameraAdapter.cpp" 
+  "include/camera/IDSCameraAdapter.h" 
+  "include/camera/IDSCameraAdapter.cpp" 
+  "include/camera/CameraHardwareFactory.h" 
+  "include/camera/CameraHardwareFactory.cpp" 
+  "mainUI/UIVisionPanel.h"  
+  "include/halcon/VisionCircleDetection.h" 
+  "include/halcon/VisionCircleDetection.cpp" 
+  "mainUI/UINodeListWindow.h" 
+  "mainUI/UINodeListWindow.cpp" 
+  "include/vision/VisionPresetManager.h" 
+  "include/vision/VisionPresetManager.cpp" 
+  "mainUI/UIVisionPanel_Main.cpp" 
+  "mainUI/UIVisionPanel_Initialization.cpp" 
+  "mainUI/UIVisionPanel_Camera.cpp" 
+  "mainUI/UIVisionPanel_Detection.cpp" 
+  "mainUI/UIVisionPanel_Parameters.cpp" 
+  "mainUI/UIVisionPanel_Presets.cpp" 
+  "mainUI/UIVisionPanel_AutoExecution.cpp" 
+  "mainUI/UIVisionPanel_Nodes.cpp" 
+  "mainUI/UIVisionPanel_Image.cpp" 
+  "mainUI/UIVisionPanel_NodePresets.cpp" 
+  "mainUI/UIVisionPanel_SaveImages.cpp" 
+  "include/Products/ProductReferenceManager.h" 
+  "mainUI/DatumUI.h" 
+  "include/Products/ProductReferenceManager.cpp"  
+  "mainUI/DatumUI_Main.cpp" 
+  "mainUI/DatumUI_LeftPanel.cpp" 
+  "mainUI/DatumUI_MiddlePanel.cpp" 
+  "mainUI/DatumUI_RightPanel.cpp" 
+  "mainUI/DatumUI_Visual.cpp" 
+  "mainUI/DatumUI_Events.cpp" 
+  "mainUI/DatumUI_Utils.cpp" 
+  "mainUI/DatumUI_Dialogs.cpp" 
+  "include/Products/ProductReferenceManager_Products.cpp" 
+  "include/Products/ProductReferenceManager_Points.cpp" 
+  "include/Products/ProductReferenceManager_Edges.cpp" 
+  "include/Products/ProductReferenceManager_Datum.cpp" 
+  "include/Products/ProductReferenceManager_Validation.cpp" 
+  "include/Products/ProductReferenceManager_Utils.cpp" 
+  "include/Products/ProductReferenceManager_Calculations.cpp" 
+  "include/Products/ProductReferenceManager_Persistence.cpp"  
+  "mainUI/VisionCoordinateCalculator.h" 
+  "mainUI/VisionCoordinateCalculator.cpp" 
+  "mainUI/UIVisionPanel_EnhancedResults.cpp" 
+  "include/Products/ModuleAlignment.h" 
+  "include/Products/ModuleAlignment.cpp" 
+  "mainUI/ModuleAlignmentUI.h" 
+  "mainUI/ModuleAlignmentUI.cpp" 
+  "include/AppContext.h" 
+  "include/ops/IOperations.h" 
+  "include/ops/BaseOperations.h" 
+)
 
+# Create resources directory in the build folder
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
 
+# Define the source icon file path
+set(ICON_SOURCE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.bmp")
 
-# Include directories - directly include SDL2, ImGui, Pylon, and PI GCS2
+# Check if the icon file exists
+if(EXISTS "${ICON_SOURCE_PATH}")
+    # Copy the icon file to the build directory
+    file(COPY "${ICON_SOURCE_PATH}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/resources")
+    message(STATUS "Icon file will be copied to build directory")
+else()
+    message(WARNING "Icon file not found at: ${ICON_SOURCE_PATH}")
+endif()
+
+# Include directories
 target_include_directories(uaa3App PRIVATE
   ${SDL2_INCLUDE_DIR}
   ${IMGUI_DIR}
-  ${ACSC_DIR}  # Added to include the directory with ACSC.h
-  ${PYLON_INCLUDE_DIR}  # Added Pylon include directory
-  ${PI_INCLUDE_DIR}  # Added PI GCS2 include directory
+  ${ACSC_DIR}
+  ${PYLON_INCLUDE_DIR}
+  ${PI_INCLUDE_DIR}
   ${EZIIO_DIR_INCLUDE}
   ${EZIIO_DIR_INCLUDE_x64}
   ${SDL2_TTF_INCLUDE_DIR}
-  ${SQLITE_INCLUDE_DIR}  # Add SQLite include
-  ${RAYLIB_INCLUDE_DIR}  # Add this line
-  ${HALCON_INCLUDE_DIR}  # Add this line for HALCON
-  ${STB_IMAGE_DIR}  # Add this line
+  ${SQLITE_INCLUDE_DIR}
+  ${RAYLIB_INCLUDE_DIR}
+  ${HALCON_INCLUDE_DIR}
+  ${STB_IMAGE_DIR}
   ${MAINUI_DIR}
   ${INCL_CAMERA}
   ${INCL_OPS}
@@ -1012,20 +654,20 @@ target_include_directories(uaa3App PRIVATE
   ${INCL_PRODUCTS}
 )
 
-# Link libraries - directly reference libraries
+# Link libraries
 target_link_libraries(uaa3App PRIVATE
   ${SDL2MAIN_LIBRARY}
   ${SDL2_LIBRARY}
   ${OPENGL_LIBRARIES}
-  ${ACSC_LIBRARY}  # ACSC library
-  ${PYLON_LIBRARIES}  # Added Pylon libraries
-  ${PI_LIBRARY}  # Added PI GCS2 library
-  ${EZIIO_LIBRARY}  # Added EziMOTIONPlusE library
-  ${SDL2_TTF_LIBRARY}  # Added SDL2_ttf library
+  ${ACSC_LIBRARY}
+  ${PYLON_LIBRARIES}
+  ${PI_LIBRARY}
+  ${EZIIO_LIBRARY}
+  ${SDL2_TTF_LIBRARY}
   nlohmann_json::nlohmann_json
-  ${HALCON_LIBRARIES}  # Add this line for HALCON
-  ${RAYLIB_LIBRARY}  # Add this line
-      # Raylib Windows dependencies
+  ${HALCON_LIBRARIES}
+  ${RAYLIB_LIBRARY}
+  # Raylib Windows dependencies
   winmm     # For timeBeginPeriod/timeEndPeriod
   gdi32     # For Windows GDI
   user32    # For Windows user interface
@@ -1034,91 +676,102 @@ target_link_libraries(uaa3App PRIVATE
   ${IDS_UEYE_LIBRARY}
 )
 
-
-
-
-
-#-----------------------
-
-
 # SQLite compile definitions
-target_compile_definitions(CMakeProject2 PRIVATE
+target_compile_definitions(uaa3App PRIVATE
     SQLITE_ENABLE_FTS5
     SQLITE_ENABLE_JSON1
     SQLITE_ENABLE_RTREE
     SQLITE_THREADSAFE=1
     SQLITE_ENABLE_COLUMN_METADATA
-
 )
 
-
-
-
-# For Windows, we need to copy the SDL2.dll and PI_GCS2_DLL
+# Copy DLLs for Windows
 if(WIN32)
-    # Simple command to copy SDL2.dll
-    add_custom_command(TARGET CMakeProject2 POST_BUILD
+    # Copy SDL2.dll
+    add_custom_command(TARGET uaa3App POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${SDL2_DLL}
-        $<TARGET_FILE_DIR:CMakeProject2>
+        $<TARGET_FILE_DIR:uaa3App>
+        COMMENT "Copying SDL2.dll to output directory"
     )
     
     # Copy Pylon DLLs to the output directory
-    add_custom_command(TARGET CMakeProject2 POST_BUILD
+    add_custom_command(TARGET uaa3App POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${PYLON_ROOT}/Runtime/x64"
-        $<TARGET_FILE_DIR:CMakeProject2>
+        $<TARGET_FILE_DIR:uaa3App>
+        COMMENT "Copying Pylon DLLs to output directory"
     )
     
     # Copy PI_GCS2_DLL to the output directory
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)
         # 64-bit build
-        add_custom_command(TARGET CMakeProject2 POST_BUILD
+        add_custom_command(TARGET uaa3App POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${PI_LIB_DIR}/PI_GCS2_DLL_x64.dll"
-            $<TARGET_FILE_DIR:CMakeProject2>
+            $<TARGET_FILE_DIR:uaa3App>
+            COMMENT "Copying PI GCS2 DLL (64-bit) to output directory"
         )
     else()
         # 32-bit build
-        add_custom_command(TARGET CMakeProject2 POST_BUILD
+        add_custom_command(TARGET uaa3App POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${PI_LIB_DIR}/PI_GCS2_DLL.dll"
-            $<TARGET_FILE_DIR:CMakeProject2>
+            $<TARGET_FILE_DIR:uaa3App>
+            COMMENT "Copying PI GCS2 DLL (32-bit) to output directory"
         )
     endif()
 
     # Copy ezimotionipluse.dll to the output directory
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)
         # 64-bit build
-        add_custom_command(TARGET CMakeProject2 POST_BUILD
+        add_custom_command(TARGET uaa3App POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${EZIIO_DIR_INCLUDE_x64}/EziMOTIONPlusE.dll"
-            $<TARGET_FILE_DIR:CMakeProject2>
+            $<TARGET_FILE_DIR:uaa3App>
+            COMMENT "Copying EziMOTIONPlusE DLL (64-bit) to output directory"
         )
     else()
         # 32-bit build
-        add_custom_command(TARGET CMakeProject2 POST_BUILD
+        add_custom_command(TARGET uaa3App POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${EZIIO_DIR_INCLUDE}/EziMOTIONPlusE.dll"
-            $<TARGET_FILE_DIR:CMakeProject2>
+            $<TARGET_FILE_DIR:uaa3App>
+            COMMENT "Copying EziMOTIONPlusE DLL (32-bit) to output directory"
         )
     endif()
 
-    
+    # Copy FreeType DLL if using DLL version
+    if(FREETYPE_USE_DLL AND EXISTS "${FREETYPE_DLL}")
+        add_custom_command(TARGET uaa3App POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${FREETYPE_DLL}
+            $<TARGET_FILE_DIR:uaa3App>
+            COMMENT "Copying FreeType 2.13.3 DLL to output directory"
+        )
+        message(STATUS "FreeType DLL will be copied: ${FREETYPE_DLL}")
+    elseif(FREETYPE_USE_DLL AND NOT EXISTS "${FREETYPE_DLL}")
+        message(WARNING "FreeType DLL not found at: ${FREETYPE_DLL}")
+        message(WARNING "Make sure FreeType DLL is in the correct location")
+    endif()
 
-
+    # Copy IDS uEye DLL to the output directory
+    add_custom_command(TARGET uaa3App POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${IDS_UEYE_DLL}
+        $<TARGET_FILE_DIR:uaa3App>
+        COMMENT "Copying IDS uEye DLL to output directory"
+    )
 endif()
 
 # For Windows, set subsystem
 if(WIN32)
     if(MSVC)
-        set_target_properties(CMakeProject2 PROPERTIES
+        set_target_properties(uaa3App PROPERTIES
             LINK_FLAGS "/SUBSYSTEM:CONSOLE"
         )
     endif()
 endif()
-
-
 
 # ==== VERSION MANAGEMENT SECTION ====
 
@@ -1146,11 +799,9 @@ function(auto_increment_build)
             
             if(PS_RESULT EQUAL 0)
                 message(STATUS "Build number incremented successfully")
-                # Parse the output to show the new version
-                string(REGEX MATCH "Updated to version: ([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)" 
-                       VERSION_MATCH "${PS_OUTPUT}")
-                if(VERSION_MATCH)
-                    message(STATUS "New version: ${CMAKE_MATCH_1}")
+                # Simply show the PowerShell output (contains version info)
+                if(PS_OUTPUT)
+                    message(STATUS "PowerShell output: ${PS_OUTPUT}")
                 endif()
             else()
                 message(WARNING "Failed to increment build number: ${PS_ERROR}")
@@ -1215,34 +866,18 @@ if(POWERSHELL_EXE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/update_version.ps1")
     message(STATUS "  - version-show   : Show current version")
 endif()
 
-# ==== OPTIONAL: PRE-BUILD VERSION INCREMENT ====
-# Uncomment this section if you want the build number to increment before every build
-# (instead of every CMake configure)
-
-# add_custom_command(
-#     TARGET CMakeProject2 PRE_BUILD
-#     COMMAND ${POWERSHELL_EXE} -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/update_version.ps1" build
-#     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-#     COMMENT "Auto-incrementing build number before build"
-# )
-
 # Copy fonts directory to build output
-add_custom_command(TARGET CMakeProject2 POST_BUILD
+add_custom_command(TARGET uaa3App POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory 
-    $<TARGET_FILE_DIR:CMakeProject2>/assets/fonts
+    $<TARGET_FILE_DIR:uaa3App>/assets/fonts
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/CascadiaCode-Regular.ttf"
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/JuliaMono-Regular.ttf"
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/NotoSans-Regular.ttf"
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/NotoColorEmoji.ttf"
-    $<TARGET_FILE_DIR:CMakeProject2>/assets/fonts/
+    $<TARGET_FILE_DIR:uaa3App>/assets/fonts/
     COMMENT "Copying font files to build directory"
 )
-
-
-
-# Add this section to your existing CMakeLists.txt file
-# (after your existing POST_BUILD commands, before the end of the file)
 
 # Define configuration files to copy
 set(CONFIG_FILES
@@ -1262,78 +897,18 @@ set(CONFIG_FILES
     "camera_config.json"
 )
 
-# Function to copy config files for a target (copy if not exist or newer)
-function(copy_config_files TARGET_NAME)
-    foreach(CONFIG_FILE ${CONFIG_FILES})
-        # Method 1: Using copy_if_different (already handles both conditions)
-        add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/${CONFIG_FILE}"
-            $<TARGET_FILE_DIR:${TARGET_NAME}>/
-            COMMENT "Copying ${CONFIG_FILE} if not exist or newer"
-        )
-        
-        # Alternative Method 2: More explicit check (uncomment if you prefer this approach)
-        # add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
-        #     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        #     "${CMAKE_CURRENT_SOURCE_DIR}/${CONFIG_FILE}"
-        #     "$<TARGET_FILE_DIR:${TARGET_NAME}>/${CONFIG_FILE}"
-        #     COMMENT "Copying ${CONFIG_FILE} (if not exist or source is newer)"
-        #     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${CONFIG_FILE}"
-        # )
-    endforeach()
-endfunction()
-
-# Copy configuration files for both executables
-copy_config_files(CMakeProject2)
-copy_config_files(uaa3App)
+# Copy configuration files
+foreach(CONFIG_FILE ${CONFIG_FILES})
+    add_custom_command(TARGET uaa3App POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/${CONFIG_FILE}"
+        $<TARGET_FILE_DIR:uaa3App>/
+        COMMENT "Copying ${CONFIG_FILE} if not exist or newer"
+    )
+endforeach()
 
 # Add verification message
-add_custom_command(TARGET CMakeProject2 POST_BUILD
+add_custom_command(TARGET uaa3App POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo "Configuration files synchronized to build directory"
     COMMENT "Configuration file copy completed"
 )
-
-# Copy DLLs for Windows
-if(WIN32)
-    # Copy SDL2.dll
-    add_custom_command(TARGET uaa3App POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${SDL2_DLL}
-        $<TARGET_FILE_DIR:uaa3App>
-        COMMENT "Copying SDL2.dll to output directory"
-    )
-    
-    # Copy FreeType DLL if using DLL version
-    if(FREETYPE_USE_DLL AND EXISTS "${FREETYPE_DLL}")
-        add_custom_command(TARGET uaa3App POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${FREETYPE_DLL}
-            $<TARGET_FILE_DIR:uaa3App>
-            COMMENT "Copying FreeType 2.13.3 DLL to output directory"
-        )
-        message(STATUS "FreeType DLL will be copied: ${FREETYPE_DLL}")
-    elseif(FREETYPE_USE_DLL AND NOT EXISTS "${FREETYPE_DLL}")
-        message(WARNING "FreeType DLL not found at: ${FREETYPE_DLL}")
-        message(WARNING "Make sure FreeType DLL is in the correct location")
-    endif()
-endif()
-
-# Add DLL copying for Windows (add this section around line 800, after existing DLL copies)
-if(WIN32)
-    # Copy IDS uEye DLL to the output directory for CMakeProject2
-    add_custom_command(TARGET CMakeProject2 POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${IDS_UEYE_DLL}
-        $<TARGET_FILE_DIR:CMakeProject2>
-        COMMENT "Copying IDS uEye DLL to CMakeProject2 output directory"
-    )
-    
-    # Copy IDS uEye DLL to the output directory for uaa3App
-    add_custom_command(TARGET uaa3App POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${IDS_UEYE_DLL}
-        $<TARGET_FILE_DIR:uaa3App>
-        COMMENT "Copying IDS uEye DLL to uaa3App output directory"
-    )
-endif()

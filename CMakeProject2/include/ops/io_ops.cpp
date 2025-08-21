@@ -20,6 +20,11 @@ IOOps::~IOOps() {
   m_logger->LogInfo("IOOps: Shutting down");
 }
 
+bool IOOps::Initialize()
+{
+	return true; // Initialization logic if needed
+}
+
 // Digital I/O methods
 bool IOOps::SetOutput(const std::string& deviceName, int outputPin, bool state,
   const std::string& callerContext) {

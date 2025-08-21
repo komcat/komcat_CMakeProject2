@@ -1,8 +1,8 @@
 // ModuleAlignmentUI.h - UI interface for module alignment operations
 #pragma once
 
-#include "ModuleAlignment.h"
-#include "ProductReferenceManager.h"  // ADD: ProductReference integration
+#include "include/products/ModuleAlignment.h"
+#include "include/products/ProductReferenceManager.h"  // ADD: ProductReference integration
 #include "imgui.h"
 #include <memory>
 #include <string>

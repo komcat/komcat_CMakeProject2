@@ -28,6 +28,8 @@ public:
 
   ~VisionOps();
 
+	bool Initialize();
+
   // Camera control methods
   bool InitializeCamera();
   bool ConnectCamera();
