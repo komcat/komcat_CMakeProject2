@@ -284,7 +284,170 @@ class Keithley2400Server:
                     "client_count": len(self.clients)
                 }
                 return {"status": "success", "data": status}
+
+            elif cmd_type == 'output':
+                state = cmd_data.get('state', 'OFF').upper()
+                if state in ['ON', 'OFF']:
+                    self.instrument.write(f':OUTP {state}')
+                    self.log_message(f"Output set to {state}")
+                    return {"status": "success", "message": f"Output set to {state}"}
+                else:
+                    return {"status": "error", "message": f"Invalid output state: {state}. Use 'ON' or 'OFF'"}
+
+            elif cmd_type == 'reset':
+                # Match the working Python code sequence
+                self.instrument.write('*RST')                    # Reset to defaults
+                self.instrument.write('*CLS')                    # Clear status
+                self.log_message("Instrument reset completed")
+                return {"status": "success", "message": "Instrument reset completed"}
+
+            elif cmd_type == 'setup_voltage_source':
+                voltage = cmd_data.get('voltage', 0)
+                compliance = cmd_data.get('compliance', 0.1)
+                range_val = cmd_data.get('range', 'AUTO')
                 
+                try:
+                    # Follow the exact sequence from working Python code
+                    self.instrument.write(':SOUR:FUNC VOLT')        # Source voltage
+                    self.instrument.write(':SOUR:VOLT:MODE FIXED')  # Fixed voltage mode
+                    self.instrument.write(f':SOUR:VOLT {voltage}')  # Set voltage
+                    
+                    if range_val != 'AUTO':
+                        self.instrument.write(f':SOUR:VOLT:RANG {range_val}')
+                    else:
+                        self.instrument.write(':SOUR:VOLT:RANG 20')  # 20V range like working code
+                    
+                    # Measurement setup (critical!)
+                    self.instrument.write(':SENS:FUNC "CURR"')       # Measure current
+                    self.instrument.write(':SENS:CURR:RANG:AUTO ON') # Auto-range current
+                    self.instrument.write(f':SENS:CURR:PROT {compliance}')  # Compliance
+                    
+                    self.log_message(f"Voltage source configured: {voltage}V, compliance {compliance}A")
+                    return {"status": "success", "message": f"Voltage source configured: {voltage}V, compliance {compliance}A"}
+                    
+                except Exception as e:
+                    error_msg = f"Failed to setup voltage source: {str(e)}"
+                    self.log_message(error_msg, "ERROR")
+                    return {"status": "error", "message": error_msg}
+                
+            elif cmd_type == 'setup_current_source':
+                current = cmd_data.get('current', 0)
+                compliance = cmd_data.get('compliance', 10.0)
+                range_val = cmd_data.get('range', 'AUTO')
+                
+                try:
+                    # Configure current source similar to working voltage source code
+                    self.instrument.write(':SOUR:FUNC CURR')         # Source current
+                    self.instrument.write(':SOUR:CURR:MODE FIXED')   # Fixed current mode
+                    self.instrument.write(f':SOUR:CURR {current}')   # Set current
+                    
+                    if range_val != 'AUTO':
+                        self.instrument.write(f':SOUR:CURR:RANG {range_val}')
+                    else:
+                        self.instrument.write(':SOUR:CURR:RANG:AUTO ON')
+                    
+                    # Measurement setup for voltage measurement
+                    self.instrument.write(':SENS:FUNC "VOLT"')       # Measure voltage
+                    self.instrument.write(':SENS:VOLT:RANG:AUTO ON') # Auto-range voltage
+                    self.instrument.write(f':SENS:VOLT:PROT {compliance}')  # Voltage compliance
+                    
+                    self.log_message(f"Current source configured: {current}A, compliance {compliance}V")
+                    return {"status": "success", "message": f"Current source configured: {current}A, compliance {compliance}V"}
+                    
+                except Exception as e:
+                    error_msg = f"Failed to setup current source: {str(e)}"
+                    self.log_message(error_msg, "ERROR")
+                    return {"status": "error", "message": error_msg}
+
+            
+            elif cmd_type == 'voltage_sweep':
+                start = cmd_data.get('start', 0)
+                stop = cmd_data.get('stop', 5)
+                steps = cmd_data.get('steps', 11)
+                compliance = cmd_data.get('compliance', 0.1)
+                delay = cmd_data.get('delay', 0.1)
+                
+                self.log_message(f"Starting voltage sweep: {start}V to {stop}V, {steps} steps, {compliance}A compliance")
+                
+                try:
+                    # Perform voltage sweep - based on working Python code
+                    results = []
+                    
+                    # Calculate voltage points
+                    if steps <= 1:
+                        voltages = [start]
+                    else:
+                        voltages = [start + (stop - start) * i / (steps - 1) for i in range(steps)]
+                    
+                    # Setup instrument for sweep (like working Python code)
+                    self.instrument.write('*RST')                    # Reset to defaults
+                    self.instrument.write('*CLS')                    # Clear status
+                    self.instrument.write(':SOUR:FUNC VOLT')        # Source voltage
+                    self.instrument.write(':SOUR:VOLT:MODE FIXED')  # Fixed voltage mode
+                    self.instrument.write(':SOUR:VOLT:RANG 20')     # 20V range
+                    self.instrument.write(':SENS:FUNC "CURR"')      # Measure current
+                    self.instrument.write(':SENS:CURR:RANG:AUTO ON') # Auto-range current
+                    self.instrument.write(f':SENS:CURR:PROT {compliance}')  # Compliance
+                    
+                    # Turn output ON
+                    self.instrument.write(':OUTP ON')
+                    
+                    try:
+                        for i, voltage in enumerate(voltages):
+                            self.log_message(f"Sweep step {i+1}/{len(voltages)}: {voltage}V")
+                            
+                            # Set voltage
+                            self.instrument.write(f':SOUR:VOLT {voltage}')
+                            
+                            # Wait for settling
+                            time.sleep(delay)
+                            
+                            # Take measurement
+                            measurement = self.instrument.query(':READ?').strip()
+                            values = measurement.split(',')
+                            
+                            if len(values) >= 2:
+                                measured_voltage = float(values[0])
+                                measured_current = float(values[1])
+                                
+                                result = {
+                                    "set_voltage": voltage,
+                                    "measured_voltage": measured_voltage,
+                                    "measured_current": measured_current,
+                                    "timestamp": datetime.now().isoformat(),
+                                    "step": i + 1
+                                }
+                                results.append(result)
+                                
+                                # Log progress every few steps
+                                if (i + 1) % 5 == 0 or i == 0 or i == len(voltages) - 1:
+                                    self.log_message(f"Step {i+1}: {voltage}V -> {measured_voltage:.6f}V, {measured_current:.9f}A")
+                            else:
+                                self.log_message(f"Invalid measurement format at step {i+1}: {measurement}", "WARNING")
+                                
+                    finally:
+                        # Always turn output OFF after sweep
+                        self.instrument.write(':OUTP OFF')
+                        self.log_message("Voltage sweep completed - output OFF")
+                        
+                    self.log_message(f"Voltage sweep completed successfully with {len(results)} points")
+                    return {"status": "success", "data": results, "message": f"Sweep completed with {len(results)} points"}
+                    
+                except Exception as e:
+                    # Ensure output is OFF on error
+                    try:
+                        self.instrument.write(':OUTP OFF')
+                    except:
+                        pass
+                    
+                    error_msg = f"Voltage sweep failed: {str(e)}"
+                    self.log_message(error_msg, "ERROR")
+                    return {"status": "error", "message": error_msg}
+
+
+
+
+
             # Add other command types as needed...
             else:
                 return {"status": "error", "message": f"Unknown command type: {cmd_type}"}

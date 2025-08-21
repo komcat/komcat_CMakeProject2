@@ -438,8 +438,16 @@ bool Keithley2400Client::ParseMeasurement(const std::string& jsonResponse, Keith
   }
 }
 
+// Fix the VoltageSweep method in keithley2400_client.cpp
+
 bool Keithley2400Client::VoltageSweep(double start, double stop, int steps, double compliance, double delay,
   std::vector<VoltageSweepResult>& results) {
+
+  Logger* logger = Logger::GetInstance();
+  logger->LogInfo("Keithley2400Client: Starting voltage sweep from " +
+    std::to_string(start) + "V to " + std::to_string(stop) + "V with " +
+    std::to_string(steps) + " steps");
+
   json data;
   data["start"] = start;
   data["stop"] = stop;
@@ -451,11 +459,16 @@ bool Keithley2400Client::VoltageSweep(double start, double stop, int steps, doub
   bool result = SendJsonCommand("voltage_sweep", data.dump(), &response);
 
   if (result) {
+    logger->LogInfo("Keithley2400Client: Received sweep response, parsing...");
+
     try {
       json jsonResponse = json::parse(response);
+
       if (jsonResponse["status"] == "success" && jsonResponse.contains("data")) {
         results.clear();
         auto sweepData = jsonResponse["data"];
+
+        logger->LogInfo("Keithley2400Client: Parsing " + std::to_string(sweepData.size()) + " sweep points");
 
         for (const auto& point : sweepData) {
           VoltageSweepResult sweepResult;
@@ -466,24 +479,28 @@ bool Keithley2400Client::VoltageSweep(double start, double stop, int steps, doub
           results.push_back(sweepResult);
         }
 
-        Logger::GetInstance()->LogInfo("Keithley2400Client: Voltage sweep completed with " +
+        logger->LogInfo("Keithley2400Client: Voltage sweep completed successfully with " +
           std::to_string(results.size()) + " points");
         return true;
       }
       else {
-        m_lastError = jsonResponse.value("message", "Unknown error");
+        m_lastError = jsonResponse.value("message", "Unknown error in sweep response");
+        logger->LogError("Keithley2400Client: Sweep failed - " + m_lastError);
         return false;
       }
     }
     catch (const std::exception& e) {
-      m_lastError = "Failed to parse voltage sweep response";
+      m_lastError = "Failed to parse voltage sweep response: " + std::string(e.what());
+      logger->LogError("Keithley2400Client: " + m_lastError);
       return false;
     }
   }
 
-  Logger::GetInstance()->LogError("Keithley2400Client: Failed to perform voltage sweep - " + m_lastError);
+  logger->LogError("Keithley2400Client: Failed to send voltage sweep command - " + m_lastError);
   return false;
 }
+
+
 
 Keithley2400Reading Keithley2400Client::GetLatestReading() const {
   std::lock_guard<std::mutex> lock(m_dataMutex);

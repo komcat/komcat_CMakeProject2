@@ -4,17 +4,23 @@
 #include "include/SMU/keithley2400_client.h"
 #include "imgui.h"
 #include <iostream>
+#include <chrono>
+#include <thread>
 #include <iomanip>
 #include <sstream>
 #include <algorithm> // For (std::min) and (std::max)
 
 UISMUPanel::UISMUPanel(Keithley2400Manager& smuManager)
-  : m_smuManager(smuManager) {
+  : m_smuManager(smuManager),
+  m_logger(Logger::GetInstance())  
+{
   // Constructor - initialize UI settings
+  m_logger->LogInfo("UISMUPanel: Initialized");
 }
 
 UISMUPanel::~UISMUPanel() {
   // Destructor - no cleanup needed
+  m_logger->LogInfo("UISMUPanel: Destroyed");
 }
 
 void UISMUPanel::RenderUI() {
@@ -434,6 +440,7 @@ void UISMUPanel::RenderDeviceStatus(Keithley2400Client* device) {
   }
 }
 
+
 void UISMUPanel::RenderOutputControls(Keithley2400Client* device) {
   ImGui::TextColored(ImVec4(0.0f, 0.8f, 1.0f, 1.0f), "Output Control");
 
@@ -442,20 +449,51 @@ void UISMUPanel::RenderOutputControls(Keithley2400Client* device) {
     return;
   }
 
-  // Output status display
-  // Note: Add method to get output status from device if available
-  ImGui::Text("Output Status: Active"); // Placeholder
-
-  // Output control buttons
   if (ImGui::Button("Turn ON", ImVec2(80, 30))) {
-    device->SetOutput(true);
+    m_logger->LogInfo("UISMUPanel: User requested output ON for device: " + m_selectedDeviceName);
+
+    // Configure instrument first (as we discussed earlier)
+    device->ResetInstrument();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    if (m_sourceSettings.sourceMode == 0) {
+      m_logger->LogInfo("UISMUPanel: Configuring voltage source: " +
+        std::to_string(m_sourceSettings.voltageSetpoint) + "V, " +
+        std::to_string(m_sourceSettings.compliance) + "A compliance");
+      device->SetupVoltageSource(m_sourceSettings.voltageSetpoint, m_sourceSettings.compliance);
+    }
+    else {
+      m_logger->LogInfo("UISMUPanel: Configuring current source: " +
+        std::to_string(m_sourceSettings.currentSetpoint) + "A, " +
+        std::to_string(m_sourceSettings.compliance) + "V compliance");
+      device->SetupCurrentSource(m_sourceSettings.currentSetpoint, m_sourceSettings.compliance);
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    bool success = device->SetOutput(true);
+    if (success) {
+      m_logger->LogInfo("UISMUPanel: Output turned ON successfully");
+    }
+    else {
+      m_logger->LogError("UISMUPanel: Failed to turn output ON: " + device->GetLastError());
+    }
   }
 
   ImGui::SameLine();
   if (ImGui::Button("Turn OFF", ImVec2(80, 30))) {
-    device->SetOutput(false);
+    m_logger->LogInfo("UISMUPanel: User requested output OFF for device: " + m_selectedDeviceName);
+
+    bool success = device->SetOutput(false);
+    if (success) {
+      m_logger->LogInfo("UISMUPanel: Output turned OFF successfully");
+    }
+    else {
+      m_logger->LogError("UISMUPanel: Failed to turn output OFF: " + device->GetLastError());
+    }
   }
 }
+
 
 void UISMUPanel::RenderSourceControls(Keithley2400Client* device) {
   ImGui::TextColored(ImVec4(0.0f, 0.8f, 1.0f, 1.0f), "Source Configuration");
@@ -615,6 +653,9 @@ void UISMUPanel::RenderEnhancedSourceControls(Keithley2400Client* device) {
   }
 }
 
+
+// Then in UISMUPanel.cpp, replace RenderVoltageSweepControls with this enhanced version:
+
 void UISMUPanel::RenderVoltageSweepControls(Keithley2400Client* device) {
   ImGui::TextColored(ImVec4(0.0f, 0.8f, 1.0f, 1.0f), "Voltage Sweep");
   ImGui::Separator();
@@ -624,7 +665,7 @@ void UISMUPanel::RenderVoltageSweepControls(Keithley2400Client* device) {
     return;
   }
 
-  // Start voltage with manual input
+  // Sweep parameter controls (same as before)
   if (ImGui::SliderFloat("Start (V)", &m_sourceSettings.sweepStart, -20.0f, 20.0f, "%.2f")) {
     // Value updated by slider
   }
@@ -635,7 +676,6 @@ void UISMUPanel::RenderVoltageSweepControls(Keithley2400Client* device) {
   }
   ImGui::PopItemWidth();
 
-  // Stop voltage with manual input
   if (ImGui::SliderFloat("Stop (V)", &m_sourceSettings.sweepStop, -20.0f, 20.0f, "%.2f")) {
     // Value updated by slider
   }
@@ -646,49 +686,185 @@ void UISMUPanel::RenderVoltageSweepControls(Keithley2400Client* device) {
   }
   ImGui::PopItemWidth();
 
-  // Steps with manual input
   ImGui::SliderInt("Steps", &m_sourceSettings.sweepSteps, 2, 100);
-  ImGui::SameLine();
-  ImGui::PushItemWidth(80);
-  ImGui::InputInt("##SweepStepsInput", &m_sourceSettings.sweepSteps, 0, 0);
-  m_sourceSettings.sweepSteps = (std::max)(2, (std::min)(100, m_sourceSettings.sweepSteps)); // Clamp
-  ImGui::PopItemWidth();
+  ImGui::SliderFloat("Compliance (A)", &m_sourceSettings.sweepCompliance, 0.001f, 1.0f, "%.3f");
+  ImGui::SliderFloat("Delay (s)", &m_sourceSettings.sweepDelay, 0.01f, 1.0f, "%.3f");
 
-  // Compliance with manual input
-  if (ImGui::SliderFloat("Compliance (A)", &m_sourceSettings.sweepCompliance, 0.001f, 1.0f, "%.3f")) {
-    // Value updated by slider
-  }
-  ImGui::SameLine();
-  ImGui::PushItemWidth(80);
-  if (ImGui::InputFloat("##SweepComplianceInput", &m_sourceSettings.sweepCompliance, 0.0f, 0.0f, "%.3f")) {
-    m_sourceSettings.sweepCompliance = (std::max)(0.001f, (std::min)(1.0f, m_sourceSettings.sweepCompliance));
-  }
-  ImGui::PopItemWidth();
+  ImGui::Spacing();
 
-  // Delay with manual input
-  if (ImGui::SliderFloat("Delay (s)", &m_sourceSettings.sweepDelay, 0.01f, 1.0f, "%.3f")) {
-    // Value updated by slider
-  }
-  ImGui::SameLine();
-  ImGui::PushItemWidth(80);
-  if (ImGui::InputFloat("##SweepDelayInput", &m_sourceSettings.sweepDelay, 0.0f, 0.0f, "%.3f")) {
-    m_sourceSettings.sweepDelay = (std::max)(0.01f, (std::min)(1.0f, m_sourceSettings.sweepDelay));
-  }
-  ImGui::PopItemWidth();
+  // ENHANCED: Real-time sweep status display
+  if (m_sweepState.inProgress) {
+    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "🔄 SWEEP IN PROGRESS");
 
-  if (ImGui::Button("Perform Voltage Sweep")) {
-    std::vector<VoltageSweepResult> sweepResults;
-    if (device->VoltageSweep(m_sourceSettings.sweepStart, m_sourceSettings.sweepStop,
-      m_sourceSettings.sweepSteps, m_sourceSettings.sweepCompliance,
-      m_sourceSettings.sweepDelay, sweepResults)) {
-      // Could store results for plotting or analysis
-      ImGui::OpenPopup("Sweep Complete");
+    // Calculate elapsed time
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_sweepState.startTime).count();
+    ImGui::Text("Elapsed: %.1f seconds", elapsed / 1000.0f);
+
+    // Estimated progress (rough estimate)
+    float estimatedTotal = m_sourceSettings.sweepSteps * m_sourceSettings.sweepDelay * 1000.0f;
+    float progress = (std::min)(elapsed / estimatedTotal, 1.0f);
+    ImGui::ProgressBar(progress, ImVec2(-1, 0), "");
+
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 1.0f, 1.0f), "Parameters: %.1fV → %.1fV, %d steps",
+      m_sourceSettings.sweepStart, m_sourceSettings.sweepStop, m_sourceSettings.sweepSteps);
+
+    if (ImGui::Button("⚠️ This will complete automatically", ImVec2(-1, 30))) {
+      // Sweep is running on server side, can't really cancel easily
+      ImGui::OpenPopup("Cannot Cancel");
+    }
+  }
+  else {
+    // ENHANCED: Sweep initiation with immediate feedback
+    if (ImGui::Button("🚀 Perform Voltage Sweep", ImVec2(-1, 40))) {
+      // Clear previous results
+      m_sweepState.lastResult = "";
+      m_sweepState.lastSweepData.clear();
+      m_sweepState.inProgress = true;
+      m_sweepState.startTime = std::chrono::steady_clock::now();
+
+      // Log the sweep attempt
+      Logger::GetInstance()->LogInfo("UI: Starting voltage sweep from " +
+        std::to_string(m_sourceSettings.sweepStart) + "V to " +
+        std::to_string(m_sourceSettings.sweepStop) + "V");
+
+      // Perform sweep (this will block briefly while sending command)
+      std::vector<VoltageSweepResult> sweepResults;
+      bool success = device->VoltageSweep(
+        m_sourceSettings.sweepStart,
+        m_sourceSettings.sweepStop,
+        m_sourceSettings.sweepSteps,
+        m_sourceSettings.sweepCompliance,
+        m_sourceSettings.sweepDelay,
+        sweepResults
+      );
+
+      // Update state immediately after command completes
+      m_sweepState.inProgress = false;
+
+      if (success) {
+        m_sweepState.lastResult = "✅ Sweep completed successfully!";
+        m_sweepState.lastSweepData = sweepResults;
+
+        Logger::GetInstance()->LogInfo("UI: Sweep completed with " + std::to_string(sweepResults.size()) + " points");
+
+        // ADD THIS: Print detailed data to console
+        PrintSweepDataToConsole(m_sweepState.lastSweepData);
+
+        // Show success popup
+        ImGui::OpenPopup("Sweep Complete");
+      }
+      else {
+        m_sweepState.lastResult = "❌ Sweep failed: " + device->GetLastError();
+        Logger::GetInstance()->LogError("UI: Sweep failed - " + device->GetLastError());
+
+        // Show error popup
+        ImGui::OpenPopup("Sweep Failed");
+      }
     }
   }
 
-  // Popup for sweep completion
+  // ENHANCED: Results display
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("Last Sweep Results:");
+
+  if (!m_sweepState.lastResult.empty()) {
+    if (m_sweepState.lastResult.find("✅") != std::string::npos) {
+      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%s", m_sweepState.lastResult.c_str());
+    }
+    else {
+      ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%s", m_sweepState.lastResult.c_str());
+    }
+  }
+  else {
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No sweep performed yet");
+  }
+
+  // ENHANCED: Data table for sweep results
+  if (!m_sweepState.lastSweepData.empty()) {
+    ImGui::Text("Data points: %zu", m_sweepState.lastSweepData.size());
+
+    if (ImGui::BeginTable("SweepResults", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+      ImGui::TableSetupColumn("Set V", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+      ImGui::TableSetupColumn("Measured V", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+      ImGui::TableSetupColumn("Current (mA)", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+      ImGui::TableHeadersRow();
+
+      // Show first few and last few points
+      size_t maxDisplay = 6;
+      size_t dataSize = m_sweepState.lastSweepData.size();
+
+      for (size_t i = 0; i < (std::min)(dataSize, maxDisplay / 2); ++i) {
+        const auto& point = m_sweepState.lastSweepData[i];
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn(); ImGui::Text("%.2f", point.setVoltage);
+        ImGui::TableNextColumn(); ImGui::Text("%.4f", point.measuredVoltage);
+        ImGui::TableNextColumn(); ImGui::Text("%.6f", point.measuredCurrent * 1000.0);
+      }
+
+      if (dataSize > maxDisplay) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn(); ImGui::Text("...");
+        ImGui::TableNextColumn(); ImGui::Text("...");
+        ImGui::TableNextColumn(); ImGui::Text("...");
+
+        for (size_t i = dataSize - maxDisplay / 2; i < dataSize; ++i) {
+          const auto& point = m_sweepState.lastSweepData[i];
+          ImGui::TableNextRow();
+          ImGui::TableNextColumn(); ImGui::Text("%.2f", point.setVoltage);
+          ImGui::TableNextColumn(); ImGui::Text("%.4f", point.measuredVoltage);
+          ImGui::TableNextColumn(); ImGui::Text("%.6f", point.measuredCurrent * 1000.0);
+        }
+      }
+
+      ImGui::EndTable();
+    }
+
+    // Add a button to re-print data to console
+    if (ImGui::Button("🖨️ Print to Console")) {
+      PrintSweepDataToConsole(m_sweepState.lastSweepData);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("📊 Export Data")) {
+      ExportSweepDataToFile(m_sweepState.lastSweepData);
+    }
+  }
+
+  // Popups for feedback
   if (ImGui::BeginPopupModal("Sweep Complete", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-    ImGui::Text("Voltage sweep completed successfully!");
+    ImGui::Text("✅ Voltage sweep completed successfully!");
+    ImGui::Text("Data points collected: %zu", m_sweepState.lastSweepData.size());
+    ImGui::Separator();
+    if (ImGui::Button("Great!", ImVec2(120, 0))) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  if (ImGui::BeginPopupModal("Sweep Failed", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "❌ Voltage sweep failed!");
+    ImGui::Text("Error: %s", device->GetLastError().c_str());
+    ImGui::Separator();
+    if (ImGui::Button("OK", ImVec2(120, 0))) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  if (ImGui::BeginPopupModal("Cannot Cancel", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Sweep is running on the instrument.");
+    ImGui::Text("It will complete automatically.");
+    ImGui::Separator();
+    if (ImGui::Button("OK", ImVec2(120, 0))) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  if (ImGui::BeginPopupModal("Export Info", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Data export feature coming soon!");
+    ImGui::Text("For now, check the console logs for data.");
     ImGui::Separator();
     if (ImGui::Button("OK", ImVec2(120, 0))) {
       ImGui::CloseCurrentPopup();
@@ -787,4 +963,137 @@ void UISMUPanel::RenderUtilityControls(Keithley2400Client* device) {
 }
 void UISMUPanel::ToggleWindow() {
   m_showWindow = !m_showWindow;
+}
+
+
+
+void UISMUPanel::PrintSweepDataToConsole(const std::vector<VoltageSweepResult>& data) {
+  if (data.empty()) {
+    std::cout << "No sweep data to print.\n" << std::endl;
+    return;
+  }
+
+  // Print header
+  std::cout << "\n" << std::string(70, '=') << std::endl;
+  std::cout << "           VOLTAGE SWEEP RESULTS" << std::endl;
+  std::cout << std::string(70, '=') << std::endl;
+  std::cout << "Device: " << m_selectedDeviceName << std::endl;
+  std::cout << "Points: " << data.size() << std::endl;
+  std::cout << "Range:  " << data.front().setVoltage << "V to " << data.back().setVoltage << "V" << std::endl;
+  std::cout << std::string(70, '-') << std::endl;
+
+  // Print column headers
+  std::cout << std::left
+    << std::setw(6) << "Step"
+    << std::setw(12) << "Set V"
+    << std::setw(15) << "Measured V"
+    << std::setw(15) << "Current (A)"
+    << std::setw(15) << "Current (mA)"
+    << "Power (mW)" << std::endl;
+  std::cout << std::string(70, '-') << std::endl;
+
+  // Print data rows
+  for (size_t i = 0; i < data.size(); ++i) {
+    const auto& point = data[i];
+    double powerMW = point.measuredVoltage * point.measuredCurrent * 1000.0; // mW
+
+    std::cout << std::left
+      << std::setw(6) << (i + 1)
+      << std::setw(12) << std::fixed << std::setprecision(3) << point.setVoltage
+      << std::setw(15) << std::fixed << std::setprecision(6) << point.measuredVoltage
+      << std::setw(15) << std::scientific << std::setprecision(3) << point.measuredCurrent
+      << std::setw(15) << std::fixed << std::setprecision(6) << (point.measuredCurrent * 1000.0)
+      << std::fixed << std::setprecision(6) << powerMW << std::endl;
+  }
+
+  std::cout << std::string(70, '-') << std::endl;
+
+  // Print summary statistics
+  double maxCurrent = 0.0, minCurrent = 0.0;
+  double maxVoltage = data[0].measuredVoltage, minVoltage = data[0].measuredVoltage;
+
+  for (const auto& point : data) {
+    maxCurrent = (std::max)(maxCurrent, std::abs(point.measuredCurrent));
+    minCurrent = (std::min)(minCurrent, std::abs(point.measuredCurrent));
+    maxVoltage = (std::max)(maxVoltage, point.measuredVoltage);
+    minVoltage = (std::min)(minVoltage, point.measuredVoltage);
+  }
+
+  std::cout << "SUMMARY:" << std::endl;
+  std::cout << "  Voltage range: " << std::fixed << std::setprecision(3)
+    << minVoltage << "V to " << maxVoltage << "V" << std::endl;
+  std::cout << "  Current range: " << std::scientific << std::setprecision(3)
+    << minCurrent << "A to " << maxCurrent << "A" << std::endl;
+  std::cout << "  Max current:   " << std::fixed << std::setprecision(6)
+    << (maxCurrent * 1000.0) << " mA" << std::endl;
+
+  // Calculate resistance if current is non-zero
+  if (maxCurrent > 1e-12) {
+    double resistance = maxVoltage / maxCurrent;
+    std::cout << "  Est. resistance: " << std::scientific << std::setprecision(3)
+      << resistance << " Ohms" << std::endl;
+  }
+
+  std::cout << std::string(70, '=') << std::endl;
+  std::cout << "Data printed at: " << GetCurrentTimeString() << std::endl;
+  std::cout << std::string(70, '=') << "\n" << std::endl;
+
+  // Also log to the logger system
+  m_logger->LogInfo("UISMUPanel: Sweep data printed to console (" +
+    std::to_string(data.size()) + " points)");
+}
+
+void UISMUPanel::ExportSweepDataToFile(const std::vector<VoltageSweepResult>& data) {
+  if (data.empty()) {
+    m_logger->LogWarning("UISMUPanel: No data to export");
+    return;
+  }
+
+  // Generate filename with timestamp
+  std::string filename = "sweep_data_" + GetTimestampString() + ".csv";
+
+  std::ofstream file(filename);
+  if (!file.is_open()) {
+    m_logger->LogError("UISMUPanel: Failed to create export file: " + filename);
+    return;
+  }
+
+  // Write CSV header
+  file << "Step,Set_Voltage_V,Measured_Voltage_V,Current_A,Current_mA,Power_mW\n";
+
+  // Write data
+  for (size_t i = 0; i < data.size(); ++i) {
+    const auto& point = data[i];
+    double currentMA = point.measuredCurrent * 1000.0;
+    double powerMW = point.measuredVoltage * point.measuredCurrent * 1000.0;
+
+    file << (i + 1) << ","
+      << std::fixed << std::setprecision(6) << point.setVoltage << ","
+      << std::fixed << std::setprecision(6) << point.measuredVoltage << ","
+      << std::scientific << std::setprecision(6) << point.measuredCurrent << ","
+      << std::fixed << std::setprecision(6) << currentMA << ","
+      << std::fixed << std::setprecision(6) << powerMW << "\n";
+  }
+
+  file.close();
+
+  std::cout << "\nData exported to: " << filename << std::endl;
+  m_logger->LogInfo("UISMUPanel: Data exported to " + filename);
+}
+
+// Helper methods - add these to UISMUPanel class:
+std::string UISMUPanel::GetCurrentTimeString() {
+  auto now = std::chrono::system_clock::now();
+  auto time_t = std::chrono::system_clock::to_time_t(now);
+  std::stringstream ss;
+  ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+  return ss.str();
+}
+
+std::string UISMUPanel::GetTimestampString() {
+  auto now = std::chrono::system_clock::now();
+  auto time_t = std::chrono::system_clock::to_time_t(now);
+  std::stringstream ss;
+  ss << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
+  return ss.str();
 }
