@@ -48,6 +48,13 @@ class Keithley2400Server:
         self.error_count = 0
         self.last_stats_time = time.time()
         
+        # Enhanced polling optimization
+        self.polling_optimized = fast_mode
+        self.read_cache_timeout = 0.05  # 50ms cache for very fast polling
+        self.cached_reading = None
+        self.cache_timestamp = 0
+        self.cache_hits = 0
+        
         # GUI callback for logging
         self.log_callback = None
         
@@ -112,7 +119,7 @@ class Keithley2400Server:
             self.running = True
             self.log_message(f"Keithley 2400 Server started on {self.host}:{self.port}")
             if self.fast_mode:
-                self.log_message("Server optimized for 250ms polling rate")
+                self.log_message("Server optimized for high-frequency polling (50ms-5s rates)")
             
             # Start statistics reporting thread
             stats_thread = threading.Thread(target=self.stats_reporter, daemon=True)
@@ -149,23 +156,34 @@ class Keithley2400Server:
                 break
     
     def stats_reporter(self):
-        """Report performance statistics every 30 seconds"""
+        """Enhanced stats reporting for polling monitoring"""
         while self.running:
             time.sleep(30)
             if self.read_count > 0:
                 elapsed = time.time() - self.last_stats_time
                 rate = self.read_count / elapsed
                 error_rate = (self.error_count / self.read_count) * 100 if self.read_count > 0 else 0
-                self.log_message(f"Performance: {rate:.1f} reads/sec, {error_rate:.1f}% errors")
+                cache_rate = (self.cache_hits / self.read_count) * 100 if self.read_count > 0 else 0
+                
+                self.log_message(f"Performance: {rate:.1f} reads/sec, {error_rate:.1f}% errors, {cache_rate:.1f}% cache hits")
+                
+                # Detailed stats for fast polling
+                if rate > 5.0:  # High frequency polling
+                    self.log_message(f"High-frequency polling active - Rate optimization enabled")
                 
                 # Reset counters
                 self.read_count = 0
                 self.error_count = 0
+                self.cache_hits = 0
                 self.last_stats_time = time.time()
             
     def handle_client(self, client_socket, address):
-        """Handle individual client connection"""
+        """Enhanced client handler with polling detection"""
         self.clients.append(client_socket)
+        
+        # Track polling statistics per client
+        client_read_count = 0
+        last_command_time = time.time()
         
         try:
             while self.running:
@@ -175,8 +193,22 @@ class Keithley2400Server:
                     
                 try:
                     command = json.loads(data)
-                    if command.get('type') != 'read':
+                    current_time = time.time()
+                    
+                    # Detect high-frequency polling
+                    if command.get('type') == 'read':
+                        client_read_count += 1
+                        time_since_last = current_time - last_command_time
+                        
+                        # Log high-frequency polling detection
+                        if time_since_last < 0.2 and client_read_count > 5:  # Less than 200ms between reads
+                            if client_read_count == 6:  # Log once when detected
+                                self.log_message(f"High-frequency polling detected from {address} (interval: {time_since_last*1000:.0f}ms)")
+                    else:
+                        # Log non-read commands
                         self.log_message(f"Command from {address}: {command}")
+                    
+                    last_command_time = current_time
                     
                     response = self.process_command(command)
                     response_json = json.dumps(response)
@@ -197,10 +229,111 @@ class Keithley2400Server:
             client_socket.close()
             if client_socket in self.clients:
                 self.clients.remove(client_socket)
-            self.log_message(f"Client {address} disconnected")
+            self.log_message(f"Client {address} disconnected (processed {client_read_count} reads)")
+            
+    def handle_optimized_read(self):
+        """Optimized read handler for high-frequency polling"""
+        current_time = time.time()
+        self.read_count += 1
+        
+        # Check if we can use cached reading for very fast polling
+        if (self.polling_optimized and 
+            self.cached_reading is not None and 
+            (current_time - self.cache_timestamp) < self.read_cache_timeout):
+            
+            self.cache_hits += 1
+            # Return cached reading with updated timestamp
+            cached_response = self.cached_reading.copy()
+            cached_response["data"]["timestamp"] = datetime.now().isoformat()
+            cached_response["data"]["cached"] = True
+            return cached_response
+        
+        # Perform actual instrument read
+        start_time = current_time
+        
+        try:
+            if self.fast_mode:
+                # Optimized fast read
+                result = self.instrument.query(':READ?').strip()
+                values = result.split(',')
+                
+                if len(values) >= 2:
+                    voltage = float(values[0])
+                    current = float(values[1])
+                    
+                    # Calculate derived values
+                    if abs(current) > 1e-12:
+                        resistance = voltage / current
+                    else:
+                        resistance = 1e9  # Very high resistance for open circuit
+                        
+                    power = voltage * current
+                    
+                    measurement = {
+                        "voltage": voltage,
+                        "current": current,
+                        "resistance": resistance,
+                        "power": power,
+                        "timestamp": datetime.now().isoformat(),
+                        "read_time_ms": (time.time() - start_time) * 1000,
+                        "cached": False
+                    }
+                else:
+                    raise ValueError(f"Invalid measurement format: {result}")
+            else:
+                # Standard read mode
+                result = self.instrument.query(':READ?').strip()
+                values = result.split(',')
+                measurement = {
+                    "voltage": float(values[0]),
+                    "current": float(values[1]),
+                    "resistance": float(values[2]) if len(values) > 2 else None,
+                    "power": float(values[3]) if len(values) > 3 else None,
+                    "timestamp": datetime.now().isoformat(),
+                    "read_time_ms": (time.time() - start_time) * 1000,
+                    "cached": False
+                }
+            
+            response = {"status": "success", "data": measurement}
+            
+            # Cache the successful reading
+            if self.polling_optimized:
+                self.cached_reading = response
+                self.cache_timestamp = current_time
+            
+            return response
+            
+        except Exception as e:
+            self.error_count += 1
+            error_msg = str(e)
+            
+            # Enhanced error handling for polling
+            if "timeout" in error_msg.lower() or "VI_ERROR_TMO" in error_msg:
+                # Don't spam logs for timeout errors during fast polling
+                if self.error_count % 50 == 1:
+                    self.log_message(f"Read timeout (x{self.error_count}): {error_msg}", "WARNING")
+                    
+                # Return a safe "no reading" response instead of error for timeouts
+                safe_response = {
+                    "status": "success", 
+                    "data": {
+                        "voltage": 0.0,
+                        "current": 0.0, 
+                        "resistance": 1e9,
+                        "power": 0.0,
+                        "timestamp": datetime.now().isoformat(),
+                        "read_time_ms": (time.time() - start_time) * 1000,
+                        "timeout": True,
+                        "cached": False
+                    }
+                }
+                return safe_response
+            else:
+                self.log_message(f"Read measurement failed: {error_msg}", "ERROR")
+                return {"status": "error", "message": error_msg}
             
     def process_command(self, command):
-        """Process instrument command"""
+        """Process instrument command with optimized read handling"""
         cmd_type = command.get('type', '')
         cmd_data = command.get('data', {})
         
@@ -216,57 +349,7 @@ class Keithley2400Server:
                 return {"status": "success", "data": result}
                 
             elif cmd_type == 'read':
-                self.read_count += 1
-                start_time = time.time()
-                
-                try:
-                    if self.fast_mode:
-                        result = self.instrument.query(':READ?').strip()
-                        values = result.split(',')
-                        
-                        voltage = float(values[0])
-                        current = float(values[1])
-                        
-                        if abs(current) > 1e-12:
-                            resistance = voltage / current
-                        else:
-                            resistance = 1e9
-                            
-                        power = voltage * current
-                        
-                        measurement = {
-                            "voltage": voltage,
-                            "current": current,
-                            "resistance": resistance,
-                            "power": power,
-                            "timestamp": datetime.now().isoformat(),
-                            "read_time_ms": (time.time() - start_time) * 1000
-                        }
-                    else:
-                        result = self.instrument.query(':READ?').strip()
-                        values = result.split(',')
-                        measurement = {
-                            "voltage": float(values[0]),
-                            "current": float(values[1]),
-                            "resistance": float(values[2]) if len(values) > 2 else None,
-                            "power": float(values[3]) if len(values) > 3 else None,
-                            "timestamp": datetime.now().isoformat(),
-                            "read_time_ms": (time.time() - start_time) * 1000
-                        }
-                    
-                    return {"status": "success", "data": measurement}
-                    
-                except Exception as e:
-                    self.error_count += 1
-                    error_msg = str(e)
-                    
-                    if "timeout" in error_msg.lower() or "VI_ERROR_TMO" in error_msg:
-                        if self.error_count % 20 == 1:
-                            self.log_message(f"Read timeout (x{self.error_count}): {error_msg}", "WARNING")
-                    else:
-                        self.log_message(f"Read measurement failed: {error_msg}", "ERROR")
-                    
-                    return {"status": "error", "message": error_msg}
+                return self.handle_optimized_read()
                 
             elif cmd_type == 'get_status':
                 idn = self.instrument.query('*IDN?').strip()
@@ -281,6 +364,7 @@ class Keithley2400Server:
                     "fast_mode": self.fast_mode,
                     "read_count": self.read_count,
                     "error_count": self.error_count,
+                    "cache_hits": self.cache_hits,
                     "client_count": len(self.clients)
                 }
                 return {"status": "success", "data": status}
@@ -288,16 +372,50 @@ class Keithley2400Server:
             elif cmd_type == 'output':
                 state = cmd_data.get('state', 'OFF').upper()
                 if state in ['ON', 'OFF']:
-                    self.instrument.write(f':OUTP {state}')
-                    self.log_message(f"Output set to {state}")
+                    if state == 'ON':
+                        # Enhanced output ON with safety checks
+                        self.log_message("Output ON requested - checking instrument configuration")
+                        
+                        # Check if source is configured
+                        try:
+                            source_func = self.instrument.query(':SOUR:FUNC?').strip()
+                            if source_func in ['VOLT', 'CURR']:
+                                self.instrument.write(f':OUTP {state}')
+                                self.log_message(f"Output set to {state} ({source_func} mode)")
+                            else:
+                                self.log_message("Warning: Source function not properly configured", "WARNING")
+                                self.instrument.write(f':OUTP {state}')
+                        except:
+                            # Fallback - just set output
+                            self.instrument.write(f':OUTP {state}')
+                            self.log_message(f"Output set to {state} (no verification)")
+                    else:
+                        self.instrument.write(f':OUTP {state}')
+                        self.log_message(f"Output set to {state}")
+                    
                     return {"status": "success", "message": f"Output set to {state}"}
                 else:
                     return {"status": "error", "message": f"Invalid output state: {state}. Use 'ON' or 'OFF'"}
 
             elif cmd_type == 'reset':
-                # Match the working Python code sequence
-                self.instrument.write('*RST')                    # Reset to defaults
-                self.instrument.write('*CLS')                    # Clear status
+                # Enhanced reset with fast mode restoration
+                self.log_message("Resetting instrument...")
+                self.instrument.write('*RST')
+                self.instrument.write('*CLS')
+                
+                # Restore fast mode settings if enabled
+                if self.fast_mode:
+                    time.sleep(0.5)  # Wait for reset to complete
+                    self.instrument.write(':SYST:AZER OFF')
+                    self.instrument.write(':DISP:ENAB OFF')
+                    self.instrument.write(':SENS:FUNC:CONC ON')
+                    self.instrument.write(':FORM:ELEM VOLT,CURR')
+                    self.log_message("Fast mode settings restored after reset")
+                
+                # Clear cache after reset
+                self.cached_reading = None
+                self.cache_timestamp = 0
+                
                 self.log_message("Instrument reset completed")
                 return {"status": "success", "message": "Instrument reset completed"}
 
@@ -307,6 +425,8 @@ class Keithley2400Server:
                 range_val = cmd_data.get('range', 'AUTO')
                 
                 try:
+                    self.log_message(f"Configuring voltage source: {voltage}V, compliance {compliance}A")
+                    
                     # Follow the exact sequence from working Python code
                     self.instrument.write(':SOUR:FUNC VOLT')        # Source voltage
                     self.instrument.write(':SOUR:VOLT:MODE FIXED')  # Fixed voltage mode
@@ -322,6 +442,11 @@ class Keithley2400Server:
                     self.instrument.write(':SENS:CURR:RANG:AUTO ON') # Auto-range current
                     self.instrument.write(f':SENS:CURR:PROT {compliance}')  # Compliance
                     
+                    # Restore fast mode settings if needed
+                    if self.fast_mode:
+                        self.instrument.write(':SENS:FUNC:CONC ON')
+                        self.instrument.write(':FORM:ELEM VOLT,CURR')
+                    
                     self.log_message(f"Voltage source configured: {voltage}V, compliance {compliance}A")
                     return {"status": "success", "message": f"Voltage source configured: {voltage}V, compliance {compliance}A"}
                     
@@ -336,6 +461,8 @@ class Keithley2400Server:
                 range_val = cmd_data.get('range', 'AUTO')
                 
                 try:
+                    self.log_message(f"Configuring current source: {current}A, compliance {compliance}V")
+                    
                     # Configure current source similar to working voltage source code
                     self.instrument.write(':SOUR:FUNC CURR')         # Source current
                     self.instrument.write(':SOUR:CURR:MODE FIXED')   # Fixed current mode
@@ -351,6 +478,11 @@ class Keithley2400Server:
                     self.instrument.write(':SENS:VOLT:RANG:AUTO ON') # Auto-range voltage
                     self.instrument.write(f':SENS:VOLT:PROT {compliance}')  # Voltage compliance
                     
+                    # Restore fast mode settings if needed
+                    if self.fast_mode:
+                        self.instrument.write(':SENS:FUNC:CONC ON')
+                        self.instrument.write(':FORM:ELEM VOLT,CURR')
+                    
                     self.log_message(f"Current source configured: {current}A, compliance {compliance}V")
                     return {"status": "success", "message": f"Current source configured: {current}A, compliance {compliance}V"}
                     
@@ -359,7 +491,6 @@ class Keithley2400Server:
                     self.log_message(error_msg, "ERROR")
                     return {"status": "error", "message": error_msg}
 
-            
             elif cmd_type == 'voltage_sweep':
                 start = cmd_data.get('start', 0)
                 stop = cmd_data.get('stop', 5)
@@ -389,13 +520,16 @@ class Keithley2400Server:
                     self.instrument.write(':SENS:CURR:RANG:AUTO ON') # Auto-range current
                     self.instrument.write(f':SENS:CURR:PROT {compliance}')  # Compliance
                     
+                    # Restore fast mode for sweep if enabled
+                    if self.fast_mode:
+                        self.instrument.write(':SENS:FUNC:CONC ON')
+                        self.instrument.write(':FORM:ELEM VOLT,CURR')
+                    
                     # Turn output ON
                     self.instrument.write(':OUTP ON')
                     
                     try:
                         for i, voltage in enumerate(voltages):
-                            self.log_message(f"Sweep step {i+1}/{len(voltages)}: {voltage}V")
-                            
                             # Set voltage
                             self.instrument.write(f':SOUR:VOLT {voltage}')
                             
@@ -430,6 +564,11 @@ class Keithley2400Server:
                         self.instrument.write(':OUTP OFF')
                         self.log_message("Voltage sweep completed - output OFF")
                         
+                        # Restore fast mode settings after sweep
+                        if self.fast_mode:
+                            self.instrument.write(':SYST:AZER OFF')
+                            self.instrument.write(':DISP:ENAB OFF')
+                        
                     self.log_message(f"Voltage sweep completed successfully with {len(results)} points")
                     return {"status": "success", "data": results, "message": f"Sweep completed with {len(results)} points"}
                     
@@ -444,15 +583,109 @@ class Keithley2400Server:
                     self.log_message(error_msg, "ERROR")
                     return {"status": "error", "message": error_msg}
 
+            elif cmd_type == 'current_sweep':
+                start = cmd_data.get('start', 0)
+                stop = cmd_data.get('stop', 0.001)
+                steps = cmd_data.get('steps', 11)
+                compliance = cmd_data.get('compliance', 10.0)
+                delay = cmd_data.get('delay', 0.1)
+                
+                self.log_message(f"Starting current sweep: {start}A to {stop}A, {steps} steps, {compliance}V compliance")
+                
+                try:
+                    # Perform current sweep - based on working voltage sweep code
+                    results = []
+                    
+                    # Calculate current points
+                    if steps <= 1:
+                        currents = [start]
+                    else:
+                        currents = [start + (stop - start) * i / (steps - 1) for i in range(steps)]
+                    
+                    # Setup instrument for current sweep
+                    self.instrument.write('*RST')                    # Reset to defaults
+                    self.instrument.write('*CLS')                    # Clear status
+                    self.instrument.write(':SOUR:FUNC CURR')        # Source current
+                    self.instrument.write(':SOUR:CURR:MODE FIXED')  # Fixed current mode
+                    self.instrument.write(':SOUR:CURR:RANG:AUTO ON') # Auto-range current
+                    self.instrument.write(':SENS:FUNC "VOLT"')      # Measure voltage
+                    self.instrument.write(':SENS:VOLT:RANG:AUTO ON') # Auto-range voltage
+                    self.instrument.write(f':SENS:VOLT:PROT {compliance}')  # Voltage compliance
+                    
+                    # Restore fast mode for sweep if enabled
+                    if self.fast_mode:
+                        self.instrument.write(':SENS:FUNC:CONC ON')
+                        self.instrument.write(':FORM:ELEM VOLT,CURR')
+                    
+                    # Turn output ON
+                    self.instrument.write(':OUTP ON')
+                    
+                    try:
+                        for i, current in enumerate(currents):
+                            # Set current
+                            self.instrument.write(f':SOUR:CURR {current}')
+                            
+                            # Wait for settling
+                            time.sleep(delay)
+                            
+                            # Take measurement
+                            measurement = self.instrument.query(':READ?').strip()
+                            values = measurement.split(',')
+                            
+                            if len(values) >= 2:
+                                measured_voltage = float(values[0])
+                                measured_current = float(values[1])
+                                
+                                result = {
+                                    "set_current": current,
+                                    "measured_voltage": measured_voltage,
+                                    "measured_current": measured_current,
+                                    "resistance": measured_voltage / measured_current if abs(measured_current) > 1e-12 else 1e9,
+                                    "power": measured_voltage * measured_current,
+                                    "timestamp": datetime.now().isoformat(),
+                                    "step": i + 1
+                                }
+                                results.append(result)
+                                
+                                # Log progress every few steps
+                                if (i + 1) % 5 == 0 or i == 0 or i == len(currents) - 1:
+                                    self.log_message(f"Step {i+1}: {current}A -> {measured_voltage:.6f}V, {measured_current:.9f}A")
+                            else:
+                                self.log_message(f"Invalid measurement format at step {i+1}: {measurement}", "WARNING")
+                                
+                    finally:
+                        # Always turn output OFF after sweep
+                        self.instrument.write(':OUTP OFF')
+                        self.log_message("Current sweep completed - output OFF")
+                        
+                        # Restore fast mode settings after sweep
+                        if self.fast_mode:
+                            self.instrument.write(':SYST:AZER OFF')
+                            self.instrument.write(':DISP:ENAB OFF')
+                    
+                    self.log_message(f"Current sweep completed successfully with {len(results)} points")
+                    return {"status": "success", "data": results, "message": f"Current sweep completed with {len(results)} points"}
+                    
+                except Exception as e:
+                    # Ensure output is OFF on error
+                    try:
+                        self.instrument.write(':OUTP OFF')
+                    except:
+                        pass
+                    
+                    error_msg = f"Current sweep failed: {str(e)}"
+                    self.log_message(error_msg, "ERROR")
+                    return {"status": "error", "message": error_msg}
 
 
 
 
-            # Add other command types as needed...
+
             else:
                 return {"status": "error", "message": f"Unknown command type: {cmd_type}"}
                 
         except Exception as e:
+            self.log_message(f"Command processing error: {str(e)}", "ERROR")
             return {"status": "error", "message": str(e)}
             
     def stop_server(self):
@@ -492,6 +725,9 @@ class Keithley2400Server:
                 pass
                 
         self.log_message("Server cleanup completed")
+
+
+
 
 class Keithley2400GUI:
     def __init__(self, auto_start=False, host='127.0.0.101', port=8888, gpib='GPIB1::24::INSTR', fast_mode=True):

@@ -79,7 +79,20 @@ private:
 	std::string GetCurrentTimeString();
 	std::string GetTimestampString();
 
-	// UI state for source controls
+	// Enhanced polling control methods
+	void StartOptimalPolling(Keithley2400Client* device, int intervalMs);
+	void StopPollingWithFeedback(Keithley2400Client* device);
+	bool ValidatePollingRate(int intervalMs);
+
+	// UI state for polling controls
+	struct PollingState {
+		bool wasPollingOnConnect = false;
+		int lastPollingRate = 250;
+		std::chrono::steady_clock::time_point lastDataUpdate;
+		int consecutiveErrors = 0;
+	} m_pollingState;
+
+	// Update the SourceSettings struct to include more polling options:
 	struct SourceSettings {
 		float voltageSetpoint = 0.0f;
 		float currentSetpoint = 0.001f;
@@ -93,9 +106,12 @@ private:
 		float sweepCompliance = 0.01f;
 		float sweepDelay = 0.1f;
 
-		// Polling controls
-		int pollingInterval = 100;  // Changed to 100ms for faster updates
+		// Enhanced polling controls
+		int pollingInterval = 250;  // Default 250ms
+		bool autoStartPolling = true; // Auto-start polling on connect
+		bool smartRateAdjustment = false; // Adjust rate based on performance
 	} m_sourceSettings;
+
 
 	// UI state for SCPI commands
 	struct SCPIState {
