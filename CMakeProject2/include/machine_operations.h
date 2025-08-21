@@ -394,6 +394,27 @@ public:
 	bool SMU_ReadPower(double& power, const std::string& clientName = "");
 	bool SMU_SendCommand(const std::string& command, const std::string& clientName = "");
 	bool SMU_QueryCommand(const std::string& command, std::string& response, const std::string& clientName = "");
+	// In the public section with other SMU methods:
+	bool SMU_GetStatus(std::string& instrumentId, std::string& outputState,
+		std::string& sourceFunction, const std::string& clientName = "");
+
+	// Simple SMU Sweep operations
+	bool SMU_VoltageSweep(double startVoltage, double stopVoltage, int steps,
+		double currentCompliance = 0.1, double delayMs = 100,
+		const std::string& clientName = "",
+		const std::string& callerContext = "");
+
+	bool SMU_CurrentSweep(double startCurrent, double stopCurrent, int steps,
+		double voltageCompliance = 10.0, double delayMs = 100,
+		const std::string& clientName = "",
+		const std::string& callerContext = "");
+
+	// Get sweep results (if you want to retrieve them programmatically)
+	bool SMU_GetLastVoltageSweepResults(std::vector<std::pair<double, double>>& results,
+		const std::string& clientName = "");
+	bool SMU_GetLastCurrentSweepResults(std::vector<std::pair<double, double>>& results,
+		const std::string& clientName = "");
+
 
 	// UI Component Access Methods (for MenuManager)
 	// ==============================================

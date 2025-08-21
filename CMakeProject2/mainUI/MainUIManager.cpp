@@ -320,6 +320,8 @@ void MainUIManager::ConnectUIToServices() {
 	if (machineOps && !m_runPageUI) {
 		// RunPageUI constructor needs MachineOperations reference
 		m_runPageUI = std::make_unique<RunPageUI>(*machineOps);  // Pass as reference
+		m_runPageUI->SetUserPromptUI(m_promptUI.get());  // Connect UserPromptUI
+		m_runPageUI->SetCameraManager(GetCameraManagerSmart());  // Connect camera manager
 
 		// No SetPromptUI method - RunPageUI probably handles prompts differently
 		// Check if RunPageUI has other methods for UserPromptUI or if it gets it from MachineOperations
@@ -1550,6 +1552,23 @@ void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
 				std::cout << "MainUIManager: UserPromptUI connected to RunPageUI" << std::endl;
 			}
 
+			// Connect UserPromptUI to RunPageUI
+			if (m_userPromptUI) {
+				m_runPageUI->SetUserPromptUI(m_userPromptUI.get());
+				std::cout << "MainUIManager: UserPromptUI connected to RunPageUI" << std::endl;
+
+				// VERIFY the connection worked
+				if (m_runPageUI->HasUserPromptUI()) {
+					std::cout << "✓ UserPromptUI connection verified" << std::endl;
+				}
+				else {
+					std::cout << "✗ UserPromptUI connection FAILED" << std::endl;
+				}
+			}
+			else {
+				std::cout << "✗ UserPromptUI is NULL!" << std::endl;
+			}
+
 			// 4. Set font if available
 			if (m_imguiFont) {
 				m_runPageUI->SetImguiFont(m_imguiFont);
@@ -1575,11 +1594,16 @@ void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
 			}
 
 		}
+
+
 	}
 	else {
 		std::cout << "MainUIManager: MachineOperations cleared" << std::endl;
 	}
 }
+
+
+
 // Optionally, add a getter method as well
 MachineOperations* MainUIManager::GetMachineOperations() {
 	return m_machineOperations;

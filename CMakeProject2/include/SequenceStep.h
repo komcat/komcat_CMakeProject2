@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "ProcessStep.h"
+#include "include/SMU/keithley2400_operations.h"
 #include <vector>
 #include <string>
 #include <functional>
@@ -2624,6 +2625,7 @@ private:
 };
 
 // Read Keithley voltage operation
+// Enhanced Read Keithley voltage operation with database storage
 class ReadKeithleyVoltageOperation : public SequenceOperation {
 public:
   ReadKeithleyVoltageOperation(const std::string& clientName = "")
@@ -2631,13 +2633,49 @@ public:
   }
 
   bool Execute(MachineOperations& ops) override {
+    // Start operation tracking
+    std::string opId;
+    auto startTime = std::chrono::steady_clock::now();
+
+    std::shared_ptr<OperationResultsManager> resultsManager = ops.GetResultsManager();
+    if (resultsManager) {
+      std::map<std::string, std::string> parameters;
+      parameters["client_name"] = m_clientName;
+      parameters["measurement_type"] = "voltage";
+
+      opId = resultsManager->StartOperation("ReadKeithleyVoltage", "",
+        "ReadKeithleyVoltageOperation_" + m_clientName, "", parameters);
+    }
+
     double voltage;
-    if (ops.SMU_ReadVoltage(voltage, m_clientName)) {
+    bool success = ops.SMU_ReadVoltage(voltage, m_clientName);
+
+    if (success) {
+      // Store measurement in database
+      if (resultsManager && !opId.empty()) {
+        auto endTime = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+        resultsManager->StoreResult(opId, "voltage_reading", std::to_string(voltage));
+        resultsManager->StoreResult(opId, "measurement_unit", "V");
+        resultsManager->StoreResult(opId, "elapsed_ms", std::to_string(elapsed));
+        resultsManager->StoreResult(opId, "client_used", m_clientName);
+
+        resultsManager->EndOperation(opId, "success");
+      }
+
       ops.LogInfo("Keithley voltage reading: " + std::to_string(voltage) + "V" +
         (m_clientName.empty() ? "" : " (" + m_clientName + ")"));
-      return true;
     }
-    return false;
+    else {
+      if (resultsManager && !opId.empty()) {
+        resultsManager->EndOperation(opId, "failed", "Failed to read voltage");
+      }
+      ops.LogError("Failed to read Keithley voltage" +
+        (m_clientName.empty() ? "" : " (" + m_clientName + ")"));
+    }
+
+    return success;
   }
 
   std::string GetDescription() const override {
@@ -2648,7 +2686,7 @@ private:
   std::string m_clientName;
 };
 
-// Read Keithley current operation
+// Enhanced Read Keithley current operation with database storage
 class ReadKeithleyCurrentOperation : public SequenceOperation {
 public:
   ReadKeithleyCurrentOperation(const std::string& clientName = "")
@@ -2656,13 +2694,52 @@ public:
   }
 
   bool Execute(MachineOperations& ops) override {
+    // Start operation tracking
+    std::string opId;
+    auto startTime = std::chrono::steady_clock::now();
+
+    std::shared_ptr<OperationResultsManager> resultsManager = ops.GetResultsManager();
+    if (resultsManager) {
+      std::map<std::string, std::string> parameters;
+      parameters["client_name"] = m_clientName;
+      parameters["measurement_type"] = "current";
+
+      opId = resultsManager->StartOperation("ReadKeithleyCurrent", "",
+        "ReadKeithleyCurrentOperation_" + m_clientName, "", parameters);
+    }
+
     double current;
-    if (ops.SMU_ReadCurrent(current, m_clientName)) {
+    bool success = ops.SMU_ReadCurrent(current, m_clientName);
+
+    if (success) {
+      // Store measurement in database
+      if (resultsManager && !opId.empty()) {
+        auto endTime = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+        resultsManager->StoreResult(opId, "current_reading", std::to_string(current));
+        resultsManager->StoreResult(opId, "measurement_unit", "A");
+        resultsManager->StoreResult(opId, "elapsed_ms", std::to_string(elapsed));
+        resultsManager->StoreResult(opId, "client_used", m_clientName);
+
+        // Calculate power if we have both voltage and current from previous reading
+        // Note: This would require storing state between operations for full power calculation
+
+        resultsManager->EndOperation(opId, "success");
+      }
+
       ops.LogInfo("Keithley current reading: " + std::to_string(current) + "A" +
         (m_clientName.empty() ? "" : " (" + m_clientName + ")"));
-      return true;
     }
-    return false;
+    else {
+      if (resultsManager && !opId.empty()) {
+        resultsManager->EndOperation(opId, "failed", "Failed to read current");
+      }
+      ops.LogError("Failed to read Keithley current" +
+        (m_clientName.empty() ? "" : " (" + m_clientName + ")"));
+    }
+
+    return success;
   }
 
   std::string GetDescription() const override {
@@ -2673,7 +2750,85 @@ private:
   std::string m_clientName;
 };
 
+// Enhanced Read Both Voltage and Current operation with database storage
+class ReadKeithleyVoltageCurrentOperation : public SequenceOperation {
+public:
+  ReadKeithleyVoltageCurrentOperation(const std::string& clientName = "")
+    : m_clientName(clientName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Start operation tracking
+    std::string opId;
+    auto startTime = std::chrono::steady_clock::now();
+
+    std::shared_ptr<OperationResultsManager> resultsManager = ops.GetResultsManager();
+    if (resultsManager) {
+      std::map<std::string, std::string> parameters;
+      parameters["client_name"] = m_clientName;
+      parameters["measurement_type"] = "voltage_current";
+
+      opId = resultsManager->StartOperation("ReadKeithleyVoltageCurrent", "",
+        "ReadKeithleyVoltageCurrentOperation_" + m_clientName, "", parameters);
+    }
+
+    double voltage, current;
+    bool voltageOk = ops.SMU_ReadVoltage(voltage, m_clientName);
+    bool currentOk = ops.SMU_ReadCurrent(current, m_clientName);
+
+    bool success = voltageOk && currentOk;
+
+    if (success) {
+      // Store both measurements in database
+      if (resultsManager && !opId.empty()) {
+        auto endTime = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+        resultsManager->StoreResult(opId, "voltage_reading", std::to_string(voltage));
+        resultsManager->StoreResult(opId, "current_reading", std::to_string(current));
+        resultsManager->StoreResult(opId, "elapsed_ms", std::to_string(elapsed));
+        resultsManager->StoreResult(opId, "client_used", m_clientName);
+
+        // Calculate and store derived values
+        if (std::abs(current) > 1e-12) { // Avoid division by zero
+          double resistance = voltage / current;
+          resultsManager->StoreResult(opId, "resistance", std::to_string(resistance));
+        }
+
+        double power = voltage * current;
+        resultsManager->StoreResult(opId, "power", std::to_string(power));
+
+        resultsManager->EndOperation(opId, "success");
+      }
+
+      ops.LogInfo("Keithley readings: " + std::to_string(voltage) + "V, " +
+        std::to_string(current) + "A" +
+        (m_clientName.empty() ? "" : " (" + m_clientName + ")"));
+    }
+    else {
+      if (resultsManager && !opId.empty()) {
+        std::string errorMsg = "Failed to read ";
+        if (!voltageOk) errorMsg += "voltage ";
+        if (!currentOk) errorMsg += "current";
+        resultsManager->EndOperation(opId, "failed", errorMsg);
+      }
+      ops.LogError("Failed to read Keithley measurements" +
+        (m_clientName.empty() ? "" : " (" + m_clientName + ")"));
+    }
+
+    return success;
+  }
+
+  std::string GetDescription() const override {
+    return "Read Keithley voltage and current" + (m_clientName.empty() ? "" : " (" + m_clientName + ")");
+  }
+
+private:
+  std::string m_clientName;
+};
+
 // Read Keithley resistance operation
+// Enhanced Read Keithley resistance operation with database storage
 class ReadKeithleyResistanceOperation : public SequenceOperation {
 public:
   ReadKeithleyResistanceOperation(const std::string& clientName = "")
@@ -2681,13 +2836,85 @@ public:
   }
 
   bool Execute(MachineOperations& ops) override {
+    // Start operation tracking
+    std::string opId;
+    auto startTime = std::chrono::steady_clock::now();
+
+    std::shared_ptr<OperationResultsManager> resultsManager = ops.GetResultsManager();
+    if (resultsManager) {
+      std::map<std::string, std::string> parameters;
+      parameters["client_name"] = m_clientName;
+      parameters["measurement_type"] = "resistance";
+
+      opId = resultsManager->StartOperation("ReadKeithleyResistance", "",
+        "ReadKeithleyResistanceOperation_" + m_clientName, "", parameters);
+    }
+
     double resistance;
-    if (ops.SMU_ReadResistance(resistance, m_clientName)) {
+    bool success = ops.SMU_ReadResistance(resistance, m_clientName);
+
+    if (success) {
+      // Store measurement in database
+      if (resultsManager && !opId.empty()) {
+        auto endTime = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+        resultsManager->StoreResult(opId, "resistance_reading", std::to_string(resistance));
+        resultsManager->StoreResult(opId, "measurement_unit", "Ohms");
+        resultsManager->StoreResult(opId, "elapsed_ms", std::to_string(elapsed));
+        resultsManager->StoreResult(opId, "client_used", m_clientName);
+
+        // Store resistance categorization for analysis
+        std::string resistanceCategory;
+        if (resistance < 1.0) {
+          resistanceCategory = "low_resistance";  // < 1 Ohm
+        }
+        else if (resistance < 1000.0) {
+          resistanceCategory = "medium_resistance";  // 1 - 1kOhm
+        }
+        else if (resistance < 1000000.0) {
+          resistanceCategory = "high_resistance";  // 1k - 1MOhm
+        }
+        else {
+          resistanceCategory = "very_high_resistance";  // > 1MOhm
+        }
+        resultsManager->StoreResult(opId, "resistance_category", resistanceCategory);
+
+        // Store conductance (1/R) for additional analysis
+        if (std::abs(resistance) > 1e-12) { // Avoid division by zero
+          double conductance = 1.0 / resistance;
+          resultsManager->StoreResult(opId, "conductance", std::to_string(conductance));
+          resultsManager->StoreResult(opId, "conductance_unit", "S"); // Siemens
+        }
+
+        // Store formatted resistance for easy reading
+        std::string formattedResistance;
+        if (resistance >= 1e6) {
+          formattedResistance = std::to_string(resistance / 1e6) + " MOhm";
+        }
+        else if (resistance >= 1e3) {
+          formattedResistance = std::to_string(resistance / 1e3) + " kOhm";
+        }
+        else {
+          formattedResistance = std::to_string(resistance) + " Ohm";
+        }
+        resultsManager->StoreResult(opId, "resistance_formatted", formattedResistance);
+
+        resultsManager->EndOperation(opId, "success");
+      }
+
       ops.LogInfo("Keithley resistance reading: " + std::to_string(resistance) + " Ohms" +
         (m_clientName.empty() ? "" : " (" + m_clientName + ")"));
-      return true;
     }
-    return false;
+    else {
+      if (resultsManager && !opId.empty()) {
+        resultsManager->EndOperation(opId, "failed", "Failed to read resistance");
+      }
+      ops.LogError("Failed to read Keithley resistance" +
+        (m_clientName.empty() ? "" : " (" + m_clientName + ")"));
+    }
+
+    return success;
   }
 
   std::string GetDescription() const override {
@@ -2717,6 +2944,60 @@ public:
 private:
   std::string m_command;
   std::string m_clientName;
+};
+
+
+// Get Keithley status operation
+class GetKeithleyStatusOperation : public SequenceOperation {
+public:
+  GetKeithleyStatusOperation(const std::string& clientName = "")
+    : m_clientName(clientName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    std::string instrumentId, outputState, sourceFunction;
+    if (ops.SMU_GetStatus(instrumentId, outputState, sourceFunction, m_clientName)) {
+      ops.LogInfo("Keithley Status - ID: " + instrumentId +
+        ", Output: " + outputState +
+        ", Source: " + sourceFunction +
+        (m_clientName.empty() ? "" : " (" + m_clientName + ")"));
+      return true;
+    }
+    return false;
+  }
+
+  std::string GetDescription() const override {
+    return "Get Keithley status" + (m_clientName.empty() ? "" : " (" + m_clientName + ")");
+  }
+
+private:
+  std::string m_clientName;
+};
+
+// SMU Wait operation (specialized wait for SMU operations)
+class SMUWaitOperation : public SequenceOperation {
+public:
+  SMUWaitOperation(int milliseconds, const std::string& description = "")
+    : m_milliseconds(milliseconds), m_description(description) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    if (!m_description.empty()) {
+      ops.LogInfo("SMU Wait: " + m_description + " (" + std::to_string(m_milliseconds) + "ms)");
+    }
+
+    ops.Wait(m_milliseconds);  // Call the void method
+    return true;               // Always return true since Wait doesn't fail
+  }
+
+  std::string GetDescription() const override {
+    return "SMU Wait " + std::to_string(m_milliseconds) + "ms" +
+      (m_description.empty() ? "" : " (" + m_description + ")");
+  }
+
+private:
+  int m_milliseconds;
+  std::string m_description;
 };
 
 
@@ -3344,3 +3625,857 @@ private:
   int m_bufferNumber;
   bool m_isRunning;
 };
+
+
+// ============================================================================
+// SIMPLE SWEEP SEQUENCE OPERATIONS
+// Add these to SequenceStep.h
+// ============================================================================
+
+// Enhanced Simple Voltage Sweep operation with individual step storage
+class SimpleVoltageSweepOperation : public SequenceOperation {
+public:
+  SimpleVoltageSweepOperation(double startVoltage, double stopVoltage, int steps,
+    double currentCompliance = 0.1, double delayMs = 100,
+    const std::string& clientName = "")
+    : m_startVoltage(startVoltage), m_stopVoltage(stopVoltage), m_steps(steps),
+    m_currentCompliance(currentCompliance), m_delayMs(delayMs), m_clientName(clientName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate descriptive caller context
+    std::string callerContext = "SimpleVoltageSweepOperation_" +
+      std::to_string(m_startVoltage) + "V_to_" + std::to_string(m_stopVoltage) + "V";
+
+    // Start operation tracking
+    std::string opId;
+    auto startTime = std::chrono::steady_clock::now();
+
+    std::shared_ptr<OperationResultsManager> resultsManager = ops.GetResultsManager();
+    if (resultsManager) {
+      std::map<std::string, std::string> parameters;
+      parameters["start_voltage"] = std::to_string(m_startVoltage);
+      parameters["stop_voltage"] = std::to_string(m_stopVoltage);
+      parameters["steps"] = std::to_string(m_steps);
+      parameters["current_compliance"] = std::to_string(m_currentCompliance);
+      parameters["delay_ms"] = std::to_string(m_delayMs);
+      parameters["client_name"] = m_clientName;
+
+      opId = resultsManager->StartOperation("SimpleVoltageSweepOperation", "", callerContext, "", parameters);
+    }
+
+    ops.LogInfo("Starting simple voltage sweep: " + std::to_string(m_startVoltage) + "V to " +
+      std::to_string(m_stopVoltage) + "V, " + std::to_string(m_steps) + " steps");
+
+    // Setup voltage source mode
+    if (!ops.SMU_SetupVoltageSource(m_startVoltage, m_currentCompliance, "AUTO", m_clientName)) {
+      ops.LogError("Failed to setup voltage source");
+      if (resultsManager && !opId.empty()) {
+        resultsManager->EndOperation(opId, "failed", "Voltage source setup failed");
+      }
+      return false;
+    }
+
+    // Enable output
+    if (!ops.SMU_SetOutput(true, m_clientName)) {
+      ops.LogError("Failed to enable SMU output");
+      if (resultsManager && !opId.empty()) {
+        resultsManager->EndOperation(opId, "failed", "SMU output enable failed");
+      }
+      return false;
+    }
+
+    // Perform sweep with individual step storage
+    std::vector<double> voltageReadings, currentReadings;
+    std::vector<std::chrono::steady_clock::time_point> stepTimes;
+    int successfulReads = 0;
+    int failedReads = 0;
+
+    for (int i = 0; i < m_steps; i++) {
+      auto stepStartTime = std::chrono::steady_clock::now();
+
+      // Calculate voltage for this step
+      double targetVoltage;
+      if (m_steps == 1) {
+        targetVoltage = m_startVoltage;
+      }
+      else {
+        targetVoltage = m_startVoltage + (m_stopVoltage - m_startVoltage) * i / (m_steps - 1);
+      }
+
+      // Set voltage for this step
+      if (!ops.SMU_SetupVoltageSource(targetVoltage, m_currentCompliance, "AUTO", m_clientName)) {
+        ops.LogError("Failed to set voltage for step " + std::to_string(i + 1));
+        failedReads++;
+        continue;
+      }
+
+      // Wait for settling
+      std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(m_delayMs)));
+
+      // Read measurements
+      double measuredVoltage = 0.0, measuredCurrent = 0.0;
+      bool voltageOk = ops.SMU_ReadVoltage(measuredVoltage, m_clientName);
+      bool currentOk = ops.SMU_ReadCurrent(measuredCurrent, m_clientName);
+
+      if (voltageOk && currentOk) {
+        voltageReadings.push_back(measuredVoltage);
+        currentReadings.push_back(measuredCurrent);
+        stepTimes.push_back(stepStartTime);
+        successfulReads++;
+
+        // Store individual step data in database
+        if (resultsManager && !opId.empty()) {
+          std::string stepPrefix = "step_" + std::to_string(i + 1);
+
+          // Store target and measured values for this step
+          resultsManager->StoreResult(opId, stepPrefix + "_target_voltage", std::to_string(targetVoltage));
+          resultsManager->StoreResult(opId, stepPrefix + "_measured_voltage", std::to_string(measuredVoltage));
+          resultsManager->StoreResult(opId, stepPrefix + "_measured_current", std::to_string(measuredCurrent));
+
+          // Calculate and store resistance for this step
+          if (std::abs(measuredCurrent) > 1e-12) { // Avoid division by zero
+            double resistance = measuredVoltage / measuredCurrent;
+            resultsManager->StoreResult(opId, stepPrefix + "_resistance", std::to_string(resistance));
+          }
+
+          // Calculate and store power for this step
+          double power = measuredVoltage * measuredCurrent;
+          resultsManager->StoreResult(opId, stepPrefix + "_power", std::to_string(power));
+
+          // Store timestamp
+          auto stepElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            stepStartTime - startTime).count();
+          resultsManager->StoreResult(opId, stepPrefix + "_timestamp_ms", std::to_string(stepElapsed));
+        }
+
+        ops.LogInfo("Step " + std::to_string(i + 1) + "/" + std::to_string(m_steps) +
+          ": Voltage=" + std::to_string(measuredVoltage) +
+          "V, Current=" + std::to_string(measuredCurrent) + "A");
+      }
+      else {
+        failedReads++;
+        ops.LogError("Failed to read measurements for step " + std::to_string(i + 1));
+      }
+    }
+
+    // Disable output
+    ops.SMU_SetOutput(false, m_clientName);
+
+    // Calculate summary statistics
+    auto endTime = std::chrono::steady_clock::now();
+    auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    // Store comprehensive results
+    if (resultsManager && !opId.empty()) {
+      // Basic operation info
+      resultsManager->StoreResult(opId, "successful_steps", std::to_string(successfulReads));
+      resultsManager->StoreResult(opId, "failed_steps", std::to_string(failedReads));
+      resultsManager->StoreResult(opId, "total_elapsed_ms", std::to_string(totalElapsed));
+      resultsManager->StoreResult(opId, "steps_completed", std::to_string(successfulReads));
+      resultsManager->StoreResult(opId, "total_steps", std::to_string(m_steps));
+
+      // Statistical analysis if we have data
+      if (!voltageReadings.empty()) {
+        auto minVoltage = *std::min_element(voltageReadings.begin(), voltageReadings.end());
+        auto maxVoltage = *std::max_element(voltageReadings.begin(), voltageReadings.end());
+        auto minCurrent = *std::min_element(currentReadings.begin(), currentReadings.end());
+        auto maxCurrent = *std::max_element(currentReadings.begin(), currentReadings.end());
+
+        resultsManager->StoreResult(opId, "min_voltage", std::to_string(minVoltage));
+        resultsManager->StoreResult(opId, "max_voltage", std::to_string(maxVoltage));
+        resultsManager->StoreResult(opId, "min_current", std::to_string(minCurrent));
+        resultsManager->StoreResult(opId, "max_current", std::to_string(maxCurrent));
+        resultsManager->StoreResult(opId, "voltage_range", std::to_string(maxVoltage - minVoltage));
+        resultsManager->StoreResult(opId, "current_range", std::to_string(maxCurrent - minCurrent));
+
+        // Calculate average power
+        double totalPower = 0.0;
+        for (size_t i = 0; i < voltageReadings.size(); i++) {
+          totalPower += voltageReadings[i] * currentReadings[i];
+        }
+        double avgPower = totalPower / voltageReadings.size();
+        resultsManager->StoreResult(opId, "average_power", std::to_string(avgPower));
+      }
+
+      // End operation
+      bool operationSuccess = (successfulReads > 0) && (failedReads == 0 || successfulReads > failedReads);
+      if (operationSuccess) {
+        resultsManager->EndOperation(opId, "success");
+      }
+      else {
+        resultsManager->EndOperation(opId, "failed",
+          "Sweep incomplete: " + std::to_string(successfulReads) + " successful, " +
+          std::to_string(failedReads) + " failed");
+      }
+    }
+
+    ops.LogInfo("Simple voltage sweep completed: " + std::to_string(successfulReads) +
+      "/" + std::to_string(m_steps) + " successful readings in " +
+      std::to_string(totalElapsed) + "ms");
+
+    return successfulReads > 0;
+  }
+
+  std::string GetDescription() const override {
+    std::string result = "Simple voltage sweep: " + std::to_string(m_startVoltage) + "V to " +
+      std::to_string(m_stopVoltage) + "V (" + std::to_string(m_steps) + " steps)";
+    if (!m_clientName.empty()) {
+      result += " (" + m_clientName + ")";
+    }
+    return result;
+  }
+
+private:
+  double m_startVoltage;
+  double m_stopVoltage;
+  int m_steps;
+  double m_currentCompliance;
+  double m_delayMs;
+  std::string m_clientName;
+};
+
+// Enhanced Simple Current Sweep operation with individual step storage
+class SimpleCurrentSweepOperation : public SequenceOperation {
+public:
+  SimpleCurrentSweepOperation(double startCurrent, double stopCurrent, int steps,
+    double voltageCompliance = 10.0, double delayMs = 100,
+    const std::string& clientName = "")
+    : m_startCurrent(startCurrent), m_stopCurrent(stopCurrent), m_steps(steps),
+    m_voltageCompliance(voltageCompliance), m_delayMs(delayMs), m_clientName(clientName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate descriptive caller context
+    std::string callerContext = "SimpleCurrentSweepOperation_" +
+      std::to_string(m_startCurrent) + "A_to_" + std::to_string(m_stopCurrent) + "A";
+
+    // Start operation tracking
+    std::string opId;
+    auto startTime = std::chrono::steady_clock::now();
+
+    std::shared_ptr<OperationResultsManager> resultsManager = ops.GetResultsManager();
+    if (resultsManager) {
+      std::map<std::string, std::string> parameters;
+      parameters["start_current"] = std::to_string(m_startCurrent);
+      parameters["stop_current"] = std::to_string(m_stopCurrent);
+      parameters["steps"] = std::to_string(m_steps);
+      parameters["voltage_compliance"] = std::to_string(m_voltageCompliance);
+      parameters["delay_ms"] = std::to_string(m_delayMs);
+      parameters["client_name"] = m_clientName;
+
+      opId = resultsManager->StartOperation("SimpleCurrentSweepOperation", "", callerContext, "", parameters);
+    }
+
+    ops.LogInfo("Starting simple current sweep: " + std::to_string(m_startCurrent) + "A to " +
+      std::to_string(m_stopCurrent) + "A, " + std::to_string(m_steps) + " steps");
+
+    // Setup current source mode
+    if (!ops.SMU_SetupCurrentSource(m_startCurrent, m_voltageCompliance, "AUTO", m_clientName)) {
+      ops.LogError("Failed to setup current source");
+      if (resultsManager && !opId.empty()) {
+        resultsManager->EndOperation(opId, "failed", "Current source setup failed");
+      }
+      return false;
+    }
+
+    // Enable output
+    if (!ops.SMU_SetOutput(true, m_clientName)) {
+      ops.LogError("Failed to enable SMU output");
+      if (resultsManager && !opId.empty()) {
+        resultsManager->EndOperation(opId, "failed", "SMU output enable failed");
+      }
+      return false;
+    }
+
+    // Perform sweep with individual step storage
+    std::vector<double> currentReadings, voltageReadings;
+    std::vector<std::chrono::steady_clock::time_point> stepTimes;
+    int successfulReads = 0;
+    int failedReads = 0;
+
+    for (int i = 0; i < m_steps; i++) {
+      auto stepStartTime = std::chrono::steady_clock::now();
+
+      // Calculate current for this step
+      double targetCurrent;
+      if (m_steps == 1) {
+        targetCurrent = m_startCurrent;
+      }
+      else {
+        targetCurrent = m_startCurrent + (m_stopCurrent - m_startCurrent) * i / (m_steps - 1);
+      }
+
+      // Set current for this step
+      if (!ops.SMU_SetupCurrentSource(targetCurrent, m_voltageCompliance, "AUTO", m_clientName)) {
+        ops.LogError("Failed to set current for step " + std::to_string(i + 1));
+        failedReads++;
+        continue;
+      }
+
+      // Wait for settling
+      std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(m_delayMs)));
+
+      // Read measurements
+      double measuredCurrent = 0.0, measuredVoltage = 0.0;
+      bool currentOk = ops.SMU_ReadCurrent(measuredCurrent, m_clientName);
+      bool voltageOk = ops.SMU_ReadVoltage(measuredVoltage, m_clientName);
+
+      if (currentOk && voltageOk) {
+        currentReadings.push_back(measuredCurrent);
+        voltageReadings.push_back(measuredVoltage);
+        stepTimes.push_back(stepStartTime);
+        successfulReads++;
+
+        // Store individual step data in database
+        if (resultsManager && !opId.empty()) {
+          std::string stepPrefix = "step_" + std::to_string(i + 1);
+
+          // Store target and measured values for this step
+          resultsManager->StoreResult(opId, stepPrefix + "_target_current", std::to_string(targetCurrent));
+          resultsManager->StoreResult(opId, stepPrefix + "_measured_current", std::to_string(measuredCurrent));
+          resultsManager->StoreResult(opId, stepPrefix + "_measured_voltage", std::to_string(measuredVoltage));
+
+          // Calculate and store resistance for this step
+          if (std::abs(measuredCurrent) > 1e-12) { // Avoid division by zero
+            double resistance = measuredVoltage / measuredCurrent;
+            resultsManager->StoreResult(opId, stepPrefix + "_resistance", std::to_string(resistance));
+          }
+
+          // Calculate and store power for this step
+          double power = measuredVoltage * measuredCurrent;
+          resultsManager->StoreResult(opId, stepPrefix + "_power", std::to_string(power));
+
+          // Store timestamp
+          auto stepElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            stepStartTime - startTime).count();
+          resultsManager->StoreResult(opId, stepPrefix + "_timestamp_ms", std::to_string(stepElapsed));
+        }
+
+        ops.LogInfo("Step " + std::to_string(i + 1) + "/" + std::to_string(m_steps) +
+          ": Current=" + std::to_string(measuredCurrent) +
+          "A, Voltage=" + std::to_string(measuredVoltage) + "V");
+      }
+      else {
+        failedReads++;
+        ops.LogError("Failed to read measurements for step " + std::to_string(i + 1));
+      }
+    }
+
+    // Disable output
+    ops.SMU_SetOutput(false, m_clientName);
+
+    // Calculate summary statistics
+    auto endTime = std::chrono::steady_clock::now();
+    auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    // Store comprehensive results
+    if (resultsManager && !opId.empty()) {
+      // Basic operation info
+      resultsManager->StoreResult(opId, "successful_steps", std::to_string(successfulReads));
+      resultsManager->StoreResult(opId, "failed_steps", std::to_string(failedReads));
+      resultsManager->StoreResult(opId, "total_elapsed_ms", std::to_string(totalElapsed));
+      resultsManager->StoreResult(opId, "steps_completed", std::to_string(successfulReads));
+      resultsManager->StoreResult(opId, "total_steps", std::to_string(m_steps));
+
+      // Statistical analysis if we have data
+      if (!currentReadings.empty()) {
+        auto minCurrent = *std::min_element(currentReadings.begin(), currentReadings.end());
+        auto maxCurrent = *std::max_element(currentReadings.begin(), currentReadings.end());
+        auto minVoltage = *std::min_element(voltageReadings.begin(), voltageReadings.end());
+        auto maxVoltage = *std::max_element(voltageReadings.begin(), voltageReadings.end());
+
+        resultsManager->StoreResult(opId, "min_current", std::to_string(minCurrent));
+        resultsManager->StoreResult(opId, "max_current", std::to_string(maxCurrent));
+        resultsManager->StoreResult(opId, "min_voltage", std::to_string(minVoltage));
+        resultsManager->StoreResult(opId, "max_voltage", std::to_string(maxVoltage));
+        resultsManager->StoreResult(opId, "current_range", std::to_string(maxCurrent - minCurrent));
+        resultsManager->StoreResult(opId, "voltage_range", std::to_string(maxVoltage - minVoltage));
+
+        // Calculate average power
+        double totalPower = 0.0;
+        for (size_t i = 0; i < currentReadings.size(); i++) {
+          totalPower += currentReadings[i] * voltageReadings[i];
+        }
+        double avgPower = totalPower / currentReadings.size();
+        resultsManager->StoreResult(opId, "average_power", std::to_string(avgPower));
+      }
+
+      // End operation
+      bool operationSuccess = (successfulReads > 0) && (failedReads == 0 || successfulReads > failedReads);
+      if (operationSuccess) {
+        resultsManager->EndOperation(opId, "success");
+      }
+      else {
+        resultsManager->EndOperation(opId, "failed",
+          "Sweep incomplete: " + std::to_string(successfulReads) + " successful, " +
+          std::to_string(failedReads) + " failed");
+      }
+    }
+
+    ops.LogInfo("Simple current sweep completed: " + std::to_string(successfulReads) +
+      "/" + std::to_string(m_steps) + " successful readings in " +
+      std::to_string(totalElapsed) + "ms");
+
+    return successfulReads > 0;
+  }
+
+  std::string GetDescription() const override {
+    std::string result = "Simple current sweep: " + std::to_string(m_startCurrent) + "A to " +
+      std::to_string(m_stopCurrent) + "A (" + std::to_string(m_steps) + " steps)";
+    if (!m_clientName.empty()) {
+      result += " (" + m_clientName + ")";
+    }
+    return result;
+  }
+
+private:
+  double m_startCurrent;
+  double m_stopCurrent;
+  int m_steps;
+  double m_voltageCompliance;
+  double m_delayMs;
+  std::string m_clientName;
+};
+
+
+
+
+// Enhanced QuickVoltageSweepOperation that stores individual step measurements
+class QuickVoltageSweepOperation : public SequenceOperation {
+public:
+  enum VoltageLevel {
+    LOW_VOLTAGE,    // 0-5V, 21 steps
+    HIGH_VOLTAGE    // 0-10V, 21 steps  
+  };
+
+  QuickVoltageSweepOperation(VoltageLevel level, const std::string& labelName = "")
+    : m_level(level), m_labelName(labelName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate caller context
+    std::string levelStr = (m_level == LOW_VOLTAGE) ? "Low" : "High";
+    std::string callerContext = "QuickVoltageSweepOperation_" + levelStr + "_Voltage";
+    if (!m_labelName.empty()) {
+      callerContext += "_" + m_labelName;
+    }
+
+    // Start operation tracking
+    std::string opId;
+    auto startTime = std::chrono::steady_clock::now();
+
+    std::shared_ptr<OperationResultsManager> resultsManager = ops.GetResultsManager();
+    if (resultsManager) {
+      std::map<std::string, std::string> parameters;
+      parameters["voltage_level"] = (m_level == LOW_VOLTAGE) ? "low" : "high";
+      parameters["steps"] = "21";
+      parameters["range"] = (m_level == LOW_VOLTAGE) ? "0-5V" : "0-10V";
+
+      opId = resultsManager->StartOperation("QuickVoltageSweepOperation", "", callerContext, "", parameters);
+    }
+
+    // Define sweep parameters
+    double startVoltage, stopVoltage, compliance;
+    int steps = 21;
+
+    if (m_level == LOW_VOLTAGE) {
+      startVoltage = 0.0;
+      stopVoltage = 5.0;    // 5V
+      compliance = 0.1;     // 100mA compliance
+    }
+    else {
+      startVoltage = 0.0;
+      stopVoltage = 10.0;   // 10V  
+      compliance = 0.1;     // 100mA compliance
+    }
+
+    std::string rangeStr = (m_level == LOW_VOLTAGE) ? "0-5V" : "0-10V";
+    ops.LogInfo("Starting quick voltage sweep: " + rangeStr + ", " + std::to_string(steps) + " steps");
+
+    // Setup voltage source mode
+    if (!ops.SMU_SetupVoltageSource(startVoltage, compliance)) {
+      ops.LogError("Failed to setup voltage source");
+      if (resultsManager && !opId.empty()) {
+        resultsManager->EndOperation(opId, "failed", "Voltage source setup failed");
+      }
+      return false;
+    }
+
+    // Enable output
+    if (!ops.SMU_SetOutput(true)) {
+      ops.LogError("Failed to enable SMU output");
+      if (resultsManager && !opId.empty()) {
+        resultsManager->EndOperation(opId, "failed", "SMU output enable failed");
+      }
+      return false;
+    }
+
+    // Perform sweep with individual step storage
+    std::vector<double> voltageReadings, currentReadings;
+    std::vector<std::chrono::steady_clock::time_point> stepTimes;
+    int successfulReads = 0;
+    int failedReads = 0;
+    bool sweepSuccess = true;
+
+    for (int i = 0; i < steps; i++) {
+      auto stepStartTime = std::chrono::steady_clock::now();
+
+      // Calculate voltage for this step
+      double targetVoltage = startVoltage + (stopVoltage - startVoltage) * i / (steps - 1);
+
+      // Set voltage for this step
+      if (!ops.SMU_SetupVoltageSource(targetVoltage, compliance)) {
+        ops.LogError("Failed to set voltage for step " + std::to_string(i + 1));
+        failedReads++;
+        continue;
+      }
+
+      // Wait for settling
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+      // Read measurements
+      double measuredVoltage = 0.0, measuredCurrent = 0.0;
+      bool voltageOk = ops.SMU_ReadVoltage(measuredVoltage);
+      bool currentOk = ops.SMU_ReadCurrent(measuredCurrent);
+
+      if (voltageOk && currentOk) {
+        voltageReadings.push_back(measuredVoltage);
+        currentReadings.push_back(measuredCurrent);
+        stepTimes.push_back(stepStartTime);
+        successfulReads++;
+
+        // Store individual step data in database
+        if (resultsManager && !opId.empty()) {
+          std::string stepPrefix = "step_" + std::to_string(i + 1);
+
+          // Store target and measured values for this step
+          resultsManager->StoreResult(opId, stepPrefix + "_target_voltage", std::to_string(targetVoltage));
+          resultsManager->StoreResult(opId, stepPrefix + "_measured_voltage", std::to_string(measuredVoltage));
+          resultsManager->StoreResult(opId, stepPrefix + "_measured_current", std::to_string(measuredCurrent));
+
+          // Calculate and store resistance for this step
+          if (std::abs(measuredCurrent) > 1e-12) { // Avoid division by zero
+            double resistance = measuredVoltage / measuredCurrent;
+            resultsManager->StoreResult(opId, stepPrefix + "_resistance", std::to_string(resistance));
+          }
+
+          // Calculate and store power for this step
+          double power = measuredVoltage * measuredCurrent;
+          resultsManager->StoreResult(opId, stepPrefix + "_power", std::to_string(power));
+
+          // Store timestamp
+          auto stepElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            stepStartTime - startTime).count();
+          resultsManager->StoreResult(opId, stepPrefix + "_timestamp_ms", std::to_string(stepElapsed));
+        }
+
+        ops.LogInfo("Step " + std::to_string(i + 1) + "/" + std::to_string(steps) +
+          ": Voltage=" + std::to_string(measuredVoltage) +
+          "V, Current=" + std::to_string(measuredCurrent) + "A");
+      }
+      else {
+        failedReads++;
+        ops.LogError("Failed to read measurements for step " + std::to_string(i + 1));
+      }
+    }
+
+    // Disable output
+    ops.SMU_SetOutput(false);
+
+    // Calculate summary statistics
+    auto endTime = std::chrono::steady_clock::now();
+    auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    // Store comprehensive results
+    if (resultsManager && !opId.empty()) {
+      // Basic operation info
+      resultsManager->StoreResult(opId, "successful_steps", std::to_string(successfulReads));
+      resultsManager->StoreResult(opId, "failed_steps", std::to_string(failedReads));
+      resultsManager->StoreResult(opId, "total_elapsed_ms", std::to_string(totalElapsed));
+      resultsManager->StoreResult(opId, "steps_completed", std::to_string(successfulReads));
+      resultsManager->StoreResult(opId, "total_steps", std::to_string(steps));
+
+      // Statistical analysis if we have data
+      if (!voltageReadings.empty()) {
+        auto minVoltage = *std::min_element(voltageReadings.begin(), voltageReadings.end());
+        auto maxVoltage = *std::max_element(voltageReadings.begin(), voltageReadings.end());
+        auto minCurrent = *std::min_element(currentReadings.begin(), currentReadings.end());
+        auto maxCurrent = *std::max_element(currentReadings.begin(), currentReadings.end());
+
+        resultsManager->StoreResult(opId, "min_voltage", std::to_string(minVoltage));
+        resultsManager->StoreResult(opId, "max_voltage", std::to_string(maxVoltage));
+        resultsManager->StoreResult(opId, "min_current", std::to_string(minCurrent));
+        resultsManager->StoreResult(opId, "max_current", std::to_string(maxCurrent));
+        resultsManager->StoreResult(opId, "voltage_range", std::to_string(maxVoltage - minVoltage));
+        resultsManager->StoreResult(opId, "current_range", std::to_string(maxCurrent - minCurrent));
+
+        // Calculate average power
+        double totalPower = 0.0;
+        for (size_t i = 0; i < voltageReadings.size(); i++) {
+          totalPower += voltageReadings[i] * currentReadings[i];
+        }
+        double avgPower = totalPower / voltageReadings.size();
+        resultsManager->StoreResult(opId, "average_power", std::to_string(avgPower));
+      }
+
+      // End operation
+      bool operationSuccess = (successfulReads > 0) && (failedReads == 0 || successfulReads > failedReads);
+      if (operationSuccess) {
+        resultsManager->EndOperation(opId, "success");
+      }
+      else {
+        resultsManager->EndOperation(opId, "failed",
+          "Sweep incomplete: " + std::to_string(successfulReads) + " successful, " +
+          std::to_string(failedReads) + " failed");
+      }
+    }
+
+    ops.LogInfo("Quick voltage sweep completed: " + std::to_string(successfulReads) +
+      "/" + std::to_string(steps) + " successful readings in " +
+      std::to_string(totalElapsed) + "ms");
+
+    return successfulReads > 0;
+  }
+
+  std::string GetDescription() const override {
+    std::string rangeStr = (m_level == LOW_VOLTAGE) ? "0-5V" : "0-10V";
+    std::string result = "Quick voltage sweep (" + rangeStr + ", 21 steps)";
+    if (!m_labelName.empty()) {
+      result += " - " + m_labelName;
+    }
+    return result;
+  }
+
+private:
+  VoltageLevel m_level;
+  std::string m_labelName;
+};
+
+
+
+// Enhanced QuickCurrentSweepOperation that stores individual step measurements
+class QuickCurrentSweepOperation : public SequenceOperation {
+public:
+  enum CurrentLevel {
+    MICRO_CURRENT,  // 0-10μA, 11 steps
+    MILLI_CURRENT   // 0-10mA, 11 steps  
+  };
+
+  QuickCurrentSweepOperation(CurrentLevel level, const std::string& labelName = "")
+    : m_level(level), m_labelName(labelName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate caller context
+    std::string levelStr = (m_level == MICRO_CURRENT) ? "Micro" : "Milli";
+    std::string callerContext = "QuickCurrentSweepOperation_" + levelStr + "_Current";
+    if (!m_labelName.empty()) {
+      callerContext += "_" + m_labelName;
+    }
+
+    // Start operation tracking
+    std::string opId;
+    auto startTime = std::chrono::steady_clock::now();
+
+    std::shared_ptr<OperationResultsManager> resultsManager = ops.GetResultsManager();
+    if (resultsManager) {
+      std::map<std::string, std::string> parameters;
+      parameters["current_level"] = (m_level == MICRO_CURRENT) ? "micro" : "milli";
+      parameters["steps"] = "11";
+      parameters["range"] = (m_level == MICRO_CURRENT) ? "0-10uA" : "0-10mA";
+
+      opId = resultsManager->StartOperation("QuickCurrentSweepOperation", "", callerContext, "", parameters);
+    }
+
+    // Define sweep parameters
+    double startCurrent, stopCurrent, compliance;
+    int steps = 11;
+
+    if (m_level == MICRO_CURRENT) {
+      startCurrent = 0.0;
+      stopCurrent = 10e-6;  // 10 μA
+      compliance = 10.0;    // 10V compliance
+    }
+    else {
+      startCurrent = 0.0;
+      stopCurrent = 0.01;   // 10 mA  
+      compliance = 10.0;    // 10V compliance
+    }
+
+    ops.LogInfo("Starting quick current sweep: " +
+      std::to_string(startCurrent * (m_level == MICRO_CURRENT ? 1e6 : 1e3)) +
+      (m_level == MICRO_CURRENT ? "μA" : "mA") + " to " +
+      std::to_string(stopCurrent * (m_level == MICRO_CURRENT ? 1e6 : 1e3)) +
+      (m_level == MICRO_CURRENT ? "μA" : "mA") + ", " + std::to_string(steps) + " steps");
+
+    // Setup current source mode
+    if (!ops.SMU_SetupCurrentSource(startCurrent, compliance)) {
+      ops.LogError("Failed to setup current source");
+      if (resultsManager && !opId.empty()) {
+        resultsManager->EndOperation(opId, "failed", "Current source setup failed");
+      }
+      return false;
+    }
+
+    // Enable output
+    if (!ops.SMU_SetOutput(true)) {
+      ops.LogError("Failed to enable SMU output");
+      if (resultsManager && !opId.empty()) {
+        resultsManager->EndOperation(opId, "failed", "SMU output enable failed");
+      }
+      return false;
+    }
+
+    // Perform sweep with individual step storage
+    std::vector<double> currentReadings, voltageReadings;
+    std::vector<std::chrono::steady_clock::time_point> stepTimes;
+    int successfulReads = 0;
+    int failedReads = 0;
+    bool sweepSuccess = true;
+
+    for (int i = 0; i < steps; i++) {
+      auto stepStartTime = std::chrono::steady_clock::now();
+
+      // Calculate current for this step
+      double targetCurrent = startCurrent + (stopCurrent - startCurrent) * i / (steps - 1);
+
+      // Set current for this step
+      if (!ops.SMU_SetupCurrentSource(targetCurrent, compliance)) {
+        ops.LogError("Failed to set current for step " + std::to_string(i + 1));
+        failedReads++;
+        continue;
+      }
+
+      // Wait for settling
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+      // Read measurements
+      double measuredCurrent = 0.0, measuredVoltage = 0.0;
+      bool currentOk = ops.SMU_ReadCurrent(measuredCurrent);
+      bool voltageOk = ops.SMU_ReadVoltage(measuredVoltage);
+
+      if (currentOk && voltageOk) {
+        currentReadings.push_back(measuredCurrent);
+        voltageReadings.push_back(measuredVoltage);
+        stepTimes.push_back(stepStartTime);
+        successfulReads++;
+
+        // Store individual step data in database
+        if (resultsManager && !opId.empty()) {
+          std::string stepPrefix = "step_" + std::to_string(i + 1);
+
+          // Store target and measured values for this step
+          resultsManager->StoreResult(opId, stepPrefix + "_target_current", std::to_string(targetCurrent));
+          resultsManager->StoreResult(opId, stepPrefix + "_measured_current", std::to_string(measuredCurrent));
+          resultsManager->StoreResult(opId, stepPrefix + "_measured_voltage", std::to_string(measuredVoltage));
+
+          // Calculate and store resistance for this step
+          if (std::abs(measuredCurrent) > 1e-12) { // Avoid division by zero
+            double resistance = measuredVoltage / measuredCurrent;
+            resultsManager->StoreResult(opId, stepPrefix + "_resistance", std::to_string(resistance));
+          }
+
+          // Store timestamp
+          auto stepElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            stepStartTime - startTime).count();
+          resultsManager->StoreResult(opId, stepPrefix + "_timestamp_ms", std::to_string(stepElapsed));
+        }
+
+        ops.LogInfo("Step " + std::to_string(i + 1) + "/" + std::to_string(steps) +
+          ": Current=" + std::to_string(measuredCurrent) +
+          "A, Voltage=" + std::to_string(measuredVoltage) + "V");
+      }
+      else {
+        failedReads++;
+        ops.LogError("Failed to read measurements for step " + std::to_string(i + 1));
+      }
+    }
+
+    // Disable output
+    ops.SMU_SetOutput(false);
+
+    // Calculate summary statistics
+    auto endTime = std::chrono::steady_clock::now();
+    auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    // Store comprehensive results
+    if (resultsManager && !opId.empty()) {
+      // Basic operation info
+      resultsManager->StoreResult(opId, "successful_steps", std::to_string(successfulReads));
+      resultsManager->StoreResult(opId, "failed_steps", std::to_string(failedReads));
+      resultsManager->StoreResult(opId, "total_elapsed_ms", std::to_string(totalElapsed));
+      resultsManager->StoreResult(opId, "steps_completed", std::to_string(successfulReads));
+      resultsManager->StoreResult(opId, "total_steps", std::to_string(steps));
+
+      // Statistical analysis if we have data
+      if (!currentReadings.empty()) {
+        auto minCurrent = *std::min_element(currentReadings.begin(), currentReadings.end());
+        auto maxCurrent = *std::max_element(currentReadings.begin(), currentReadings.end());
+        auto minVoltage = *std::min_element(voltageReadings.begin(), voltageReadings.end());
+        auto maxVoltage = *std::max_element(voltageReadings.begin(), voltageReadings.end());
+
+        resultsManager->StoreResult(opId, "min_current", std::to_string(minCurrent));
+        resultsManager->StoreResult(opId, "max_current", std::to_string(maxCurrent));
+        resultsManager->StoreResult(opId, "min_voltage", std::to_string(minVoltage));
+        resultsManager->StoreResult(opId, "max_voltage", std::to_string(maxVoltage));
+        resultsManager->StoreResult(opId, "current_range", std::to_string(maxCurrent - minCurrent));
+        resultsManager->StoreResult(opId, "voltage_range", std::to_string(maxVoltage - minVoltage));
+      }
+
+      // End operation
+      bool operationSuccess = (successfulReads > 0) && (failedReads == 0 || successfulReads > failedReads);
+      if (operationSuccess) {
+        resultsManager->EndOperation(opId, "success");
+      }
+      else {
+        resultsManager->EndOperation(opId, "failed",
+          "Sweep incomplete: " + std::to_string(successfulReads) + " successful, " +
+          std::to_string(failedReads) + " failed");
+      }
+    }
+
+    ops.LogInfo("Quick current sweep completed: " + std::to_string(successfulReads) +
+      "/" + std::to_string(steps) + " successful readings in " +
+      std::to_string(totalElapsed) + "ms");
+
+    return successfulReads > 0;
+  }
+
+  std::string GetDescription() const override {
+    std::string rangeStr = (m_level == MICRO_CURRENT) ? "0-10μA" : "0-10mA";
+    std::string result = "Quick current sweep (" + rangeStr + ", 11 steps)";
+    if (!m_labelName.empty()) {
+      result += " - " + m_labelName;
+    }
+    return result;
+  }
+
+private:
+  CurrentLevel m_level;
+  std::string m_labelName;
+};
+
+
+
+// ============================================================================
+// Usage Examples for the Aurora Process
+// ============================================================================
+
+/*
+// Example 1: Custom voltage sweep in Aurora process
+sequence->AddOperation(std::make_shared<VoltageSweepOperation>(
+  0.0, 5.0, 51, 0.1, 100, ""));
+
+// Example 2: Simple predefined current sweep
+sequence->AddOperation(std::make_shared<SimpleCurrentSweepOperation>(
+  SimpleCurrentSweepOperation::MILLI_CURRENT, ""));
+
+// Example 3: Custom current sweep
+sequence->AddOperation(std::make_shared<CurrentSweepOperation>(
+  0.001, 0.010, 10, 10.0, 500, ""));
+
+// Example 4: High voltage characterization
+sequence->AddOperation(std::make_shared<SimpleVoltageSweepOperation>(
+  SimpleVoltageSweepOperation::HIGH_VOLTAGE, ""));
+*/

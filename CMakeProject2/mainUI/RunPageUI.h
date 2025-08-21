@@ -38,7 +38,9 @@ public:
   void SetSelectedCamera(const std::string& cameraId);
   void InitializeCameraFeed();
   void ClearCameraFeed();
-
+  bool HasUserPromptUI() const {
+    return m_promptUI != nullptr;
+  }
 private:
   // Existing members...
   MachineOperations& m_machineOps;

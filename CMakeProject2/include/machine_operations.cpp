@@ -11,7 +11,22 @@
 #include "include/data/DatabaseManager.h"
 #include "include/data/OperationResultsManager.h"
 
-
+//
+//struct VoltageSweepResult {
+//  double voltage;
+//  double current;
+//  double resistance;
+//  double power;
+//  std::chrono::steady_clock::time_point timestamp;
+//};
+//
+//struct CurrentSweepResult {
+//  double current;
+//  double voltage;
+//  double resistance;
+//  double power;
+//  std::chrono::steady_clock::time_point timestamp;
+//};
 
 
 // Updated constructor
@@ -3376,6 +3391,263 @@ bool MachineOperations::SMU_QueryCommand(const std::string& command, std::string
   }
   return result;
 }
+
+
+
+bool MachineOperations::SMU_GetStatus(std::string& instrumentId, std::string& outputState,
+  std::string& sourceFunction, const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: Getting SMU status" +
+    (clientName.empty() ? "" : " (" + clientName + ")"));
+
+  bool result = m_smuOps->GetStatus(instrumentId, outputState, sourceFunction, clientName);
+
+  if (result) {
+    m_logger->LogInfo("MachineOperations: SMU Status - ID: " + instrumentId +
+      ", Output: " + outputState +
+      ", Source: " + sourceFunction +
+      (clientName.empty() ? "" : " (" + clientName + ")"));
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to get SMU status" +
+      (clientName.empty() ? "" : " (" + clientName + ")"));
+  }
+
+  return result;
+}
+
+
+
+// ============================================================================
+// 2. ADD THESE IMPLEMENTATIONS TO machine_operations.cpp
+// ============================================================================
+
+
+// ============================================================================
+// SIMPLE MACHINE OPERATIONS SWEEP METHODS
+// Add these to machine_operations.h and machine_operations.cpp
+// ============================================================================
+
+// ============================================================================
+// 1. ADD THESE TO machine_operations.h (in the public section)
+// ============================================================================
+
+// Simple SMU Sweep operations
+bool SMU_VoltageSweep(double startVoltage, double stopVoltage, int steps,
+  double currentCompliance = 0.1, double delayMs = 100,
+  const std::string& clientName = "",
+  const std::string& callerContext = "");
+
+bool SMU_CurrentSweep(double startCurrent, double stopCurrent, int steps,
+  double voltageCompliance = 10.0, double delayMs = 100,
+  const std::string& clientName = "",
+  const std::string& callerContext = "");
+
+// ============================================================================
+// 2. ADD THESE IMPLEMENTATIONS TO machine_operations.cpp
+// ============================================================================
+
+bool MachineOperations::SMU_VoltageSweep(double startVoltage, double stopVoltage, int steps,
+  double currentCompliance, double delayMs, const std::string& clientName,
+  const std::string& callerContext) {
+
+  // 1. Start operation tracking
+  std::string opId;
+  auto startTime = std::chrono::steady_clock::now();
+
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"start_voltage", std::to_string(startVoltage)},
+        {"stop_voltage", std::to_string(stopVoltage)},
+        {"steps", std::to_string(steps)},
+        {"current_compliance", std::to_string(currentCompliance)},
+        {"delay_ms", std::to_string(delayMs)},
+        {"sweep_type", "voltage"}
+    };
+
+    std::string sequenceName = "";
+    if (callerContext.find("Aurora") != std::string::npos) {
+      sequenceName = "Aurora";
+    }
+
+    opId = m_resultsManager->StartOperation("SMU_VoltageSweep", clientName.empty() ? "default" : clientName,
+      callerContext, sequenceName, parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Starting simple voltage sweep from " +
+    std::to_string(startVoltage) + "V to " + std::to_string(stopVoltage) + "V, " +
+    std::to_string(steps) + " steps" +
+    (clientName.empty() ? "" : " (" + clientName + ")") +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")"));
+
+  // 2. Check if SMU is available
+  if (!m_smuOps) {
+    auto endTime = std::chrono::steady_clock::now();
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+      m_resultsManager->EndOperation(opId, "failed", "SMU operations not available");
+    }
+
+    m_logger->LogError("MachineOperations: SMU operations not available for voltage sweep");
+    return false;
+  }
+
+  // 3. Perform the voltage sweep using the simple method
+  bool sweepSuccess = m_smuOps->VoltageSweep(startVoltage, stopVoltage, steps,
+    currentCompliance, delayMs, clientName);
+
+  auto endTime = std::chrono::steady_clock::now();
+  auto totalElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+  // 4. Store results
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->StoreResult(opId, "total_elapsed_ms", std::to_string(totalElapsedMs));
+    m_resultsManager->StoreResult(opId, "steps_completed", std::to_string(steps));
+
+    if (sweepSuccess) {
+      m_logger->LogInfo("MachineOperations: Voltage sweep completed successfully");
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_logger->LogError("MachineOperations: Voltage sweep failed");
+      m_resultsManager->EndOperation(opId, "failed", "Voltage sweep operation failed");
+    }
+  }
+
+  return sweepSuccess;
+}
+
+bool MachineOperations::SMU_CurrentSweep(double startCurrent, double stopCurrent, int steps,
+  double voltageCompliance, double delayMs, const std::string& clientName,
+  const std::string& callerContext) {
+
+  // 1. Start operation tracking
+  std::string opId;
+  auto startTime = std::chrono::steady_clock::now();
+
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"start_current", std::to_string(startCurrent)},
+        {"stop_current", std::to_string(stopCurrent)},
+        {"steps", std::to_string(steps)},
+        {"voltage_compliance", std::to_string(voltageCompliance)},
+        {"delay_ms", std::to_string(delayMs)},
+        {"sweep_type", "current"}
+    };
+
+    std::string sequenceName = "";
+    if (callerContext.find("Aurora") != std::string::npos) {
+      sequenceName = "Aurora";
+    }
+
+    opId = m_resultsManager->StartOperation("SMU_CurrentSweep", clientName.empty() ? "default" : clientName,
+      callerContext, sequenceName, parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Starting simple current sweep from " +
+    std::to_string(startCurrent) + "A to " + std::to_string(stopCurrent) + "A, " +
+    std::to_string(steps) + " steps" +
+    (clientName.empty() ? "" : " (" + clientName + ")") +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")"));
+
+  // 2. Check if SMU is available
+  if (!m_smuOps) {
+    auto endTime = std::chrono::steady_clock::now();
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+      m_resultsManager->EndOperation(opId, "failed", "SMU operations not available");
+    }
+
+    m_logger->LogError("MachineOperations: SMU operations not available for current sweep");
+    return false;
+  }
+
+  // 3. Perform the current sweep using the simple method
+  bool sweepSuccess = m_smuOps->CurrentSweep(startCurrent, stopCurrent, steps,
+    voltageCompliance, delayMs, clientName);
+
+  auto endTime = std::chrono::steady_clock::now();
+  auto totalElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+  // 4. Store results
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->StoreResult(opId, "total_elapsed_ms", std::to_string(totalElapsedMs));
+    m_resultsManager->StoreResult(opId, "steps_completed", std::to_string(steps));
+
+    if (sweepSuccess) {
+      m_logger->LogInfo("MachineOperations: Current sweep completed successfully");
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_logger->LogError("MachineOperations: Current sweep failed");
+      m_resultsManager->EndOperation(opId, "failed", "Current sweep operation failed");
+    }
+  }
+
+  return sweepSuccess;
+}
+
+// ============================================================================
+// USAGE EXAMPLES
+// ============================================================================
+
+/*
+// Example 1: Direct usage in MachineOperations
+bool success = machineOps.SMU_VoltageSweep(0.0, 5.0, 21, 0.1, 100, "", "MyTest");
+
+// Example 2: Using in sequence operations
+auto sequence = std::make_unique<SequenceStep>("Simple SMU Test", machineOps);
+
+// Add simple voltage sweep
+sequence->AddOperation(std::make_shared<SimpleVoltageSweepOperation>(
+    0.0, 5.0, 21, 0.1, 100, ""));
+
+// Add quick current sweep
+sequence->AddOperation(std::make_shared<QuickCurrentSweepOperation>(
+    QuickCurrentSweepOperation::MILLI_CURRENT, ""));
+
+// Execute
+sequence->Execute();
+*/
+
+
+
+
+
+bool MachineOperations::SMU_GetLastVoltageSweepResults(std::vector<std::pair<double, double>>& results,
+  const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  // This would require additional storage in Keithley2400Operations to cache last results
+  // For now, log that results should be retrieved during the sweep
+  m_logger->LogInfo("MachineOperations: Voltage sweep results are logged during sweep execution");
+  return true;
+}
+
+bool MachineOperations::SMU_GetLastCurrentSweepResults(std::vector<std::pair<double, double>>& results,
+  const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  // This would require additional storage in Keithley2400Operations to cache last results
+  // For now, log that results should be retrieved during the sweep
+  m_logger->LogInfo("MachineOperations: Current sweep results are logged during sweep execution");
+  return true;
+}
+
 
 bool MachineOperations::SetDeviceSpeed(const std::string& deviceName, double velocity,
   const std::string& callerContext) {
