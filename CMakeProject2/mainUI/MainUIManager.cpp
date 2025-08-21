@@ -167,6 +167,9 @@ void MainUIManager::InitializeUIComponents() {
 	m_macroManager = std::make_unique<MacroManager>();
 	m_macroPanelUI = std::make_unique<MacroPanelUI>();
 
+
+
+
 	// Connect programming components to each other
 	if (m_macroManager && m_machineBlockUI) {
 		m_macroManager->SetMachineBlockUI(m_machineBlockUI.get());
@@ -207,6 +210,7 @@ void MainUIManager::ConnectUIToServices() {
 	// For UIConfigVisualizer, use smart getter for camera
 	auto* camera = GetCameraManagerSmart();
 	uiConfigVisualizer = std::make_unique<UIConfigVisualizer>(*motionConfig, camera);
+
 
 	// Create UIJogWindow
 	m_uiJogWindow = std::make_unique<UIJogWindow>(*motionConfig);
@@ -322,6 +326,14 @@ void MainUIManager::ConnectUIToServices() {
 
 		logger->LogInfo("MainUIManager: Run Page UI connected");
 	}
+
+
+	if (machineOps)	{
+		uiConfigVisualizer->SetMachineOperations(machineOps);
+	}
+
+
+
 
 	logger->LogInfo("MainUIManager: Service connections complete");
 }

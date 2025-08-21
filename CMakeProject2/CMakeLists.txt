@@ -609,7 +609,7 @@ add_executable(uaa3App
   "include/AppContext.h" 
   "include/ops/IOperations.h" 
   "include/ops/BaseOperations.h" 
-)
+ "RaylibCameraManager.h" "RaylibCameraManager.cpp" "include/AppContext.cpp")
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")

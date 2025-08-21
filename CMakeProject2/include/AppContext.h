@@ -325,28 +325,9 @@ public:
     return resultsManager ? resultsManager : m_resultsManagerPtr;
   }
 
-  // Shared pointer getters for database services (for compatibility with MachineOperations)
-  std::shared_ptr<DatabaseManager> GetDatabaseManagerShared() const {
-    auto* machineOps = GetMachineOperations();
-    if (machineOps) {
-      // Try to get from MachineOperations first (which returns shared_ptr)
-      return machineOps->GetDatabaseManager();
-    }
-    // Fallback: wrap raw pointer in shared_ptr (use with caution)
-    auto* db = GetDatabaseManager();
-    return db ? std::shared_ptr<DatabaseManager>(db, [](DatabaseManager*) {}) : nullptr;
-  }
-
-  std::shared_ptr<OperationResultsManager> GetResultsManagerShared() const {
-    auto* machineOps = GetMachineOperations();
-    if (machineOps) {
-      // Try to get from MachineOperations first (which returns shared_ptr)
-      return machineOps->GetResultsManager();
-    }
-    // Fallback: wrap raw pointer in shared_ptr (use with caution)
-    auto* results = GetResultsManager();
-    return results ? std::shared_ptr<OperationResultsManager>(results, [](OperationResultsManager*) {}) : nullptr;
-  }
+  // MOVED TO .CPP: Shared pointer getters for database services (for compatibility with MachineOperations)
+  std::shared_ptr<DatabaseManager> GetDatabaseManagerShared() const;
+  std::shared_ptr<OperationResultsManager> GetResultsManagerShared() const;
 
   ConfigFileWatchdog* GetConfigWatchdog() const { return configWatchdog; }
 

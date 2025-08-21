@@ -60,7 +60,7 @@
 
 #include "IDSCameraUI.h"
 #include "AppContext.h"
-
+#include "RaylibCameraManager.h"
 
 
 bool g_deugMode = false; // Global debug mode flag
@@ -1193,138 +1193,39 @@ int main(int argc, char* argv[])
 	}
 
 
-	// In your uaa3App.cpp, replace the camera feed setup section with this:
 
-	// CORRECTED: Create CameraFeedDisplay FIRST, then RaylibWindow
-	std::unique_ptr<CameraFeedDisplay> raylibCameraFeed;
-	std::unique_ptr<RaylibWindow> raylibWindow;
 
-	// Step 1: Create camera feed display first
-	if (cameraManager && cameraManager->GetCameraCount() > 0) {
-		logger->LogInfo("Setting up camera feed for raylib 3D window...");
+	// ================================================================
+	// RAYLIB AND CAMERA INTEGRATION - REFACTORED INTO MANAGER CLASS
+	// ================================================================
 
-		// Create camera feed display
-		raylibCameraFeed = std::make_unique<CameraFeedDisplay>();
+	logger->LogInfo("=== Setting up Raylib and Camera Integration ===");
 
-		// **NEW: Connect to broadcasting system instead of direct camera**
-		auto cameraIds = cameraManager->GetCameraIds();
-		if (!cameraIds.empty()) {
-			// Try to find a connected camera
-			std::string selectedCameraId;
-			for (const auto& cameraId : cameraIds) {
-				auto status = cameraManager->GetCameraStatus(cameraId);
-				if (status.connected) {
-					selectedCameraId = cameraId;
-					break;
-				}
-			}
+	// Create the raylib camera manager using AppContext
+	std::unique_ptr<RaylibCameraManager> raylibManager;
+	raylibManager = std::make_unique<RaylibCameraManager>(context, logger);
 
-			// If no connected camera found, use the first one anyway
-			if (selectedCameraId.empty()) {
-				selectedCameraId = cameraIds[0];
-				logger->LogInfo("No connected cameras found, will try to connect to: " + selectedCameraId);
-			}
+	// Set data store if available
+	if (dataStore) {
+		raylibManager->SetDataStore(dataStore);
+	}
 
-			// **CRITICAL CHANGE: Use broadcasting system instead of direct camera connection**
-			logger->LogInfo("=== SETTING UP CAMERA FEED WITH BROADCASTING ===");
+	// Configure initialization options
+	RaylibCameraManager::InitializationOptions raylibOptions;
+	raylibOptions.enableRaylib3D = true;           // Set to false to disable raylib
+	raylibOptions.autoConnectCamera = true;        // Auto-connect first available camera
+	raylibOptions.enableDebugWindow = true;        // Enable debug UI
+	raylibOptions.cameraConnectionTimeout = 500;   // Connection timeout in ms
 
-			// Set the target camera for the feed display
-			raylibCameraFeed->SetTargetCamera(selectedCameraId);
-			logger->LogInfo("CameraFeedDisplay set to target camera: " + selectedCameraId);
-
-			// **CRITICAL: Subscribe the CameraFeedDisplay to the broadcasting system**
-			std::shared_ptr<CameraFrameSubscriber> feedSubscriber =
-				std::static_pointer_cast<CameraFrameSubscriber>(
-					std::shared_ptr<CameraFeedDisplay>(raylibCameraFeed.get(), [](CameraFeedDisplay*) {}));
-
-			cameraManager->SubscribeToFrames(feedSubscriber);
-			logger->LogInfo("CameraFeedDisplay subscribed to broadcasting system");
-
-			// **CRITICAL: Start the broadcasting system if not already started**
-			cameraManager->StartBroadcastSystem();
-			logger->LogInfo("Camera broadcasting system started");
-
-			// Try to auto-start the camera if it's connected
-			PylonCameraTest* selectedCamera = cameraManager->GetCamera(selectedCameraId);
-			if (selectedCamera) {
-				auto& pylonCamera = selectedCamera->GetCamera();
-				if (pylonCamera.IsConnected()) {
-					if (!pylonCamera.IsGrabbing()) {
-						// **IMPORTANT: Use StartGrabbing which automatically sets up broadcasting**
-						if (cameraManager->StartGrabbing(selectedCameraId)) {
-							logger->LogInfo("Started camera grabbing with broadcasting for raylib feed");
-						}
-						else {
-							logger->LogWarning("Failed to start camera grabbing for raylib feed");
-						}
-					}
-					else {
-						logger->LogInfo("Camera already grabbing - should be broadcasting");
-					}
-				}
-				else {
-					logger->LogInfo("Camera not connected yet - feed will activate when camera connects");
-				}
-			}
-
-			logger->LogInfo("=== CAMERA FEED SETUP COMPLETE ===");
-		}
+	// Initialize the manager
+	if (raylibManager->Initialize(raylibOptions)) {
+		logger->LogInfo("✅ Raylib and camera integration initialized successfully");
 	}
 	else {
-		if (!cameraManager) {
-			logger->LogInfo("No camera manager available for raylib integration");
-		}
-		else if (cameraManager->GetCameraCount() == 0) {
-			logger->LogInfo("No cameras available for raylib integration");
-		}
+		logger->LogError("❌ Failed to initialize raylib integration: " + raylibManager->GetLastError());
+		// Continue without raylib (graceful degradation)
+		raylibManager.reset();
 	}
-
-	// Step 2: Initialize RaylibWindow AFTER camera feed is ready
-	bool enableRaylib3D = true; // Set to false to disable
-
-	if (enableRaylib3D) {
-		raylibWindow = std::make_unique<RaylibWindow>();
-
-		// Set the logger first
-		raylibWindow->SetLogger(logger);
-
-		// Set connections BEFORE initializing
-		if (piControllerManager) {
-			raylibWindow->SetPIControllerManager(piControllerManager.get());
-		}
-		if (dataStore) {
-			raylibWindow->SetDataStore(dataStore);
-		}
-		if (machineOps) {
-			raylibWindow->SetMachineOperations(machineOps.get());
-		}
-
-		// Set camera feed BEFORE starting thread (now raylibCameraFeed exists)
-		if (raylibCameraFeed) {
-			raylibWindow->SetCameraFeedDisplay(raylibCameraFeed.get());
-			logger->LogInfo("Connected camera feed to raylib window");
-		}
-		else {
-			logger->LogInfo("No camera feed available for raylib window");
-		}
-
-		// THEN initialize the thread (this starts the render loop)
-		if (raylibWindow->Initialize()) {
-			logger->LogInfo("Raylib 3D Window thread started successfully");
-		}
-		else {
-			logger->LogError("Failed to start Raylib 3D Window");
-			raylibWindow.reset(); // Clean up on failure
-		}
-	}
-
-
-
-	//debug setup 
-// You can call this function in your main loop or when troubleshooting:
-	//DebugCameraFeedSetupEnhanced(cameraManager.get(), raylibCameraFeed.get(), raylibWindow.get(), logger);
-
-
 
 
 	bool done = false;
@@ -1332,112 +1233,30 @@ int main(int argc, char* argv[])
 
 
 
-	// ADD MenuManager creation HERE instead:
-// Create menu manager and debug window
-	std::unique_ptr<MenuManagerUaa3> menuManager = std::make_unique<MenuManagerUaa3>();
-	std::unique_ptr<RaylibDebugWindow> raylibDebugWindow = std::make_unique<RaylibDebugWindow>();
 
-	// Set up the raylib debug window
-	if (cameraManager) {
-		raylibDebugWindow->SetCameraManager(cameraManager.get());
-	}
-	if (raylibWindow) {
-		raylibDebugWindow->SetRaylibWindow(raylibWindow.get());
-	}
-	if (raylibCameraFeed) {
-		raylibDebugWindow->SetCameraFeedDisplay(raylibCameraFeed.get());
-	}
-	raylibDebugWindow->SetLogger(logger);
+	// Create menu manager 
+	std::unique_ptr<MenuManagerUaa3> menuManager = std::make_unique<MenuManagerUaa3>();
 
 	// Set up menu callbacks
 	menuManager->SetOnExitCallback([&done]() {
 		done = true;
-		});
+	});
+
 	if (menuManager && idsCameraUI) {
 		menuManager->SetIDSCameraUI(idsCameraUI.get());
 		logger->LogInfo("IDS Camera UI connected to menu system");
 	}
 
-	//uiManager.SetImguiFont(mainFont);
+	logger->LogInfo("=== Raylib and Camera Integration Setup Complete ===");
 
-
-
-
-// Auto-connect to first available camera and start broadcasting
-	if (cameraManager && cameraManager->GetCameraCount() > 0) {
-		logger->LogInfo("=== AUTO-CONNECTING FIRST CAMERA ===");
-
-		auto cameraIds = cameraManager->GetCameraIds();
-
-		// Try each camera until one connects successfully
-		bool connectedSuccessfully = false;
-		std::string firstConnectedCamera;
-
-		for (const auto& cameraId : cameraIds) {
-			logger->LogInfo("Attempting to auto-connect camera: " + cameraId);
-
-			// Try to connect the camera
-			if (cameraManager->ConnectCamera(cameraId)) {
-				logger->LogInfo("Successfully connected camera: " + cameraId);
-
-				// Wait a moment for connection to stabilize
-				std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-				// Try to start grabbing (which enables broadcasting)
-				if (cameraManager->StartGrabbing(cameraId)) {
-					logger->LogInfo("Successfully started grabbing for camera: " + cameraId);
-					firstConnectedCamera = cameraId;
-					connectedSuccessfully = true;
-					break; // Success! Stop trying other cameras
-				}
-				else {
-					logger->LogWarning("Failed to start grabbing for camera: " + cameraId);
-					// Try to disconnect cleanly before trying next camera
-					cameraManager->DisconnectCamera(cameraId);
-				}
-			}
-			else {
-				logger->LogWarning("Failed to connect camera: " + cameraId);
-			}
-		}
-
-		if (connectedSuccessfully) {
-			logger->LogInfo("=== AUTO-CONNECTION SUCCESS ===");
-			logger->LogInfo("Connected camera: " + firstConnectedCamera);
-
-			// Start the broadcasting system
-			cameraManager->StartBroadcastSystem();
-			logger->LogInfo("Broadcasting system started");
-
-			// Set the raylib debug window to this camera
-			if (raylibDebugWindow) {
-				// This will automatically call SetTargetCamera on the CameraFeedDisplay
-				raylibDebugWindow->SelectCamera(firstConnectedCamera);
-				logger->LogInfo("Raylib debug window set to camera: " + firstConnectedCamera);
-			}
-
-			// Optional: Also set the main camera feed if it exists
-			if (raylibCameraFeed) {
-				raylibCameraFeed->SetTargetCamera(firstConnectedCamera);
-				logger->LogInfo("Raylib camera feed set to camera: " + firstConnectedCamera);
-			}
-
-			logger->LogInfo("=== AUTO-CONNECTION COMPLETE ===");
-		}
-		else {
-			logger->LogWarning("=== AUTO-CONNECTION FAILED ===");
-			logger->LogWarning("Could not connect to any cameras automatically");
-			logger->LogWarning("You will need to connect manually in the debug window");
-		}
+	// Set up menu callbacks
+	menuManager->SetOnExitCallback([&done]() {
+		done = true;
+	});
+	if (menuManager && idsCameraUI) {
+		menuManager->SetIDSCameraUI(idsCameraUI.get());
+		logger->LogInfo("IDS Camera UI connected to menu system");
 	}
-	else {
-		logger->LogInfo("No cameras available for auto-connection");
-	}
-
-
-
-
-
 
 
 
@@ -1499,51 +1318,29 @@ int main(int argc, char* argv[])
 
 		
 #pragma region rayLibwindow
-		// REPLACE WITH THIS:
-		if (menuManager->IsRaylibDebugVisible() && raylibDebugWindow->IsVisible()) {
-			bool isOpen = raylibDebugWindow->IsVisible();
+		// Update raylib with current machine data
+		if (raylibManager && raylibManager->IsRunning()) {
 
-			if (ImGui::Begin("Raylib Live Feed Debug", &isOpen)) {
-				raylibDebugWindow->RenderUI();
-			}
-			ImGui::End();
 
-			// Update visibility state
-			raylibDebugWindow->SetVisible(isOpen);
-
-			// Optional: Also update menu state when window is closed
-			if (!isOpen) {
-				menuManager->SetRaylibDebugVisible(false);
+			// Check if raylib window was closed
+			if (raylibManager->ShouldClose()) {
+				logger->LogInfo("Raylib window closed by user");
+				raylibManager->Shutdown();
+				raylibManager.reset();
 			}
 		}
 
-
-
-
-
-		// Update raylib window with current machine data (add this in the main loop)
-		if (raylibWindow && raylibWindow->IsRunning()) {
-			// Collect current machine data from your systems
-			MachineData data = { 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false };
-
-
-			// Update 3D visualization (thread-safe)
-			raylibWindow->UpdateMachineData(data);
-
-			// Check if raylib window was closed
-			if (raylibWindow->ShouldClose()) {
-				logger->LogInfo("Raylib window closed by user");
-				raylibWindow->Shutdown();
-				raylibWindow.reset();
-			}
+		// Render raylib debug UI if enabled
+		if (raylibManager && menuManager) {
+			raylibManager->RenderDebugUI(menuManager.get());
 		}
 #pragma endregion
 
 #pragma region DebugMode
 		//debug mode smaller ops
 
-		if (true) {
-		//if (g_deugMode) {
+		//if (true) {
+		if (g_deugMode) {
 			// NEW: Add test window for MotionOps
 			static bool showMotionTest = true;
 			if (showMotionTest && motionOps) {
@@ -1671,166 +1468,6 @@ int main(int argc, char* argv[])
 
 
 
-//#pragma region emoji test
-//
-//		// Main test window
-//		ImGui::Begin("Emoji Test");
-//
-//		ImGui::Text("Configuration Status:");
-//#ifdef IMGUI_USE_WCHAR32
-//		ImGui::TextColored(ImVec4(0, 1, 0, 1), "✅ IMGUI_USE_WCHAR32");
-//#else
-//		ImGui::TextColored(ImVec4(1, 0, 0, 1), "❌ IMGUI_USE_WCHAR32 - add to imconfig.h");
-//#endif
-//
-//#ifdef IMGUI_ENABLE_FREETYPE
-//		ImGui::TextColored(ImVec4(0, 1, 0, 1), "✅ IMGUI_ENABLE_FREETYPE");
-//#else
-//		ImGui::TextColored(ImVec4(1, 0, 0, 1), "❌ IMGUI_ENABLE_FREETYPE - add to imconfig.h");
-//#endif
-//
-//		if (emojiLoaded) {
-//			ImGui::TextColored(ImVec4(0, 1, 0, 1), "✅ Emoji font loaded");
-//		}
-//		else {
-//			ImGui::TextColored(ImVec4(1, 0, 0, 1), "❌ No emoji font");
-//		}
-//
-//		ImGui::Separator();
-//
-//		ImGui::Text("Font Debug Information:");
-//		ImGui::Text("Total fonts loaded: %d", io.Fonts->Fonts.Size);
-//
-//		for (int i = 0; i < io.Fonts->Fonts.Size; i++) {
-//			ImFont* font = io.Fonts->Fonts[i];
-//			ImGui::Text("Font %d: %.0f px, %d glyphs", i, font->FontSize, font->Glyphs.Size);
-//
-//			// Test Greek letters with each font
-//			if (ImGui::TreeNode(("Test with Font " + std::to_string(i)).c_str())) {
-//				ImGui::PushFont(font);
-//				ImGui::Text("Greek test: α β γ μ");
-//				ImGui::Text("Math test: ± ÷ × ≠ ∞");
-//				ImGui::Text("Emoji test: 👍 ❤ 🔥");
-//				ImGui::PopFont();
-//				ImGui::TreePop();
-//			}
-//		}
-//
-//		ImGui::Separator();
-//
-//		// Check specific glyph availability
-//		ImGui::Text("Glyph Availability Check:");
-//
-//		struct TestGlyph {
-//			ImWchar codepoint;
-//			const char* name;
-//			const char* utf8;
-//		};
-//
-//		TestGlyph testGlyphs[] = {
-//				{0x03B1, "α (alpha)", reinterpret_cast<const char*>(u8"α")},
-//				{0x03B2, "β (beta)", reinterpret_cast<const char*>(u8"β")},
-//				{0x03B3, "γ (gamma)", reinterpret_cast<const char*>(u8"γ")},
-//				{0x03BC, "μ (mu)", reinterpret_cast<const char*>(u8"μ")},
-//				{0x1F44D, "👍 (thumbs up)", reinterpret_cast<const char*>(u8"👍")},
-//				{0x2764, "❤ (heart)", reinterpret_cast<const char*>(u8"❤")},
-//		};
-//
-//		for (const auto& glyph : testGlyphs) {
-//			const ImFontGlyph* g = nullptr;
-//			int fontIndex = -1;
-//
-//			for (int i = 0; i < io.Fonts->Fonts.Size; i++) {
-//				g = io.Fonts->Fonts[i]->FindGlyph(glyph.codepoint);
-//				if (g) {
-//					fontIndex = i;
-//					break;
-//				}
-//			}
-//
-//			ImGui::Text("U+%04X %s: %s",
-//				glyph.codepoint,
-//				glyph.name,
-//				g ? "✅ Found" : "❌ Missing");
-//
-//			if (g) {
-//				ImGui::SameLine();
-//				ImGui::Text("(Font %d) ", fontIndex);
-//				ImGui::SameLine();
-//
-//				// Try to render the actual character
-//				if (fontIndex >= 0 && fontIndex < io.Fonts->Fonts.Size) {
-//					ImGui::PushFont(io.Fonts->Fonts[fontIndex]);
-//					ImGui::Text("%s", reinterpret_cast<const char*>(glyph.utf8));
-//					ImGui::PopFont();
-//				}
-//			}
-//		}
-//
-//		ImGui::Separator();
-//
-//		// Additional debug: check fallback character
-//		ImFont* currentFont = io.Fonts->Fonts[0];
-//		ImGui::Text("Font Debug:");
-//		ImGui::Text("Fallback char: U+%04X (%c)", currentFont->FallbackChar, (char)currentFont->FallbackChar);
-//		ImGui::Text("Ellipsis char: U+%04X", currentFont->EllipsisChar);
-//
-//		// Test direct character codes
-//		ImGui::Text("Direct character test:");
-//		ImGui::Text("Alpha test: %lc", (wint_t)0x03B1);  // Try wide character
-//
-//		ImGui::Separator();
-//
-//		ImGui::Text("Basic Tests:");
-//		ImGui::Text("ASCII: Hello World 123");
-//
-//		// Test with different approaches
-//		ImGui::Text("Unicode Test Methods:");
-//		ImGui::Text("Method 1 (reinterpret_cast): ");
-//		ImGui::SameLine();
-//		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"α β γ μ"));
-//
-//		ImGui::Text("Method 2 (direct UTF-8): ");
-//		ImGui::SameLine();
-//		ImGui::Text("α β γ μ");  // Direct UTF-8 without u8 prefix
-//
-//		ImGui::Text("Method 3 (escape codes): ");
-//		ImGui::SameLine();
-//		ImGui::Text("\u03B1 \u03B2 \u03B3 \u03BC");  // α β γ μ as Unicode escapes
-//
-//		ImGui::Text("Method 4 (hex codes): ");
-//		ImGui::SameLine();
-//		ImGui::Text("U+03B1=%c U+03B2=%c U+03B3=%c U+03BC=%c",
-//			(char)0x03B1, (char)0x03B2, (char)0x03B3, (char)0x03BC);
-//
-//		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"Math: ± ÷ × ≠ ∞"));
-//		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"Arrows: ← → ↑ ↓"));
-//
-//		ImGui::Separator();
-//
-//		ImGui::Text("Your Test Cases:");
-//		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"⌚ <- watch"));
-//		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"😊 <- smile"));
-//
-//		ImGui::Separator();
-//
-//		ImGui::Text("More Emoji Tests:");
-//		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"👍 ❤ 🔥 🎉 🚀"));
-//		ImGui::TextUnformatted(reinterpret_cast<const char*>(u8"😀 😃 😄 😁 😆"));
-//
-//		ImGui::Separator();
-//
-//		ImGui::Text("Instructions:");
-//		ImGui::BulletText("Add '#define IMGUI_USE_WCHAR32' to imconfig.h");
-//		ImGui::BulletText("Add '#define IMGUI_ENABLE_FREETYPE' to imconfig.h");
-//		ImGui::BulletText("Put emoji font in assets/fonts/");
-//
-//		ImGui::End();
-//
-//
-//
-//#pragma endregion
-
 		if (idsCameraUI) {
 			idsCameraUI->Render();
 		}
@@ -1847,10 +1484,10 @@ int main(int argc, char* argv[])
 
 
 	// Cleanup RaylibWindow (add this in the cleanup section)
-	if (raylibWindow) {
-		logger->LogInfo("Shutting down Raylib thread...");
-		raylibWindow->Shutdown();
-		raylibWindow.reset();
+	if (raylibManager) {
+		logger->LogInfo("Shutting down raylib integration...");
+		raylibManager->Shutdown();
+		raylibManager.reset();
 	}
 
 	// Cleanup
