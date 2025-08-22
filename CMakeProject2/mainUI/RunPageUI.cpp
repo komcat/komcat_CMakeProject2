@@ -1657,15 +1657,255 @@ void RunPageUI::RenderStatusTab() {
 }
 
 void RunPageUI::RenderDetailResultsTab() {
-  // Embed the existing OperationsDisplayUI
-  if (m_operationsDisplayUI) {
-    // Render the operations display UI within this tab
-    m_operationsDisplayUI->RenderUI();
+  // Direct embedded operations display - no separate UI class needed
+  auto resultsManager = m_machineOps.GetResultsManager();
+  if (!resultsManager) {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Results Manager not available");
+    ImGui::Text("Operation results display is not initialized.");
+    return;
   }
-  else {
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Operations Display UI not available");
-    ImGui::Text("Unable to load operation results display.");
+
+  // Get operations data
+  static std::vector<OperationResult> operations;
+  static std::chrono::steady_clock::time_point lastRefresh;
+  static constexpr std::chrono::milliseconds refreshInterval{ 1000 }; // 1 second
+  static int selectedOperationIndex = -1;
+  static std::string selectedOperationId;
+  static OperationResult selectedOperation;
+
+  // Check if we need to refresh
+  auto now = std::chrono::steady_clock::now();
+  if ((now - lastRefresh) >= refreshInterval) {
+    try {
+      operations = resultsManager->GetOperationHistory(50); // Get last 50 operations
+      lastRefresh = now;
+    }
+    catch (const std::exception& e) {
+      ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Error loading operations:");
+      ImGui::Text("%s", e.what());
+      return;
+    }
   }
+
+  // Header
+  ImGui::Text("Operation Results - %d operations", static_cast<int>(operations.size()));
+  ImGui::Separator();
+
+  // Split view: Operations list on left, details on right
+  float availableWidth = ImGui::GetContentRegionAvail().x;
+  float leftPanelWidth = availableWidth * 0.6f; // 60% for list
+
+  // Left panel - Operations list
+  ImGui::BeginChild("OperationsList", ImVec2(leftPanelWidth, 0), true);
+  {
+    ImGui::Text("Operations List");
+    ImGui::Separator();
+
+    // Operations table
+    ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY |
+      ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders;
+
+    if (ImGui::BeginTable("OperationsTable", 5, flags)) {
+      ImGui::TableSetupColumn("Select", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+      ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+      ImGui::TableSetupColumn("Method", ImGuiTableColumnFlags_WidthStretch);
+      ImGui::TableSetupColumn("Device", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+      ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+      ImGui::TableSetupScrollFreeze(0, 1);
+      ImGui::TableHeadersRow();
+
+      // Render operations
+      for (int i = 0; i < static_cast<int>(operations.size()); i++) {
+        const auto& op = operations[i];
+
+        ImGui::TableNextRow();
+
+        // Select column with radio button
+        ImGui::TableNextColumn();
+        bool isSelected = (selectedOperationIndex == i);
+        if (ImGui::RadioButton(("##select_" + std::to_string(i)).c_str(), isSelected)) {
+          selectedOperationIndex = i;
+          selectedOperationId = op.operationId;
+          selectedOperation = op;
+        }
+
+        // Status column with color coding
+        ImGui::TableNextColumn();
+        ImVec4 statusColor;
+        const char* statusIcon;
+
+        if (op.status == "success" || op.status == "completed") {
+          statusColor = ImVec4(0.0f, 0.8f, 0.0f, 1.0f); // Green
+          statusIcon = "✓";
+        }
+        else if (op.status == "failed" || op.status == "error") {
+          statusColor = ImVec4(1.0f, 0.3f, 0.3f, 1.0f); // Red
+          statusIcon = "✗";
+        }
+        else if (op.status == "running") {
+          statusColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f); // Yellow
+          statusIcon = "⟳";
+        }
+        else {
+          statusColor = ImVec4(0.7f, 0.7f, 0.7f, 1.0f); // Gray
+          statusIcon = "?";
+        }
+
+        ImGui::TextColored(statusColor, "%s", statusIcon);
+        if (ImGui::IsItemHovered()) {
+          ImGui::SetTooltip("%s", op.status.c_str());
+        }
+
+        // Method column
+        ImGui::TableNextColumn();
+        ImGui::Text("%s", op.methodName.c_str());
+
+        // Device column
+        ImGui::TableNextColumn();
+        ImGui::Text("%s", op.deviceName.c_str());
+
+        // Duration column
+        ImGui::TableNextColumn();
+        if (op.elapsedTimeMs > 0) {
+          // Format duration
+          int64_t seconds = op.elapsedTimeMs / 1000;
+          int64_t minutes = seconds / 60;
+          seconds = seconds % 60;
+
+          if (minutes > 0) {
+            ImGui::Text("%lldm %llds", minutes, seconds);
+          }
+          else {
+            ImGui::Text("%llds", seconds);
+          }
+        }
+        else if (op.status == "running") {
+          ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Running...");
+        }
+        else {
+          ImGui::Text("-");
+        }
+      }
+
+      ImGui::EndTable();
+    }
+  }
+  ImGui::EndChild();
+
+  ImGui::SameLine();
+
+  // Right panel - Operation details
+  ImGui::BeginChild("OperationDetails", ImVec2(0, 0), true);
+  {
+    ImGui::Text("Operation Details");
+    ImGui::Separator();
+
+    if (selectedOperationIndex >= 0 && selectedOperationIndex < static_cast<int>(operations.size())) {
+      const auto& op = selectedOperation;
+
+      // Operation metadata
+      ImGui::Text("Operation ID: %s", op.operationId.c_str());
+      ImGui::Text("Method: %s", op.methodName.c_str());
+      ImGui::Text("Device: %s", op.deviceName.c_str());
+
+      ImGui::Text("Status: ");
+      ImGui::SameLine();
+      ImVec4 statusColor;
+      if (op.status == "success" || op.status == "completed") {
+        statusColor = ImVec4(0.0f, 0.8f, 0.0f, 1.0f);
+      }
+      else if (op.status == "failed" || op.status == "error") {
+        statusColor = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
+      }
+      else if (op.status == "running") {
+        statusColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+      }
+      else {
+        statusColor = ImVec4(0.7f, 0.7f, 0.7f, 1.0f);
+      }
+      ImGui::TextColored(statusColor, "%s", op.status.c_str());
+
+      if (!op.callerContext.empty()) {
+        ImGui::Text("Caller: %s", op.callerContext.c_str());
+      }
+
+      if (!op.sequenceName.empty()) {
+        ImGui::Text("Sequence: %s", op.sequenceName.c_str());
+      }
+
+      // Timing information
+      ImGui::Separator();
+      ImGui::Text("Timing Information:");
+
+      // Format timestamp
+      auto time_t = std::chrono::system_clock::to_time_t(op.timestamp);
+      std::stringstream timeStr;
+      timeStr << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+      ImGui::Text("Start Time: %s", timeStr.str().c_str());
+
+      if (op.elapsedTimeMs > 0) {
+        int64_t totalSeconds = op.elapsedTimeMs / 1000;
+        int64_t minutes = totalSeconds / 60;
+        int64_t seconds = totalSeconds % 60;
+        int64_t milliseconds = op.elapsedTimeMs % 1000;
+
+        if (minutes > 0) {
+          ImGui::Text("Duration: %lldm %llds %lldms", minutes, seconds, milliseconds);
+        }
+        else {
+          ImGui::Text("Duration: %llds %lldms", seconds, milliseconds);
+        }
+      }
+
+      // Error message if failed
+      if (op.status == "failed" || op.status == "error") {
+        auto errorIt = op.data.find("error_message");
+        if (errorIt != op.data.end() && !errorIt->second.empty()) {
+          ImGui::Separator();
+          ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Error Message:");
+          ImGui::TextWrapped("%s", errorIt->second.c_str());
+        }
+      }
+
+      // Parameters & Results
+      if (!op.data.empty()) {
+        ImGui::Separator();
+        ImGui::Text("Parameters & Results:");
+
+        if (ImGui::BeginTable("ResultsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
+          ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+          ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+          ImGui::TableHeadersRow();
+
+          for (const auto& [key, value] : op.data) {
+            // Skip error_message as it's shown above
+            if (key == "error_message") continue;
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+
+            // Color-code parameter vs result keys
+            if (key.find("param_") == 0) {
+              ImGui::TextColored(ImVec4(0.7f, 0.7f, 1.0f, 1.0f), "%s", key.c_str());
+            }
+            else {
+              ImGui::Text("%s", key.c_str());
+            }
+
+            ImGui::TableNextColumn();
+            ImGui::Text("%s", value.c_str());
+          }
+
+          ImGui::EndTable();
+        }
+      }
+    }
+    else {
+      ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
+        "Select an operation from the list to view details");
+    }
+  }
+  ImGui::EndChild();
 }
 
 void RunPageUI::RenderControlButtons() {
