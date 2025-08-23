@@ -627,7 +627,10 @@ add_executable(uaa3App
   "include/data/DUTDataRecorder.h"
   "include/data/DUTDataRecorder.cpp"
 
-   "include/DUTOperations.cpp")
+   "include/DUTOperations.cpp"
+   "include/ops/UserInputOperations.h"
+   "include/ops/UserInputOperation.cpp"
+ "include/data/SQLiteConnection.h" "include/data/SQLiteConnection.cpp")
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")

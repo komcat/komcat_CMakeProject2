@@ -273,6 +273,22 @@ public:
 		}
 	}
 
+	// ADD THIS NEW METHOD:
+	// ADD THIS IMPLEMENTATION:
+	void LogDebug(const std::string& message) {
+		auto* logger = Logger::GetInstance();
+		if (logger) {
+			logger->LogDebug(message);  // Assuming your Logger has LogDebug
+			// OR if your Logger doesn't have LogDebug, you could use:
+			// logger->LogInfo("[DEBUG] " + message);
+		}
+
+		// Optional: Only output debug in debug builds
+#ifdef _DEBUG
+		std::cout << "[DEBUG] " << message << std::endl;
+#endif
+	}
+
 	// Camera control methods
 	bool InitializeCamera();
 	bool ConnectCamera();

@@ -1,5 +1,6 @@
 #include "DUTDataRecorder.h"
 #include "include/data/global_data_store.h"
+#include "SQLiteConnection.h"
 #include "include/logger.h"
 #include <fstream>
 #include <sstream>
@@ -7,13 +8,78 @@
 #include <iostream>
 
 DUTDataRecorder::DUTDataRecorder()
-  : m_isRecording(false) {
-  EnsureDirectoryExists("dut_saved");
+  : m_isRecording(false),
+  m_enableDatabase(false),
+  m_batchSize(100),  // Default: flush every 100 points
+  m_autoSaveInterval(30),  // Default: auto-flush every 30 seconds
+  m_totalSavedToDb(0),
+  m_databasePath("db/dut_db.db") {  // Fixed database location
+
+  // Ensure directories exist
+  EnsureDirectoryExists("dut_saved");  // For CSV/JSON exports
+  EnsureDirectoryExists("db");  // For database file
 }
 
 DUTDataRecorder::~DUTDataRecorder() {
   if (m_isRecording) {
     End(); // Auto-save if still recording
+  }
+  if (m_dbConnection) {
+    FlushToDatabase(); // Final flush
+    DisconnectDatabase();
+  }
+}
+
+bool DUTDataRecorder::ConnectToDatabase(const std::string& connectionString) {
+  std::lock_guard<std::mutex> lock(m_dbMutex);
+
+  // Use default path if no connection string provided
+  std::string dbPath = connectionString.empty() ? m_databasePath : connectionString;
+
+  // Update stored path
+  m_databasePath = dbPath;
+
+  // Ensure the database directory exists
+  std::filesystem::path path(dbPath);
+  if (path.has_parent_path()) {
+    EnsureDirectoryExists(path.parent_path().string());
+  }
+
+  // Create database connection - YOU NEED TO UNCOMMENT THIS LINE!
+  m_dbConnection = std::make_unique<SQLiteConnection>();
+
+  if (!m_dbConnection) {
+    auto* logger = Logger::GetInstance();
+    logger->LogError("DUTDataRecorder: Database implementation not available");
+    return false;
+  }
+
+  if (m_dbConnection->Connect(dbPath)) {
+    auto* logger = Logger::GetInstance();
+    logger->LogInfo("DUTDataRecorder: Connected to database at: " + dbPath);
+
+    // SQLite automatically creates the database file if it doesn't exist
+    // The CreateTableIfNotExists() in SQLiteConnection ensures tables are created
+
+    m_enableDatabase = true;
+    return true;
+  }
+
+  auto* logger = Logger::GetInstance();
+  logger->LogError("DUTDataRecorder: Failed to connect to database at: " + dbPath);
+  return false;
+}
+
+void DUTDataRecorder::DisconnectDatabase() {
+  std::lock_guard<std::mutex> lock(m_dbMutex);
+
+  if (m_dbConnection) {
+    m_dbConnection->Disconnect();
+    m_dbConnection.reset();
+    m_enableDatabase = false;
+
+    auto* logger = Logger::GetInstance();
+    logger->LogInfo("DUTDataRecorder: Disconnected from database");
   }
 }
 
@@ -22,10 +88,15 @@ void DUTDataRecorder::Start(const std::string& serialNumber) {
     End(); // End previous session
   }
 
+  std::lock_guard<std::mutex> lock(m_dataMutex);
+
   m_currentSerialNumber = serialNumber;
   m_dataPoints.clear();
+  m_pendingDataPoints.clear();
   m_isRecording = true;
   m_sessionStartTime = std::chrono::system_clock::now();
+  m_lastFlushTime = m_sessionStartTime;
+  m_totalSavedToDb = 0;
 
   auto* logger = Logger::GetInstance();
   logger->LogInfo("DUTDataRecorder: Started recording for DUT: " + serialNumber);
@@ -43,7 +114,124 @@ void DUTDataRecorder::AddDataPoint(const std::string& key, double value) {
   point.value = value;
   point.timestamp = std::chrono::system_clock::now();
 
-  m_dataPoints.push_back(point);
+  {
+    std::lock_guard<std::mutex> lock(m_dataMutex);
+    m_dataPoints.push_back(point);
+
+    // Add to pending buffer if database is enabled
+    if (m_enableDatabase && m_dbConnection) {
+      m_pendingDataPoints.push_back(point);
+    }
+  }
+
+  // Check if we should flush to database
+  CheckAutoFlush();
+}
+
+void DUTDataRecorder::CheckAutoFlush() {
+  if (!m_enableDatabase || !m_dbConnection) {
+    return;
+  }
+
+  bool shouldFlush = false;
+
+  {
+    std::lock_guard<std::mutex> lock(m_dataMutex);
+
+    // Check batch size trigger
+    if (m_pendingDataPoints.size() >= m_batchSize) {
+      shouldFlush = true;
+    }
+
+    // Check time interval trigger
+    auto now = std::chrono::system_clock::now();
+    auto timeSinceLastFlush = std::chrono::duration_cast<std::chrono::seconds>(
+      now - m_lastFlushTime);
+
+    if (timeSinceLastFlush >= m_autoSaveInterval && !m_pendingDataPoints.empty()) {
+      shouldFlush = true;
+    }
+  }
+
+  if (shouldFlush) {
+    FlushToDatabase();
+  }
+}
+
+void DUTDataRecorder::FlushToDatabase() {
+  if (!m_enableDatabase || !m_dbConnection) {
+    return;
+  }
+
+  std::vector<DataPoint> batchToSave;
+
+  {
+    std::lock_guard<std::mutex> lock(m_dataMutex);
+
+    if (m_pendingDataPoints.empty()) {
+      return;
+    }
+
+    // Move pending points to batch
+    batchToSave = std::move(m_pendingDataPoints);
+    m_pendingDataPoints.clear();
+    m_lastFlushTime = std::chrono::system_clock::now();
+  }
+
+  // Save batch to database (outside of data mutex to avoid blocking AddDataPoint)
+  if (SaveBatchToDatabase(batchToSave)) {
+    m_totalSavedToDb += batchToSave.size();
+
+    auto* logger = Logger::GetInstance();
+    logger->LogInfo("DUTDataRecorder: Flushed " + std::to_string(batchToSave.size()) +
+      " data points to database (Total: " + std::to_string(m_totalSavedToDb) + ")");
+  }
+  else {
+    // On failure, add back to pending
+    std::lock_guard<std::mutex> lock(m_dataMutex);
+    m_pendingDataPoints.insert(m_pendingDataPoints.begin(),
+      batchToSave.begin(), batchToSave.end());
+
+    auto* logger = Logger::GetInstance();
+    logger->LogError("DUTDataRecorder: Failed to save batch to database, data retained in buffer");
+  }
+}
+
+bool DUTDataRecorder::SaveBatchToDatabase(const std::vector<DataPoint>& batch) {
+  std::lock_guard<std::mutex> lock(m_dbMutex);
+
+  if (!m_dbConnection || !m_dbConnection->IsConnected()) {
+    return false;
+  }
+
+  // Start transaction for batch insert
+  if (!m_dbConnection->BeginTransaction()) {
+    auto* logger = Logger::GetInstance();
+    logger->LogError("DUTDataRecorder: Failed to begin database transaction");
+    return false;
+  }
+
+  // Insert all data points
+  for (const auto& point : batch) {
+    if (!m_dbConnection->InsertDataPoint(m_currentSerialNumber, point.key,
+      point.value, point.timestamp)) {
+      auto* logger = Logger::GetInstance();
+      logger->LogError("DUTDataRecorder: Failed to insert data point: " +
+        m_dbConnection->GetLastError());
+      m_dbConnection->RollbackTransaction();
+      return false;
+    }
+  }
+
+  // Commit transaction
+  if (!m_dbConnection->CommitTransaction()) {
+    auto* logger = Logger::GetInstance();
+    logger->LogError("DUTDataRecorder: Failed to commit transaction");
+    m_dbConnection->RollbackTransaction();
+    return false;
+  }
+
+  return true;
 }
 
 void DUTDataRecorder::End() {
@@ -51,14 +239,22 @@ void DUTDataRecorder::End() {
     return;
   }
 
+  // Final flush to database
+  if (m_enableDatabase && m_dbConnection) {
+    FlushToDatabase();
+  }
+
   m_isRecording = false;
 
   auto* logger = Logger::GetInstance();
   logger->LogInfo("DUTDataRecorder: Ended recording for DUT: " + m_currentSerialNumber +
-    " (" + std::to_string(m_dataPoints.size()) + " data points)");
+    " (" + std::to_string(m_dataPoints.size()) + " total points, " +
+    std::to_string(m_totalSavedToDb) + " saved to DB)");
 }
 
 bool DUTDataRecorder::ExportToCSV(const std::string& filename) {
+  std::lock_guard<std::mutex> lock(m_dataMutex);
+
   if (m_dataPoints.empty()) {
     auto* logger = Logger::GetInstance();
     logger->LogWarning("DUTDataRecorder: No data to export");
@@ -101,6 +297,8 @@ bool DUTDataRecorder::ExportToCSV(const std::string& filename) {
 }
 
 bool DUTDataRecorder::ExportToJSON(const std::string& filename) {
+  std::lock_guard<std::mutex> lock(m_dataMutex);
+
   if (m_dataPoints.empty()) {
     auto* logger = Logger::GetInstance();
     logger->LogWarning("DUTDataRecorder: No data to export");
@@ -125,6 +323,7 @@ bool DUTDataRecorder::ExportToJSON(const std::string& filename) {
   auto start_time_t = std::chrono::system_clock::to_time_t(m_sessionStartTime);
   file << "  \"session_start\": \"" << std::put_time(std::localtime(&start_time_t), "%Y-%m-%d %H:%M:%S") << "\",\n";
   file << "  \"data_point_count\": " << m_dataPoints.size() << ",\n";
+  file << "  \"data_saved_to_db\": " << m_totalSavedToDb << ",\n";
   file << "  \"data_points\": [\n";
 
   for (size_t i = 0; i < m_dataPoints.size(); ++i) {

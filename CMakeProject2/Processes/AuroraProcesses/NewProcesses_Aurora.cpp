@@ -5,6 +5,7 @@
 #include "NewProcesses_Aurora.h"
 #include "ProcessRegistry.h"
 #include "SequenceStep.h"  // Has DUT operations
+#include "UserInputOperations.h"
 #include <memory>
 #include <chrono>       // For timestamp
 #include <sstream>      // For stringstream
@@ -31,14 +32,35 @@ namespace AuroraProcesses {
       "Click Yes to continue.",
       promptUI));
 
-    // START DUT RECORDING - Use a test serial number or timestamp
+    // NEW: Get DUT serial number from user instead of auto-generating
+    // Generate a default suggestion based on timestamp
     auto now = std::chrono::system_clock::now();
     auto time_t = std::chrono::system_clock::to_time_t(now);
     std::stringstream ss;
     ss << "DUT_" << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
-    std::string dutSerialNumber = ss.str();
+    std::string defaultSerial = ss.str();
 
-    sequence->AddOperation(std::make_shared<DUTStartRecordingOperation>(dutSerialNumber));
+    // Ask user for serial number with auto-generated default
+    sequence->AddOperation(std::make_shared<UserInputOperation>(
+      "dut_serial",                          // storage key
+      "Enter DUT Serial Number",             // title
+      "Please enter the DUT serial number:\n"
+      "(Leave blank to use auto-generated)",  // prompt
+      promptUI,
+      defaultSerial,                         // default value (auto-generated)
+      true,                                  // required (but has default)
+      300                                    // 5 minute timeout
+    ));
+
+    // START DUT RECORDING - Use the user-provided serial number
+    sequence->AddOperation(std::make_shared<UseStoredInputOperation>(
+      "dut_serial",
+      [](MachineOperations& ops, const std::string& dutSerialNumber) {
+      // Create and execute DUTStartRecordingOperation with user input
+      auto startRecording = std::make_shared<DUTStartRecordingOperation>(dutSerialNumber);
+      return startRecording->Execute(ops);
+    }
+    ));
 
     // 2. Reset SMU instrument
     sequence->AddOperation(std::make_shared<ResetKeithleyOperation>(""));
@@ -71,7 +93,7 @@ namespace AuroraProcesses {
       "Click Yes to start.",
       promptUI));
 
-    // 5. Simple voltage sweep (data is recorded internally by SimpleVoltageSweepOperation)
+    // 5. Simple voltage sweep
     sequence->AddOperation(std::make_shared<SimpleVoltageSweepOperation>(
       0.0, 5.0, 21, 0.1, 100, ""));
 
@@ -109,23 +131,33 @@ namespace AuroraProcesses {
     sequence->AddOperation(std::make_shared<ResetKeithleyOperation>(""));
 
     // END DUT RECORDING AND EXPORT DATA
-    sequence->AddOperation(std::make_shared<DUTEndRecordingOperation>(true, true)); // Export both CSV and JSON
+    sequence->AddOperation(std::make_shared<DUTEndRecordingOperation>(true, true));
 
-    // 9. Completion message
-    sequence->AddOperation(UserPromptOperation::CreateBasic(
-      "Simple SMU Test Complete",
-      "Simple SMU test completed successfully!\n\n"
-      "✓ Basic functionality test\n"
-      "✓ Voltage sweep (0-5V, 21 steps)\n"
-      "✓ Current sweep (0-10mA, 11 steps)\n"
-      "✓ SMU safely reset\n"
-      "✓ Data saved to dut_saved/" + dutSerialNumber + "\n\n"
-      "Check logs and saved data files.",
-      promptUI));
+    // 9. Completion message with user's serial number
+    sequence->AddOperation(std::make_shared<UseStoredInputOperation>(
+      "dut_serial",
+      [&promptUI](MachineOperations& ops, const std::string& dutSerialNumber) {
+      // Create completion message with actual serial number used
+      auto completionPrompt = UserPromptOperation::CreateBasic(
+        "Simple SMU Test Complete",
+        "Simple SMU test completed successfully!\n\n"
+        "✓ Basic functionality test\n"
+        "✓ Voltage sweep (0-5V, 21 steps)\n"
+        "✓ Current sweep (0-10mA, 11 steps)\n"
+        "✓ SMU safely reset\n"
+        "✓ Data saved to dut_saved/" + dutSerialNumber + "\n\n"
+        "Serial Number: " + dutSerialNumber + "\n"
+        "Check logs and saved data files.",
+        promptUI);
+      return completionPrompt->Execute(ops);
+    }
+    ));
+
+    // Clear the stored input at the end
+    sequence->AddOperation(std::make_shared<ClearUserInputOperation>("dut_serial"));
 
     return sequence;
   }
-
   // ============================================================================
     // VERY BASIC TEST - Minimal SMU operations with specified client name
     // ============================================================================

@@ -2,6 +2,7 @@
 #include "UserPromptUI.h"
 #include <algorithm>
 #include <chrono>
+#include <cstring>  // for strncpy
 
 UserPromptUI::UserPromptUI()
   : m_isVisible(false)
@@ -14,8 +15,10 @@ UserPromptUI::UserPromptUI()
   , m_autoConfirmDelay(3.0f)
   , m_promptStartTime(0.0f)
   , m_autoConfirmTriggered(false)
-  , m_windowSizeCalculated(false)  // NEW: Track if size was calculated
-  , m_calculatedWindowSize(ImVec2(500, 300))  // NEW: Store calculated size
+  , m_windowSizeCalculated(false)
+  , m_calculatedWindowSize(ImVec2(500, 300))
+  , m_showInputPrompt(false)
+  , m_textInputRequested(false)
 {
 }
 
@@ -43,7 +46,6 @@ void UserPromptUI::RequestPrompt(const std::string& title, const std::string& me
   m_promptRequested = true;
   m_isVisible = true;
 
-  // NEW: Reset window sizing for new prompt
   m_windowSizeCalculated = false;
   m_autoConfirmTriggered = false;
   m_promptStartTime = GetCurrentTime();
@@ -62,7 +64,6 @@ void UserPromptUI::ShowPrompt(const std::string& title, const std::string& messa
   m_isPromptActive = true;
   m_isVisible = true;
 
-  // NEW: Reset window sizing for new prompt
   m_windowSizeCalculated = false;
   m_autoConfirmTriggered = false;
   m_promptStartTime = GetCurrentTime();
@@ -70,7 +71,6 @@ void UserPromptUI::ShowPrompt(const std::string& title, const std::string& messa
   ImGui::OpenPopup(m_title.c_str());
 }
 
-// NEW: Calculate window size once on appearance
 void UserPromptUI::CalculateWindowSize() {
   if (m_windowSizeCalculated) {
     return;
@@ -79,29 +79,199 @@ void UserPromptUI::CalculateWindowSize() {
   ImVec2 minSize = ImVec2(500, 300);
   ImVec2 maxSize = ImVec2(800, 600);
 
-  // Calculate content-based height estimation
-  float estimatedHeight = 120;  // Base height for header and buttons
+  float estimatedHeight = 120;
 
-  // Add height for title
   if (!m_title.empty() && m_title != "User Confirmation") {
     estimatedHeight += 30;
   }
 
-  // Add height for message (rough estimate based on text length)
   float messageLines = (float)m_message.length() / 80.0f;
   if (messageLines < 1.0f) messageLines = 1.0f;
   estimatedHeight += messageLines * 20.0f + 40;
 
-  // Add height for auto-confirm display
   if (m_autoConfirm) {
     estimatedHeight += 60;
   }
 
-  // Clamp to min/max
   estimatedHeight = (std::max)(minSize.y, (std::min)(estimatedHeight, maxSize.y));
 
   m_calculatedWindowSize = ImVec2(minSize.x, estimatedHeight);
   m_windowSizeCalculated = true;
+}
+
+// ===== NEW TEXT INPUT METHODS =====
+
+void UserPromptUI::RequestInput(const std::string& title, const std::string& message,
+  const std::string& defaultValue,
+  std::function<void(const std::string&, bool)> callback) {
+
+  std::lock_guard<std::mutex> lock(m_mutex);
+  m_inputTitle = title;
+  m_inputMessage = message;
+  m_inputDefaultValue = defaultValue;
+  m_inputBuffer = defaultValue;
+  m_inputCallback = callback;
+  m_showInputPrompt = true;
+}
+
+void UserPromptUI::RequestTextInput(const std::string& title,
+  const std::string& message,
+  const std::string& defaultValue,
+  std::function<void(bool, const std::string&)> callback) {
+  std::lock_guard<std::mutex> lock(m_mutex);
+
+  printf("[DEBUG] RequestTextInput called: title='%s', default='%s'\n",
+    title.c_str(), defaultValue.c_str());
+
+  m_inputTitle = title;
+  m_inputMessage = message;
+  m_inputDefaultValue = defaultValue;
+  m_inputBuffer = defaultValue;
+  m_textInputCallback = callback;
+  m_textInputRequested = true;
+  m_showInputPrompt = true;
+}
+
+void UserPromptUI::CompleteTextInput(bool accepted, const std::string& value) {
+  std::lock_guard<std::mutex> lock(m_mutex);
+
+  if (m_textInputCallback) {
+    m_textInputCallback(accepted, value);
+  }
+  if (m_inputCallback) {
+    m_inputCallback(value, accepted);
+  }
+
+  m_textInputRequested = false;
+  m_showInputPrompt = false;
+  m_textInputCallback = nullptr;
+  m_inputCallback = nullptr;
+  m_inputBuffer.clear();
+}
+
+void UserPromptUI::RenderTextInputDialog() {
+  if (!m_showInputPrompt) {
+    return;
+  }
+
+  // Open popup on first frame
+  static bool shouldOpen = false;
+  if (m_showInputPrompt && !ImGui::IsPopupOpen("TextInputDialog")) {
+    ImGui::OpenPopup("TextInputDialog");
+    shouldOpen = true;
+  }
+
+  // Center the popup
+  ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+  ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::SetNextWindowSize(ImVec2(450, 250), ImGuiCond_FirstUseEver);
+
+  if (ImGui::BeginPopupModal("TextInputDialog", nullptr,
+    ImGuiWindowFlags_AlwaysAutoResize)) {
+
+    // Title with styling
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.4f, 0.8f, 1.0f));
+    ImGui::Text("%s", m_inputTitle.c_str());
+    ImGui::PopStyleColor();
+
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // Message
+    ImGui::TextWrapped("%s", m_inputMessage.c_str());
+    ImGui::Spacing();
+
+    // Show default value hint
+    if (!m_inputDefaultValue.empty()) {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+      ImGui::Text("Default: %s", m_inputDefaultValue.c_str());
+      ImGui::PopStyleColor();
+    }
+
+    ImGui::Spacing();
+
+    // Text input field
+    static char inputBuffer[256];
+    if (shouldOpen) {
+      strncpy(inputBuffer, m_inputBuffer.c_str(), sizeof(inputBuffer) - 1);
+      inputBuffer[sizeof(inputBuffer) - 1] = '\0';
+      shouldOpen = false;
+    }
+
+    ImGui::Text("Enter value:");
+    ImGui::SetNextItemWidth(-1);
+    bool enterPressed = ImGui::InputText("##textinput", inputBuffer,
+      sizeof(inputBuffer),
+      ImGuiInputTextFlags_EnterReturnsTrue);
+
+    // Focus on text input when window appears
+    if (ImGui::IsWindowAppearing()) {
+      ImGui::SetKeyboardFocusHere(-1);
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // Buttons
+    float buttonWidth = 120.0f;
+    bool accepted = false;
+    bool useDefault = false;
+    bool cancelled = false;
+
+    // Center buttons
+    float availableWidth = ImGui::GetContentRegionAvail().x;
+    float totalButtonWidth = buttonWidth * 3 + 20;
+    float startX = (availableWidth - totalButtonWidth) * 0.5f;
+    if (startX > 0) {
+      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + startX);
+    }
+
+    // OK button
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 1.0f));
+    if (ImGui::Button("OK", ImVec2(buttonWidth, 0)) || enterPressed) {
+      accepted = true;
+    }
+    ImGui::PopStyleColor();
+
+    ImGui::SameLine();
+
+    // Use Default button
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+    if (ImGui::Button("Use Default", ImVec2(buttonWidth, 0))) {
+      useDefault = true;
+    }
+    ImGui::PopStyleColor();
+
+    ImGui::SameLine();
+
+    // Cancel button
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.3f, 1.0f));
+    if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0))) {
+      cancelled = true;
+    }
+    ImGui::PopStyleColor();
+
+    // Handle button actions
+    if (accepted) {
+      std::string finalValue(inputBuffer);
+      if (finalValue.empty()) {
+        finalValue = m_inputDefaultValue;
+      }
+      CompleteTextInput(true, finalValue);
+      ImGui::CloseCurrentPopup();
+    }
+    else if (useDefault) {
+      CompleteTextInput(true, m_inputDefaultValue);
+      ImGui::CloseCurrentPopup();
+    }
+    else if (cancelled) {
+      CompleteTextInput(false, m_inputDefaultValue);
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+  }
 }
 
 void UserPromptUI::Render() {
@@ -114,17 +284,16 @@ void UserPromptUI::Render() {
     }
   }
 
+  // Render text input dialog if requested
+  RenderTextInputDialog();
+
   if (!m_isVisible || !m_isPromptActive) {
     return;
   }
 
-  // Check auto-confirm before rendering
   CheckAutoConfirm();
-
-  // Calculate window size once on appearance
   CalculateWindowSize();
 
-  // Force focus on the next window if prompt just became active
   static bool needsFocus = false;
   {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -134,21 +303,15 @@ void UserPromptUI::Render() {
     }
   }
 
-  // Set window position and size
   ImVec2 center = ImGui::GetMainViewport()->GetCenter();
   ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-
-  // Use calculated size only on appearance
   ImGui::SetNextWindowSize(m_calculatedWindowSize, ImGuiCond_Appearing);
 
-  // Set size constraints for manual resizing
   ImVec2 minSize = ImVec2(400, 250);
   ImVec2 maxSize = ImVec2(900, 700);
   ImGui::SetNextWindowSizeConstraints(minSize, maxSize);
 
-  // Window flags - removed AlwaysAutoResize to prevent flickering
-  ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse |
-    ImGuiWindowFlags_NoDocking;
+  ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
 
   SetupPromptStyling();
 
@@ -157,7 +320,6 @@ void UserPromptUI::Render() {
 
   if (ImGui::Begin(windowID.c_str(), &isOpen, flags)) {
 
-    // Handle window focus
     if (ImGui::IsWindowAppearing()) {
       ImGui::SetWindowFocus();
       needsFocus = false;
@@ -198,16 +360,13 @@ void UserPromptUI::Render() {
     // Message with fixed scrollable area
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
 
-    // Calculate fixed available space for message
-    float reservedHeight = 200; // Reserve space for buttons and status
+    float reservedHeight = 200;
     float availableHeight = ImGui::GetContentRegionAvail().y - reservedHeight;
 
-    // Ensure minimum message area
     if (availableHeight < 60) availableHeight = 60;
 
     ImGui::Text("Message:");
 
-    // Always use scrollable region for consistent sizing
     ImGui::BeginChild("MessageScroll", ImVec2(0, availableHeight), true,
       ImGuiWindowFlags_HorizontalScrollbar);
     ImGui::TextWrapped("%s", m_message.c_str());
@@ -229,7 +388,6 @@ void UserPromptUI::Render() {
         ImGui::Text("Auto-confirming in %.1f seconds...", remaining);
         ImGui::PopStyleColor();
 
-        // Progress bar showing countdown
         float progress = elapsed / m_autoConfirmDelay;
         ImGui::ProgressBar(progress, ImVec2(-1, 0), "");
       }
@@ -241,7 +399,6 @@ void UserPromptUI::Render() {
       ImGui::Spacing();
     }
     else {
-      // Normal status message
       ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.3f, 0.0f, 1.0f));
       ImGui::Text("Program execution is PAUSED - Waiting for your decision...");
       ImGui::PopStyleColor();
@@ -253,17 +410,15 @@ void UserPromptUI::Render() {
     float buttonHeight = 40.0f;
     float buttonSpacing = 15.0f;
 
-    // Calculate button layout
     float availableWidth = ImGui::GetContentRegionAvail().x;
     float totalButtonWidth = buttonWidth * 3 + buttonSpacing * 2;
 
-    // Center buttons horizontally
     float startX = (availableWidth - totalButtonWidth) * 0.5f;
     if (startX > 0) {
       ImGui::SetCursorPosX(ImGui::GetCursorPosX() + startX);
     }
 
-    // YES button - highlight if auto-confirm is active
+    // YES button
     std::string yesID = "YES##prompt_yes_" + std::to_string((uintptr_t)this);
     if (m_autoConfirm && !m_autoConfirmTriggered) {
       ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
@@ -327,67 +482,9 @@ void UserPromptUI::Render() {
 
   RestoreDefaultStyling();
 
-  // Handle window close
   if (!isOpen) {
     OnCancelClicked();
   }
-
-
-  // Handle input prompt
-  if (m_showInputPrompt) {
-    ImGui::OpenPopup(m_inputTitle.c_str());
-
-    if (ImGui::BeginPopupModal(m_inputTitle.c_str(), nullptr,
-      ImGuiWindowFlags_AlwaysAutoResize)) {
-
-      ImGui::Text("%s", m_inputMessage.c_str());
-      ImGui::Separator();
-
-      // Input field
-      char buffer[256];
-      strncpy(buffer, m_inputBuffer.c_str(), sizeof(buffer) - 1);
-      buffer[sizeof(buffer) - 1] = '\0';
-
-      ImGui::SetKeyboardFocusHere();
-      if (ImGui::InputText("##input", buffer, sizeof(buffer),
-        ImGuiInputTextFlags_EnterReturnsTrue)) {
-        // Enter pressed - confirm input
-        m_inputBuffer = std::string(buffer);
-        if (m_inputCallback) {
-          m_inputCallback(m_inputBuffer, true);
-        }
-        m_showInputPrompt = false;
-        ImGui::CloseCurrentPopup();
-      }
-      else {
-        m_inputBuffer = std::string(buffer);
-      }
-
-      ImGui::Separator();
-
-      // Buttons
-      if (ImGui::Button("OK", ImVec2(120, 0))) {
-        if (m_inputCallback) {
-          m_inputCallback(m_inputBuffer, true);
-        }
-        m_showInputPrompt = false;
-        ImGui::CloseCurrentPopup();
-      }
-
-      ImGui::SameLine();
-
-      if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-        if (m_inputCallback) {
-          m_inputCallback("", false);
-        }
-        m_showInputPrompt = false;
-        ImGui::CloseCurrentPopup();
-      }
-
-      ImGui::EndPopup();
-    }
-  }
-
 }
 
 void UserPromptUI::CheckAutoConfirm() {
@@ -416,10 +513,9 @@ void UserPromptUI::Reset() {
   m_result = PromptResult::PENDING;
   m_callback = nullptr;
   m_autoConfirmTriggered = false;
-  m_windowSizeCalculated = false;  // NEW: Reset for next prompt
+  m_windowSizeCalculated = false;
 }
 
-// Button handlers
 void UserPromptUI::OnYesClicked() {
   printf("[DEBUG] OnYesClicked() called%s\n", m_autoConfirmTriggered ? " (auto-confirmed)" : "");
 
@@ -464,7 +560,6 @@ void UserPromptUI::OnCancelClicked() {
   }
 }
 
-// UI styling methods
 void UserPromptUI::SetupPromptStyling() {
   ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20, 20));
@@ -488,17 +583,4 @@ void UserPromptUI::SetupPromptStylingDark() {
   ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
   ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
   ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
-}
-
-// Add to UserPromptUI.cpp:
-void UserPromptUI::RequestInput(const std::string& title, const std::string& message,
-  const std::string& defaultValue,
-  std::function<void(const std::string&, bool)> callback) {
-
-  m_inputTitle = title;
-  m_inputMessage = message;
-  m_inputDefaultValue = defaultValue;
-  m_inputBuffer = defaultValue; // Initialize buffer with default
-  m_inputCallback = callback;
-  m_showInputPrompt = true;
 }
