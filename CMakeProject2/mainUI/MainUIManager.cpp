@@ -334,7 +334,21 @@ void MainUIManager::ConnectUIToServices() {
 		uiConfigVisualizer->SetMachineOperations(machineOps);
 	}
 
-
+	// FIXED code:
+	if (auto* cld101manager = GetCLD101x()) {
+		if (!m_cld101xEquipmentUI) {
+			m_cld101xEquipmentUI = std::make_unique<CLD101xEquipmentUI>();  // Default constructor
+			m_cld101xEquipmentUI->SetCLD101xManager(cld101manager);  // Set manager via setter
+		}
+		logger->LogInfo("MainUIManager: CLD101x Equipment UI connected");
+	}
+	else {
+		// Still create the UI even without manager - allows manual setup later
+		if (!m_cld101xEquipmentUI) {
+			m_cld101xEquipmentUI = std::make_unique<CLD101xEquipmentUI>();
+			logger->LogWarning("MainUIManager: CLD101x Equipment UI created without manager");
+		}
+	}
 
 
 	logger->LogInfo("MainUIManager: Service connections complete");
@@ -1022,23 +1036,7 @@ void MainUIManager::RenderDataInstrumentPage() {
 
 // Add new method to handle Data Instrument sub-pages
 
-// ==============================================================================
-// HEADER FILE CHANGES (MainUIManager.h)
-// ==============================================================================
 
-// 1. UPDATE the DataInstrumentSubPage enum - RENAME CLD101X_TEC to CLD101X_EQUIPMENT:
-enum class DataInstrumentSubPage {
-	NONE,
-	GLOBAL_DATA_STORE,
-	TCP_DATA_MANAGER,
-	CLD101X_EQUIPMENT,    // RENAMED from CLD101X_TEC
-	SMU_MANAGER
-};
-
-// 2. UPDATE method declaration in private section:
-// CHANGE: void RenderCld101xTecPage();
-// TO:
-void RenderCld101xEquipmentPage();
 
 
 // ==============================================================================
@@ -1121,31 +1119,22 @@ void MainUIManager::SetCLD101xManager(CLD101xManager* cld101xManager) {
 
 
 void MainUIManager::RenderCld101xEquipmentPage() {
-	if (m_cld101xManager) {
-		// Use ONLY the manager's built-in UI - no duplication
-		m_cld101xManager->RenderUI();
-
-		// REMOVE the duplicate client rendering loop:
-		// auto clientNames = m_cld101xManager->GetClientNames();
-		// for (const auto& clientName : clientNames) { ... }
+	if (m_cld101xEquipmentUI) {
+		// Use the equipment UI directly
+		m_cld101xEquipmentUI->Render();
 	}
 	else {
-		// Fallback when manager not available
+		// Fallback when UI not available
 		ImGui::SetWindowFontScale(1.5f);
 		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "CLD101x Equipment Control");
 		ImGui::SetWindowFontScale(1.0f);
 
 		ImGui::Spacing();
-		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "CLD101x Manager not available");
-		ImGui::Text("Equipment control is not initialized.");
-		ImGui::Spacing();
-		ImGui::Text("This typically means:");
-		ImGui::BulletText("CLD101x manager is still loading");
-		ImGui::BulletText("No CLD101x devices are configured");
-		ImGui::BulletText("Hardware connection issues");
-		ImGui::BulletText("Check network connectivity to laser controllers");
+		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "CLD101x UI not initialized");
+		ImGui::Text("This is an internal error - please check the console for details.");
 	}
 }
+
 
 // Update RenderSmuManagerPage() method to use the dedicated UI:
 void MainUIManager::RenderSmuManagerPage() {
@@ -1926,4 +1915,19 @@ Keithley2400Manager* MainUIManager::GetKeithley() const {
 		if (auto* keithley = m_context->GetKeithley()) return keithley;
 	}
 	return m_keithleyManager;  // Fallback to old way
+}
+
+CLD101xManager* MainUIManager::GetCLD101x() const {
+	if (m_context) {
+		if (auto* cld101x = m_context->GetCLD101x()) {
+			Logger::GetInstance()->LogInfo("GetCLD101x: Found in AppContext");
+			return cld101x;
+		}
+	}
+	if (m_cld101xManager) {
+		Logger::GetInstance()->LogInfo("GetCLD101x: Using fallback member variable");
+		return m_cld101xManager;
+	}
+	Logger::GetInstance()->LogWarning("GetCLD101x: No CLD101x manager available!");
+	return nullptr;
 }

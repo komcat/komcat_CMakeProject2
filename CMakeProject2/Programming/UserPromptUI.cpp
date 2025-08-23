@@ -331,6 +331,63 @@ void UserPromptUI::Render() {
   if (!isOpen) {
     OnCancelClicked();
   }
+
+
+  // Handle input prompt
+  if (m_showInputPrompt) {
+    ImGui::OpenPopup(m_inputTitle.c_str());
+
+    if (ImGui::BeginPopupModal(m_inputTitle.c_str(), nullptr,
+      ImGuiWindowFlags_AlwaysAutoResize)) {
+
+      ImGui::Text("%s", m_inputMessage.c_str());
+      ImGui::Separator();
+
+      // Input field
+      char buffer[256];
+      strncpy(buffer, m_inputBuffer.c_str(), sizeof(buffer) - 1);
+      buffer[sizeof(buffer) - 1] = '\0';
+
+      ImGui::SetKeyboardFocusHere();
+      if (ImGui::InputText("##input", buffer, sizeof(buffer),
+        ImGuiInputTextFlags_EnterReturnsTrue)) {
+        // Enter pressed - confirm input
+        m_inputBuffer = std::string(buffer);
+        if (m_inputCallback) {
+          m_inputCallback(m_inputBuffer, true);
+        }
+        m_showInputPrompt = false;
+        ImGui::CloseCurrentPopup();
+      }
+      else {
+        m_inputBuffer = std::string(buffer);
+      }
+
+      ImGui::Separator();
+
+      // Buttons
+      if (ImGui::Button("OK", ImVec2(120, 0))) {
+        if (m_inputCallback) {
+          m_inputCallback(m_inputBuffer, true);
+        }
+        m_showInputPrompt = false;
+        ImGui::CloseCurrentPopup();
+      }
+
+      ImGui::SameLine();
+
+      if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+        if (m_inputCallback) {
+          m_inputCallback("", false);
+        }
+        m_showInputPrompt = false;
+        ImGui::CloseCurrentPopup();
+      }
+
+      ImGui::EndPopup();
+    }
+  }
+
 }
 
 void UserPromptUI::CheckAutoConfirm() {
@@ -431,4 +488,17 @@ void UserPromptUI::SetupPromptStylingDark() {
   ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
   ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
   ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+}
+
+// Add to UserPromptUI.cpp:
+void UserPromptUI::RequestInput(const std::string& title, const std::string& message,
+  const std::string& defaultValue,
+  std::function<void(const std::string&, bool)> callback) {
+
+  m_inputTitle = title;
+  m_inputMessage = message;
+  m_inputDefaultValue = defaultValue;
+  m_inputBuffer = defaultValue; // Initialize buffer with default
+  m_inputCallback = callback;
+  m_showInputPrompt = true;
 }

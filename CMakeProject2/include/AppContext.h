@@ -17,7 +17,7 @@
 #include <vector>
 #include <string>
 #include "logger.h"
-
+#include "include/data/DUTDataRecorder.h"
 // === FORWARD DECLARATIONS ===
 // Use forward declarations to minimize include dependencies
 class MotionConfigManager;
@@ -41,6 +41,7 @@ class OperationResultsManager;
 class Logger;
 class ConfigFileWatchdog;
 class IOperations;
+class DUTDataRecorder;
 
 /**
  * Application Context - Centralized service container
@@ -82,6 +83,9 @@ public:
   IOOps* ioOps = nullptr;
   VisionOps* visionOps = nullptr;
 
+  // DUT
+  DUTDataRecorder* dutDataRecorder = nullptr;
+
 private:
   // === Operations Registry for Scripting Interface ===
   std::map<std::string, IOperations*> m_operationsRegistry;
@@ -105,6 +109,8 @@ private:
   MotionOps* m_motionOpsPtr = nullptr;
   IOOps* m_ioOpsPtr = nullptr;
   VisionOps* m_visionOpsPtr = nullptr;
+  DUTDataRecorder* m_dutDataRecorderPtr = nullptr;
+
 
 public:
   // === Singleton Access ===
@@ -305,6 +311,14 @@ public:
   void RegisterConfigWatchdog(ConfigFileWatchdog* service) {
     configWatchdog = service;
   }
+  void RegisterExistingDUTDataRecorder(DUTDataRecorder* service) {
+    dutDataRecorder = service;
+    m_dutDataRecorderPtr = service;
+    if (dutDataRecorder) {
+      GetLogger()->LogInfo("AppContext: DUTDataRecorder registered");
+    }
+  }
+
 
   // === Safe Access Methods ===
   Logger* GetLogger() const { return Logger::GetInstance(); }
@@ -394,6 +408,12 @@ public:
     return visionOps ? visionOps : m_visionOpsPtr;
   }
 
+  // 5. Add safe access method (following your GetXXX pattern):
+  DUTDataRecorder* GetDUTDataRecorder() const {
+    return dutDataRecorder ? dutDataRecorder : m_dutDataRecorderPtr;
+  }
+
+
   // === Service Status Check ===
   bool IsInitialized() const {
     return Logger::GetInstance() != nullptr && motionConfigManager != nullptr;
@@ -450,6 +470,12 @@ public:
     log->LogInfo("  - Motion Ops: " + std::string(GetMotionOps() ? "✓" : "✗"));
     log->LogInfo("  - IO Ops: " + std::string(GetIOOps() ? "✓" : "✗"));
     log->LogInfo("  - Vision Ops: " + std::string(GetVisionOps() ? "✓" : "✗"));
+
+    // ADD THIS SECTION after "High-Level Operations:" section:
+    log->LogInfo("Data Recording:");
+    log->LogInfo("  - DUT Data Recorder: " + std::string(GetDUTDataRecorder() ? "✓" : "✗"));
+
+
   }
 
   // === Enhanced Operations Status (Future) ===

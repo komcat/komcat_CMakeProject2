@@ -8,6 +8,7 @@
 #include "UICameraPanel.h"
 #include "TCPDataManagerUI.h"
 #include "include/data/data_client_manager.h"
+#include "CLD101xEquipmentUI.h"
 #include "include/machine_operations.h"
 #include "GlobalDataStoreViewerUI.h"
 //#include "CLD101xEquipmentUI.h"
@@ -123,6 +124,7 @@ public:
   RunPageUI* GetRunPageUI() const { return m_runPageUI.get(); }
   UserPromptUI* GetUserPromptUI() const { return m_promptUI.get(); }
   UIVisionPanel* GetVisionPanel() const { return m_visionPanelUI.get(); }
+	CLD101xEquipmentUI* GetCLD101xEquipmentUI() const { return m_cld101xEquipmentUI.get(); }
   DatumUI* GetDatumUI() const { return m_datumUI.get(); }
   MachineOperations* GetMachineOperations();
 
@@ -156,6 +158,7 @@ private:
   PneumaticManager* GetPneumaticManager() const;
   DataClientManager* GetDataClient() const;
   Keithley2400Manager* GetKeithley() const;
+  CLD101xManager* GetCLD101x() const;
 
   // === KEEP OLD MEMBER VARIABLES (for backward compatibility) ===
   PIControllerManager* m_piControllerManager = nullptr;
@@ -192,6 +195,7 @@ private:
   std::unique_ptr<UserPromptUI> m_promptUI;
   std::unique_ptr<UIVisionPanel> m_visionPanelUI;
   std::unique_ptr<DatumUI> m_datumUI;
+	std::unique_ptr<CLD101xEquipmentUI> m_cld101xEquipmentUI;
 
   // Utility members
   ImFont* m_imguiFont = nullptr;

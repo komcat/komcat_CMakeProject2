@@ -4,7 +4,11 @@
 
 #include "NewProcesses_Aurora.h"
 #include "ProcessRegistry.h"
+#include "SequenceStep.h"  // Has DUT operations
 #include <memory>
+#include <chrono>       // For timestamp
+#include <sstream>      // For stringstream
+#include <iomanip>      // For put_time
 
 namespace AuroraProcesses {
 
@@ -27,6 +31,15 @@ namespace AuroraProcesses {
       "Click Yes to continue.",
       promptUI));
 
+    // START DUT RECORDING - Use a test serial number or timestamp
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    std::stringstream ss;
+    ss << "DUT_" << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
+    std::string dutSerialNumber = ss.str();
+
+    sequence->AddOperation(std::make_shared<DUTStartRecordingOperation>(dutSerialNumber));
+
     // 2. Reset SMU instrument
     sequence->AddOperation(std::make_shared<ResetKeithleyOperation>(""));
 
@@ -36,7 +49,18 @@ namespace AuroraProcesses {
 
     sequence->AddOperation(std::make_shared<SetKeithleyOutputOperation>(true, ""));
     sequence->AddOperation(std::make_shared<SMUWaitOperation>(1000, "Output ON test"));
+
+    // Read and record initial voltage/current using correct channel names
     sequence->AddOperation(std::make_shared<ReadKeithleyVoltageOperation>(""));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SMU1-Voltage"));
+
+    sequence->AddOperation(std::make_shared<ReadKeithleyCurrentOperation>(""));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SMU1-Current"));
+
+    // Also record power and resistance if available
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SMU1-Power"));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SMU1-Resistance"));
+
     sequence->AddOperation(std::make_shared<SetKeithleyOutputOperation>(false, ""));
 
     // 4. User confirmation for voltage sweep
@@ -47,9 +71,16 @@ namespace AuroraProcesses {
       "Click Yes to start.",
       promptUI));
 
-    // 5. Simple voltage sweep
+    // 5. Simple voltage sweep (data is recorded internally by SimpleVoltageSweepOperation)
     sequence->AddOperation(std::make_shared<SimpleVoltageSweepOperation>(
       0.0, 5.0, 21, 0.1, 100, ""));
+
+    // Record values after voltage sweep
+    sequence->AddOperation(std::make_shared<ReadKeithleyVoltageOperation>(""));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SMU1-Voltage"));
+
+    sequence->AddOperation(std::make_shared<ReadKeithleyCurrentOperation>(""));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SMU1-Current"));
 
     // 6. User confirmation for current sweep
     sequence->AddOperation(UserPromptOperation::CreateBasic(
@@ -63,8 +94,22 @@ namespace AuroraProcesses {
     sequence->AddOperation(std::make_shared<QuickCurrentSweepOperation>(
       QuickCurrentSweepOperation::MILLI_CURRENT, ""));
 
+    // Record final values after current sweep
+    sequence->AddOperation(std::make_shared<ReadKeithleyVoltageOperation>(""));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SMU1-Voltage"));
+
+    sequence->AddOperation(std::make_shared<ReadKeithleyCurrentOperation>(""));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SMU1-Current"));
+
+    // Record power and resistance at the end
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SMU1-Power"));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SMU1-Resistance"));
+
     // 8. Safety shutdown
     sequence->AddOperation(std::make_shared<ResetKeithleyOperation>(""));
+
+    // END DUT RECORDING AND EXPORT DATA
+    sequence->AddOperation(std::make_shared<DUTEndRecordingOperation>(true, true)); // Export both CSV and JSON
 
     // 9. Completion message
     sequence->AddOperation(UserPromptOperation::CreateBasic(
@@ -73,8 +118,9 @@ namespace AuroraProcesses {
       "✓ Basic functionality test\n"
       "✓ Voltage sweep (0-5V, 21 steps)\n"
       "✓ Current sweep (0-10mA, 11 steps)\n"
-      "✓ SMU safely reset\n\n"
-      "Check logs for measurement data.",
+      "✓ SMU safely reset\n"
+      "✓ Data saved to dut_saved/" + dutSerialNumber + "\n\n"
+      "Check logs and saved data files.",
       promptUI));
 
     return sequence;

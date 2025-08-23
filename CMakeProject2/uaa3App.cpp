@@ -823,57 +823,32 @@ int main(int argc, char* argv[])
 
 	cld101xManager = std::make_unique<CLD101xManager>();
 
-	//// Try to initialize with error checking
-	//if (cld101xManager->Initialize()) {
-	//	logger->LogInfo("CLD101x Manager initialized successfully");
-
-	//	// Try to connect to laser hardware
-	//	if (cld101xManager->ConnectAll()) {
-	//		logger->LogInfo("Successfully connected to CLD101x laser systems");
-	//		// Only create laserOps after successful connection
-	//		laserOps = std::make_unique<CLD101xOperations>(*cld101xManager);
-	//		logger->LogInfo("CLD101x operations module created");
-	//	}
-	//	else {
-	//		logger->LogWarning("Failed to connect to CLD101x laser hardware");
-	//		logger->LogInfo("Laser operations will be disabled - system will run without laser control");
-	//		// laserOps remains nullptr - this is safe and intentional
-	//	}
-	//}
-	//else {
-	//	logger->LogError("Failed to initialize CLD101x Manager");
-	//	logger->LogInfo("Laser operations will be disabled - system will run without laser control");
-	//	// laserOps remains nullptr - this is safe and intentional
-	//}
-
 	// After creating cld101xManager, before creating MachineOperations:
-// After creating cld101xManager, before creating MachineOperations:
 	if (cld101xManager) {
-		logger->LogInfo("=== MANUAL CLD101x CONNECTION ATTEMPT ===");
+		logger->LogInfo("=== CLD101x MANAGER INITIALIZATION ===");
 
-		// Manually add the client that the UI successfully connects to
+		// Enable global data store for all clients
+		cld101xManager->EnableGlobalDataStoreForAll(true);
+		logger->LogInfo("Enabled Global Data Store for CLD101x");
+
+		// Manually add the client
 		logger->LogInfo("Adding CLD101x client: 127.0.0.88:65432");
-		cld101xManager->AddClient("CLD101x", "127.0.0.88", 65432);
+		bool clientAdded = cld101xManager->AddClient("CLD101x", "127.0.0.88", 65432);
+		logger->LogInfo("Client added: " + std::string(clientAdded ? "SUCCESS" : "FAILED"));
 
+		// Try to connect (but don't require success for UI to work)
 		logger->LogInfo("Attempting ConnectAll()...");
 		if (cld101xManager->ConnectAll()) {
 			logger->LogInfo("ConnectAll() returned SUCCESS");
-			logger->LogInfo("Creating CLD101xOperations...");
 			laserOps = std::make_unique<CLD101xOperations>(*cld101xManager);
-
-			if (laserOps) {
-				logger->LogInfo("LaserOps successfully created!");
-			}
-			else {
-				logger->LogError("LaserOps creation FAILED!");
-			}
 		}
 		else {
-			logger->LogError("ConnectAll() returned FAILURE");
+			logger->LogWarning("ConnectAll() returned FAILURE - UI will still be available for manual connection");
+			// Don't create laserOps, but keep cld101xManager for UI
 		}
 
-		logger->LogInfo("Final laserOps status: " + std::string(laserOps ? "AVAILABLE" : "NULL"));
-		logger->LogInfo("=== END MANUAL CONNECTION ===");
+		logger->LogInfo("CLD101xManager ready for UI (connection can be done manually)");
+		logger->LogInfo("=== END CLD101x INITIALIZATION ===");
 	}
 
 
@@ -994,7 +969,9 @@ int main(int argc, char* argv[])
 		logger->LogInfo("  - pneumaticManager: " + std::string(pneumaticManager ? "AVAILABLE" : "MISSING"));
 	}
 
-
+	// Create DUT Data Recorder
+	std::unique_ptr<DUTDataRecorder> dutDataRecorder = std::make_unique<DUTDataRecorder>();
+	logger->LogInfo("DUTDataRecorder created successfully");
 
 
 	// ================================================================
@@ -1035,8 +1012,10 @@ int main(int argc, char* argv[])
 	if (dataClientManager) {
 		context.RegisterExistingDataClient(dataClientManager.get());
 	}
+	// Register CLD101x with context (even if not connected)
 	if (cld101xManager) {
 		context.RegisterExistingCLD101x(cld101xManager.get());
+		logger->LogInfo("✅ CLD101xManager registered with AppContext");
 	}
 	if (keithleyManager) {
 		context.RegisterExistingKeithley(keithleyManager.get());
@@ -1157,18 +1136,14 @@ int main(int argc, char* argv[])
 	if (visionOps) {
 		context.RegisterExistingVisionOps(visionOps.get());
 	}
-
+	// Register DUT Data Recorder
+	if (dutDataRecorder) {
+		context.RegisterExistingDUTDataRecorder(dutDataRecorder.get());
+	}
 	logger->LogInfo("✅ All services registered with AppContext");
 	context.LogInitializationStatus();
 
 
-
-	// ================================================================
-// FIXED: Clean AppContext usage
-// ================================================================
-
-	logger->LogInfo("✅ All services registered with AppContext");
-	context.LogInitializationStatus();
 
 	// CREATE MainUIManager with AppContext
 	MainUIManager uiManager(context);

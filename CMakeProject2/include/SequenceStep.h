@@ -1,7 +1,8 @@
 ﻿#pragma once
-
+//#include "AppContext.h"
 #include "ProcessStep.h"
 #include "include/SMU/keithley2400_operations.h"
+
 #include <vector>
 #include <string>
 #include <functional>
@@ -16,6 +17,7 @@
 #include <cmath>        // for std::pow, std::sqrt
 #include <limits>       // for std::numeric_limits
 
+class AppContext;  // ADD THIS
 
 // Represents an operation in a sequence
 class SequenceOperation {
@@ -4479,3 +4481,53 @@ sequence->AddOperation(std::make_shared<CurrentSweepOperation>(
 sequence->AddOperation(std::make_shared<SimpleVoltageSweepOperation>(
   SimpleVoltageSweepOperation::HIGH_VOLTAGE, ""));
 */
+
+// Add these new operation classes to SequenceStep.h or a new DUTOperations.h file
+
+
+// Then your DUT operations can use the forward declared AppContext:
+class DUTStartRecordingOperation : public SequenceOperation {
+public:
+  DUTStartRecordingOperation(const std::string& serialNumber)
+    : m_serialNumber(serialNumber) {
+  }
+
+  bool Execute(MachineOperations& ops) override;  // Implement in .cpp
+  std::string GetDescription() const override {
+    return "Start DUT recording for " + m_serialNumber;
+  }
+
+private:
+  std::string m_serialNumber;
+};
+
+class DUTRecordDataOperation : public SequenceOperation {
+public:
+  DUTRecordDataOperation(const std::string& dataKey)
+    : m_dataKey(dataKey) {
+  }
+
+  bool Execute(MachineOperations& ops) override;  // Implement in .cpp
+  std::string GetDescription() const override {
+    return "Record DUT data: " + m_dataKey;
+  }
+
+private:
+  std::string m_dataKey;
+};
+
+class DUTEndRecordingOperation : public SequenceOperation {
+public:
+  DUTEndRecordingOperation(bool exportCsv = true, bool exportJson = false)
+    : m_exportCsv(exportCsv), m_exportJson(exportJson) {
+  }
+
+  bool Execute(MachineOperations& ops) override;  // Implement in .cpp
+  std::string GetDescription() const override {
+    return "End DUT recording and export data";
+  }
+
+private:
+  bool m_exportCsv;
+  bool m_exportJson;
+};

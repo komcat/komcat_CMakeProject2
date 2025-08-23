@@ -4046,3 +4046,32 @@ bool MachineOperations::StopAllMovement() {
 //    m_logger->LogInfo("MachineOperations: Forced position update completed");
 //  }
 //}
+
+bool MachineOperations::GetDataValue(const std::string& dataKey, double& value,
+  const std::string& callerContext) {
+  // Log operation
+  LogInfo("GetDataValue for key: " + dataKey +
+    (callerContext.empty() ? "" : " (context: " + callerContext + ")"));
+
+  GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+  if (!dataStore) {
+    LogError("GlobalDataStore not available");
+    return false;
+  }
+
+  // Check if the channel exists
+  std::vector<std::string> channels = dataStore->GetAvailableChannels();
+  bool channelExists = std::find(channels.begin(), channels.end(), dataKey) != channels.end();
+
+  if (!channelExists) {
+    LogWarning("Data key '" + dataKey + "' not found in available channels");
+    // Still get the value (will return default 0.0)
+  }
+
+  // Get the value
+  value = dataStore->GetValue(dataKey, 0.0);
+
+  LogInfo("Retrieved value: " + std::to_string(value));
+
+  return true;
+}

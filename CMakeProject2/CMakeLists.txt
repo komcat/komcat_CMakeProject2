@@ -238,15 +238,24 @@ endif()
 
 # Set include directory paths
 set(MAINUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mainUI")
+set(INCL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
 set(INCL_CAMERA "${CMAKE_CURRENT_SOURCE_DIR}/include/camera")
+set(INCL_DATA "${CMAKE_CURRENT_SOURCE_DIR}/include/data")
+set(INCL_MOTIONS "${CMAKE_CURRENT_SOURCE_DIR}/include/motions")
+set(INCL_EZIIO "${CMAKE_CURRENT_SOURCE_DIR}/include/eziio")
+set(INCL_SMU "${CMAKE_CURRENT_SOURCE_DIR}/include/SMU")
+set(INCL_SCANNING "${CMAKE_CURRENT_SOURCE_DIR}/include/scanning")
+set(INCL_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/include/script")
+set(INCL_UI "${CMAKE_CURRENT_SOURCE_DIR}/include/ui")
+set(INCLUDE_HALCON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/halcon")
+set(INCLUDE_VISION_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/vision")
 set(INCL_OPS "${CMAKE_CURRENT_SOURCE_DIR}/include/ops")
 set(INCL_PRODUCTS "${CMAKE_CURRENT_SOURCE_DIR}/include/Products")
 set(INCL_PROGRAM "${CMAKE_CURRENT_SOURCE_DIR}/Programming")
-set(INCL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
+
 set(INCL_PROCESSES "${CMAKE_CURRENT_SOURCE_DIR}/Processes")
 set(INCL_Uaa3_PROCESSES "${CMAKE_CURRENT_SOURCE_DIR}/Processes/UAA3ProcessBuilders")
-set(INCLUDE_HALCON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/halcon")
-set(INCLUDE_VISION_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/vision")
+
 
 # Add source to this project's executable
 add_executable(uaa3App 
@@ -614,7 +623,11 @@ add_executable(uaa3App
  "include/AppContext.cpp"
  
  "Processes/AuroraProcesses/NewProcesses_Aurora.h"
- "Processes/AuroraProcesses/NewProcesses_Aurora.cpp" "include/SequenceStep_SMU.h")
+ "Processes/AuroraProcesses/NewProcesses_Aurora.cpp"
+  "include/data/DUTDataRecorder.h"
+  "include/data/DUTDataRecorder.cpp"
+
+   "include/DUTOperations.cpp")
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
@@ -650,6 +663,13 @@ target_include_directories(uaa3App PRIVATE
   ${INCL_OPS}
   ${INCL_PROGRAM}
   ${INCL_DIR}
+  ${INCL_DATA}
+  ${INCL_MOTIONS}
+  ${INCL_EZIIO}
+  ${INCL_SMU}
+  ${INCL_SCANNING}
+  ${INCL_SCRIPT}
+  ${INCL_UI}
   ${INCL_PROCESSES}
   ${INCL_Uaa3_PROCESSES}
   ${FREETYPE_INCLUDE_DIR}

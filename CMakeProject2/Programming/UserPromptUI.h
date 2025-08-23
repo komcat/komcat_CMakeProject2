@@ -64,6 +64,14 @@ public:
     return m_autoConfirmDelay;
   }
 
+
+  /// <summary>
+  /// Request text input from user with callback
+  /// </summary>
+  void RequestInput(const std::string& title, const std::string& message,
+    const std::string& defaultValue,
+    std::function<void(const std::string&, bool)> callback);
+
 private:
   bool m_isVisible;
   bool m_isPromptActive;
@@ -103,4 +111,13 @@ private:
 
   // NEW: Window sizing helper
   void CalculateWindowSize();
+
+
+  // Input prompt state
+  bool m_showInputPrompt = false;
+  std::string m_inputTitle;
+  std::string m_inputMessage;
+  std::string m_inputDefaultValue;
+  std::string m_inputBuffer;
+  std::function<void(const std::string&, bool)> m_inputCallback;
 };

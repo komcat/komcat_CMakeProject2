@@ -478,6 +478,8 @@ public:
 		m_motionLayer.UpdateRealtimePositions();
 	}
 
+	bool GetDataValue(const std::string& dataKey, double& value,
+		const std::string& callerContext = "");
 
 private:
 	
@@ -559,6 +561,8 @@ private:
 	// Helper method for consistent result storage
 	void StorePositionResult(const std::string& operationId, const std::string& prefix,
 		const PositionStruct& position);
+
+
 };
 
 
