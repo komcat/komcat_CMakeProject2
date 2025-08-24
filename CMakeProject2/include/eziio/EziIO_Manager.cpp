@@ -411,7 +411,7 @@ bool EziIOManager::disconnectDevice(int deviceId) {
 bool EziIOManager::readInputs(int deviceId, uint32_t& inputs, uint32_t& latch) {
   auto device = getDevice(deviceId);
   if (!device) {
-    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
+    //std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
     return false;
   }
 
@@ -421,7 +421,7 @@ bool EziIOManager::readInputs(int deviceId, uint32_t& inputs, uint32_t& latch) {
 bool EziIOManager::getLastInputStatus(int deviceId, uint32_t& inputs, uint32_t& latch) {
   auto device = getDevice(deviceId);
   if (!device) {
-    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
+    //std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
     return false;
   }
 
@@ -431,7 +431,7 @@ bool EziIOManager::getLastInputStatus(int deviceId, uint32_t& inputs, uint32_t& 
 bool EziIOManager::getOutputs(int deviceId, uint32_t& outputs, uint32_t& status) {
   auto device = getDevice(deviceId);
   if (!device) {
-    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
+    //std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
     return false;
   }
 
@@ -441,7 +441,7 @@ bool EziIOManager::getOutputs(int deviceId, uint32_t& outputs, uint32_t& status)
 bool EziIOManager::getLastOutputStatus(int deviceId, uint32_t& outputs, uint32_t& status) {
   auto device = getDevice(deviceId);
   if (!device) {
-    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
+    //std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
     return false;
   }
 
