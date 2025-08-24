@@ -1,9 +1,5 @@
 ﻿# Simplified CMakeLists.txt for uaa3App with SDL2, ImGui, Pylon SDK, and PI GCS2 support
 cmake_minimum_required(VERSION 3.12)
-
-
-
-
 project(CMakeProject2)
 
 
