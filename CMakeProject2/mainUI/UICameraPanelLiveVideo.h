@@ -61,7 +61,7 @@ private:
   void UpdateGrabbingState();
 
   // Texture management
-  void UpdateTextureFromFrameData(const class CameraFrameData& frameData);
+  void UpdateTextureFromFrameData(const struct CameraFrameData& frameData);
   void CleanupTexture();
 
   // Validation

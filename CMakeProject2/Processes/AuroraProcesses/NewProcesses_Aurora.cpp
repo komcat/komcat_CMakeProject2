@@ -33,11 +33,15 @@ namespace AuroraProcesses {
       promptUI));
 
     // NEW: Get DUT serial number from user instead of auto-generating
-    // Generate a default suggestion based on timestamp
+// Generate a default suggestion based on timestamp
     auto now = std::chrono::system_clock::now();
     auto time_t = std::chrono::system_clock::to_time_t(now);
     std::stringstream ss;
-    ss << "DUT_" << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
+
+    // Use localtime_s for Windows
+    std::tm timeinfo;
+    localtime_s(&timeinfo, &time_t);
+    ss << "DUT_" << std::put_time(&timeinfo, "%Y%m%d_%H%M%S");
     std::string defaultSerial = ss.str();
 
     // Ask user for serial number with auto-generated default

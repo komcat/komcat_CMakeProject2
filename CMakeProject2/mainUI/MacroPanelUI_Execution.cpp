@@ -242,7 +242,7 @@ void MacroPanelUI::RenderAvailablePrograms() {
     }
 
     ImGui::PushItemWidth(-1);
-    ImGui::Combo("##ProgramSelect", &m_selectedProgramIndex, items.data(), items.size());
+    ImGui::Combo("##ProgramSelect", &m_selectedProgramIndex, items.data(), static_cast<int>(items.size()));
     ImGui::PopItemWidth();
 
     // Add button

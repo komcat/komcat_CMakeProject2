@@ -409,7 +409,7 @@ void UINodeListWindow::UpdateMovementProgress() {
     auto it = m_nodeMap.find(m_movingToNode);
     double estimatedTime = (it != m_nodeMap.end()) ? it->second.estimatedTime : 10.0;
 
-    float calculatedProgress = static_cast<float>(elapsed.count()) / (estimatedTime * 1000.0f);
+    float calculatedProgress = static_cast<float>(elapsed.count()) / (static_cast<float>(estimatedTime) * 1000.0f);
     m_moveProgress = (std::min)(1.0f, calculatedProgress);
 
     // Check if movement should be complete (this is simplified - in reality you'd check device status)
@@ -442,7 +442,7 @@ void UINodeListWindow::RenderUI() {
 
   // Update current position periodically
   static float lastUpdate = 0.0f;
-  float currentTime = ImGui::GetTime();
+  float currentTime = static_cast<float>(ImGui::GetTime());
   if (currentTime - lastUpdate > 1.0f) { // Update every second
     UpdateCurrentPosition();
     lastUpdate = currentTime;

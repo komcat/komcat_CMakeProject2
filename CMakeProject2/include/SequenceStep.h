@@ -2311,9 +2311,10 @@ public:
     float promptToResponseMs = std::numeric_limits<float>::quiet_NaN();
 
     if (userResponded && m_enableResponseTimeTracking) {
-      responseTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+      responseTimeMs = std::chrono::duration<float, std::milli>(
         userResponseTime - startTime).count();
-      promptToResponseMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+
+      promptToResponseMs = std::chrono::duration<float, std::milli>(
         userResponseTime - promptDisplayTime).count();
     }
 

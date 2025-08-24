@@ -231,8 +231,8 @@ bool ACSController::Connect(const std::string& ipAddress, int port) {
   // Attempt to connect to the controller
   // ACS requires a non-const char buffer for the IP address
   char ipBuffer[64];
-  strncpy(ipBuffer, m_ipAddress.c_str(), sizeof(ipBuffer) - 1);
-  ipBuffer[sizeof(ipBuffer) - 1] = '\0'; // Ensure null termination
+  strncpy_s(ipBuffer, sizeof(ipBuffer), m_ipAddress.c_str(), _TRUNCATE);
+  // No need for manual null termination - strncpy_s handles it
 
   m_controllerId = acsc_OpenCommEthernet(ipBuffer, m_port);
 
@@ -892,8 +892,10 @@ void ACSController::RenderUI() {
   if (!m_isConnected) {
     // Show connection controls
     char ipBuffer[64];
-    strncpy(ipBuffer, m_ipAddress.empty() ? "192.168.0.50" : m_ipAddress.c_str(), sizeof(ipBuffer) - 1);
-    ipBuffer[sizeof(ipBuffer) - 1] = '\0';
+    strncpy_s(ipBuffer, sizeof(ipBuffer),
+      m_ipAddress.empty() ? "192.168.0.50" : m_ipAddress.c_str(),
+      _TRUNCATE);
+    // No need for manual null termination - strncpy_s handles it
 
     int port = m_port == 0 ? ACSC_SOCKET_STREAM_PORT : m_port;
 
@@ -1236,8 +1238,7 @@ bool ACSController::RunBuffer(int bufferNumber, const std::string& labelName) {
     }
 
     // Copy to buffer for ACS API
-    strncpy(labelBuffer, upperLabel.c_str(), sizeof(labelBuffer) - 1);
-    labelBuffer[sizeof(labelBuffer) - 1] = '\0';
+    strncpy_s(labelBuffer, sizeof(labelBuffer), upperLabel.c_str(), _TRUNCATE);
     labelPtr = labelBuffer;
 
     m_logger->LogInfo("ACSController: Running buffer " + std::to_string(bufferNumber) +

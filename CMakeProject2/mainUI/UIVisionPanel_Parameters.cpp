@@ -483,7 +483,7 @@ void UIVisionPanel::CreateInvertedTexture() {
 
   // Determine format based on image channels
   GLenum format = GL_RGB;
-  int channels = m_invertedImageData.size() / (m_imageWidth * m_imageHeight);
+  int channels = static_cast<int>(m_invertedImageData.size()) / (m_imageWidth * m_imageHeight);
   if (channels == 1) format = GL_LUMINANCE;
   else if (channels == 3) format = GL_RGB;
   else if (channels == 4) format = GL_RGBA;

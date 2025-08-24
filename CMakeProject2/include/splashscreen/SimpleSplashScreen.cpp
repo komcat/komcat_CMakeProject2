@@ -123,7 +123,7 @@ void SimpleSplashScreen::DrawLogo() {
   SDL_Point points[7]; // 6 points + 1 to close the shape
 
   for (int i = 0; i <= sides; i++) {
-    float angle = (float)(i % sides) * (2.0f * M_PI / sides) - M_PI / 2;
+    float angle = (float)(i % sides) * (2.0f * static_cast<float>(M_PI) / sides) - static_cast<float>(M_PI) / 2;
     angle += animationTime * 0.5f; // Slow rotation
 
     points[i].x = centerX + (int)(radius * cos(angle));
@@ -137,7 +137,7 @@ void SimpleSplashScreen::DrawLogo() {
   SDL_SetRenderDrawColor(renderer, 50, 100, 200, 150);
   SDL_Point innerPoints[7];
   for (int i = 0; i <= sides; i++) {
-    float angle = (float)(i % sides) * (2.0f * M_PI / sides) - M_PI / 2;
+    float angle = (float)(i % sides) * (2.0f * static_cast<float>(M_PI) / sides) - static_cast<float>(M_PI) / 2;
     angle -= animationTime * 0.7f; // Counter-rotation
 
     innerPoints[i].x = centerX + (int)(radius * 0.6f * cos(angle));

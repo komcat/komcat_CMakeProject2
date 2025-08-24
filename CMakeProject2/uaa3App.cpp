@@ -25,12 +25,12 @@
 #include "ApplicationInitializer.h"
 #include "ConsoleProgressDisplay.h"
 #include "CameraConfigManager.h"
-#include "cld101x_manager.h"
+#include "include/cld101x/cld101x_manager.h"
 #include "keithley2400_manager.h"
 #include "include/ops/vision_ops.h"
 #include "include/ops/io_ops.h"
 #include "include/ops/motion_ops.h"
-#include "include/cld101x_operations.h"
+#include "include/cld101x/cld101x_operations.h"
 #include "SimpleSplashScreen.h"
 // Keep your debug function as-is
 bool g_deugMode = false; // Global debug mode flag

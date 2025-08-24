@@ -63,12 +63,9 @@ void DatumUI::OnEditPoint() {
     return;
   }
 
-  // Populate input buffers with current values
-  strncpy(m_pointNameBuffer, point->name.c_str(), sizeof(m_pointNameBuffer) - 1);
-  m_pointNameBuffer[sizeof(m_pointNameBuffer) - 1] = '\0';
-
-  strncpy(m_pointDescBuffer, point->description.c_str(), sizeof(m_pointDescBuffer) - 1);
-  m_pointDescBuffer[sizeof(m_pointDescBuffer) - 1] = '\0';
+  // For MSVC compiler
+  strncpy_s(m_pointNameBuffer, sizeof(m_pointNameBuffer), point->name.c_str(), _TRUNCATE);
+  strncpy_s(m_pointDescBuffer, sizeof(m_pointDescBuffer), point->description.c_str(), _TRUNCATE);
 
   if (point->isValid) {
     m_pointCoords[0] = static_cast<float>(point->x);

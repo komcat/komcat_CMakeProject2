@@ -53,7 +53,7 @@ private:
   void ClearCapturedFrame();
 
   // Texture management
-  void UpdateCapturedTexture(const class CameraFrameData& frameData);
+  void UpdateCapturedTexture(const struct CameraFrameData& frameData);
   void CleanupCapturedTexture();
 
   // Validation

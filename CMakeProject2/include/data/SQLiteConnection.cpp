@@ -154,8 +154,11 @@ bool SQLiteConnection::InsertDataPoint(
   auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
     timestamp.time_since_epoch()) % 1000;
 
+	std::tm timeinfo;
+	localtime_s(&timeinfo, &time_t);
+
   std::stringstream ss;
-  ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S")
+  ss << std::put_time(&timeinfo, "%Y-%m-%d %H:%M:%S")
     << "." << std::setfill('0') << std::setw(3) << ms.count();
   std::string timestampStr = ss.str();
 

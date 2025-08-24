@@ -440,7 +440,9 @@ std::string IDSCameraTest::GenerateTimestampFilename(const std::string& extensio
   auto time_t = std::chrono::system_clock::to_time_t(now);
 
   std::stringstream ss;
-  ss << "ids_capture_" << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S") << extension;
+  std::tm timeinfo;
+	localtime_s(&timeinfo, &time_t);
+  ss << "ids_capture_" << std::put_time(&timeinfo, "%Y%m%d_%H%M%S") << extension;
 
   return ss.str();
 }

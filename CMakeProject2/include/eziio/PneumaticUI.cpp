@@ -16,7 +16,7 @@ PneumaticUI::PneumaticUI(PneumaticManager& manager)
   // Register for state change notifications
   m_pneumaticManager.setStateChangeCallback([this](const std::string& slideName, SlideState state) {
     // Record timestamp for animation
-    m_stateChangeTimestamp[slideName] = ImGui::GetTime();
+    m_stateChangeTimestamp[slideName] = static_cast<float>(ImGui::GetTime());
 
     // Log the state change
     std::cout << "Pneumatic UI: Slide " << slideName << " changed to "
@@ -282,7 +282,7 @@ bool PneumaticUI::IsAnimating(const std::string& slideName) const
   }
 
   // Animation lasts for 2 seconds
-  float elapsed = ImGui::GetTime() - it->second;
+  float elapsed = static_cast<float>(ImGui::GetTime()) - it->second;
   return elapsed < 2.0f;
 }
 
@@ -294,6 +294,6 @@ float PneumaticUI::GetAnimationProgress(const std::string& slideName) const
   }
 
   // Animation progress from 0.0 to 1.0
-  float elapsed = ImGui::GetTime() - it->second;
+  float elapsed = static_cast<float>(ImGui::GetTime()) - it->second;
   return (std::min)(elapsed / 2.0f, 1.0f);
 }

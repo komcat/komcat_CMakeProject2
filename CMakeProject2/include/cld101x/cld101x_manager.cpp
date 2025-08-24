@@ -1,5 +1,5 @@
-#include "include/cld101x_manager.h"
-#include "include/logger.h"
+#include "cld101x_manager.h"
+#include "logger.h"
 #include "imgui.h"
 #include <fstream>
 #include <nlohmann/json.hpp>

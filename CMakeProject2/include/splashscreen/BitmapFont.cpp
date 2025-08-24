@@ -521,7 +521,7 @@ void BitmapFont::DrawTextCentered(const std::string& text, int y, int windowWidt
 }
 
 int BitmapFont::GetTextWidth(const std::string& text, int scale) const {
-  return text.length() * CHAR_WIDTH * scale;
+  return static_cast<int>(text.length()) * CHAR_WIDTH * scale;
 }
 
 int BitmapFont::GetTextHeight(int scale) const {

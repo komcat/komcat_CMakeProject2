@@ -14,8 +14,8 @@
 #include "include/data/data_client_manager.h"
 #include "include/data/global_data_store.h"
 #include "include/data/DUTDataRecorder.h"
-#include "include/cld101x_manager.h"
-#include "include/cld101x_operations.h"
+#include "include/cld101x/cld101x_manager.h"
+#include "include/cld101x/cld101x_operations.h"
 #include "include/SMU/keithley2400_manager.h"
 #include "include/SMU/keithley2400_operations.h"
 #include "include/machine_operations.h"
@@ -87,7 +87,7 @@ void ApplicationInitializer::PrepareInitializationSteps(HardwareManagers& hw, Op
          WrapInitConfigWatchdog(hw), false},  // Optional
   };
 
-  currentProgress.totalSteps = initSteps.size();
+  currentProgress.totalSteps = static_cast<int>(initSteps.size());
 }
 
 bool ApplicationInitializer::ExecuteInitialization(HardwareManagers& hw, Operations& ops) {
@@ -99,7 +99,7 @@ bool ApplicationInitializer::ExecuteInitialization(HardwareManagers& hw, Operati
 
   for (size_t i = 0; i < initSteps.size(); ++i) {
     auto& step = initSteps[i];
-    currentProgress.currentStep = i + 1;
+    currentProgress.currentStep = static_cast<int>(i + 1);
 
     // Calculate percentage
     float percentage = (float)(i) / initSteps.size() * 100.0f;

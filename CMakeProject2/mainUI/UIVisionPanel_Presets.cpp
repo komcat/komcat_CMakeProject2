@@ -206,10 +206,8 @@ void UIVisionPanel::RenderNewPresetDialog() {
     ImGui::Unindent();
     ImGui::Spacing();
 
-    // Preset name input
     char nameBuffer[256];
-    strncpy(nameBuffer, m_newPresetName.c_str(), sizeof(nameBuffer) - 1);
-    nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+    strncpy_s(nameBuffer, sizeof(nameBuffer), m_newPresetName.c_str(), _TRUNCATE);
 
     if (ImGui::InputText("Preset Name", nameBuffer, sizeof(nameBuffer))) {
       m_newPresetName = nameBuffer;
@@ -217,8 +215,7 @@ void UIVisionPanel::RenderNewPresetDialog() {
 
     // Description input
     char descBuffer[512];
-    strncpy(descBuffer, m_newPresetDescription.c_str(), sizeof(descBuffer) - 1);
-    descBuffer[sizeof(descBuffer) - 1] = '\0';
+    strncpy_s(descBuffer, sizeof(descBuffer), m_newPresetDescription.c_str(), _TRUNCATE);
 
     if (ImGui::InputTextMultiline("Description", descBuffer, sizeof(descBuffer), ImVec2(-1, 60))) {
       m_newPresetDescription = descBuffer;

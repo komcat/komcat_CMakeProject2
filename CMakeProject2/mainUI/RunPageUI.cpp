@@ -360,9 +360,13 @@ void RunPageUI::AddCompletedStep(const std::string& stepName, const std::string&
   std::lock_guard<std::mutex> lock(m_mutex);
 
   // Get current date/time
+  // Timestamp (adjusted position based on whether we have percentage)
   auto now = std::chrono::system_clock::now();
   auto time_t = std::chrono::system_clock::to_time_t(now);
-  auto tm = *std::localtime(&time_t);
+
+  // Use localtime_s for Windows
+  std::tm tm;
+  localtime_s(&tm, &time_t);
 
   char dateTimeStr[100];
   std::strftime(dateTimeStr, sizeof(dateTimeStr), "%Y-%m-%d %H:%M:%S", &tm);
@@ -441,7 +445,8 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
     auto ms = totalMs % 1000;
 
     char idleStr[32];
-    std::sprintf(idleStr, "%02d:%02d.%03d", static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
+    sprintf_s(idleStr, sizeof(idleStr), "%02d:%02d.%03d",
+      static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
     idleTimeStr = std::string(idleStr);
   }
 
@@ -495,7 +500,8 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
     auto ms = totalMs % 1000;
 
     char durationStr[32];
-    std::sprintf(durationStr, "%02d:%02d.%03d", static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
+    sprintf_s(durationStr, sizeof(durationStr), "%02d:%02d.%03d",
+      static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
 
     if (m_stopRequested) {
       UpdateStatus("Process stopped by user");
@@ -529,8 +535,9 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
     auto seconds = (totalMs % 60000) / 1000;
     auto ms = totalMs % 1000;
 
-    char durationStr[32];
-    std::sprintf(durationStr, "%02d:%02d.%03d", static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
+    char durationStr[32];    
+    sprintf_s(durationStr, sizeof(durationStr), "%02d:%02d.%03d",
+			static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
 
     AddCompletedStep(processName, std::string(durationStr), idleTimeStr, false);
 
@@ -726,11 +733,10 @@ void RunPageUI::RenderLiveViewTab() {
       // Use a string buffer for the input
       char specBuffer[64];
       if (m_specValueStrings[m_selectedDataChannel].empty()) {
-        strcpy(specBuffer, "");
+        strcpy_s(specBuffer, sizeof(specBuffer), "");
       }
       else {
-        strncpy(specBuffer, m_specValueStrings[m_selectedDataChannel].c_str(), sizeof(specBuffer) - 1);
-        specBuffer[sizeof(specBuffer) - 1] = '\0';
+        strncpy_s(specBuffer, sizeof(specBuffer), m_specValueStrings[m_selectedDataChannel].c_str(), _TRUNCATE);
       }
 
       ImGui::SetNextItemWidth(120);
@@ -1067,7 +1073,10 @@ void RunPageUI::RenderDataValueOverlay(const ImVec2& canvasPos, const ImVec2& ca
   // Timestamp (adjusted position based on whether we have percentage)
   auto now = std::chrono::system_clock::now();
   auto time_t = std::chrono::system_clock::to_time_t(now);
-  auto tm = *std::localtime(&time_t);
+
+  // Use localtime_s for Windows
+  std::tm tm;
+  localtime_s(&tm, &time_t);
 
   char timeStr[32];
   std::strftime(timeStr, sizeof(timeStr), "%H:%M:%S", &tm);
@@ -1839,8 +1848,13 @@ void RunPageUI::RenderDetailResultsTab() {
 
       // Format timestamp
       auto time_t = std::chrono::system_clock::to_time_t(op.timestamp);
+
+      // Use localtime_s for Windows
+      std::tm timeinfo;
+      localtime_s(&timeinfo, &time_t);
+
       std::stringstream timeStr;
-      timeStr << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+      timeStr << std::put_time(&timeinfo, "%Y-%m-%d %H:%M:%S");
       ImGui::Text("Start Time: %s", timeStr.str().c_str());
 
       if (op.elapsedTimeMs > 0) {
@@ -2271,9 +2285,13 @@ void RunPageUI::UpdateStatus(const std::string& message, bool isError) {
   m_statusMessage = message;
 
   // Add to history with timestamp
+// Timestamp (adjusted position based on whether we have percentage)
   auto now = std::chrono::system_clock::now();
   auto time_t = std::chrono::system_clock::to_time_t(now);
-  auto tm = *std::localtime(&time_t);
+
+  // Use localtime_s for Windows
+  std::tm tm;
+  localtime_s(&tm, &time_t);
 
   char timeStr[100];
   std::strftime(timeStr, sizeof(timeStr), "[%H:%M:%S]", &tm);

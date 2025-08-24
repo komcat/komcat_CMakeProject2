@@ -11,7 +11,7 @@ ACSMonitor::ACSMonitor()
     xPos(0.0), yPos(0.0), zPos(0.0),
     updateInterval(0.1), lastUpdateTime(0.0), jogDistance(0.1f),
     m_threadRunning(false), m_terminateThread(false) {
-    std::strcpy(ipAddress, "192.168.0.50");
+    strcpy_s(ipAddress, sizeof(ipAddress), "192.168.0.50");
 }
 
 ACSMonitor::~ACSMonitor() {
@@ -77,8 +77,8 @@ bool ACSMonitor::ConnectToController(const char* ip) {
     // This runs in the communication thread
     // Create a non-const copy of the IP string
     char ipCopy[64];
-    strncpy(ipCopy, ip, sizeof(ipCopy) - 1);
-    ipCopy[sizeof(ipCopy) - 1] = '\0'; // Ensure null termination
+    strncpy_s(ipCopy, sizeof(ipCopy), ip, _TRUNCATE);
+    // No need for manual null termination - strncpy_s handles it
 
     hComm = acsc_OpenCommEthernet(ipCopy, ACSC_SOCKET_STREAM_PORT);
     if (hComm != ACSC_INVALID) {

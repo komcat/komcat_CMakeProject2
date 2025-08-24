@@ -2,7 +2,7 @@
 // IMPLEMENTATION FILE: CLD101xEquipmentUI.cpp - Updated with 3-Column Layout
 // ==============================================================================
 #include "CLD101xEquipmentUI.h"
-#include "include/cld101x_manager.h"
+#include "include/cld101x/cld101x_manager.h"
 #include <algorithm>
 #include <string>
 #include <iostream>
@@ -191,7 +191,7 @@ void CLD101xEquipmentUI::Render() {
 
   // Enhanced auto-refresh with polling awareness
   if (m_autoRefresh && m_isConnected) {
-    float currentTime = ImGui::GetTime();
+    float currentTime = static_cast<float>(ImGui::GetTime());
     if (currentTime - m_lastStatusUpdate > m_refreshRate) {
       OnGetStatus();
       m_lastStatusUpdate = currentTime;
@@ -788,8 +788,8 @@ void CLD101xEquipmentUI::UpdateMAFromCurrent() {
 
 void CLD101xEquipmentUI::AddDebugOutput(const std::string& message) {
   char timeStr[32];
-  float currentTime = ImGui::GetTime();
-  sprintf(timeStr, "[%.1f] ", currentTime);
+  float currentTime = static_cast<float>(ImGui::GetTime());
+  sprintf_s(timeStr, sizeof(timeStr), "[%.1f] ", currentTime);
 
   m_debugOutput += timeStr + message + "\n";
 
@@ -858,7 +858,7 @@ void CLD101xEquipmentUI::OnConnect() {
 
     if (connected) {
       m_isConnected = true;
-      m_lastConnectionTime = ImGui::GetTime();
+      m_lastConnectionTime = static_cast<float>(ImGui::GetTime());
       AddDebugOutput("Successfully connected to instrument");
 
       auto client = m_cld101xManager->GetClient("CLD101x");

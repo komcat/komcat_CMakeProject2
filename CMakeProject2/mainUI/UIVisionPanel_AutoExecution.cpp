@@ -12,7 +12,7 @@ void UIVisionPanel::UpdateAutoExecution() {
     return;
   }
 
-  float currentTime = ImGui::GetTime() * 1000.0f;
+  float currentTime = static_cast<float>(ImGui::GetTime()) * 1000.0f;
 
   if (currentTime - m_lastAutoExecuteTime >= m_autoExecuteInterval) {
     ExecuteCircleDetection();
@@ -26,7 +26,7 @@ void UIVisionPanel::RenderAutoExecutionControls() {
   bool oldAutoExecute = m_autoExecute;
   if (ImGui::Checkbox("Enable Auto Execution", &m_autoExecute)) {
     if (m_autoExecute && !oldAutoExecute) {
-      m_lastAutoExecuteTime = ImGui::GetTime() * 1000.0f;
+      m_lastAutoExecuteTime = static_cast<float>(ImGui::GetTime()) * 1000.0f;
       std::cout << "[UIVisionPanel] Auto-execution started (interval: " << m_autoExecuteInterval << "ms)" << std::endl;
     }
     else if (!m_autoExecute && oldAutoExecute) {
@@ -69,7 +69,7 @@ void UIVisionPanel::RenderAutoExecutionControls() {
     float fps = 1000.0f / m_autoExecuteInterval;
     ImGui::Text("Execution rate: %.1f Hz (%.0f ms)", fps, m_autoExecuteInterval);
 
-    float currentTime = ImGui::GetTime() * 1000.0f;
+    float currentTime = static_cast<float>(ImGui::GetTime()) * 1000.0f;
     float timeUntilNext = m_autoExecuteInterval - (currentTime - m_lastAutoExecuteTime);
     if (timeUntilNext > 0) {
       ImGui::Text("Next execution in: %.0f ms", timeUntilNext);

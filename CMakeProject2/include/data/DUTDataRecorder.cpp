@@ -281,10 +281,13 @@ bool DUTDataRecorder::ExportToCSV(const std::string& filename) {
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
       point.timestamp.time_since_epoch()) % 1000;
 
+
+    std::tm timeinfo;
+    localtime_s(&timeinfo, &time_t);
     file << m_currentSerialNumber << ","
       << point.key << ","
       << std::fixed << std::setprecision(6) << point.value << ","
-      << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S")
+      << std::put_time(&timeinfo, "%Y-%m-%d %H:%M:%S")  // <-- Fixed: removed duplicate std::put_time
       << "." << std::setfill('0') << std::setw(3) << ms.count()
       << "\n";
   }
@@ -321,7 +324,12 @@ bool DUTDataRecorder::ExportToJSON(const std::string& filename) {
   file << "  \"serial_number\": \"" << m_currentSerialNumber << "\",\n";
 
   auto start_time_t = std::chrono::system_clock::to_time_t(m_sessionStartTime);
-  file << "  \"session_start\": \"" << std::put_time(std::localtime(&start_time_t), "%Y-%m-%d %H:%M:%S") << "\",\n";
+
+  // Use localtime_s for Windows
+  std::tm timeinfo;
+  localtime_s(&timeinfo, &start_time_t);
+
+  file << "  \"session_start\": \"" << std::put_time(&timeinfo, "%Y-%m-%d %H:%M:%S") << "\",\n";
   file << "  \"data_point_count\": " << m_dataPoints.size() << ",\n";
   file << "  \"data_saved_to_db\": " << m_totalSavedToDb << ",\n";
   file << "  \"data_points\": [\n";
@@ -332,10 +340,14 @@ bool DUTDataRecorder::ExportToJSON(const std::string& filename) {
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
       point.timestamp.time_since_epoch()) % 1000;
 
+    // Use localtime_s for Windows
+    std::tm timeinfo;
+    localtime_s(&timeinfo, &time_t);
+
     file << "    {\n";
     file << "      \"key\": \"" << point.key << "\",\n";
     file << "      \"value\": " << std::fixed << std::setprecision(6) << point.value << ",\n";
-    file << "      \"timestamp\": \"" << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S")
+    file << "      \"timestamp\": \"" << std::put_time(&timeinfo, "%Y-%m-%d %H:%M:%S")
       << "." << std::setfill('0') << std::setw(3) << ms.count() << "\"\n";
     file << "    }";
 
@@ -362,12 +374,15 @@ std::string DUTDataRecorder::GetSaveDirectory() {
 std::string DUTDataRecorder::GenerateFilename(const std::string& extension) {
   auto now = std::chrono::system_clock::now();
   auto time_t = std::chrono::system_clock::to_time_t(now);
-
   std::stringstream ss;
-  ss << m_currentSerialNumber << "_"
-    << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S")
-    << "." << extension;
 
+  // Use localtime_s for Windows
+  std::tm timeinfo;
+  localtime_s(&timeinfo, &time_t);
+
+  ss << m_currentSerialNumber << "_"
+    << std::put_time(&timeinfo, "%Y%m%d_%H%M%S")
+    << "." << extension;
   return ss.str();
 }
 

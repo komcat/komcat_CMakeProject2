@@ -243,9 +243,9 @@ void UIVisionPanel::RenderImageWithOverlay() {
     float scaleX = displaySize.x / m_imageWidth;
     float scaleY = displaySize.y / m_imageHeight;
 
-    float centerX = screenImagePos.x + (m_lastResult.centerX * scaleX);
-    float centerY = screenImagePos.y + (m_lastResult.centerY * scaleY);
-    float radius = m_lastResult.radius * scaleX;
+    float centerX = screenImagePos.x + (static_cast<float>(m_lastResult.centerX) * scaleX);
+    float centerY = screenImagePos.y + (static_cast<float>(m_lastResult.centerY) * scaleY);
+    float radius = static_cast<float>(m_lastResult.radius) * scaleX;
 
     // Draw detected circle
     ImU32 circleColor = IM_COL32(255, 0, 0, 255);

@@ -6,7 +6,7 @@
 #include "include/motions/MotionConfigManager.h"
 #include "include/motions/pi_controller_manager.h"
 #include "include/motions/acs_controller_manager.h"
-#include "include/cld101x_manager.h"
+#include "include/cld101x/cld101x_manager.h"
 #include "CLD101xEquipmentUI.h"
 // Add this include at the top:
 #include "PIPanelUI.h"

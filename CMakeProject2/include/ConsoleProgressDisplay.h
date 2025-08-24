@@ -13,7 +13,7 @@ public:
 
     // Progress bar
     int barWidth = 50;
-    int pos = barWidth * progress.percentage / 100.0f;
+    int pos = static_cast<int>(barWidth * progress.percentage / 100.0f);
 
     std::cout << "[";
     for (int i = 0; i < barWidth; ++i) {

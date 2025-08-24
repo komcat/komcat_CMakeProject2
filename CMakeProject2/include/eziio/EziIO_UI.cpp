@@ -28,10 +28,10 @@ void EziIO_UI::RenderUI()
   // Determine window size based on number of devices and debug state
   ImVec2 windowSize;
   if (m_showDebugInfo) {
-    windowSize = ImVec2(800, 200 * m_deviceStates.size() + 400); // More space for debug info
+    windowSize = ImVec2(800, 200 * static_cast<float>(m_deviceStates.size()) + 400); // More space for debug info
   }
   else {
-    windowSize = ImVec2(800, 200 * m_deviceStates.size() + 100);
+    windowSize = ImVec2(800, 200 * static_cast<float>(m_deviceStates.size()) + 100);
   }
 
   // Create the main window

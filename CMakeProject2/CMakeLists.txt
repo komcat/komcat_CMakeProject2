@@ -1,6 +1,13 @@
 ﻿# Simplified CMakeLists.txt for uaa3App with SDL2, ImGui, Pylon SDK, and PI GCS2 support
 cmake_minimum_required(VERSION 3.12)
+
+
+
+
 project(CMakeProject2)
+
+
+
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 20)
@@ -239,6 +246,9 @@ endif()
 # Set include directory paths
 set(MAINUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mainUI")
 set(INCL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
+set(INCL_TCP "${CMAKE_CURRENT_SOURCE_DIR}/include/tcp")
+set(INCL_CLD101x "${CMAKE_CURRENT_SOURCE_DIR}/include/cld101x")
+set(INCL_SPLASHSCREEN "${CMAKE_CURRENT_SOURCE_DIR}/include/splashscreen")
 set(INCL_CAMERA "${CMAKE_CURRENT_SOURCE_DIR}/include/camera")
 set(INCL_DATA "${CMAKE_CURRENT_SOURCE_DIR}/include/data")
 set(INCL_MOTIONS "${CMAKE_CURRENT_SOURCE_DIR}/include/motions")
@@ -262,16 +272,16 @@ add_executable(uaa3App
   "uaa3App.cpp" 
   "CMakeProject2.h" 
   "Version.h"
-  "include/random.cpp" 
-  "include/random.h"
-  "include/randomwindow.cpp"
-  "include/randomwindow.h"
+   
+  
+  
+  
   ${IMGUI_SOURCES}
   ${SQLITE_SOURCES}
-  "include/tcp_client.h"
-  "include/tcp_client.cpp"
-  "include/client_manager.h"
-  "include/client_manager.cpp"
+  "include/tcp/tcp_client.h"
+  "include/tcp/tcp_client.cpp"
+  "include/tcp/client_manager.h"
+  "include/tcp/client_manager.cpp"
   "Include/motions/acs_monitor.h" 
   "include/motions/acs_monitor.cpp"
   "include/camera/camera_window.h"
@@ -329,10 +339,10 @@ add_executable(uaa3App
   "include/data/product_config_manager.cpp"
   "include/eziio/IOControlPanel.h"
   "include/eziio/IOControlPanel.cpp"
-  "include/cld101x_client.h"
-  "include/cld101x_client.cpp"
-  "include/cld101x_manager.h"
-  "include/cld101x_manager.cpp"
+  "include/cld101x/cld101x_client.h"
+  "include/cld101x/cld101x_client.cpp"
+  "include/cld101x/cld101x_manager.h"
+  "include/cld101x/cld101x_manager.cpp"
   "include/python_process_managaer.h"
   "include/motions/global_jog_panel.h"
   "include/data/global_data_store.h"
@@ -369,8 +379,8 @@ add_executable(uaa3App
   "include/ProcessRunner.cpp"
   "include/ProcessControlPanel.h"
   "include/ProcessControlPanel.cpp"
-  "include/cld101x_operations.h"
-  "include/cld101x_operations.cpp"
+  "include/cld101x/cld101x_operations.h"
+  "include/cld101x/cld101x_operations.cpp"
   "PerformanceOverlay.h"
   "FpsDisplay.h" 
   "include/ui/VerticalToolbarMenu.h"
@@ -630,7 +640,7 @@ add_executable(uaa3App
    "include/DUTOperations.cpp"
    "include/ops/UserInputOperations.h"
    "include/ops/UserInputOperation.cpp"
- "include/data/SQLiteConnection.h" "include/data/SQLiteConnection.cpp" "include/ApplicationInitializer.h" "include/ApplicationInitializer.cpp" "include/ConsoleProgressDisplay.h"   "include/SimpleSplashScreen.h" "include/SimpleSplashScreen.cpp" "include/BitmapFont.h" "include/BitmapFont.cpp")
+ "include/data/SQLiteConnection.h" "include/data/SQLiteConnection.cpp" "include/ApplicationInitializer.h" "include/ApplicationInitializer.cpp" "include/ConsoleProgressDisplay.h"   "include/splashscreen/SimpleSplashScreen.h" "include/splashscreen/SimpleSplashScreen.cpp" "include/splashscreen/BitmapFont.h" "include/splashscreen/BitmapFont.cpp")
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
@@ -674,6 +684,9 @@ target_include_directories(uaa3App PRIVATE
   ${INCL_SCRIPT}
   ${INCL_UI}
   ${INCL_PROCESSES}
+  ${INCL_CLD101x}
+  ${INCL_SPLASHSCREEN}
+  ${INCL_TCP}
   ${INCL_Uaa3_PROCESSES}
   ${FREETYPE_INCLUDE_DIR}
   ${IDS_UEYE_INCLUDE_DIR}
@@ -712,6 +725,11 @@ target_compile_definitions(uaa3App PRIVATE
     SQLITE_THREADSAFE=1
     SQLITE_ENABLE_COLUMN_METADATA
 )
+
+
+if(MSVC)
+    target_compile_options(uaa3App PRIVATE /wd4566)
+endif()
 
 # Copy DLLs for Windows
 if(WIN32)

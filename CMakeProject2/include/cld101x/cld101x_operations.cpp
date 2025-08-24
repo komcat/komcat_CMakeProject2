@@ -1,7 +1,7 @@
 // cld101x_operations.cpp
-#include "include/cld101x_operations.h"
-#include "include/cld101x_manager.h"  // Include the actual headers here
-#include "include/cld101x_client.h"
+#include "include/cld101x/cld101x_operations.h"
+#include "include/cld101x/cld101x_manager.h"  // Include the actual headers here
+#include "include/cld101x/cld101x_client.h"
 #include "include/logger.h"
 #include <chrono>
 #include <thread>

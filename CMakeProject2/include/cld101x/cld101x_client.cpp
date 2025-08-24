@@ -1,5 +1,5 @@
-#include "include/cld101x_client.h"
-#include "include/logger.h"
+#include "cld101x_client.h"
+#include "logger.h"
 #include "imgui.h"
 #include <sstream>
 #include <iomanip>
@@ -166,8 +166,13 @@ bool CLD101xClient::SendCommand(const std::string& command, std::string* respons
   // Clear any previous error
   m_lastError.clear();
 
-  // Send the command
-  if (send(m_socket, command.c_str(), command.length(), 0) == SOCKET_ERROR) {
+  // Check for overflow before casting
+  if (command.length() > static_cast<size_t>(INT_MAX)) {
+    m_lastError = "Command too large to send";
+    return false;
+  }
+
+  if (send(m_socket, command.c_str(), static_cast<int>(command.length()), 0) == SOCKET_ERROR) {
     m_lastError = "Failed to send command";
     return false;
   }

@@ -1,4 +1,4 @@
-#include "include/client_manager.h"
+#include "client_manager.h"
 #include "imgui.h"
 #include <algorithm>
 #include <cstring>
@@ -151,7 +151,7 @@ void ClientManager::RenderUI() {
 
             // Connection settings
             char ipBuffer[64];
-            strncpy(ipBuffer, info.serverIp.c_str(), sizeof(ipBuffer));
+            strncpy_s(ipBuffer, sizeof(ipBuffer), info.serverIp.c_str(), _TRUNCATE);
 
             char ipInputId[64];
             snprintf(ipInputId, sizeof(ipInputId), "Server IP%s", idPrefix);
