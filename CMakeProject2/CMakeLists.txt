@@ -1,5 +1,10 @@
 ﻿# Simplified CMakeLists.txt for uaa3App with SDL2, ImGui, Pylon SDK, and PI GCS2 support
 cmake_minimum_required(VERSION 3.12)
+
+if(MSVC)
+    add_compile_options(/wd4566)
+endif()
+
 project(CMakeProject2)
 
 # Set C++ standard
