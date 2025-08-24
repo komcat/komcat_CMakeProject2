@@ -9,6 +9,12 @@
 #include <atomic>
 #include <mutex>
 #include "FAS_EziMOTIONPlusE.h"
+enum class EziIOError {
+  SUCCESS = 0,
+  DEVICE_NOT_FOUND,
+  DEVICE_DISCONNECTED,
+  OPERATION_FAILED
+};
 
 class EziIODevice {
 public:
@@ -79,15 +85,15 @@ public:
   bool connectDevice(int deviceId);
   bool disconnectDevice(int deviceId);
 
-  // Input operations
-  bool readInputs(int deviceId, uint32_t& inputs, uint32_t& latch);
-  bool getLastInputStatus(int deviceId, uint32_t& inputs, uint32_t& latch);
+  // Input operations - now return EziIOError
+  EziIOError readInputs(int deviceId, uint32_t& inputs, uint32_t& latch);
+  EziIOError getLastInputStatus(int deviceId, uint32_t& inputs, uint32_t& latch);
 
-  // Output operations
-  bool getOutputs(int deviceId, uint32_t& outputs, uint32_t& status);
-  bool getLastOutputStatus(int deviceId, uint32_t& outputs, uint32_t& status);
-  bool setOutputs(int deviceId, uint32_t setMask, uint32_t clearMask);
-  bool setOutput(int deviceId, int outputPin, bool state);
+  // Output operations - now return EziIOError
+  EziIOError getOutputs(int deviceId, uint32_t& outputs, uint32_t& status);
+  EziIOError getLastOutputStatus(int deviceId, uint32_t& outputs, uint32_t& status);
+  EziIOError setOutputs(int deviceId, uint32_t setMask, uint32_t clearMask);
+  EziIOError setOutput(int deviceId, int outputPin, bool state);
 
   // Polling thread control
   void startPolling(unsigned int intervalMs = 100);
@@ -100,12 +106,20 @@ public:
   EziIODevice* getDeviceByName(const std::string& name);
 
   const std::vector<std::shared_ptr<EziIODevice>>& getDevices() const { return m_devices; }
+  int getConnectedDeviceCount() const { return m_connectedDeviceCount; }
+
+  void setLogging(bool enable) { m_enableLogging = enable; }
+
+  // Helper to get error message
+  static std::string getErrorString(EziIOError error);
 
 private:
+  bool m_enableLogging = true;
   std::vector<std::shared_ptr<EziIODevice>> m_devices;
   std::map<int, std::shared_ptr<EziIODevice>> m_deviceMap;
   std::map<std::string, std::shared_ptr<EziIODevice>> m_deviceNameMap;
   bool m_initialized;
+  std::atomic<int> m_connectedDeviceCount{ 0 };
 
   // Threading
   std::thread* m_pollingThread;
@@ -114,4 +128,7 @@ private:
 
   // Thread function
   void pollingThreadFunc();
+
+  // Helper method for validation
+  EziIOError validateDevice(int deviceId, EziIODevice** device, const std::string& operation);
 };

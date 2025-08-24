@@ -1,4 +1,4 @@
-#include "EziIO_UI.h"
+﻿#include "EziIO_UI.h"
 #include <sstream>
 #include <iomanip>
 
@@ -19,6 +19,18 @@ EziIO_UI::EziIO_UI(EziIOManager& manager)
 
 EziIO_UI::~EziIO_UI()
 {
+}
+
+
+
+void EziIO_UI::ShowErrorTooltip(EziIOError error) {
+  if (error != EziIOError::SUCCESS && ImGui::IsItemHovered()) {
+    ImGui::BeginTooltip();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f));
+    ImGui::Text("Error: %s", EziIOManager::getErrorString(error).c_str());
+    ImGui::PopStyleColor();
+    ImGui::EndTooltip();
+  }
 }
 
 void EziIO_UI::RenderUI()
@@ -95,14 +107,11 @@ void EziIO_UI::RenderUI()
   ImGui::End();
 }
 
-void EziIO_UI::RefreshDeviceStates()
-{
-  // Clear previous states
+
+void EziIO_UI::RefreshDeviceStates() {
   m_deviceStates.clear();
 
-  // Get all devices from the manager
-  for (const auto& devicePtr : m_ioManager.getDevices())
-  {
+  for (const auto& devicePtr : m_ioManager.getDevices()) {
     DeviceState state;
     state.name = devicePtr->getName();
     state.id = devicePtr->getDeviceId();
@@ -110,19 +119,19 @@ void EziIO_UI::RefreshDeviceStates()
     state.outputCount = devicePtr->getOutputCount();
     state.connected = devicePtr->isConnected();
 
-    // Get cached input and output states
+    // Get cached input and output states with error handling
     uint32_t inputs = 0, latch = 0;
     uint32_t outputs = 0, outStatus = 0;
 
-    bool inputSuccess = m_ioManager.getLastInputStatus(state.id, inputs, latch);
-    bool outputSuccess = m_ioManager.getLastOutputStatus(state.id, outputs, outStatus);
+    EziIOError inputError = m_ioManager.getLastInputStatus(state.id, inputs, latch);
+    EziIOError outputError = m_ioManager.getLastOutputStatus(state.id, outputs, outStatus);
 
     // Log the refresh operation if debug is enabled
     if (m_showDebugInfo) {
       std::cout << "[EziIO_UI] Refreshing device " << state.name << " (ID: " << state.id << ")" << std::endl;
-      std::cout << "  Input status: " << (inputSuccess ? "Success" : "Failed")
+      std::cout << "  Input status: " << EziIOManager::getErrorString(inputError)
         << " [0x" << std::hex << inputs << ", Latch: 0x" << latch << std::dec << "]" << std::endl;
-      std::cout << "  Output status: " << (outputSuccess ? "Success" : "Failed")
+      std::cout << "  Output status: " << EziIOManager::getErrorString(outputError)
         << " [0x" << std::hex << outputs << ", Status: 0x" << outStatus << std::dec << "]" << std::endl;
     }
 
@@ -130,48 +139,58 @@ void EziIO_UI::RefreshDeviceStates()
     state.latch = latch;
     state.outputs = outputs;
     state.outputStatus = outStatus;
+    state.lastError = (inputError != EziIOError::SUCCESS) ? inputError : outputError;
 
-    // Add to our list
     m_deviceStates.push_back(state);
   }
 }
 
-void EziIO_UI::RenderDevicePanel(DeviceState& device)
-{
-  // Create a collapsing header for each device
+void EziIO_UI::RenderDevicePanel(DeviceState& device) {
+  // Create header with connection status and device count
   std::string headerName = device.name + " (ID: " + std::to_string(device.id) + ")";
-  if (device.connected)
-  {
+
+  if (device.connected) {
     headerName += " - Connected";
+    if (m_ioManager.getConnectedDeviceCount() > 0) {
+      headerName += " [" + std::to_string(m_ioManager.getConnectedDeviceCount()) + " total connected]";
+    }
   }
-  else
-  {
+  else {
     headerName += " - Disconnected";
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
   }
 
-  if (ImGui::CollapsingHeader(headerName.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
-  {
-    if (!device.connected)
-    {
+  // Show error indicator if there's an error
+  if (device.lastError != EziIOError::SUCCESS) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f));
+    headerName += " ⚠";
+    ImGui::PopStyleColor();
+  }
+
+  if (ImGui::CollapsingHeader(headerName.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (!device.connected) {
       ImGui::PopStyleColor();
       ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Device is not connected!");
 
-      if (ImGui::Button("Connect"))
-      {
-        if (m_ioManager.connectDevice(device.id))
-        {
+      if (ImGui::Button(("Connect##" + device.name).c_str())) {
+        if (m_ioManager.connectDevice(device.id)) {
           device.connected = true;
           std::cout << "[EziIO_UI] Connected to device " << device.name << std::endl;
         }
       }
     }
-    else
-    {
-      // Show raw debug values if debug mode is enabled
-      if (m_showDebugInfo)
-      {
+    else {
+      // Show error status if any
+      if (device.lastError != EziIOError::SUCCESS) {
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+          "Last Error: %s",
+          EziIOManager::getErrorString(device.lastError).c_str());
+      }
+
+      // Show debug info if enabled
+      if (m_showDebugInfo) {
         ImGui::Text("Debug Information:");
+        ImGui::Text("Connected Devices: %d", m_ioManager.getConnectedDeviceCount());
         ImGui::Text("Raw Inputs: 0x%08X  Latch: 0x%08X", device.inputs, device.latch);
         ImGui::Text("Raw Outputs: 0x%08X  Status: 0x%08X", device.outputs, device.outputStatus);
 
@@ -206,45 +225,43 @@ void EziIO_UI::RenderDevicePanel(DeviceState& device)
       }
 
       // Create a two-column layout for inputs and outputs
-      ImGui::Columns(2, "io_columns", true);
+      ImGui::Columns(2, ("io_columns_" + device.name).c_str(), true);
 
       // Render input pins if any
-      if (device.inputCount > 0)
-      {
+      if (device.inputCount > 0) {
         RenderInputPins(device);
       }
-      else
-      {
+      else {
         ImGui::Text("No input pins available.");
       }
 
       ImGui::NextColumn();
 
       // Render output pins if any
-      if (device.outputCount > 0)
-      {
+      if (device.outputCount > 0) {
         RenderOutputPins(device);
       }
-      else
-      {
+      else {
         ImGui::Text("No output pins available.");
       }
 
       ImGui::Columns(1);
 
+      // Control buttons section
+      ImGui::Separator();
+
       // Add a force refresh button for this device
-      if (ImGui::Button(("Force Refresh Device##" + device.name).c_str()))
-      {
+      if (ImGui::Button(("Force Refresh Device##" + device.name).c_str())) {
         // Force a direct hardware read instead of using cached values
         EziIODevice* dev = m_ioManager.getDevice(device.id);
         if (dev) {
           uint32_t outputs = 0, status = 0;
           uint32_t inputs = 0, latch = 0;
 
-          bool inputSuccess = dev->readInputs(inputs, latch);
-          bool outputSuccess = dev->getOutputs(outputs, status);
+          EziIOError inputError = m_ioManager.readInputs(device.id, inputs, latch);
+          EziIOError outputError = m_ioManager.getOutputs(device.id, outputs, status);
 
-          if (outputSuccess) {
+          if (outputError == EziIOError::SUCCESS) {
             device.outputs = outputs;
             device.outputStatus = status;
 
@@ -255,21 +272,43 @@ void EziIO_UI::RenderDevicePanel(DeviceState& device)
             }
           }
 
-          if (inputSuccess) {
+          if (inputError == EziIOError::SUCCESS) {
             device.inputs = inputs;
             device.latch = latch;
           }
+
+          // Update error status
+          device.lastError = (inputError != EziIOError::SUCCESS) ? inputError : outputError;
         }
+      }
+
+      ImGui::SameLine();
+
+      // Add disconnect button
+      if (ImGui::Button(("Disconnect##" + device.name).c_str())) {
+        if (m_ioManager.disconnectDevice(device.id)) {
+          device.connected = false;
+          std::cout << "[EziIO_UI] Disconnected device " << device.name << std::endl;
+        }
+      }
+
+      // Show polling status for this device
+      ImGui::SameLine();
+      if (m_ioManager.isPolling()) {
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Polling: Active");
+      }
+      else {
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Polling: Inactive");
       }
     }
   }
-  else if (!device.connected)
-  {
+  else if (!device.connected) {
     ImGui::PopStyleColor();
   }
 
   ImGui::Separator();
 }
+
 
 // EziIO_UI.cpp - Modify your RenderInputPins method
 void EziIO_UI::RenderInputPins(DeviceState& device)
@@ -343,155 +382,101 @@ void EziIO_UI::RenderInputPins(DeviceState& device)
 }
 
 // EziIO_UI.cpp - Modify your RenderOutputPins method
-void EziIO_UI::RenderOutputPins(DeviceState& device)
-{
+void EziIO_UI::RenderOutputPins(DeviceState& device) {
   ImGui::Text("Output Pins:");
 
-  // Create a table for output pins
-  if (ImGui::BeginTable("Outputs", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
-  {
+  if (ImGui::BeginTable("Outputs", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
     ImGui::TableSetupColumn("Pin", ImGuiTableColumnFlags_WidthFixed, 30.0f);
-    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 100.0f);  // Add this column
+    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 100.0f);
     ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 80.0f);
     ImGui::TableSetupColumn("Visual", ImGuiTableColumnFlags_WidthFixed, 80.0f);
     ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthFixed, 120.0f);
     ImGui::TableHeadersRow();
 
-    // Render each output pin row
-    for (int i = 0; i < device.outputCount; i++)
-    {
+    for (int i = 0; i < device.outputCount; i++) {
       ImGui::TableNextRow();
 
       // Pin number
       ImGui::TableNextColumn();
       ImGui::Text("%d", i);
 
-      // Pin name - Add this column
+      // Pin name
       ImGui::TableNextColumn();
       std::string pinName = GetPinName(device.name, false, i);
       ImGui::Text("%s", pinName.c_str());
 
       // State (ON/OFF)
       ImGui::TableNextColumn();
-
-      // Use the correct mask for the device type
       uint32_t mask = GetOutputPinMask(device.name, i);
       bool outputState = (device.outputs & mask) != 0;
 
       if (m_showDebugInfo) {
-        // When debug mode is on, show the hex mask value
-        std::string stateInfo = std::string(outputState ? "ON" : "OFF") +
-          " [0x" +
-          (std::stringstream() << std::hex << mask).str() +
-          "]";
-        ImGui::Text("%s", stateInfo.c_str());
+        ImGui::Text("%s [0x%X]", outputState ? "ON" : "OFF", mask);
       }
       else {
-        // Simple ON/OFF display when debug is off
         ImGui::Text("%s", outputState ? "ON" : "OFF");
       }
 
       // Visual indicator
       ImGui::TableNextColumn();
-
-      // Create a unique ID for the color button based on device ID and pin
       std::string colorButtonId = "##output_indicator_" + device.name + "_" + std::to_string(i);
-
       ImVec4 color = outputState ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) : ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
       ImGui::ColorButton(colorButtonId.c_str(), color, ImGuiColorEditFlags_NoTooltip, ImVec2(20, 20));
 
       // Control buttons
       ImGui::TableNextColumn();
-
-      // Generate unique IDs for each button based on device name and pin
       std::string onButtonId = "ON##out_" + device.name + "_" + std::to_string(i);
       std::string offButtonId = "OFF##out_" + device.name + "_" + std::to_string(i);
 
       // ON button
-      if (ImGui::Button(onButtonId.c_str(), ImVec2(50, 20)))
-      {
-        bool success = m_ioManager.setOutput(device.id, i, true);
-
-        if (m_showDebugInfo) {
-          std::cout << "[EziIO_UI] Set output " << device.name
-            << " pin " << i << " (" << pinName << ") to ON: " << (success ? "Success" : "Failed") << std::endl;
-        }
-
-        // Force an immediate update of the output status
-        EziIODevice* dev = m_ioManager.getDevice(device.id);
-        if (dev) {
-          // Read the current outputs directly from the device
-          uint32_t outputs = 0, status = 0;
-          if (dev->getOutputs(outputs, status)) {
-            // Update our cached state for the UI
-            device.outputs = outputs;
-            device.outputStatus = status;
-
-            if (m_showDebugInfo) {
-              std::cout << "  Updated outputs: 0x" << std::hex << outputs
-                << " status: 0x" << status << std::dec << std::endl;
-
-              // Check if the expected bit is now set
-              bool newState = (outputs & mask) != 0;
-              std::cout << "  New pin state: " << (newState ? "ON" : "OFF")
-                << " (expected ON)" << std::endl;
-            }
-          }
-        }
-
-        // Call output change callback if set
-        if (m_outputChangeCallback)
-        {
-          m_outputChangeCallback(device.name, i, true);
-        }
+      if (ImGui::Button(onButtonId.c_str(), ImVec2(50, 20))) {
+        HandleOutputControl(device, i, true);
       }
+      ShowErrorTooltip(device.lastError);
 
       ImGui::SameLine();
 
       // OFF button
-      if (ImGui::Button(offButtonId.c_str(), ImVec2(50, 20)))
-      {
-        bool success = m_ioManager.setOutput(device.id, i, false);
-
-        if (m_showDebugInfo) {
-          std::cout << "[EziIO_UI] Set output " << device.name
-            << " pin " << i << " (" << pinName << ") to OFF: " << (success ? "Success" : "Failed") << std::endl;
-        }
-
-        // Force an immediate update of the output status
-        EziIODevice* dev = m_ioManager.getDevice(device.id);
-        if (dev) {
-          // Read the current outputs directly from the device
-          uint32_t outputs = 0, status = 0;
-          if (dev->getOutputs(outputs, status)) {
-            // Update our cached state for the UI
-            device.outputs = outputs;
-            device.outputStatus = status;
-
-            if (m_showDebugInfo) {
-              std::cout << "  Updated outputs: 0x" << std::hex << outputs
-                << " status: 0x" << status << std::dec << std::endl;
-
-              // Check if the expected bit is now clear
-              bool newState = (outputs & mask) != 0;
-              std::cout << "  New pin state: " << (newState ? "ON" : "OFF")
-                << " (expected OFF)" << std::endl;
-            }
-          }
-        }
-
-        // Call output change callback if set
-        if (m_outputChangeCallback)
-        {
-          m_outputChangeCallback(device.name, i, false);
-        }
+      if (ImGui::Button(offButtonId.c_str(), ImVec2(50, 20))) {
+        HandleOutputControl(device, i, false);
       }
+      ShowErrorTooltip(device.lastError);
     }
 
     ImGui::EndTable();
   }
 }
 
+void EziIO_UI::HandleOutputControl(DeviceState& device, int pin, bool state) {
+  EziIOError result = m_ioManager.setOutput(device.id, pin, state);
+
+  if (result == EziIOError::SUCCESS) {
+    // Force an immediate update of the output status
+    EziIODevice* dev = m_ioManager.getDevice(device.id);
+    if (dev) {
+      uint32_t outputs = 0, status = 0;
+      if (dev->getOutputs(outputs, status)) {
+        device.outputs = outputs;
+        device.outputStatus = status;
+      }
+    }
+
+    // Call output change callback if set
+    if (m_outputChangeCallback) {
+      m_outputChangeCallback(device.name, pin, state);
+    }
+  }
+  else {
+    device.lastError = result;
+
+    // Show error message
+    if (m_showDebugInfo) {
+      std::cout << "[EziIO_UI] Failed to set output " << device.name
+        << " pin " << pin << " to " << (state ? "ON" : "OFF")
+        << " - Error: " << EziIOManager::getErrorString(result) << std::endl;
+    }
+  }
+}
 
 
 uint32_t EziIO_UI::GetOutputPinMask(const std::string& deviceName, int pin) const

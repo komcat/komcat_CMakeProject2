@@ -742,8 +742,7 @@ bool MachineOperations::SetOutput(const std::string& deviceName, int outputPin, 
 bool MachineOperations::SetOutput(int deviceId, int outputPin, bool state) {
   m_logger->LogInfo("MachineOperations: Setting output pin " + std::to_string(outputPin) +
     " on device ID " + std::to_string(deviceId) + " to " + (state ? "ON" : "OFF"));
-
-  return m_ioManager.setOutput(deviceId, outputPin, state);
+  return m_ioManager.setOutput(deviceId, outputPin, state) == EziIOError::SUCCESS;
 }
 
 // Read input state by device name
@@ -835,15 +834,13 @@ bool MachineOperations::ReadInput(const std::string& deviceName, int inputPin, b
 bool MachineOperations::ReadInput(int deviceId, int inputPin, bool& state) {
   m_logger->LogInfo("MachineOperations: Reading input pin " + std::to_string(inputPin) +
     " on device ID " + std::to_string(deviceId));
-
   // Read inputs
   uint32_t inputs = 0, latch = 0;
-  if (!m_ioManager.readInputs(deviceId, inputs, latch)) {
+  if (m_ioManager.readInputs(deviceId, inputs, latch) != EziIOError::SUCCESS) {
     m_logger->LogError("MachineOperations: Failed to read inputs from device ID " +
       std::to_string(deviceId));
     return false;
   }
-
   // Check the pin state
   state = ConvertPinStateToBoolean(inputs, inputPin);
   return true;

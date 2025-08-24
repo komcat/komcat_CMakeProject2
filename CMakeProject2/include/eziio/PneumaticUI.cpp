@@ -224,8 +224,10 @@ void PneumaticUI::RenderSlidePanel(const std::string& slideName)
       ImGui::Separator();
 
       // Add sensor state info
-      bool extendedSensor = m_pneumaticManager.readInputPin(slide->getExtendedInputConfig());
-      bool retractedSensor = m_pneumaticManager.readInputPin(slide->getRetractedInputConfig());
+      bool extendedSensor = false;
+      bool retractedSensor = false;
+      m_pneumaticManager.readInputPin(slide->getExtendedInputConfig(), extendedSensor);
+      m_pneumaticManager.readInputPin(slide->getRetractedInputConfig(), retractedSensor);
 
       ImGui::Text("Extended Sensor: %s", extendedSensor ? "ON" : "OFF");
       ImGui::Text("Retracted Sensor: %s", retractedSensor ? "ON" : "OFF");

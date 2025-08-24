@@ -7,6 +7,8 @@
 #include <map>
 #include <vector>
 #include <mutex>
+#include <thread>
+#include <atomic>
 
 class PneumaticManager {
 public:
@@ -47,14 +49,31 @@ public:
   void startPolling(unsigned int intervalMs = 50);
   void stopPolling();
   bool isPolling() const;
+
   // Helper to resolve pin configurations
   bool resolvePinConfig(IOPinConfig& config);
 
-  // Helper to read the current state of input pin
-  bool readInputPin(const IOPinConfig& config) const;
+  // Helper to read the current state of input pin (returns error code)
+  EziIOError readInputPin(const IOPinConfig& config, bool& state) const;
 
-  // Helper to set the state of output pin
-  bool setOutputPin(const IOPinConfig& config, bool state) const;
+  // Helper to set the state of output pin (returns error code)
+  EziIOError setOutputPin(const IOPinConfig& config, bool state) const;
+
+  // Get last error message
+  std::string getLastError() const { return m_lastError; }
+
+  // Enable/disable logging
+  void setLogging(bool enable) { m_enableLogging = enable; }
+
+  // Get statistics
+  struct Statistics {
+    int totalSlides;
+    int connectedDevices;
+    int pollingErrors;
+    int operationErrors;
+  };
+  Statistics getStatistics() const;
+
 private:
   // Reference to the EziIO manager
   EziIOManager& m_ioManager;
@@ -72,14 +91,21 @@ private:
   // Callback for slide state changes
   std::function<void(const std::string&, SlideState)> m_stateChangeCallback;
 
-
-
   // Polling thread
   std::thread* m_pollingThread = nullptr;
   std::atomic<bool> m_stopPolling;
   unsigned int m_pollingInterval;
-  std::mutex m_slidesMutex;
+  mutable std::mutex m_slidesMutex;
+
+  // Error tracking
+  mutable std::string m_lastError;
+  mutable std::atomic<int> m_pollingErrorCount{ 0 };
+  mutable std::atomic<int> m_operationErrorCount{ 0 };
+  bool m_enableLogging = true;
 
   // Thread function for polling
   void pollingThreadFunc();
+
+  // Helper to log errors
+  void logError(const std::string& operation, EziIOError error) const;
 };

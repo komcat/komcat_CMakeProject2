@@ -391,81 +391,133 @@ bool EziIOManager::disconnectAll() {
 bool EziIOManager::connectDevice(int deviceId) {
   auto device = getDevice(deviceId);
   if (!device) {
-    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
     return false;
   }
 
-  return device->connect();
+  bool result = device->connect();
+  if (result) {
+    m_connectedDeviceCount++;
+  }
+  return result;
 }
 
 bool EziIOManager::disconnectDevice(int deviceId) {
   auto device = getDevice(deviceId);
   if (!device) {
-    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
     return false;
   }
 
-  return device->disconnect();
+  bool wasConnected = device->isConnected();
+  bool result = device->disconnect();
+  if (result && wasConnected) {
+    m_connectedDeviceCount--;
+  }
+  return result;
 }
 
-bool EziIOManager::readInputs(int deviceId, uint32_t& inputs, uint32_t& latch) {
-  auto device = getDevice(deviceId);
-  if (!device) {
-    //std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
-    return false;
+// Helper to get error message string
+std::string EziIOManager::getErrorString(EziIOError error) {
+  switch (error) {
+  case EziIOError::SUCCESS:
+    return "Success";
+  case EziIOError::DEVICE_NOT_FOUND:
+    return "Device not found";
+  case EziIOError::DEVICE_DISCONNECTED:
+    return "Device disconnected";
+  case EziIOError::OPERATION_FAILED:
+    return "Operation failed";
+  default:
+    return "Unknown error";
   }
-
-  return device->readInputs(inputs, latch);
 }
 
-bool EziIOManager::getLastInputStatus(int deviceId, uint32_t& inputs, uint32_t& latch) {
-  auto device = getDevice(deviceId);
-  if (!device) {
-    //std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
-    return false;
+// Updated validation helper to return EziIOError
+EziIOError EziIOManager::validateDevice(int deviceId, EziIODevice** device, const std::string& operation) {
+  *device = getDevice(deviceId);
+
+  if (!*device) {
+    if (m_enableLogging) {
+      std::cerr << "[EziIOManager] " << operation << " failed: Device ID "
+        << deviceId << " not found" << std::endl;
+    }
+    return EziIOError::DEVICE_NOT_FOUND;
   }
 
-  return device->getLastInputStatus(inputs, latch);
+  if (!(*device)->isConnected()) {
+    if (m_enableLogging) {
+      std::cerr << "[EziIOManager] " << operation << " failed: Device '"
+        << (*device)->getName() << "' (ID: " << deviceId
+        << ") is disconnected" << std::endl;
+    }
+    return EziIOError::DEVICE_DISCONNECTED;
+  }
+
+  return EziIOError::SUCCESS;
 }
 
-bool EziIOManager::getOutputs(int deviceId, uint32_t& outputs, uint32_t& status) {
-  auto device = getDevice(deviceId);
-  if (!device) {
-    //std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
-    return false;
+// Updated I/O functions to return EziIOError
+EziIOError EziIOManager::readInputs(int deviceId, uint32_t& inputs, uint32_t& latch) {
+  EziIODevice* device = nullptr;
+  EziIOError validationResult = validateDevice(deviceId, &device, "readInputs");
+  if (validationResult != EziIOError::SUCCESS) {
+    return validationResult;
   }
 
-  return device->getOutputs(outputs, status);
+  bool result = device->readInputs(inputs, latch);
+  return result ? EziIOError::SUCCESS : EziIOError::OPERATION_FAILED;
 }
 
-bool EziIOManager::getLastOutputStatus(int deviceId, uint32_t& outputs, uint32_t& status) {
-  auto device = getDevice(deviceId);
+EziIOError EziIOManager::getLastInputStatus(int deviceId, uint32_t& inputs, uint32_t& latch) {
+  EziIODevice* device = getDevice(deviceId);
   if (!device) {
-    //std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
-    return false;
+    return EziIOError::DEVICE_NOT_FOUND;
   }
-
-  return device->getLastOutputStatus(outputs, status);
+  // Return cached values even if disconnected
+  bool result = device->getLastInputStatus(inputs, latch);
+  return result ? EziIOError::SUCCESS : EziIOError::OPERATION_FAILED;
 }
 
-bool EziIOManager::setOutputs(int deviceId, uint32_t setMask, uint32_t clearMask) {
-  auto device = getDevice(deviceId);
-  if (!device) {
-    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
-    return false;
+EziIOError EziIOManager::getOutputs(int deviceId, uint32_t& outputs, uint32_t& status) {
+  EziIODevice* device = nullptr;
+  EziIOError validationResult = validateDevice(deviceId, &device, "getOutputs");
+  if (validationResult != EziIOError::SUCCESS) {
+    return validationResult;
   }
 
-  return device->setOutputs(setMask, clearMask);
+  bool result = device->getOutputs(outputs, status);
+  return result ? EziIOError::SUCCESS : EziIOError::OPERATION_FAILED;
 }
 
-bool EziIOManager::setOutput(int deviceId, int outputPin, bool state) {
-  auto device = getDevice(deviceId);
+EziIOError EziIOManager::getLastOutputStatus(int deviceId, uint32_t& outputs, uint32_t& status) {
+  EziIODevice* device = getDevice(deviceId);
   if (!device) {
-    std::cerr << "Device with ID " << deviceId << " not found" << std::endl;
-    return false;
+    return EziIOError::DEVICE_NOT_FOUND;
+  }
+  // Return cached values even if disconnected
+  bool result = device->getLastOutputStatus(outputs, status);
+  return result ? EziIOError::SUCCESS : EziIOError::OPERATION_FAILED;
+}
+
+EziIOError EziIOManager::setOutputs(int deviceId, uint32_t setMask, uint32_t clearMask) {
+  EziIODevice* device = nullptr;
+  EziIOError validationResult = validateDevice(deviceId, &device, "setOutputs");
+  if (validationResult != EziIOError::SUCCESS) {
+    return validationResult;
   }
 
-  return device->setOutput(outputPin, state);
+  bool result = device->setOutputs(setMask, clearMask);
+  return result ? EziIOError::SUCCESS : EziIOError::OPERATION_FAILED;
+}
+
+EziIOError EziIOManager::setOutput(int deviceId, int outputPin, bool state) {
+  EziIODevice* device = nullptr;
+  EziIOError validationResult = validateDevice(deviceId, &device, "setOutput");
+  if (validationResult != EziIOError::SUCCESS) {
+    return validationResult;
+  }
+
+  bool result = device->setOutput(outputPin, state);
+  return result ? EziIOError::SUCCESS : EziIOError::OPERATION_FAILED;
 }
 
 EziIODevice* EziIOManager::getDevice(int deviceId) {
@@ -525,29 +577,38 @@ void EziIOManager::pollingThreadFunc() {
   std::cout << "Polling thread started with interval " << m_pollingInterval << "ms" << std::endl;
 
   while (!m_stopPolling) {
+    int connectedCount = 0;
+
     // Poll status of all connected devices
     for (auto& device : m_devices) {
       if (device->isConnected()) {
+        connectedCount++;
+
         // Poll for inputs and outputs
         uint32_t inputs = 0, latch = 0;
         uint32_t outputs = 0, status = 0;
 
-        // Read inputs (this will update the device's internal status)
         device->readInputs(inputs, latch);
-
-        // Read outputs (this will update the device's internal status)
         device->getOutputs(outputs, status);
-
-        // Check if any inputs changed - you could implement callbacks here in the future
       }
     }
 
-    // Sleep for the specified interval
-    std::this_thread::sleep_for(std::chrono::milliseconds(m_pollingInterval));
+    // Adjust sleep based on connection status
+    if (connectedCount == 0) {
+      // No devices connected - sleep longer (1 second)
+      std::cout << "No devices connected, sleeping for 1000ms" << std::endl;
+      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
+    else {
+      // Normal polling interval when devices are connected
+      // Could also log: std::cout << connectedCount << " devices connected" << std::endl;
+      std::this_thread::sleep_for(std::chrono::milliseconds(m_pollingInterval));
+    }
   }
 
   std::cout << "Polling thread stopped" << std::endl;
 }
+
 
 bool EziIOManager::isPolling() const {
   return m_pollingThread != nullptr && !m_stopPolling;

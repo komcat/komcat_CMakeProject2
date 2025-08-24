@@ -104,7 +104,11 @@ bool IOOps::SetOutput(int deviceId, int outputPin, bool state) {
   m_logger->LogInfo("IOOps: Setting output pin " + std::to_string(outputPin) +
     " on device ID " + std::to_string(deviceId) + " to " + (state ? "ON" : "OFF"));
 
-  return m_ioManager.setOutput(deviceId, outputPin, state);
+  EziIOError result = m_ioManager.setOutput(deviceId, outputPin, state);
+  if (result != EziIOError::SUCCESS) {
+    m_logger->LogError("IOOps: Failed - " + EziIOManager::getErrorString(result));
+  }
+  return result == EziIOError::SUCCESS;
 }
 
 bool IOOps::ReadInput(const std::string& deviceName, int inputPin, bool& state,
@@ -193,15 +197,14 @@ bool IOOps::ReadInput(const std::string& deviceName, int inputPin, bool& state,
 bool IOOps::ReadInput(int deviceId, int inputPin, bool& state) {
   m_logger->LogInfo("IOOps: Reading input pin " + std::to_string(inputPin) +
     " on device ID " + std::to_string(deviceId));
-
   // Read inputs
   uint32_t inputs = 0, latch = 0;
-  if (!m_ioManager.readInputs(deviceId, inputs, latch)) {
+  EziIOError result = m_ioManager.readInputs(deviceId, inputs, latch);
+  if (result != EziIOError::SUCCESS) {
     m_logger->LogError("IOOps: Failed to read inputs from device ID " +
-      std::to_string(deviceId));
+      std::to_string(deviceId) + " - " + EziIOManager::getErrorString(result));
     return false;
   }
-
   // Check the pin state
   state = ConvertPinStateToBoolean(inputs, inputPin);
   return true;
