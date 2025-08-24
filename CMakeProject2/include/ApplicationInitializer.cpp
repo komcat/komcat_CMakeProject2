@@ -410,6 +410,7 @@ bool ApplicationInitializer::InitMotionControllers(HardwareManagers& hw) {
   return true;
 }
 
+
 bool ApplicationInitializer::InitIOSystems(HardwareManagers& hw) {
   // Initialize EziIO
   hw.ioManager = std::make_unique<EziIOManager>();
@@ -435,13 +436,17 @@ bool ApplicationInitializer::InitIOSystems(HardwareManagers& hw) {
 
   // Initialize Pneumatic System
   hw.pneumatic = std::make_unique<PneumaticManager>(*hw.ioManager);
-  if (!hw.pneumatic->initialize()) {
-    logger->LogWarning("Failed to initialize Pneumatic Manager");
+
+  // IMPORTANT: Configure BEFORE initialize!
+  if (!hw.ioConfig->initializePneumaticManager(*hw.pneumatic)) {
+    logger->LogWarning("Failed to configure pneumatic manager");
     return false;
   }
 
-  if (!hw.ioConfig->initializePneumaticManager(*hw.pneumatic)) {
-    logger->LogWarning("Failed to configure pneumatic manager");
+  // NOW initialize after configuration is loaded
+  if (!hw.pneumatic->initialize()) {
+    logger->LogWarning("Failed to initialize Pneumatic Manager");
+    return false;
   }
 
   hw.pneumatic->startPolling(100);
@@ -462,6 +467,7 @@ bool ApplicationInitializer::InitIOSystems(HardwareManagers& hw) {
   logger->LogInfo("Pneumatic system initialized");
   return true;
 }
+
 
 bool ApplicationInitializer::InitCameras(HardwareManagers& hw) {
   hw.camera = std::make_unique<CameraManager>();

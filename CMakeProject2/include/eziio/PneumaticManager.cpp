@@ -241,26 +241,56 @@ void PneumaticManager::updateAllSlideStates()
     EziIOError extResult = readInputPin(slide->getExtendedInputConfig(), extendedSensor);
     EziIOError retResult = readInputPin(slide->getRetractedInputConfig(), retractedSensor);
 
+    // Enhanced logging - always log if slide is moving, otherwise every 20 polls
+    if (m_enableLogging) {
+      static std::map<std::string, int> logCounters;
+      bool shouldLog = false;
+
+      // Always log if slide is moving
+      if (slide->getState() == SlideState::MOVING) {
+        shouldLog = true;
+      }
+      else {
+        // Otherwise log every 20 polls (1 second)
+        if (logCounters[name]++ % 20 == 0) {
+          shouldLog = true;
+        }
+      }
+
+      if (shouldLog) {
+        std::cout << "Slide " << name
+          << " [" << GetStateString(slide->getState()) << "]"
+          << " - Extended: " << (extendedSensor ? "ON" : "OFF")
+          << ", Retracted: " << (retractedSensor ? "ON" : "OFF")
+          << std::endl;
+      }
+    }
+
     // Check for errors
     if (extResult != EziIOError::SUCCESS || retResult != EziIOError::SUCCESS) {
-      // Log error but continue with other slides
       if (m_enableLogging) {
         std::cerr << "Error reading sensors for slide " << name
           << " - Extended: " << EziIOManager::getErrorString(extResult)
           << ", Retracted: " << EziIOManager::getErrorString(retResult) << std::endl;
       }
       m_pollingErrorCount++;
-
-      // Set slide to error state if we can't read sensors
-      if (extResult == EziIOError::DEVICE_DISCONNECTED ||
-        retResult == EziIOError::DEVICE_DISCONNECTED) {
-        slide->updateState(false, false); // This will trigger error state
-      }
       continue;
     }
 
     // Update the slide's state based on sensor readings
     slide->updateState(extendedSensor, retractedSensor);
+  }
+}
+
+// Add this helper function to PneumaticManager
+const char* PneumaticManager::GetStateString(SlideState state) const {
+  switch (state) {
+  case SlideState::EXTENDED:  return "EXTENDED";
+  case SlideState::RETRACTED: return "RETRACTED";
+  case SlideState::MOVING:    return "MOVING";
+  case SlideState::P_ERROR:   return "ERROR";
+  case SlideState::UNKNOWN:
+  default:                    return "UNKNOWN";
   }
 }
 

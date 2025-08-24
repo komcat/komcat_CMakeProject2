@@ -1,4 +1,4 @@
-#include "EziIO_Manager.h"
+﻿#include "EziIO_Manager.h"
 #include <sstream>
 #include <chrono>
 #include <thread>
@@ -81,45 +81,26 @@ uint32_t EziIODevice::getOutputPinMask(int pin) const {
 
 bool EziIODevice::connect() {
   if (m_isConnected) {
-    return true; // Already connected
+    return true;
   }
 
-  // Connect using TCP protocol
+  std::cout << "Attempting to connect to " << m_name
+    << " at " << (int)m_ipBytes[0] << "." << (int)m_ipBytes[1]
+    << "." << (int)m_ipBytes[2] << "." << (int)m_ipBytes[3]
+    << " (Device ID: " << m_deviceId << ")" << std::endl;
+
   if (PE::FAS_ConnectTCP(m_ipBytes[0], m_ipBytes[1], m_ipBytes[2], m_ipBytes[3], m_deviceId)) {
     m_isConnected = true;
-    std::cout << "Connected to device " << m_name << " (ID: " << m_deviceId
-      << ") at IP " << m_ipAddress << std::endl;
-
-    //DO NOT CLEAR output when connect for safety
-		if (false) {
-      // Initialize by clearing all outputs
-      if (m_outputCount > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-        // Clear all outputs as initialization
-        uint32_t clearMask = 0;
-
-        // Create a mask to clear all possible output pins
-        for (int i = 0; i < m_outputCount; i++) {
-          clearMask |= getOutputPinMask(i);
-        }
-
-        uint32_t setMask = 0; // Set none
-
-        std::cout << "Initializing outputs with clear mask: 0x" << std::hex << clearMask << std::dec << std::endl;
-        setOutputs(setMask, clearMask);
-      }
-		}
-
-
+    std::cout << "✓ Connected successfully!" << std::endl;
     return true;
   }
   else {
-    std::cerr << "Failed to connect to device " << m_name << " (ID: " << m_deviceId
-      << ") at IP " << m_ipAddress << std::endl;
+    // Get error code if available
+    std::cerr << "✗ Connection failed for " << m_name << std::endl;
     return false;
   }
 }
+
 
 bool EziIODevice::disconnect() {
   if (!m_isConnected) {
@@ -366,12 +347,21 @@ bool EziIOManager::addDevice(int id, const std::string& name, const std::string&
 
 bool EziIOManager::connectAll() {
   bool allConnected = true;
+  int connectedCount = 0;  // Add counter
 
   for (auto& device : m_devices) {
-    if (!device->connect()) {
+    if (device->connect()) {
+      connectedCount++;  // Increment when connected
+    }
+    else {
       allConnected = false;
     }
   }
+
+  m_connectedDeviceCount = connectedCount;  // Update atomic counter
+
+  std::cout << "Connected " << connectedCount << "/"
+    << m_devices.size() << " EziIO devices" << std::endl;
 
   return allConnected;
 }
@@ -385,6 +375,8 @@ bool EziIOManager::disconnectAll() {
     }
   }
 
+  m_connectedDeviceCount = 0;  // Reset counter
+
   return allDisconnected;
 }
 
@@ -394,10 +386,13 @@ bool EziIOManager::connectDevice(int deviceId) {
     return false;
   }
 
+  bool wasConnected = device->isConnected();
   bool result = device->connect();
-  if (result) {
-    m_connectedDeviceCount++;
+
+  if (result && !wasConnected) {
+    m_connectedDeviceCount++;  // Increment when newly connected
   }
+
   return result;
 }
 
@@ -409,9 +404,11 @@ bool EziIOManager::disconnectDevice(int deviceId) {
 
   bool wasConnected = device->isConnected();
   bool result = device->disconnect();
+
   if (result && wasConnected) {
-    m_connectedDeviceCount--;
+    m_connectedDeviceCount--;  // Decrement when disconnected
   }
+
   return result;
 }
 

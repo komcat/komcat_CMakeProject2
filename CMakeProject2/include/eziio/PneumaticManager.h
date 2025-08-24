@@ -101,11 +101,12 @@ private:
   mutable std::string m_lastError;
   mutable std::atomic<int> m_pollingErrorCount{ 0 };
   mutable std::atomic<int> m_operationErrorCount{ 0 };
-  bool m_enableLogging = true;
+  bool m_enableLogging = false;
 
   // Thread function for polling
   void pollingThreadFunc();
 
   // Helper to log errors
   void logError(const std::string& operation, EziIOError error) const;
+  const char* GetStateString(SlideState state) const;
 };
