@@ -42,6 +42,7 @@ class Logger;
 class ConfigFileWatchdog;
 class IOperations;
 class DUTDataRecorder;
+class Logger;
 
 /**
  * Application Context - Centralized service container
@@ -49,6 +50,9 @@ class DUTDataRecorder;
  */
 class AppContext {
 public:
+	//Logger instance
+  Logger* logger = nullptr;
+
   // === Core System Services ===
   MotionConfigManager* motionConfigManager = nullptr;
   ConfigFileWatchdog* configWatchdog = nullptr;
@@ -90,6 +94,9 @@ private:
   // === Operations Registry for Scripting Interface ===
   std::map<std::string, IOperations*> m_operationsRegistry;
 
+
+	//logger instance
+  Logger* m_logger = nullptr;
   // === Non-owning pointers for parallel migration ===
   MotionConfigManager* m_motionConfigPtr = nullptr;
   MotionControlLayer* m_motionControlLayerPtr = nullptr;
@@ -119,14 +126,14 @@ public:
     return instance;
   }
 
-  // === NEW: Motion Control Layer Registration ===
-  void RegisterExistingMotionControlLayer(MotionControlLayer* layer) {
-    motionControlLayer = layer;
-    m_motionControlLayerPtr = layer;  // Also store in parallel pointer
-    if (motionControlLayer) {
-      GetLogger()->LogInfo("AppContext: MotionControlLayer registered");
+  void RegisterLogger(Logger* log) {
+    logger = log;
+    m_logger = log; // Also store in parallel pointer
+    if (logger) {
+      GetLogger()->LogInfo("AppContext: Logger registered");
     }
-  }
+	}
+
 
   // === Database and Results Manager Registration ===
   void RegisterDatabaseManager(DatabaseManager* dbManager) {
@@ -179,6 +186,14 @@ public:
   // === Service Registration & Access ===
   void RegisterMotionConfig(MotionConfigManager* service) {
     motionConfigManager = service;
+  }
+  // === NEW: Motion Control Layer Registration ===
+  void RegisterExistingMotionControlLayer(MotionControlLayer* layer) {
+    motionControlLayer = layer;
+    m_motionControlLayerPtr = layer;  // Also store in parallel pointer
+    if (motionControlLayer) {
+      GetLogger()->LogInfo("AppContext: MotionControlLayer registered");
+    }
   }
 
   // Individual registration methods for existing services
@@ -321,7 +336,9 @@ public:
 
 
   // === Safe Access Methods ===
-  Logger* GetLogger() const { return Logger::GetInstance(); }
+  Logger* GetLogger() const {
+    return logger ? logger : m_logger;
+	}
 
   MotionConfigManager* GetMotionConfig() const {
     return motionConfigManager ? motionConfigManager : m_motionConfigPtr;
@@ -419,6 +436,31 @@ public:
     return Logger::GetInstance() != nullptr && motionConfigManager != nullptr;
   }
 
+  bool HasMotionControl() const {
+    return motionControlLayer != nullptr &&
+      piControllerManager != nullptr &&
+      acsControllerManager != nullptr;
+	}
+
+  bool HasMotionConfig() const {
+    return motionConfigManager != nullptr;
+	}
+
+  bool HasMachineOperations() const {
+    return machineOperations != nullptr;
+	}
+  bool HasDUTDataRecorder() const {
+    return dutDataRecorder != nullptr;
+  }
+  bool HasConfigWatchdog() const {
+    return configWatchdog != nullptr;
+	}
+  bool HasCLD101xManagers() const {
+    return cld101xManager != nullptr || keithleyManager != nullptr;
+	}
+  bool HasLogger() const {
+    return logger != nullptr;
+	}
   bool HasHardwareManagers() const {
     return piControllerManager != nullptr ||
       acsControllerManager != nullptr ||

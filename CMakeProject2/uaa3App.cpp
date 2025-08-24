@@ -1140,6 +1140,16 @@ int main(int argc, char* argv[])
 	if (dutDataRecorder) {
 		context.RegisterExistingDUTDataRecorder(dutDataRecorder.get());
 	}
+
+	if (logger)
+	{
+		context.RegisterLogger(logger);
+	}
+	if(configWatchdog)
+	{
+		context.RegisterConfigWatchdog(configWatchdog.get());
+	}
+
 	logger->LogInfo("✅ All services registered with AppContext");
 	context.LogInitializationStatus();
 
