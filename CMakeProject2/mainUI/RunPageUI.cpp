@@ -6,6 +6,7 @@
 #include "uaa3_process_builders.h"
 #include "ProcessRegistry.h"
 #include "LiveVideoSubscriber.h"
+#include "ManualAdjustmentOperation.h"
 // UPDATE RunPageUI.cpp - Constructor
 
 // NEW: Add to constructor
@@ -74,6 +75,9 @@ void RunPageUI::RenderUI() {
   if (m_showFilterWindow) {
     m_filterManager->RenderFilterWindow(&m_showFilterWindow);
   }
+
+  // ADD THIS: Render any active manual adjustment windows
+  ManualAdjustmentRegistry::GetInstance().RenderAll();
 }
 
 void RunPageUI::RenderColumn1() {

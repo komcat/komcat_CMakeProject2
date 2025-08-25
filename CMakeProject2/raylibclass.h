@@ -99,6 +99,7 @@ private:
   std::atomic<bool> isVisible;
   std::atomic<bool> shouldClose;
   std::atomic<bool> shouldShutdown;
+  bool m_showCrosshair = false;  // ADD THIS: Toggle for crosshair display
 
   // Thread-safe data
   std::mutex dataMutex;
@@ -139,5 +140,7 @@ private:
   void RenderCameraOverlay();
   void RenderCameraInCorner();
   void RenderCameraFullscreen();
+
+  void DebugCrosshair();
 
 };

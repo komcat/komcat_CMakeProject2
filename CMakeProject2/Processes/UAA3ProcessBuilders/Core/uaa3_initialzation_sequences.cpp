@@ -7,7 +7,17 @@ namespace UAA3ProcessBuilders {
     MachineOperations& machineOps, UserPromptUI& promptUI) {
 
     auto sequence = std::make_unique<SequenceStep>("UAA3 Initialization", machineOps);
+    // 6. Retract UV_Head pneumatic
+    sequence->AddOperation(std::make_shared<RetractSlideOperation>(
+      "UV_Head"));
 
+    // 7. Retract Dispenser_Head pneumatic
+    sequence->AddOperation(std::make_shared<RetractSlideOperation>(
+      "Dispenser_Head"));
+
+    // 8. Retract Pick_Up_Tool pneumatic
+    sequence->AddOperation(std::make_shared<RetractSlideOperation>(
+      "Pick_Up_Tool"));
 
     // 1. Move gantry-main to safe position
     sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
@@ -29,17 +39,7 @@ namespace UAA3ProcessBuilders {
     sequence->AddOperation(std::make_shared<SetOutputOperation>(
       "IOBottom", 2, false));
 
-    // 6. Retract UV_Head pneumatic
-    sequence->AddOperation(std::make_shared<RetractSlideOperation>(
-      "UV_Head"));
 
-    // 7. Retract Dispenser_Head pneumatic
-    sequence->AddOperation(std::make_shared<RetractSlideOperation>(
-      "Dispenser_Head"));
-
-    // 8. Retract Pick_Up_Tool pneumatic
-    sequence->AddOperation(std::make_shared<RetractSlideOperation>(
-      "Pick_Up_Tool"));
 
     // 9. Clear dedicated output (pin 10) - Vacuum_Base
     sequence->AddOperation(std::make_shared<ClearOutputOperationDedicated>(

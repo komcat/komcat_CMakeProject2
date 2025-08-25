@@ -420,6 +420,9 @@ void RaylibWindow::RaylibThreadFunction() {
     // REPLACE your main raylib loop in RaylibThreadFunction() with this:
 
     // Main raylib loop
+
+// Find this section in RaylibThreadFunction() and replace it:
+// Main raylib loop
     while (!WindowShouldClose() && !shouldShutdown.load()) {
 
       // === ADD CAMERA UPDATE HERE (CRITICAL!) ===
@@ -447,8 +450,8 @@ void RaylibWindow::RaylibThreadFunction() {
         currentPage = REALTIME_CHART_PAGE;
       }
 
-      // === ADD CAMERA CONTROLS HERE ===
-      // Handle camera visibility toggle with different key (since C is used for chart)
+      // === FIX: CONSOLIDATED CAMERA CONTROLS ===
+      // Handle camera visibility toggle
       if (IsKeyPressed(KEY_F)) {  // F for Feed toggle
         ToggleCameraFeed();
         if (logger) {
@@ -457,10 +460,25 @@ void RaylibWindow::RaylibThreadFunction() {
       }
 
       // Handle camera fullscreen toggle
-      if (IsKeyPressed(KEY_G)) {  // G for fullscreen toggle (since V is used for video page)
+      if (IsKeyPressed(KEY_G)) {  // G for fullscreen toggle
         m_cameraFullscreenMode = !m_cameraFullscreenMode;
         if (logger) {
           logger->LogInfo("Camera view mode: " + std::string(m_cameraFullscreenMode ? "Fullscreen" : "Corner"));
+        }
+      }
+
+      // FIX: Handle crosshair toggle ONLY HERE in main loop
+      if (IsKeyPressed(KEY_H)) {  // H for crosshair toggle
+        if (m_cameraFullscreenMode && m_showCameraFeed) {  // Only work in fullscreen mode with feed visible
+          m_showCrosshair = !m_showCrosshair;
+          if (logger) {
+            logger->LogInfo("Camera crosshair " + std::string(m_showCrosshair ? "enabled" : "disabled"));
+          }
+        }
+        else {
+          if (logger) {
+            logger->LogInfo("Crosshair toggle ignored - requires fullscreen mode");
+          }
         }
       }
       // ================================
@@ -490,11 +508,10 @@ void RaylibWindow::RaylibThreadFunction() {
         realtimeChartPage.Render();
       }
 
-      // === ADD CAMERA OVERLAY RENDERING HERE (CRITICAL!) ===
-      // Render camera overlay on ALL pages - MUST be called every frame
+      // === FIX: RENDER CAMERA OVERLAY WITH STATE ===
       RenderCameraOverlay();
 
-      // Add camera status display
+      // Add camera status display with crosshair state
       if (m_cameraFeedDisplay) {
         std::string cameraStatus = m_cameraFeedDisplay->GetStatusText();
         Color statusColor = m_cameraFeedDisplay->IsReceivingFrames() ? GREEN : ORANGE;
@@ -502,6 +519,13 @@ void RaylibWindow::RaylibThreadFunction() {
 
         if (m_cameraFeedDisplay->HasValidTexture()) {
           DrawText("Camera: F=Toggle, G=Fullscreen", 10, GetScreenHeight() - 40, 12, LIGHTGRAY);
+
+          // FIX: Show crosshair state
+          if (m_cameraFullscreenMode) {
+            std::string crosshairStatus = m_showCrosshair ? "H=Crosshair [ON]" : "H=Crosshair [OFF]";
+            Color crosshairColor = m_showCrosshair ? GREEN : LIGHTGRAY;
+            DrawText(crosshairStatus.c_str(), 10, GetScreenHeight() - 20, 12, crosshairColor);
+          }
         }
       }
       // =====================================================
@@ -510,6 +534,11 @@ void RaylibWindow::RaylibThreadFunction() {
 
       EndDrawing();
     }
+
+
+
+
+
     if (logger) logger->LogInfo("Raylib thread main loop ended, cleaning up...");
 
     // Cleanup
@@ -644,35 +673,12 @@ void RaylibWindow::UpdateCameraTexture() {
 }
 
 
+
+// ============================================
+// SIMPLIFIED RenderCameraOverlay - Remove duplicate key handling
 void RaylibWindow::RenderCameraOverlay() {
   if (!m_showCameraFeed || !m_cameraFeedDisplay || m_cameraTextureID == 0) {
-    // NEW: Log why we're not rendering
-    static int noRenderCount = 0;
-    noRenderCount++;
-
-    if (noRenderCount % 300 == 0) { // Log every 5 seconds
-      if (m_logger) {
-        std::string reason = "Unknown";
-        if (!m_showCameraFeed) reason = "Feed not visible";
-        else if (!m_cameraFeedDisplay) reason = "No feed display";
-        else if (m_cameraTextureID == 0) reason = "No texture ID";
-
-        m_logger->LogInfo("RaylibWindow: Not rendering camera overlay - " + reason);
-      }
-    }
     return;
-  }
-
-  // NEW: Log successful renders occasionally
-  static int renderCount = 0;
-  renderCount++;
-
-  if (renderCount % 300 == 0) { // Log every 5 seconds
-    if (m_logger) {
-      m_logger->LogInfo("RaylibWindow: Rendering camera overlay (render #" + std::to_string(renderCount) + ")");
-      m_logger->LogInfo("  Texture ID: " + std::to_string(m_cameraTextureID));
-      m_logger->LogInfo("  Mode: " + std::string(m_cameraFullscreenMode ? "Fullscreen" : "Corner"));
-    }
   }
 
   // Get camera texture dimensions
@@ -680,28 +686,23 @@ void RaylibWindow::RenderCameraOverlay() {
   uint32_t texHeight = m_cameraFeedDisplay->GetTextureHeight();
 
   if (texWidth == 0 || texHeight == 0) {
-    if (m_logger && renderCount % 300 == 0) {
-      m_logger->LogInfo("RaylibWindow: Invalid texture dimensions: " +
-        std::to_string(texWidth) + "x" + std::to_string(texHeight));
-    }
     return;
   }
 
-  // Toggle with 'V' key
-  if (IsKeyPressed(KEY_V)) {
-    m_cameraFullscreenMode = !m_cameraFullscreenMode;
-    if (m_logger) {
-      m_logger->LogInfo("Camera view mode: " + std::string(m_cameraFullscreenMode ? "Fullscreen" : "Corner"));
-    }
-  }
-
+  // REMOVED duplicate key handling - it's now only in main loop
+  // Just render based on current state
   if (m_cameraFullscreenMode) {
     RenderCameraFullscreen();
   }
   else {
     RenderCameraInCorner();
+    // Reset crosshair when not in fullscreen
+    if (m_showCrosshair) {
+      m_showCrosshair = false;
+    }
   }
 }
+
 
 
 
@@ -802,6 +803,9 @@ void RaylibWindow::RenderCameraInCorner() {
 }
 
 
+
+// ============================================
+// SIMPLIFIED RenderCameraFullscreen with clear crosshair rendering
 void RaylibWindow::RenderCameraFullscreen() {
   if (m_cameraTextureID == 0) return;
 
@@ -819,19 +823,19 @@ void RaylibWindow::RenderCameraFullscreen() {
   // Fit to screen while maintaining aspect ratio
   if (aspectRatio > ((float)screenWidth / screenHeight)) {
     // Fit by width
-    displayWidth = screenWidth;
+    displayWidth = (float)screenWidth;
     displayHeight = screenWidth / aspectRatio;
     offsetY = (screenHeight - displayHeight) * 0.5f;
   }
   else {
     // Fit by height
-    displayHeight = screenHeight;
+    displayHeight = (float)screenHeight;
     displayWidth = screenHeight * aspectRatio;
     offsetX = (screenWidth - displayWidth) * 0.5f;
   }
 
   Rectangle destRect = { offsetX, offsetY, displayWidth, displayHeight };
-  Rectangle sourceRect = { 0, 0, texWidth, texHeight };  // Negative height to flip Y
+  Rectangle sourceRect = { 0, 0, texWidth, texHeight };
 
   // Create texture reference
   Texture2D cameraTexture = {
@@ -848,8 +852,113 @@ void RaylibWindow::RenderCameraFullscreen() {
   // Draw camera feed
   DrawTexturePro(cameraTexture, sourceRect, destRect, Vector2{ 0, 0 }, 0.0f, WHITE);
 
+  // FIX: ALWAYS CHECK AND RENDER CROSSHAIR IF ENABLED
+  if (m_showCrosshair) {
+    // Calculate center of the IMAGE
+    float imageCenterX = offsetX + displayWidth / 2.0f;
+    float imageCenterY = offsetY + displayHeight / 2.0f;
+
+    // Use high contrast colors
+    Color crosshairColor = LIME;  // Bright green
+    Color outlineColor = BLACK;
+    float lineThickness = 3.0f;
+    float outlineThickness = 5.0f;
+    float centerGap = 20.0f;
+
+    // === HORIZONTAL LINES ===
+    // Left side - black outline
+    DrawLineEx(Vector2{ offsetX, imageCenterY },
+      Vector2{ imageCenterX - centerGap, imageCenterY },
+      outlineThickness, outlineColor);
+    // Left side - green line
+    DrawLineEx(Vector2{ offsetX, imageCenterY },
+      Vector2{ imageCenterX - centerGap, imageCenterY },
+      lineThickness, crosshairColor);
+
+    // Right side - black outline
+    DrawLineEx(Vector2{ imageCenterX + centerGap, imageCenterY },
+      Vector2{ offsetX + displayWidth, imageCenterY },
+      outlineThickness, outlineColor);
+    // Right side - green line
+    DrawLineEx(Vector2{ imageCenterX + centerGap, imageCenterY },
+      Vector2{ offsetX + displayWidth, imageCenterY },
+      lineThickness, crosshairColor);
+
+    // === VERTICAL LINES ===
+    // Top side - black outline
+    DrawLineEx(Vector2{ imageCenterX, offsetY },
+      Vector2{ imageCenterX, imageCenterY - centerGap },
+      outlineThickness, outlineColor);
+    // Top side - green line
+    DrawLineEx(Vector2{ imageCenterX, offsetY },
+      Vector2{ imageCenterX, imageCenterY - centerGap },
+      lineThickness, crosshairColor);
+
+    // Bottom side - black outline
+    DrawLineEx(Vector2{ imageCenterX, imageCenterY + centerGap },
+      Vector2{ imageCenterX, offsetY + displayHeight },
+      outlineThickness, outlineColor);
+    // Bottom side - green line
+    DrawLineEx(Vector2{ imageCenterX, imageCenterY + centerGap },
+      Vector2{ imageCenterX, offsetY + displayHeight },
+      lineThickness, crosshairColor);
+
+    // === CENTER MARKER ===
+    DrawCircle((int)imageCenterX, (int)imageCenterY, 8, WHITE);
+    DrawCircle((int)imageCenterX, (int)imageCenterY, 6, BLACK);
+    DrawCircle((int)imageCenterX, (int)imageCenterY, 3, RED);
+
+    // === STATUS INDICATOR ===
+    DrawRectangle(screenWidth - 200, 20, 180, 30, Fade(BLACK, 0.8f));
+    DrawText("CROSSHAIR ON", screenWidth - 190, 28, 16, LIME);
+
+    // Debug: Draw a test shape to verify rendering works
+    DrawRectangle(screenWidth - 220, 60, 20, 20, LIME);
+    DrawText("Test", screenWidth - 190, 62, 14, WHITE);
+  }
+
   // Draw controls
   DrawText("CAMERA FEED - FULLSCREEN MODE", 20, 20, 24, WHITE);
   DrawText("Press 'V' to return to corner view", 20, 50, 16, LIGHTGRAY);
   DrawText("Press 'C' to hide camera feed", 20, 70, 16, LIGHTGRAY);
+
+  // Show crosshair control with current state
+  if (m_showCrosshair) {
+    DrawText("Press 'H' to hide crosshair [ON]", 20, 130, 16, LIME);
+
+    // DEBUG: Add visible confirmation
+    DrawRectangle(300, 125, 150, 25, Fade(LIME, 0.3f));
+    DrawText("CROSSHAIR ACTIVE", 305, 130, 16, LIME);
+  }
+  else {
+    DrawText("Press 'H' to show crosshair [OFF]", 20, 130, 16, LIGHTGRAY);
+  }
+}
+
+
+// Also add this debug method to help troubleshoot:
+void RaylibWindow::DebugCrosshair() {
+  if (m_logger) {
+    m_logger->LogInfo("=== CROSSHAIR DEBUG ===");
+    m_logger->LogInfo("Crosshair enabled: " + std::string(m_showCrosshair ? "YES" : "NO"));
+    m_logger->LogInfo("Fullscreen mode: " + std::string(m_cameraFullscreenMode ? "YES" : "NO"));
+    m_logger->LogInfo("Camera feed visible: " + std::string(m_showCameraFeed ? "YES" : "NO"));
+
+    if (m_cameraFeedDisplay) {
+      m_logger->LogInfo("Camera texture ID: " + std::to_string(m_cameraTextureID));
+      m_logger->LogInfo("Camera dimensions: " +
+        std::to_string(m_cameraFeedDisplay->GetTextureWidth()) + "x" +
+        std::to_string(m_cameraFeedDisplay->GetTextureHeight()));
+    }
+    m_logger->LogInfo("===================");
+  }
+
+  // Also draw debug info on screen
+  if (m_showCrosshair && m_cameraFullscreenMode) {
+    DrawText("CROSSHAIR DEBUG: SHOULD BE VISIBLE", 400, 20, 20, YELLOW);
+    DrawRectangle(400, 50, 300, 100, Fade(RED, 0.3f));
+    DrawText("If you see this red box but no crosshair,", 410, 60, 14, WHITE);
+    DrawText("there's a rendering issue.", 410, 80, 14, WHITE);
+    DrawText("Check console for debug output.", 410, 100, 14, WHITE);
+  }
 }
