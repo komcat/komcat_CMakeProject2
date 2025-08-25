@@ -804,8 +804,8 @@ void RaylibWindow::RenderCameraInCorner() {
 
 
 
-// ============================================
-// SIMPLIFIED RenderCameraFullscreen with clear crosshair rendering
+// In raylibclass.cpp, replace the RenderCameraFullscreen() method with this simpler version:
+
 void RaylibWindow::RenderCameraFullscreen() {
   if (m_cameraTextureID == 0) return;
 
@@ -852,89 +852,49 @@ void RaylibWindow::RenderCameraFullscreen() {
   // Draw camera feed
   DrawTexturePro(cameraTexture, sourceRect, destRect, Vector2{ 0, 0 }, 0.0f, WHITE);
 
-  // FIX: ALWAYS CHECK AND RENDER CROSSHAIR IF ENABLED
+  // SIMPLIFIED CROSSHAIR - Just basic lines, no fancy features
   if (m_showCrosshair) {
     // Calculate center of the IMAGE
     float imageCenterX = offsetX + displayWidth / 2.0f;
     float imageCenterY = offsetY + displayHeight / 2.0f;
 
-    // Use high contrast colors
-    Color crosshairColor = LIME;  // Bright green
-    Color outlineColor = BLACK;
-    float lineThickness = 3.0f;
-    float outlineThickness = 5.0f;
-    float centerGap = 20.0f;
-
-    // === HORIZONTAL LINES ===
-    // Left side - black outline
-    DrawLineEx(Vector2{ offsetX, imageCenterY },
-      Vector2{ imageCenterX - centerGap, imageCenterY },
-      outlineThickness, outlineColor);
-    // Left side - green line
-    DrawLineEx(Vector2{ offsetX, imageCenterY },
-      Vector2{ imageCenterX - centerGap, imageCenterY },
-      lineThickness, crosshairColor);
-
-    // Right side - black outline
-    DrawLineEx(Vector2{ imageCenterX + centerGap, imageCenterY },
+    // Simple crosshair - just draw the lines directly
+    // Horizontal line (full width of image)
+    DrawLineEx(
+      Vector2{ offsetX, imageCenterY },
       Vector2{ offsetX + displayWidth, imageCenterY },
-      outlineThickness, outlineColor);
-    // Right side - green line
-    DrawLineEx(Vector2{ imageCenterX + centerGap, imageCenterY },
-      Vector2{ offsetX + displayWidth, imageCenterY },
-      lineThickness, crosshairColor);
+      2.0f,
+      GREEN  // Simple green color
+    );
 
-    // === VERTICAL LINES ===
-    // Top side - black outline
-    DrawLineEx(Vector2{ imageCenterX, offsetY },
-      Vector2{ imageCenterX, imageCenterY - centerGap },
-      outlineThickness, outlineColor);
-    // Top side - green line
-    DrawLineEx(Vector2{ imageCenterX, offsetY },
-      Vector2{ imageCenterX, imageCenterY - centerGap },
-      lineThickness, crosshairColor);
-
-    // Bottom side - black outline
-    DrawLineEx(Vector2{ imageCenterX, imageCenterY + centerGap },
+    // Vertical line (full height of image)
+    DrawLineEx(
+      Vector2{ imageCenterX, offsetY },
       Vector2{ imageCenterX, offsetY + displayHeight },
-      outlineThickness, outlineColor);
-    // Bottom side - green line
-    DrawLineEx(Vector2{ imageCenterX, imageCenterY + centerGap },
-      Vector2{ imageCenterX, offsetY + displayHeight },
-      lineThickness, crosshairColor);
+      2.0f,
+      GREEN
+    );
 
-    // === CENTER MARKER ===
-    DrawCircle((int)imageCenterX, (int)imageCenterY, 8, WHITE);
-    DrawCircle((int)imageCenterX, (int)imageCenterY, 6, BLACK);
-    DrawCircle((int)imageCenterX, (int)imageCenterY, 3, RED);
+    // Center dot
+    DrawCircle((int)imageCenterX, (int)imageCenterY, 5, RED);
 
-    // === STATUS INDICATOR ===
-    DrawRectangle(screenWidth - 200, 20, 180, 30, Fade(BLACK, 0.8f));
-    DrawText("CROSSHAIR ON", screenWidth - 190, 28, 16, LIME);
-
-    // Debug: Draw a test shape to verify rendering works
-    DrawRectangle(screenWidth - 220, 60, 20, 20, LIME);
-    DrawText("Test", screenWidth - 190, 62, 14, WHITE);
+    // Simple status text
+    DrawText("CROSSHAIR ON", screenWidth - 150, 20, 20, GREEN);
   }
 
   // Draw controls
   DrawText("CAMERA FEED - FULLSCREEN MODE", 20, 20, 24, WHITE);
-  DrawText("Press 'V' to return to corner view", 20, 50, 16, LIGHTGRAY);
-  DrawText("Press 'C' to hide camera feed", 20, 70, 16, LIGHTGRAY);
+  DrawText("Press 'G' to return to corner view", 20, 50, 16, LIGHTGRAY);
+  DrawText("Press 'F' to hide camera feed", 20, 70, 16, LIGHTGRAY);
 
-  // Show crosshair control with current state
+  // Show crosshair control
   if (m_showCrosshair) {
-    DrawText("Press 'H' to hide crosshair [ON]", 20, 130, 16, LIME);
-
-    // DEBUG: Add visible confirmation
-    DrawRectangle(300, 125, 150, 25, Fade(LIME, 0.3f));
-    DrawText("CROSSHAIR ACTIVE", 305, 130, 16, LIME);
+    DrawText("Press 'H' to hide crosshair [ON]", 20, 130, 16, GREEN);
   }
   else {
     DrawText("Press 'H' to show crosshair [OFF]", 20, 130, 16, LIGHTGRAY);
   }
 }
-
 
 // Also add this debug method to help troubleshoot:
 void RaylibWindow::DebugCrosshair() {
