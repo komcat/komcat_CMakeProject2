@@ -115,6 +115,12 @@ void UICameraPanel::RenderGlobalControls() {
     m_cameraManager.CaptureImageAll();
   }
 
+  // Show where images are saved
+  ImGui::Spacing();
+  ImGui::Text("Image Output:");
+  std::string outputDir = m_cameraManager.GetImageOutputDirectory();
+  ImGui::TextWrapped("%s", outputDir.c_str());
+
   ImGui::Spacing();
   ImGui::Text("Total Cameras: %zu", m_cameraManager.GetCameraCount());
 

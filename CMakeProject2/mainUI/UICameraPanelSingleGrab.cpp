@@ -181,9 +181,14 @@ void UICameraPanelSingleGrab::RenderCaptureControls() {
     ImGui::Spacing();
     if (ImGui::Button("Save to Disk", ImVec2(-1, 30))) {
       // Use camera manager's capture image function which saves to disk
-      m_cameraManager.CaptureImage(m_currentCameraId);
-      m_lastCaptureStatus = "Frame saved to disk";
+      if (m_cameraManager.CaptureImage(m_currentCameraId)) {
+        m_lastCaptureStatus = "Saved to: " + m_cameraManager.GetLastCapturedImagePath();
+      }
+      else {
+        m_lastCaptureStatus = "Failed to save image";
+      }
     }
+
   }
 
   ImGui::Spacing();

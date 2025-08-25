@@ -346,7 +346,12 @@ void UICameraPanelUtility::RenderImageControls() {
 
   // Capture controls
   if (ImGui::Button("Capture Image", ImVec2(-1, 30))) {
-    m_cameraManager.CaptureImage(m_currentCameraId);
+    if (m_cameraManager.CaptureImage(m_currentCameraId)) {
+      std::cout << "[INFO] Image saved to: " << m_cameraManager.GetLastCapturedImagePath() << std::endl;
+    }
+    else {
+      std::cout << "[ERROR] Failed to capture and save image" << std::endl;
+    }
   }
 
   ImGui::Spacing();

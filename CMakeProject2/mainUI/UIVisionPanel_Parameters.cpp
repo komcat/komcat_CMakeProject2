@@ -139,7 +139,7 @@ void UIVisionPanel::RenderCircleParameterControls() {
   if (ImGui::CollapsingHeader("Circle Size", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Text("Radius Constraints:");
 
-    if (ImGui::SliderFloat("Target", &params.targetRadius, 10.0f, 200.0f, "%.0f px")) {
+    if (ImGui::SliderFloat("Target", &params.targetRadius, 10.0f, 2000.0f, "%.0f px")) {
       paramsChanged = true;
     }
     ImGui::SameLine();
@@ -147,7 +147,7 @@ void UIVisionPanel::RenderCircleParameterControls() {
       ImGui::SetTooltip("Preferred circle radius - detection prioritizes circles closest to this size");
     }
 
-    if (ImGui::SliderFloat("Min", &params.minRadius, 1.0f, 200.0f, "%.0f px")) {
+    if (ImGui::SliderFloat("Min", &params.minRadius, 1.0f, 2000.0f, "%.0f px")) {
       paramsChanged = true;
     }
     ImGui::SameLine();
@@ -155,7 +155,7 @@ void UIVisionPanel::RenderCircleParameterControls() {
       ImGui::SetTooltip("Minimum acceptable circle radius");
     }
 
-    if (ImGui::SliderFloat("Max", &params.maxRadius, 1.0f, 200.0f, "%.0f px")) {
+    if (ImGui::SliderFloat("Max", &params.maxRadius, 1.0f, 2000.0f, "%.0f px")) {
       paramsChanged = true;
     }
     ImGui::SameLine();

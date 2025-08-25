@@ -95,6 +95,8 @@ struct  CameraInfo {
     }
   }
 
+
+
 private:
   // Private default constructor for factory methods
   CameraInfo() : autoConnect(true), connectionMethod(ConnectionMethod::AUTO), deviceIndex(0) {}
@@ -196,15 +198,8 @@ public:
   // Apply direct exposure settings via interface (New)
   bool ApplyExposureSettings(const std::string& cameraId, const ICameraHardware::ExposureSettings& settings);
 
-  // ============================================================================
-  // IMAGE CAPTURE
-  // ============================================================================
 
-  // Capture image from specific camera
-  bool CaptureImage(const std::string& cameraId);
 
-  // Capture images from all cameras (synchronized)
-  bool CaptureImageAll();
 
   // ============================================================================
   // CAMERA STATUS AND CONFIGURATION
@@ -265,6 +260,25 @@ public:
 
   // NEW: Combined discovery and addition method
   bool DiscoverAndAddAllCameras();
+
+
+
+  // Capture image from specific camera and save to file
+  bool CaptureImage(const std::string& cameraId);
+
+  // Capture image with custom filename
+  bool CaptureImage(const std::string& cameraId, const std::string& customFilename);
+
+  // Capture images from all cameras (synchronized) and save to files
+  bool CaptureImageAll();
+
+  // Set/Get the output directory for captured images
+  void SetImageOutputDirectory(const std::string& directory);
+  std::string GetImageOutputDirectory();
+
+  // Get the path of the last captured image
+  std::string GetLastCapturedImagePath() const { return m_lastCapturedImagePath; }
+
 
 private:
   // ============================================================================
@@ -355,4 +369,23 @@ private:
   void OnCameraFrameReceived(const std::string& cameraId, const Pylon::CGrabResultPtr& grabResult);
   void CleanupExpiredSubscribers();
   bool RestartGrabbingWithBroadcast(const std::string& cameraId);
+
+
+  // ============================================================================
+    // IMAGE SAVE HELPERS
+    // ============================================================================
+
+    // Save frame data to BMP file
+  bool SaveFrameToBMP(const CameraFrameData& frameData, const std::string& filePath);
+
+  // Generate unique filename with timestamp
+  std::string GenerateImageFilename(const std::string& cameraId, const std::string& extension);
+
+  // ============================================================================
+  // MEMBER VARIABLES (add these to existing member variables)
+  // ============================================================================
+
+  // Image capture settings
+  std::string m_imageOutputDirectory;
+  std::string m_lastCapturedImagePath;
 };

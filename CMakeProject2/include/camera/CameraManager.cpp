@@ -9,6 +9,41 @@
 #include <algorithm>
 #include <iostream>
 #include <pylon/PylonIncludes.h>
+
+
+// Add these includes to CameraManager.cpp at the top
+#include <fstream>
+#include <filesystem>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
+
+// Add this helper function to CameraManager.cpp (private helper methods section)
+// BMP file header structures
+#pragma pack(push, 1)
+struct BMPFileHeader {
+  uint16_t type = 0x4D42; // "BM"
+  uint32_t size;
+  uint16_t reserved1 = 0;
+  uint16_t reserved2 = 0;
+  uint32_t offset = 54;
+};
+
+struct BMPInfoHeader {
+  uint32_t size = 40;
+  int32_t width;
+  int32_t height;
+  uint16_t planes = 1;
+  uint16_t bitCount = 24;
+  uint32_t compression = 0;
+  uint32_t imageSize;
+  int32_t xPixelsPerMeter = 2835; // 72 DPI
+  int32_t yPixelsPerMeter = 2835; // 72 DPI
+  uint32_t colorsUsed = 0;
+  uint32_t colorsImportant = 0;
+};
+#pragma pack(pop)
+
 // ============================================================================
 // CONSTRUCTOR / DESTRUCTOR
 // ============================================================================
@@ -422,34 +457,8 @@ bool CameraManager::ApplyExposureSettings(const std::string& cameraId, const ICa
   return false;
 }
 
-// ============================================================================
-// IMAGE CAPTURE
-// ============================================================================
 
-bool CameraManager::CaptureImage(const std::string& cameraId) {
-  auto camera = GetCameraHardware(cameraId);
-  if (camera) {
-    CameraFrameData frameData;
-    return camera->CaptureFrame(frameData);
-  }
-  return false;
-}
 
-bool CameraManager::CaptureImageAll() {
-  std::lock_guard<std::mutex> lock(m_camerasMutex);
-
-  bool allSuccess = true;
-  for (const auto& [id, managedCamera] : m_cameras) {
-    if (managedCamera->camera && managedCamera->camera->IsGrabbing()) {
-      CameraFrameData frameData;
-      if (!managedCamera->camera->CaptureFrame(frameData)) {
-        allSuccess = false;
-      }
-    }
-  }
-
-  return allSuccess;
-}
 
 // ============================================================================
 // CAMERA STATUS
@@ -1042,6 +1051,293 @@ bool CameraManager::DiscoverAndAddAllCameras() {
   if (logger) {
     logger->LogInfo("Camera discovery completed. Added " +
       std::to_string(GetCameraCount()) + " cameras.");
+  }
+
+  return allSuccess;
+}
+
+
+// Add these new methods to CameraManager class implementation
+
+bool CameraManager::SaveFrameToBMP(const CameraFrameData& frameData, const std::string& filePath) {
+  if (!frameData.IsValid()) {
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      logger->LogError("Cannot save invalid frame data to BMP");
+    }
+    return false;
+  }
+
+  // Only support RGB images for now
+  if (frameData.channels != 3) {
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      logger->LogError("BMP save only supports RGB images (3 channels), got " +
+        std::to_string(frameData.channels) + " channels");
+    }
+    return false;
+  }
+
+  try {
+    std::ofstream file(filePath, std::ios::binary);
+    if (!file.is_open()) {
+      Logger* logger = Logger::GetInstance();
+      if (logger) {
+        logger->LogError("Failed to open file for writing: " + filePath);
+      }
+      return false;
+    }
+
+    // Calculate padded row size (BMP rows must be aligned to 4 bytes)
+    int rowSize = ((frameData.width * 3 + 3) / 4) * 4;
+    int paddingSize = rowSize - (frameData.width * 3);
+    uint32_t imageSize = rowSize * frameData.height;
+
+    // Prepare BMP headers
+    BMPFileHeader fileHeader;
+    fileHeader.size = sizeof(BMPFileHeader) + sizeof(BMPInfoHeader) + imageSize;
+
+    BMPInfoHeader infoHeader;
+    infoHeader.width = frameData.width;
+    infoHeader.height = frameData.height;
+    infoHeader.imageSize = imageSize;
+
+    // Write headers
+    file.write(reinterpret_cast<const char*>(&fileHeader), sizeof(fileHeader));
+    file.write(reinterpret_cast<const char*>(&infoHeader), sizeof(infoHeader));
+
+    // Write pixel data (BMP stores images bottom-to-top, BGR format)
+    std::vector<uint8_t> padding(paddingSize, 0);
+
+    for (int y = frameData.height - 1; y >= 0; y--) {
+      for (int x = 0; x < frameData.width; x++) {
+        int idx = (y * frameData.width + x) * 3;
+        // Convert RGB to BGR for BMP format
+        uint8_t b = frameData.imageData[idx + 2];
+        uint8_t g = frameData.imageData[idx + 1];
+        uint8_t r = frameData.imageData[idx];
+
+        file.write(reinterpret_cast<const char*>(&b), 1);
+        file.write(reinterpret_cast<const char*>(&g), 1);
+        file.write(reinterpret_cast<const char*>(&r), 1);
+      }
+      // Write padding bytes
+      if (paddingSize > 0) {
+        file.write(reinterpret_cast<const char*>(padding.data()), paddingSize);
+      }
+    }
+
+    file.close();
+
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      logger->LogInfo("Saved image to: " + filePath);
+    }
+
+    return true;
+  }
+  catch (const std::exception& e) {
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      logger->LogError("Exception saving BMP file: " + std::string(e.what()));
+    }
+    return false;
+  }
+}
+
+std::string CameraManager::GenerateImageFilename(const std::string& cameraId, const std::string& extension) {
+  // Get current time for timestamp
+  auto now = std::chrono::system_clock::now();
+  auto time_t = std::chrono::system_clock::to_time_t(now);
+
+  std::stringstream ss;
+  ss << cameraId << "_";
+  ss << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
+
+  // Add milliseconds for uniqueness
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+    now.time_since_epoch()) % 1000;
+  ss << "_" << std::setfill('0') << std::setw(3) << ms.count();
+  ss << "." << extension;
+
+  return ss.str();
+}
+
+std::string CameraManager::GetImageOutputDirectory() {
+  // Check if custom directory is set
+  if (!m_imageOutputDirectory.empty()) {
+    return m_imageOutputDirectory;
+  }
+
+  // Default to "captured_images" folder in current working directory
+  std::string defaultDir = "captured_images";
+
+  // Create directory if it doesn't exist
+  try {
+    if (!std::filesystem::exists(defaultDir)) {
+      std::filesystem::create_directories(defaultDir);
+
+      Logger* logger = Logger::GetInstance();
+      if (logger) {
+        logger->LogInfo("Created image output directory: " + defaultDir);
+      }
+    }
+  }
+  catch (const std::exception& e) {
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      logger->LogError("Failed to create output directory: " + std::string(e.what()));
+    }
+    // Fall back to current directory
+    return ".";
+  }
+
+  return defaultDir;
+}
+
+void CameraManager::SetImageOutputDirectory(const std::string& directory) {
+  m_imageOutputDirectory = directory;
+
+  // Try to create the directory if it doesn't exist
+  try {
+    if (!std::filesystem::exists(directory)) {
+      std::filesystem::create_directories(directory);
+
+      Logger* logger = Logger::GetInstance();
+      if (logger) {
+        logger->LogInfo("Created image output directory: " + directory);
+      }
+    }
+  }
+  catch (const std::exception& e) {
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      logger->LogError("Failed to create output directory: " + std::string(e.what()));
+    }
+  }
+}
+
+// Replace the existing CaptureImage method with this enhanced version
+bool CameraManager::CaptureImage(const std::string& cameraId) {
+  auto camera = GetCameraHardware(cameraId);
+  if (!camera) {
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      logger->LogError("Camera not found: " + cameraId);
+    }
+    return false;
+  }
+
+  // Capture frame from camera
+  CameraFrameData frameData;
+  frameData.cameraId = cameraId; // Set camera ID for the frame
+
+  if (!camera->CaptureFrame(frameData)) {
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      logger->LogError("Failed to capture frame from camera: " + cameraId);
+    }
+    return false;
+  }
+
+  // Generate filename with timestamp
+  std::string filename = GenerateImageFilename(cameraId, "bmp");
+  std::string directory = GetImageOutputDirectory();
+  std::string fullPath = directory + "/" + filename;
+
+  // Save to BMP file
+  if (!SaveFrameToBMP(frameData, fullPath)) {
+    Logger* logger = Logger::GetInstance();
+    if (logger) {
+      logger->LogError("Failed to save captured image to file");
+    }
+    return false;
+  }
+
+  // Store the last captured image path for reference
+  m_lastCapturedImagePath = fullPath;
+
+  Logger* logger = Logger::GetInstance();
+  if (logger) {
+    logger->LogInfo("Image captured and saved: " + fullPath);
+  }
+
+  return true;
+}
+
+// Add this overload for capturing with custom filename
+bool CameraManager::CaptureImage(const std::string& cameraId, const std::string& customFilename) {
+  auto camera = GetCameraHardware(cameraId);
+  if (!camera) {
+    return false;
+  }
+
+  CameraFrameData frameData;
+  frameData.cameraId = cameraId;
+
+  if (!camera->CaptureFrame(frameData)) {
+    return false;
+  }
+
+  std::string directory = GetImageOutputDirectory();
+  std::string fullPath = directory + "/" + customFilename;
+
+  if (!SaveFrameToBMP(frameData, fullPath)) {
+    return false;
+  }
+
+  m_lastCapturedImagePath = fullPath;
+
+  Logger* logger = Logger::GetInstance();
+  if (logger) {
+    logger->LogInfo("Image captured with custom name: " + fullPath);
+  }
+
+  return true;
+}
+
+// Enhanced CaptureImageAll to save all captured images
+bool CameraManager::CaptureImageAll() {
+  std::lock_guard<std::mutex> lock(m_camerasMutex);
+
+  bool allSuccess = true;
+  int captureCount = 0;
+
+  for (const auto& [id, managedCamera] : m_cameras) {
+    if (managedCamera->camera && managedCamera->camera->IsConnected()) {
+      CameraFrameData frameData;
+      frameData.cameraId = id;
+
+      if (managedCamera->camera->CaptureFrame(frameData)) {
+        // Generate unique filename for each camera
+        std::string filename = GenerateImageFilename(id, "bmp");
+        std::string directory = GetImageOutputDirectory();
+        std::string fullPath = directory + "/" + filename;
+
+        if (SaveFrameToBMP(frameData, fullPath)) {
+          captureCount++;
+          Logger* logger = Logger::GetInstance();
+          if (logger) {
+            logger->LogInfo("Captured image from " + id + ": " + fullPath);
+          }
+        }
+        else {
+          allSuccess = false;
+        }
+      }
+      else {
+        allSuccess = false;
+        Logger* logger = Logger::GetInstance();
+        if (logger) {
+          logger->LogError("Failed to capture frame from camera: " + id);
+        }
+      }
+    }
+  }
+
+  Logger* logger = Logger::GetInstance();
+  if (logger) {
+    logger->LogInfo("Captured " + std::to_string(captureCount) + " images from all cameras");
   }
 
   return allSuccess;
