@@ -668,7 +668,7 @@ add_executable(uaa3App
    "include/DUTOperations.cpp"
    "include/ops/UserInputOperations.h"
    "include/ops/UserInputOperation.cpp"
- "include/data/SQLiteConnection.h" "include/data/SQLiteConnection.cpp" "include/ApplicationInitializer.h" "include/ApplicationInitializer.cpp" "include/ConsoleProgressDisplay.h"   "include/splashscreen/SimpleSplashScreen.h" "include/splashscreen/SimpleSplashScreen.cpp" "include/splashscreen/BitmapFont.h" "include/splashscreen/BitmapFont.cpp" "include/ops/ManualAdjustmentOperation.h" "include/ops/ManualAdjustmentOperation.cpp")
+ "include/data/SQLiteConnection.h" "include/data/SQLiteConnection.cpp" "include/ApplicationInitializer.h" "include/ApplicationInitializer.cpp" "include/ConsoleProgressDisplay.h"   "include/splashscreen/SimpleSplashScreen.h" "include/splashscreen/SimpleSplashScreen.cpp" "include/splashscreen/BitmapFont.h" "include/splashscreen/BitmapFont.cpp" "include/ops/ManualAdjustmentOperation.h" "include/ops/ManualAdjustmentOperation.cpp" )
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
