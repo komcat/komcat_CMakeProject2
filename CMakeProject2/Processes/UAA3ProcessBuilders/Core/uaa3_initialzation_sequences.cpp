@@ -1,5 +1,6 @@
 // Core/uaa3_pick_place_sequences.cpp
 #include "../uaa3_process_builders.h"
+#include <iostream>
 
 namespace UAA3ProcessBuilders {
 
@@ -19,9 +20,18 @@ namespace UAA3ProcessBuilders {
     sequence->AddOperation(std::make_shared<RetractSlideOperation>(
       "Pick_Up_Tool"));
 
-    // 1. Move gantry-main to safe position
-    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-      "gantry-main", "Process_Flow", "node_4027"));
+    // Debug BEFORE adding fallback operation
+    std::cout << "Operations before fallback: " << sequence->GetOperations().size() << std::endl;
+
+    // Add with fallback
+    sequence->AddOperationWithFallback(
+      std::make_shared<MoveToNodeOperation>("gantry-main", "Process_Flow", "node_4027"),
+      std::make_shared<MoveToPointNameOperation>("gantry-main", "safe")
+    );
+
+    // Debug AFTER adding fallback operation  
+    std::cout << "Operations after fallback: " << sequence->GetOperations().size() << std::endl;
+
 
     // 2. Move hex-left to home position
     sequence->AddOperation(std::make_shared<MoveToNodeOperation>(

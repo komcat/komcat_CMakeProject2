@@ -22,6 +22,7 @@ bool SequenceStep::Execute() {
   LogInfo("Starting sequence execution with " + std::to_string(m_operations.size()) + " operations");
 
   bool success = true;
+
   for (size_t i = 0; i < m_operations.size(); ++i) {
     auto& operation = m_operations[i];
 
@@ -30,13 +31,31 @@ bool SequenceStep::Execute() {
 
     if (!operation->Execute(m_machineOps)) {
       LogError("Operation FAILED: " + operation->GetDescription());
-      success = false;
-      break;
+
+      // CHECK FOR FALLBACK - THIS PART IS MISSING!
+      auto it = m_fallbacks.find(operation);
+      if (it != m_fallbacks.end()) {
+        LogInfo("Attempting FALLBACK operation: " + it->second->GetDescription());
+
+        if (it->second->Execute(m_machineOps)) {
+          LogInfo("FALLBACK SUCCEEDED: " + it->second->GetDescription());
+          continue;  // Continue to next operation
+        }
+        else {
+          LogError("FALLBACK also FAILED: " + it->second->GetDescription());
+          success = false;
+          break;
+        }
+      }
+      else {
+        // No fallback available
+        success = false;
+        break;
+      }
     }
 
     LogInfo("Operation COMPLETED SUCCESSFULLY: " + operation->GetDescription());
   }
-
   if (success) {
     LogInfo("Sequence completed successfully");
   }
@@ -46,8 +65,26 @@ bool SequenceStep::Execute() {
 
   // Notify completion
   NotifyCompletion(success);
+
   return success;
 }
+
+
+
+// In SequenceStep.cpp
+void SequenceStep::AddOperationWithFallback(
+  std::shared_ptr<SequenceOperation> primary,
+  std::shared_ptr<SequenceOperation> fallback) {
+
+  m_operations.push_back(primary);
+  m_fallbacks[primary] = fallback;
+
+  // Add debug log to verify it's being stored
+  LogInfo("Added operation with fallback: " + primary->GetDescription() +
+    " -> " + fallback->GetDescription());
+}
+
+
 void SequenceStep::PrintSequencePlan() const {
   Logger* logger = Logger::GetInstance();
 

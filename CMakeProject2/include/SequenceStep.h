@@ -164,26 +164,32 @@ private:
 };
 
 
-// Sequence step - executes a sequence of operations
 class SequenceStep : public ProcessStep {
 public:
   SequenceStep(const std::string& name, MachineOperations& machineOps);
 
-  // Add operations to the sequence
+  // Existing method - declaration only
   void AddOperation(std::shared_ptr<SequenceOperation> operation);
 
-  // Execute the sequence
+  // NEW method declaration for fallback
+  void AddOperationWithFallback(
+    std::shared_ptr<SequenceOperation> primary,
+    std::shared_ptr<SequenceOperation> fallback);
+
   bool Execute() override;
 
-  // Get the operations for this sequence (added for ProcessBuilder)
   const std::vector<std::shared_ptr<SequenceOperation>>& GetOperations() const {
     return m_operations;
   }
+
   void PrintSequencePlan() const;
+
 private:
   std::vector<std::shared_ptr<SequenceOperation>> m_operations;
-
+  std::map<std::shared_ptr<SequenceOperation>,
+    std::shared_ptr<SequenceOperation>> m_fallbacks;  // ADD THIS
 };
+
 
 // Wait operation
 class WaitOperation : public SequenceOperation {

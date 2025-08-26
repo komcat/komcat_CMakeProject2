@@ -462,38 +462,12 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
       return;
     }
 
-    const auto& operations = sequence->GetOperations();
-    size_t totalOps = operations.size();
+    UpdateStatus("Starting process: " + processName);
 
-    UpdateStatus("Starting sequence with " + std::to_string(totalOps) + " operations");
+    // Call the sequence's Execute method - it handles fallbacks internally
+    bool processSuccess = sequence->Execute();
 
-    bool processSuccess = true;
-    std::string failureReason = "";
-
-    for (size_t i = 0; i < totalOps && !m_stopRequested; ++i) {
-      // Handle pause
-      while (m_pauseRequested && !m_stopRequested) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      }
-
-      if (m_stopRequested) break;
-
-      std::string stepDescription = operations[i]->GetDescription();
-      UpdateStatus("Step " + std::to_string(i + 1) + "/" + std::to_string(totalOps) +
-        ": " + stepDescription);
-
-      bool success = operations[i]->Execute(m_machineOps);
-      if (!success && !m_stopRequested) {
-        UpdateStatus("Operation failed: " + stepDescription, true);
-        processSuccess = false;
-        failureReason = "Failed at step " + std::to_string(i + 1) + ": " + stepDescription;
-        break;
-      }
-
-      m_progress = static_cast<float>(i + 1) / static_cast<float>(totalOps);
-    }
-
-    // Calculate final duration (for both success and failure)
+    // Calculate final duration
     auto endTime = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - m_processStartTime);
 
@@ -509,21 +483,18 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
 
     if (m_stopRequested) {
       UpdateStatus("Process stopped by user");
-      // NEW: Track stopped processes as failed
       AddCompletedStep(processName, std::string(durationStr), idleTimeStr, false);
     }
     else if (processSuccess) {
-      UpdateStatus("Process completed successfully - " + std::to_string(totalOps) + " operations executed");
-      // NEW: Add completed process
+      UpdateStatus("Process completed successfully");
       AddCompletedStep(processName, std::string(durationStr), idleTimeStr, true);
     }
     else {
-      UpdateStatus("Process failed: " + failureReason, true);
-      // NEW: Add failed process
+      UpdateStatus("Process failed", true);
       AddCompletedStep(processName, std::string(durationStr), idleTimeStr, false);
     }
 
-    // Always record end time for next idle calculation (whether success or failure)
+    // Always record end time for next idle calculation
     m_lastProcessEndTime = endTime;
     m_hasLastProcessEndTime = true;
 
@@ -531,7 +502,7 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
   catch (const std::exception& e) {
     UpdateStatus("Process error: " + std::string(e.what()), true);
 
-    // NEW: Track exception as failed process
+    // Track exception as failed process
     auto endTime = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - m_processStartTime);
     auto totalMs = duration.count();
@@ -539,9 +510,9 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
     auto seconds = (totalMs % 60000) / 1000;
     auto ms = totalMs % 1000;
 
-    char durationStr[32];    
+    char durationStr[32];
     sprintf_s(durationStr, sizeof(durationStr), "%02d:%02d.%03d",
-			static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
+      static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
 
     AddCompletedStep(processName, std::string(durationStr), idleTimeStr, false);
 
@@ -553,7 +524,6 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
   m_processPaused = false;
   m_progress = 0.0f;
 }
-
 
 
 
