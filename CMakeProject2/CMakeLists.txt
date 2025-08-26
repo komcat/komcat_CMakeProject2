@@ -291,6 +291,10 @@ set(INCL_PROCESSES "${CMAKE_CURRENT_SOURCE_DIR}/Processes")
 set(INCL_Uaa3_PROCESSES "${CMAKE_CURRENT_SOURCE_DIR}/Processes/UAA3ProcessBuilders")
 
 
+# Add PowerSupply module
+add_subdirectory(include/PowerSupply)
+
+
 # Add source to this project's executable
 add_executable(uaa3App 
   "uaa3App.cpp" 
@@ -755,39 +759,6 @@ target_compile_definitions(uaa3App PRIVATE
 )
 
 
-
-
-
-#PowerSupply Test Target
-if(VISA_FOUND)
-    add_executable(testSPDPowerSupply
-        "include/PowerSupply/SPDPowerSupply.h"
-        "include/PowerSupply/SPDPowerSupply.cpp"
-        "include/PowerSupply/test_spd_power_supply.cpp"
-    )
-    
-    target_include_directories(testSPDPowerSupply PRIVATE
-        ${INCL_DIR}
-        ${VISA_INCLUDE_DIR}
-    )
-    
-    target_link_libraries(testSPDPowerSupply PRIVATE
-        ${VISA_LIBRARY}
-        ws2_32
-    )
-    
-    target_compile_features(testSPDPowerSupply PRIVATE cxx_std_17)
-    
-    if(WIN32 AND MSVC)
-        set_target_properties(testSPDPowerSupply PROPERTIES
-            LINK_FLAGS "/SUBSYSTEM:CONSOLE"
-        )
-    endif()
-    
-    message(STATUS "testSPDPowerSupply target added")
-else()
-    message(STATUS "testSPDPowerSupply target skipped (VISA not found)")
-endif()
 
 
 
