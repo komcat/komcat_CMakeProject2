@@ -59,7 +59,7 @@ private:
   bool m_enableX;
   bool m_enableY;
   bool m_enableZ;
-
+  MachineOperations* m_machineOps = nullptr;  // Add this
   // Optional parameters
   std::vector<std::string> m_checklistItems;
   double m_stepSize;
@@ -97,6 +97,8 @@ private:
   void RenderPositionDisplay();
   void RenderChecklist();
   void RenderJogButtons(MachineOperations& ops);
+
+
 };
 
 // Global registry for active manual adjustment operations

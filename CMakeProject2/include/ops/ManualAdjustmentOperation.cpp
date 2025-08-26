@@ -76,6 +76,9 @@ ManualAdjustmentOperation& ManualAdjustmentOperation::WithSafetyLimits(
 bool ManualAdjustmentOperation::Execute(MachineOperations& ops) {
   ops.LogInfo("Starting manual adjustment: " + m_title);
 
+  // Store the MachineOperations pointer
+  m_machineOps = &ops;  // ADD THIS LINE
+
   // Reset state
   m_adjustmentComplete = false;
   m_isActive = true;
@@ -168,6 +171,13 @@ bool ManualAdjustmentOperation::Execute(MachineOperations& ops) {
     m_isActive = false;
     throw;
   }
+
+
+  // At the end, before returning:
+  m_machineOps = nullptr;  // Clear the pointer when done
+  m_isActive = false;
+  return true;
+
 
   m_isActive = false;
   return true;
@@ -263,7 +273,11 @@ void ManualAdjustmentOperation::RenderJogButtons(MachineOperations& ops) {
       ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
     }
 
-    if (ImGui::Button(stepLabels[i], ImVec2(50, 20))) {
+    // Use unique ID with ##JogStep prefix
+    char buttonId[32];
+    snprintf(buttonId, sizeof(buttonId), "%s##JogStep%d", stepLabels[i], i);
+
+    if (ImGui::Button(buttonId, ImVec2(60, 20))) {  // Wider buttons for the mm suffix
       m_stepSize = stepSizes[i];
     }
 
@@ -280,8 +294,7 @@ void ManualAdjustmentOperation::RenderJogButtons(MachineOperations& ops) {
 void ManualAdjustmentOperation::RenderImGui() {
   if (!m_showWindow || !m_isActive) return;
 
-  // Window setup remains mostly the same...
-  ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(500, 600), ImGuiCond_FirstUseEver); // Increased height
 
   ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoCollapse |
     ImGuiWindowFlags_AlwaysAutoResize;
@@ -307,16 +320,36 @@ void ManualAdjustmentOperation::RenderImGui() {
       ImGui::Spacing();
     }
 
-    // Note about jog controls
-    ImGui::Text("Note: Use MoveRelative buttons or external jog controls to adjust position");
+    // ADD THIS SECTION to actually render the jog buttons:
+    if (m_machineOps) {
+      RenderJogButtons(*m_machineOps);  // Call the jog buttons method
+      ImGui::Separator();
+      ImGui::Spacing();
+    }
+    else {
+      ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f),
+        "Jog controls not available - MachineOperations not connected");
+    }
+
+    ImGui::Text("Jog Controls");
+    ImGui::Separator();
+
+    // Since we don't have MachineOperations here, show manual controls info
     ImGui::Text("Step Size: %.3f mm", m_stepSize);
-    if (m_enableX) ImGui::Text("  X-axis: Enabled");
-    if (m_enableY) ImGui::Text("  Y-axis: Enabled");
-    if (m_enableZ) ImGui::Text("  Z-axis: Enabled");
+
+    
+
+    ImGui::Spacing();
+    ImGui::Text("Enabled Axes:");
+    if (m_enableX) ImGui::Text("  ✓ X-axis");
+    if (m_enableY) ImGui::Text("  ✓ Y-axis");
+    if (m_enableZ) ImGui::Text("  ✓ Z-axis");
+
+    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f),
+      "Note: Use external jog controls or keyboard to adjust position");
+
     ImGui::Separator();
     ImGui::Spacing();
-
-    // Rest of the UI remains the same...
 
     // Action buttons
     bool allChecklistComplete = true;
@@ -373,7 +406,6 @@ void ManualAdjustmentOperation::RenderImGui() {
   }
   ImGui::End();
 }
-
 
 
 void ManualAdjustmentOperation::RenderPositionDisplay() {
