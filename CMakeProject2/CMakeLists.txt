@@ -239,6 +239,34 @@ else()
     set(IDS_UEYE_FOUND TRUE)
 endif()
 
+
+# Set VISA paths for PowerSupply module
+set(VISA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/visa")
+set(VISA_INCLUDE_DIR "${VISA_DIR}/include")
+
+if(WIN32)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        # Try 64-bit first, fall back to 32-bit
+        if(EXISTS "${VISA_DIR}/Lib_x64/visa64.lib")
+            set(VISA_LIBRARY "${VISA_DIR}/Lib_x64/visa64.lib")
+        else()
+            set(VISA_LIBRARY "${VISA_DIR}/lib/visa32.lib")
+        endif()
+    else()
+        set(VISA_LIBRARY "${VISA_DIR}/lib/visa32.lib")
+    endif()
+endif()
+
+# Check if VISA exists
+if(EXISTS "${VISA_INCLUDE_DIR}/visa.h" AND EXISTS "${VISA_LIBRARY}")
+    set(VISA_FOUND TRUE)
+    message(STATUS "VISA found at: ${VISA_DIR}")
+else()
+    set(VISA_FOUND FALSE)
+    message(WARNING "VISA not found - PowerSupply test will be disabled")
+endif()
+
+
 # Set include directory paths
 set(MAINUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mainUI")
 set(INCL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -653,6 +681,8 @@ else()
     message(WARNING "Icon file not found at: ${ICON_SOURCE_PATH}")
 endif()
 
+
+
 # Include directories
 target_include_directories(uaa3App PRIVATE
   ${SDL2_INCLUDE_DIR}
@@ -689,6 +719,7 @@ target_include_directories(uaa3App PRIVATE
   ${INCLUDE_HALCON_DIR}
   ${INCLUDE_VISION_DIR}
   ${INCL_PRODUCTS}
+  ${VISA_INCLUDE_DIR}
 )
 
 # Link libraries
@@ -711,6 +742,7 @@ target_link_libraries(uaa3App PRIVATE
   shell32   # For Windows shell
   ${FREETYPE_LIBRARY}
   ${IDS_UEYE_LIBRARY}
+  ${VISA_LIBRARY}
 )
 
 # SQLite compile definitions
@@ -721,6 +753,60 @@ target_compile_definitions(uaa3App PRIVATE
     SQLITE_THREADSAFE=1
     SQLITE_ENABLE_COLUMN_METADATA
 )
+
+
+
+
+
+#PowerSupply Test Target
+if(VISA_FOUND)
+    add_executable(testSPDPowerSupply
+        "include/PowerSupply/SPDPowerSupply.h"
+        "include/PowerSupply/SPDPowerSupply.cpp"
+        "include/PowerSupply/test_spd_power_supply.cpp"
+    )
+    
+    target_include_directories(testSPDPowerSupply PRIVATE
+        ${INCL_DIR}
+        ${VISA_INCLUDE_DIR}
+    )
+    
+    target_link_libraries(testSPDPowerSupply PRIVATE
+        ${VISA_LIBRARY}
+        ws2_32
+    )
+    
+    target_compile_features(testSPDPowerSupply PRIVATE cxx_std_17)
+    
+    if(WIN32 AND MSVC)
+        set_target_properties(testSPDPowerSupply PROPERTIES
+            LINK_FLAGS "/SUBSYSTEM:CONSOLE"
+        )
+    endif()
+    
+    message(STATUS "testSPDPowerSupply target added")
+else()
+    message(STATUS "testSPDPowerSupply target skipped (VISA not found)")
+endif()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 if(MSVC)
