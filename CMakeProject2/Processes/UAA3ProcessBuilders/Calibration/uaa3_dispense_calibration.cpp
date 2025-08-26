@@ -29,12 +29,14 @@ namespace UAA3ProcessBuilders {
 
     // 2. Manual adjustment for dispense position (replaces user prompt)
     sequence->AddOperation(std::make_shared<ManualAdjustmentOperation>(
-      "gantry-main",                              // deviceName
-      "Dispense Position Setup",                  // windowTitle
+      "gantry-main",                              // axisSystem
+      "Dispense Position Setup",                  // title
       "Position the camera crosshair exactly where you want to dispense.\n"
       "Use the adjustment controls to fine-tune the position.",  // instructions
-      true,                                        // showLiveVideo
-      true                                        // enableZAdjustment (if you want Z-axis control)
+      promptUI,                                    // UserPromptUI& (REQUIRED - you missed this)
+      true,                                        // enableX
+      true,                                        // enableY
+      true                                         // enableZ
     ));
 
     // 3. Save current location to _cam_dispense_1
@@ -55,14 +57,16 @@ namespace UAA3ProcessBuilders {
     // Wait for dispenser to extend
     sequence->AddOperation(std::make_shared<WaitOperation>(500));
 
-    // 6. Manual adjustment for dispense height (replaces user prompt)
+    // 6. Manual adjustment for dispense height
     sequence->AddOperation(std::make_shared<ManualAdjustmentOperation>(
-      "gantry-main",                              // deviceName
-      "Dispense Height Adjustment",               // windowTitle
+      "gantry-main",                              // axisSystem
+      "Dispense Height Adjustment",               // title
       "Adjust the dispenser tip to the correct height for dispensing.\n"
       "Use Z-axis controls to set the proper tip-to-surface distance.",  // instructions
-      true,                                        // showLiveVideo
-      true                                        // enableZAdjustment - important for this step
+      promptUI,                                    // UserPromptUI&
+      false,                                       // enableX - disabled for Z-only adjustment
+      false,                                       // enableY - disabled for Z-only adjustment  
+      true                                         // enableZ - enabled for height adjustment
     ));
 
     // 7. Save current location to dispense1
@@ -121,12 +125,14 @@ namespace UAA3ProcessBuilders {
 
     // 2. Manual adjustment for dispense position (replaces user prompt)
     sequence->AddOperation(std::make_shared<ManualAdjustmentOperation>(
-      "gantry-main",                              // deviceName
-      "Dispense Position Setup",                  // windowTitle
+      "gantry-main",                              // axisSystem
+      "Dispense Position Setup",                  // title
       "Position the camera crosshair exactly where you want to dispense.\n"
       "Use the adjustment controls to fine-tune the position.",  // instructions
-      true,                                        // showLiveVideo
-      true                                        // enableZAdjustment (if you want Z-axis control)
+      promptUI,                                    // UserPromptUI& (REQUIRED - you missed this)
+      true,                                        // enableX
+      true,                                        // enableY
+      true                                         // enableZ
     ));
 
     // 3. Save current location to _cam_dispense_2
@@ -147,14 +153,16 @@ namespace UAA3ProcessBuilders {
     // Wait for dispenser to extend
     sequence->AddOperation(std::make_shared<WaitOperation>(500));
 
-    // 6. Manual adjustment for dispense height (replaces user prompt)
+    // 6. Manual adjustment for dispense height
     sequence->AddOperation(std::make_shared<ManualAdjustmentOperation>(
-      "gantry-main",                              // deviceName
-      "Dispense Height Adjustment",               // windowTitle
+      "gantry-main",                              // axisSystem
+      "Dispense Height Adjustment",               // title
       "Adjust the dispenser tip to the correct height for dispensing.\n"
       "Use Z-axis controls to set the proper tip-to-surface distance.",  // instructions
-      true,                                        // showLiveVideo
-      true                                        // enableZAdjustment - important for this step
+      promptUI,                                    // UserPromptUI&
+      false,                                       // enableX - disabled for Z-only adjustment
+      false,                                       // enableY - disabled for Z-only adjustment  
+      true                                         // enableZ - enabled for height adjustment
     ));
 
     // 7. Save current location to dispense2
