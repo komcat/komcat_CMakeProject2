@@ -8,14 +8,27 @@ PylonCameraAdapter::PylonCameraAdapter(const std::string& cameraId)
   , m_pylonCamera(std::make_unique<PylonCamera>())
   , m_frameCallback(nullptr) {
 
+  // Initialize format converter once
+  m_formatConverter.OutputPixelFormat = Pylon::PixelType_RGB8packed;
+  m_formatConverter.OutputBitAlignment = Pylon::OutputBitAlignment_MsbAligned;
+
   Logger* logger = Logger::GetInstance();
   if (logger) {
     logger->LogInfo("PylonCameraAdapter created for camera: " + cameraId);
   }
 }
 
+// PylonCameraAdapter.cpp
 PylonCameraAdapter::~PylonCameraAdapter() {
   try {
+    // Clear cached images before destroying
+    if (m_cachedPylonImage.IsValid()) {
+      m_cachedPylonImage.Release();
+    }
+    if (m_cachedConvertedImage.IsValid()) {
+      m_cachedConvertedImage.Release();
+    }
+
     if (IsGrabbing()) {
       StopGrabbing();
     }
@@ -32,6 +45,7 @@ PylonCameraAdapter::~PylonCameraAdapter() {
     logger->LogInfo("PylonCameraAdapter destroyed for camera: " + m_cameraId);
   }
 }
+
 
 bool PylonCameraAdapter::Initialize() {
   try {
@@ -250,10 +264,9 @@ bool PylonCameraAdapter::CaptureFrame(CameraFrameData& frameData) {
       }
     }
     else {
-      // Camera is not grabbing continuously, try to grab a single frame
+      // Camera is not grabbing continuously
       auto& internalCamera = m_pylonCamera->GetInternalCamera();
 
-      // Try to retrieve a frame with timeout
       Pylon::CGrabResultPtr grabResult;
       if (!internalCamera.RetrieveResult(1000, grabResult, Pylon::TimeoutHandling_Return) ||
         !grabResult || !grabResult->GrabSucceeded()) {
@@ -261,33 +274,47 @@ bool PylonCameraAdapter::CaptureFrame(CameraFrameData& frameData) {
         return false;
       }
 
-      // Convert Pylon grab result to CameraFrameData
+      // Use the cached converter with thread safety
+      std::lock_guard<std::mutex> lock(m_conversionMutex);
+
       frameData.cameraId = m_cameraId;
       frameData.width = grabResult->GetWidth();
       frameData.height = grabResult->GetHeight();
-      frameData.channels = 3; // Assume RGB
+      frameData.channels = 3;
       frameData.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
 
-      // Get exposure settings for metadata
       auto exposureSettings = GetExposureSettings();
       frameData.exposureTime = exposureSettings.exposure_time;
       frameData.gain = exposureSettings.gain;
 
-      // Convert image data to RGB format
-      Pylon::CImageFormatConverter formatConverter;
-      formatConverter.OutputPixelFormat = Pylon::PixelType_RGB8packed;
+      // Check pixel type first
+      Pylon::EPixelType pixelType = grabResult->GetPixelType();
 
-      Pylon::CPylonImage pylonImage;
-      pylonImage.AttachGrabResultBuffer(grabResult);
+      if (pixelType == Pylon::PixelType_RGB8packed) {
+        // Direct copy
+        size_t dataSize = grabResult->GetImageSize();
+        frameData.imageData.resize(dataSize);
+        const uint8_t* buffer = static_cast<const uint8_t*>(grabResult->GetBuffer());
+        std::memcpy(frameData.imageData.data(), buffer, dataSize);
+      }
+      else {
+        // Use cached converter
+        if (m_cachedPylonImage.IsValid()) {
+          m_cachedPylonImage.Release();
+        }
+        m_cachedPylonImage.AttachGrabResultBuffer(grabResult);
 
-      Pylon::CPylonImage convertedImage;
-      formatConverter.Convert(convertedImage, pylonImage);
+        if (m_cachedConvertedImage.IsValid()) {
+          m_cachedConvertedImage.Release();
+        }
+        m_formatConverter.Convert(m_cachedConvertedImage, m_cachedPylonImage);
 
-      // Copy the converted image data
-      size_t dataSize = convertedImage.GetImageSize();
-      frameData.imageData.resize(dataSize);
-      std::memcpy(frameData.imageData.data(), convertedImage.GetBuffer(), dataSize);
+        size_t dataSize = m_cachedConvertedImage.GetImageSize();
+        frameData.imageData.resize(dataSize);
+        const uint8_t* buffer = static_cast<const uint8_t*>(m_cachedConvertedImage.GetBuffer());
+        std::memcpy(frameData.imageData.data(), buffer, dataSize);
+      }
 
       ClearLastError();
       return true;
@@ -519,39 +546,61 @@ void PylonCameraAdapter::SetupFrameCallbackIntegration() {
 }
 
 void PylonCameraAdapter::OnPylonFrameReceived(const Pylon::CGrabResultPtr& grabResult) {
-  // This is called by PylonCamera when a new frame arrives
-  if (m_frameCallback && grabResult && grabResult->GrabSucceeded()) {
-    try {
-      CameraFrameData frameData;
+  // Early exit if no callback or invalid grab result
+  if (!m_frameCallback || !grabResult || !grabResult->GrabSucceeded()) {
+    return;
+  }
 
-      // Convert Pylon grab result to CameraFrameData
-      frameData.cameraId = m_cameraId;
-      frameData.width = grabResult->GetWidth();
-      frameData.height = grabResult->GetHeight();
-      frameData.channels = 3; // RGB
-      frameData.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count();
+  try {
+    // Lock for thread safety during conversion
+    std::lock_guard<std::mutex> lock(m_conversionMutex);
 
-      // Convert image data to RGB format
-      Pylon::CImageFormatConverter formatConverter;
-      formatConverter.OutputPixelFormat = Pylon::PixelType_RGB8packed;
+    CameraFrameData frameData;
+    frameData.cameraId = m_cameraId;
+    frameData.width = grabResult->GetWidth();
+    frameData.height = grabResult->GetHeight();
+    frameData.channels = 3; // RGB
+    frameData.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
 
-      Pylon::CPylonImage pylonImage;
-      pylonImage.AttachGrabResultBuffer(grabResult);
+    // Check if the grabbed image is already RGB to avoid unnecessary conversion
+    Pylon::EPixelType pixelType = grabResult->GetPixelType();
 
-      Pylon::CPylonImage convertedImage;
-      formatConverter.Convert(convertedImage, pylonImage);
+    if (pixelType == Pylon::PixelType_RGB8packed) {
+      // Already in the format we want, copy directly
+      size_t dataSize = grabResult->GetImageSize();
+      frameData.imageData.resize(dataSize);
+      const uint8_t* buffer = static_cast<const uint8_t*>(grabResult->GetBuffer());
+      std::memcpy(frameData.imageData.data(), buffer, dataSize);
+    }
+    else {
+      // Need format conversion - use cached objects
+
+      // Release and reattach the cached pylon image
+      if (m_cachedPylonImage.IsValid()) {
+        m_cachedPylonImage.Release();
+      }
+      m_cachedPylonImage.AttachGrabResultBuffer(grabResult);
+
+      // Release previous converted image
+      if (m_cachedConvertedImage.IsValid()) {
+        m_cachedConvertedImage.Release();
+      }
+
+      // Convert using the pre-initialized converter
+      m_formatConverter.Convert(m_cachedConvertedImage, m_cachedPylonImage);
 
       // Copy the converted image data
-      size_t dataSize = convertedImage.GetImageSize();
+      size_t dataSize = m_cachedConvertedImage.GetImageSize();
       frameData.imageData.resize(dataSize);
-      std::memcpy(frameData.imageData.data(), convertedImage.GetBuffer(), dataSize);
+      const uint8_t* buffer = static_cast<const uint8_t*>(m_cachedConvertedImage.GetBuffer());
+      std::memcpy(frameData.imageData.data(), buffer, dataSize);
+    }
 
-      // Call the frame callback
-      m_frameCallback(frameData);
-    }
-    catch (const std::exception& e) {
-      SetError("Exception in frame callback: " + std::string(e.what()));
-    }
+    // Call the frame callback outside the lock
+    m_frameCallback(frameData);
+  }
+  catch (const std::exception& e) {
+    SetError("Exception in frame callback: " + std::string(e.what()));
   }
 }
