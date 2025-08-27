@@ -1,4 +1,5 @@
 #pragma once
+#include "AppContext.h" 
 // Add this include at the top:
 #include "PIPanelUI.h"
 #include "ACSPanelUI.h"
@@ -24,7 +25,8 @@
 #include "UIVisionPanel.h"
 #include "DatumUI.h"  // ADD THIS LINE - Include new DatumUI class
 #include "ModuleAlignmentUI.h"
-#include "AppContext.h" 
+#include "mainUI/SPDPowerSupplyUI.h"
+
 
 // Forward declarations
 class MotionConfigManager;
@@ -81,7 +83,8 @@ public:
     GLOBAL_DATA_STORE,
     TCP_DATA_MANAGER,
     CLD101X_EQUIPMENT,    // RENAMED from CLD101X_TEC
-    SMU_MANAGER
+    SMU_MANAGER,
+    SPD_POWER_SUPPLY  // ADD THIS
   };
 
   enum class VisionSubPage {
@@ -159,6 +162,7 @@ private:
   DataClientManager* GetDataClient() const;
   Keithley2400Manager* GetKeithley() const;
   CLD101xManager* GetCLD101x() const;
+  SPDPowerSupplyManager* GetSPDManager() const;
 
   // === KEEP OLD MEMBER VARIABLES (for backward compatibility) ===
   PIControllerManager* m_piControllerManager = nullptr;
@@ -196,6 +200,7 @@ private:
   std::unique_ptr<UIVisionPanel> m_visionPanelUI;
   std::unique_ptr<DatumUI> m_datumUI;
 	std::unique_ptr<CLD101xEquipmentUI> m_cld101xEquipmentUI;
+  std::unique_ptr<SPDPowerSupplyUI> m_spdPowerSupplyUI;
 
   // Utility members
   ImFont* m_imguiFont = nullptr;
@@ -236,6 +241,7 @@ private:
   void RenderTcpDataManagerPage();
   void RenderCld101xEquipmentPage();
   void RenderSmuManagerPage();
+  void RenderSPDPowerSupplyPage();
 
   void RenderProgrammingSubPage();
   void RenderMachineBlockPage();
@@ -248,4 +254,6 @@ private:
 
   void RenderGlobalJogWindow();
   void CreateIOControlPanel();
+
+
 };

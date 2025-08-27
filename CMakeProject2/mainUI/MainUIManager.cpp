@@ -315,6 +315,14 @@ void MainUIManager::ConnectUIToServices() {
 		logger->LogInfo("MainUIManager: SMU Panel UI connected");
 	}
 
+	// ADD THIS - Create SPD UI when SPD manager is available
+	if (auto* spdManager = GetSPDManager()) {
+		if (!m_spdPowerSupplyUI) {
+			m_spdPowerSupplyUI = std::make_unique<SPDPowerSupplyUI>(spdManager);
+		}
+		logger->LogInfo("MainUIManager: SPD Power Supply UI connected");
+	}
+
 	// Connect RunPageUI using smart getter for MachineOperations
 	auto* machineOps = m_context ? m_context->GetMachineOperations() : m_machineOperations;
 	if (machineOps && !m_runPageUI) {
@@ -671,6 +679,10 @@ void MainUIManager::RenderBreadcrumbs() {
 		case DataInstrumentSubPage::SMU_MANAGER:
 			breadcrumb += " > SMU Manager";
 			break;
+			// Update RenderBreadcrumbs() - add SPD breadcrumb:
+		case DataInstrumentSubPage::SPD_POWER_SUPPLY:
+			breadcrumb += " > SPD Power Supply";
+			break;
 		default:
 			break;
 		}
@@ -1003,9 +1015,8 @@ void MainUIManager::RenderCameraPage() {
 
 
 
-// Update RenderDataInstrumentPage() to show the 4 buttons
 
-// 1. UPDATE RenderDataInstrumentPage() - Change button text and enum:
+// Update RenderDataInstrumentPage() - add the button:
 void MainUIManager::RenderDataInstrumentPage() {
 	ImGui::SetWindowFontScale(1.5f);
 	ImGui::Text("Data & Instrument");
@@ -1023,13 +1034,17 @@ void MainUIManager::RenderDataInstrumentPage() {
 		currentDataInstrumentSubPage = DataInstrumentSubPage::TCP_DATA_MANAGER;
 	}
 
-	// UPDATED BUTTON TEXT AND ENUM:
 	if (ImGui::Button("3. CLD101x Equipment", ImVec2(250, 50))) {
 		currentDataInstrumentSubPage = DataInstrumentSubPage::CLD101X_EQUIPMENT;
 	}
 
 	if (ImGui::Button("4. SMU Manager", ImVec2(250, 50))) {
 		currentDataInstrumentSubPage = DataInstrumentSubPage::SMU_MANAGER;
+	}
+
+	// ADD THIS - New SPD button
+	if (ImGui::Button("5. SPD Power Supply", ImVec2(250, 50))) {
+		currentDataInstrumentSubPage = DataInstrumentSubPage::SPD_POWER_SUPPLY;
 	}
 }
 
@@ -1058,6 +1073,9 @@ void MainUIManager::RenderDataInstrumentSubPage() {
 		break;
 	case DataInstrumentSubPage::SMU_MANAGER:
 		RenderSmuManagerPage();
+		break;
+	case DataInstrumentSubPage::SPD_POWER_SUPPLY:  // ADD THIS
+		RenderSPDPowerSupplyPage();
 		break;
 	default:
 		break;
@@ -1917,6 +1935,14 @@ Keithley2400Manager* MainUIManager::GetKeithley() const {
 	return m_keithleyManager;  // Fallback to old way
 }
 
+// Add SPD manager getter method to MainUIManager (add to both .h and .cpp):
+SPDPowerSupplyManager* MainUIManager::GetSPDManager() const {
+	if (m_context) {
+		if (auto* spd = m_context->GetSPDPowerSupply()) return spd;
+	}
+	return nullptr;  // Add fallback member if you add it later
+}
+
 CLD101xManager* MainUIManager::GetCLD101x() const {
 	if (m_context) {
 		if (auto* cld101x = m_context->GetCLD101x()) {
@@ -1930,4 +1956,21 @@ CLD101xManager* MainUIManager::GetCLD101x() const {
 	}
 	Logger::GetInstance()->LogWarning("GetCLD101x: No CLD101x manager available!");
 	return nullptr;
+}
+
+
+// Add the render method implementation:
+void MainUIManager::RenderSPDPowerSupplyPage() {
+	if (m_spdPowerSupplyUI) {
+		m_spdPowerSupplyUI->RenderUI();
+	}
+	else {
+		ImGui::SetWindowFontScale(1.5f);
+		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "SPD Power Supply Control");
+		ImGui::SetWindowFontScale(1.0f);
+
+		ImGui::Spacing();
+		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "SPD UI not initialized");
+		ImGui::Text("SPD Power Supply Manager may not be available.");
+	}
 }
