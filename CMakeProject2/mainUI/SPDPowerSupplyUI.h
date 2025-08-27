@@ -1,7 +1,7 @@
 
 #pragma once
 #include "imgui.h"
-#include "SPDPowerSupplyManager.h"
+#include "include/PowerSupply/SPDPowerSupplyManager.h"
 #include "include/data/global_data_store.h"
 #include "logger.h"
 

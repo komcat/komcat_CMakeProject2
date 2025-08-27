@@ -804,16 +804,6 @@ void MainUIManager::RenderMainPage() {
 	ImGui::Separator();
 	ImGui::Spacing();
 
-	// Simple status display
-	ImGui::SetWindowFontScale(1.3f);
-	ImGui::Text("System Status");
-	ImGui::SetWindowFontScale(1.0f);
-
-	ImGui::Spacing();
-	ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Motion Config Manager: Ready");
-	ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ UI Config Editor: Ready");
-	ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ UI Config Visualizer: Ready");
-
 	// Show jog status
 	if (m_uiJogWindow) {
 		ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Global Jog Panel: Ready");
@@ -834,6 +824,34 @@ void MainUIManager::RenderMainPage() {
 	ImGui::Spacing();
 	ImGui::Text("All systems operational. You can use the Config Editor to manage motion settings");
 	ImGui::Text("and the Node Visualizer to view and edit motion graphs interactively.");
+
+	// Add this to any render method in MainUIManager (like RenderMainPage)
+	ImGuiIO& io = ImGui::GetIO();
+	// In any MainUIManager render method
+	ImFont* currentFont = ImGui::GetFont();
+	if (currentFont) {
+		ImGui::Text("Current font size: %.1f", currentFont->FontSize);
+		ImGui::Text("Font pointer: %p", (void*)currentFont);
+		if (m_imguiFont) {  // Use the stored font from SetImguiFont
+			ImGui::Text("Stored font pointer: %p", (void*)m_imguiFont);
+			ImGui::Text("Using correct font: %s", (currentFont == m_imguiFont) ? "YES" : "NO");
+		}
+	}
+
+
+	ImGui::Text("=== FONT SCALING DEBUG ===");
+	ImGui::Text("Font global scale: %.3f", io.FontGlobalScale);
+	ImGui::Text("Display scale X: %.3f", io.DisplayFramebufferScale.x);
+	ImGui::Text("Display scale Y: %.3f", io.DisplayFramebufferScale.y);
+
+	if (currentFont) {
+		ImGui::Text("Current font size: %.1f", currentFont->FontSize);
+		ImGui::Text("Font scale: %.3f", currentFont->Scale);
+
+		// Calculate what the actual rendered size should be
+		float actualSize = currentFont->FontSize * io.FontGlobalScale * currentFont->Scale;
+		ImGui::Text("Calculated actual size: %.1f", actualSize);
+	}
 }
 
 

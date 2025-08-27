@@ -285,6 +285,8 @@ int main(int argc, char* argv[])
 		logger->LogError("SDL Initialization failed: " + std::string(SDL_GetError()));
 		return -1;
 	}
+	// ADD THIS LINE HERE - after SDL_Init but before window creation
+	SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "system");
 
 	// Setup SDL window
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
@@ -340,7 +342,7 @@ int main(int argc, char* argv[])
 
 	// Load main font (try project font, fallback to default)
 	if (std::filesystem::exists("assets/fonts/Roboto-Regular.ttf")) {
-		mainFont = io.Fonts->AddFontFromFileTTF("assets/fonts/Roboto-Regular.ttf", 24.0f);
+		mainFont = io.Fonts->AddFontFromFileTTF("assets/fonts/Roboto-Regular.ttf", 20.0f);
 		std::cout << "✅ Loaded Roboto-Regular" << std::endl;
 	}
 	else {
@@ -408,7 +410,7 @@ int main(int argc, char* argv[])
 	for (const char* emojiPath : emojiSources) {
 		if (std::filesystem::exists(emojiPath)) {
 			// Use the extended emoji ranges instead of the wide range
-			ImFont* emoji = io.Fonts->AddFontFromFileTTF(emojiPath, 16.0f, &emojiConfig, extended_emoji_ranges);
+			ImFont* emoji = io.Fonts->AddFontFromFileTTF(emojiPath, 20.0f, &emojiConfig, extended_emoji_ranges);
 			if (emoji) {
 				std::cout << "✅ Loaded emoji with extended ranges: " << emojiPath << std::endl;
 				emojiLoaded = true;
@@ -443,24 +445,35 @@ int main(int argc, char* argv[])
 	}
 
 	// Build fonts
-	if (io.Fonts->Build()) {
-		std::cout << "✅ Font atlas built successfully" << std::endl;
-		std::cout << "   Total fonts: " << io.Fonts->Fonts.Size << std::endl;
+if (io.Fonts->Build()) {
+    std::cout << "✅ Font atlas built successfully" << std::endl;
+    std::cout << "   Total fonts: " << io.Fonts->Fonts.Size << std::endl;
 
-		// Debug: Show glyph counts
-		for (int i = 0; i < io.Fonts->Fonts.Size; i++) {
-			ImFont* font = io.Fonts->Fonts[i];
-			std::cout << "   Font " << i << ": " << font->Glyphs.Size << " glyphs, "
-				<< font->FontSize << "px" << std::endl;
-		}
+    // Debug: Show glyph counts
+    for (int i = 0; i < io.Fonts->Fonts.Size; i++) {
+        ImFont* font = io.Fonts->Fonts[i];
+        std::cout << "   Font " << i << ": " << font->Glyphs.Size << " glyphs, "
+            << font->FontSize << "px" << std::endl;
+    }
 
-		if (emojiLoaded) {
-			std::cout << "🎉 Emoji support enabled with extended character ranges" << std::endl;
-		}
-	}
-	else {
-		std::cout << "❌ Failed to build font atlas" << std::endl;
-	}
+    if (emojiLoaded) {
+        std::cout << "🎉 Emoji support enabled with extended character ranges" << std::endl;
+    }
+
+    // FIXED: Always set mainFont as default, regardless of emoji status
+    if (mainFont) {
+        io.FontDefault = mainFont;  // This makes it the default for everything
+        if (emojiLoaded) {
+            std::cout << "✅ Set emoji-enabled font as default application font" << std::endl;
+        } else {
+            std::cout << "✅ Set main font as default application font (no emojis)" << std::endl;
+        }
+    } else {
+        std::cout << "⚠️ No main font loaded, using ImGui default" << std::endl;
+    }
+} else {
+    std::cout << "❌ Failed to build font atlas" << std::endl;
+}
 
 	// Set the emoji-enabled font as the default font for the entire application
 	if (mainFont && emojiLoaded) {
@@ -483,6 +496,10 @@ int main(int argc, char* argv[])
 
 	// CREATE MainUIManager with AppContext
 	MainUIManager uiManager(context);
+	// Store the font reference in MainUIManager
+	if (mainFont) {
+		uiManager.SetImguiFont(mainFont);  // This stores it in m_imguiFont
+	}
 	logger->LogInfo("MainUIManager created with AppContext approach");
 
 	// Connect UserPromptUI to RunPageUI
