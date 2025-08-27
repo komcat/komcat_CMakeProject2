@@ -32,6 +32,9 @@ class VisionOps;
 class ConfigFileWatchdog;
 class DUTDataRecorder;
 class GlobalDataStore;
+class SPDPowerSupplyManager;
+
+
 
 class ApplicationInitializer {
 public:
@@ -76,6 +79,7 @@ public:
     std::unique_ptr<MotionControlLayer> motionControl;
     std::unique_ptr<DUTDataRecorder> dutRecorder;
     std::unique_ptr<ConfigFileWatchdog> configWatchdog;
+    std::unique_ptr<SPDPowerSupplyManager> spdPowerSupply;
   };
 
   struct Operations {
@@ -136,6 +140,7 @@ private:
   std::function<bool()> WrapInitOperations(HardwareManagers& hw, Operations& ops);
   std::function<bool()> WrapRegisterWithContext(HardwareManagers& hw, Operations& ops);
   std::function<bool()> WrapInitConfigWatchdog(HardwareManagers& hw);
+  std::function<bool()> WarpInitConfigSPDPowerSupply(HardwareManagers& hw);
 
   // Actual implementation methods
   bool InitMotionControllers(HardwareManagers& hw);
@@ -148,6 +153,7 @@ private:
   bool InitOperations(HardwareManagers& hw, Operations& ops);
   bool RegisterWithContext(HardwareManagers& hw, Operations& ops);
   bool InitConfigWatchdog(HardwareManagers& hw);
+  bool InitConfigSPDPowerSupply(HardwareManagers& hw);
 
   // Helper methods
   void LogHardwareVelocities(PIControllerManager* pi, ACSControllerManager* acs);

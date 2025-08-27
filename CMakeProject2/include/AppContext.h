@@ -43,6 +43,7 @@ class ConfigFileWatchdog;
 class IOperations;
 class DUTDataRecorder;
 class Logger;
+class SPDPowerSupplyManager;
 
 /**
  * Application Context - Centralized service container
@@ -79,6 +80,7 @@ public:
   // === Equipment Managers ===
   CLD101xManager* cld101xManager = nullptr;
   Keithley2400Manager* keithleyManager = nullptr;
+  SPDPowerSupplyManager* spdPowerSupplyManager = nullptr;
 
   // === High-Level Operations ===
   // Use raw pointers for ops classes to avoid incomplete type issues
@@ -112,6 +114,7 @@ private:
   DataClientManager* m_dataClientPtr = nullptr;
   CLD101xManager* m_cld101xPtr = nullptr;
   Keithley2400Manager* m_keithleyPtr = nullptr;
+  SPDPowerSupplyManager* m_spdPowerSupplyManagerPtr = nullptr;
   MachineOperations* m_machineOperationsPtr = nullptr;
   MotionOps* m_motionOpsPtr = nullptr;
   IOOps* m_ioOpsPtr = nullptr;
@@ -249,6 +252,11 @@ public:
     keithleyManager = service;
     m_keithleyPtr = service;
   }
+  void RegisterExistingSPDPowerSupplyManager(SPDPowerSupplyManager* service)
+  {
+    spdPowerSupplyManager = service;
+    m_spdPowerSupplyManagerPtr = service;
+  }
   void RegisterExistingMachineOps(MachineOperations* service) {
     machineOperations = service;
     m_machineOperationsPtr = service;
@@ -316,6 +324,10 @@ public:
 
   void RegisterKeithley(Keithley2400Manager* service) {
     keithleyManager = service;
+  }
+  void RegisterSPDPowerSupplyManager(SPDPowerSupplyManager* service)
+  {
+    spdPowerSupplyManager = service;
   }
 
   // Register high-level operations
@@ -408,6 +420,11 @@ public:
     return keithleyManager ? keithleyManager : m_keithleyPtr;
   }
 
+  SPDPowerSupplyManager* GetSPDPowerSupply() const
+  {
+    return spdPowerSupplyManager ? spdPowerSupplyManager : m_spdPowerSupplyManagerPtr;
+  }
+
   // High-level operations
   MachineOperations* GetMachineOperations() const {
     return machineOperations ? machineOperations : m_machineOperationsPtr;
@@ -456,8 +473,17 @@ public:
     return configWatchdog != nullptr;
 	}
   bool HasCLD101xManagers() const {
-    return cld101xManager != nullptr || keithleyManager != nullptr;
+    return cld101xManager != nullptr;
 	}
+
+  bool HasKeithley2400Managers() const {
+    return keithleyManager != nullptr;
+  }
+
+  bool HasSPDPowerSupply() const {
+    return spdPowerSupplyManager != nullptr;
+  }
+
   bool HasLogger() const {
     return logger != nullptr;
 	}

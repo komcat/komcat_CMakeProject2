@@ -292,7 +292,7 @@ set(INCL_Uaa3_PROCESSES "${CMAKE_CURRENT_SOURCE_DIR}/Processes/UAA3ProcessBuilde
 
 
 # Add PowerSupply module
-add_subdirectory(include/PowerSupply)
+#add_subdirectory(include/PowerSupply)
 
 
 # Add source to this project's executable
@@ -668,7 +668,22 @@ add_executable(uaa3App
    "include/DUTOperations.cpp"
    "include/ops/UserInputOperations.h"
    "include/ops/UserInputOperation.cpp"
- "include/data/SQLiteConnection.h" "include/data/SQLiteConnection.cpp" "include/ApplicationInitializer.h" "include/ApplicationInitializer.cpp" "include/ConsoleProgressDisplay.h"   "include/splashscreen/SimpleSplashScreen.h" "include/splashscreen/SimpleSplashScreen.cpp" "include/splashscreen/BitmapFont.h" "include/splashscreen/BitmapFont.cpp" "include/ops/ManualAdjustmentOperation.h" "include/ops/ManualAdjustmentOperation.cpp" )
+ "include/data/SQLiteConnection.h"
+ "include/data/SQLiteConnection.cpp"
+ "include/ApplicationInitializer.h"
+ "include/ApplicationInitializer.cpp"
+ "include/ConsoleProgressDisplay.h" 
+ "include/splashscreen/SimpleSplashScreen.h"
+ "include/splashscreen/SimpleSplashScreen.cpp" 
+ "include/splashscreen/BitmapFont.h"
+ "include/splashscreen/BitmapFont.cpp"
+ "include/ops/ManualAdjustmentOperation.h"
+ "include/ops/ManualAdjustmentOperation.cpp" 
+ "include/PowerSupply/SPDPowerSupply.cpp"
+ "include/PowerSupply/SPDPowerSupply.h"
+ "include/PowerSupply/SPDPowerSupplyManager.cpp"
+ "include/PowerSupply/SPDPowerSupplyManager.h"
+ )
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")

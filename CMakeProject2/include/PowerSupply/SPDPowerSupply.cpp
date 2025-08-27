@@ -112,68 +112,80 @@ namespace PowerSupply {
         return *this;
     }
 
-    bool SPDPowerSupply::connect() {
-        if (is_connected_) {
-            return true;
+    bool SPDPowerSupply::connect(const std::string& resource_string) {
+      if (is_connected_) {
+        return true;
+      }
+
+      // Update resource string if provided
+      if (!resource_string.empty()) {
+        resource_string_ = resource_string;
+      }
+
+      // Check if we have a valid resource string
+      if (resource_string_.empty()) {
+        std::cerr << "ERROR: No resource string provided. Use either constructor parameter or connect() parameter." << std::endl;
+        return false;
+      }
+
+      std::cout << "DEBUG: Attempting to connect to: " << resource_string_ << std::endl;
+
+      try {
+        // Initialize VISA
+        std::cout << "DEBUG: Opening default resource manager..." << std::endl;
+        ViStatus status = viOpenDefaultRM(&pimpl_->default_rm);
+        if (status != VI_SUCCESS) {
+          std::cerr << "DEBUG: Failed to initialize VISA: 0x" << std::hex << status << std::endl;
+          return false;
+        }
+        std::cout << "DEBUG: VISA resource manager opened successfully" << std::endl;
+
+        pimpl_->visa_initialized = true;
+
+        // Open instrument connection
+        std::cout << "DEBUG: Opening instrument connection..." << std::endl;
+        status = viOpen(pimpl_->default_rm,
+          resource_string_.c_str(),
+          VI_NULL,
+          VI_NULL,
+          &pimpl_->instrument);
+
+        if (status != VI_SUCCESS) {
+          std::cerr << "DEBUG: Failed to connect to instrument: 0x" << std::hex << status << std::endl;
+          viClose(pimpl_->default_rm);
+          pimpl_->default_rm = VI_NULL;
+          pimpl_->visa_initialized = false;
+          return false;
+        }
+        std::cout << "DEBUG: Instrument connection opened successfully" << std::endl;
+
+        // Set connection flag BEFORE calling other methods that need it
+        is_connected_ = true;
+
+        // Set default timeout (10 seconds)
+        std::cout << "DEBUG: Setting timeout..." << std::endl;
+        setTimeout(10000);
+
+        // Test connection by getting instrument ID
+        std::cout << "DEBUG: Testing connection with *IDN? query..." << std::endl;
+        std::string idn = query("*IDN?");
+        if (idn.empty()) {
+          std::cerr << "DEBUG: Failed to get instrument identification - query returned empty string" << std::endl;
+          disconnect();
+          return false;
         }
 
-        std::cout << "DEBUG: Attempting to connect to: " << resource_string_ << std::endl;
+        std::cout << "DEBUG: Successfully connected to: " << idn << std::endl;
+        return true;
 
-        try {
-            // Initialize VISA
-            std::cout << "DEBUG: Opening default resource manager..." << std::endl;
-            ViStatus status = viOpenDefaultRM(&pimpl_->default_rm);
-            if (status != VI_SUCCESS) {
-                std::cerr << "DEBUG: Failed to initialize VISA: 0x" << std::hex << status << std::endl;
-                return false;
-            }
-            std::cout << "DEBUG: VISA resource manager opened successfully" << std::endl;
-
-            pimpl_->visa_initialized = true;
-
-            // Open instrument connection
-            std::cout << "DEBUG: Opening instrument connection..." << std::endl;
-            status = viOpen(pimpl_->default_rm,
-                resource_string_.c_str(),
-                VI_NULL,
-                VI_NULL,
-                &pimpl_->instrument);
-
-            if (status != VI_SUCCESS) {
-                std::cerr << "DEBUG: Failed to connect to instrument: 0x" << std::hex << status << std::endl;
-                viClose(pimpl_->default_rm);
-                pimpl_->default_rm = VI_NULL;
-                pimpl_->visa_initialized = false;
-                return false;
-            }
-            std::cout << "DEBUG: Instrument connection opened successfully" << std::endl;
-
-            // Set connection flag BEFORE calling other methods that need it
-            is_connected_ = true;
-
-            // Set default timeout (10 seconds)
-            std::cout << "DEBUG: Setting timeout..." << std::endl;
-            setTimeout(10000);
-
-            // Test connection by getting instrument ID
-            std::cout << "DEBUG: Testing connection with *IDN? query..." << std::endl;
-            std::string idn = query("*IDN?");
-            if (idn.empty()) {
-                std::cerr << "DEBUG: Failed to get instrument identification - query returned empty string" << std::endl;
-                disconnect();
-                return false;
-            }
-
-            std::cout << "DEBUG: Successfully connected to: " << idn << std::endl;
-            return true;
-
-        }
-        catch (const std::exception& e) {
-            std::cerr << "DEBUG: Exception during connection: " << e.what() << std::endl;
-            disconnect();
-            return false;
-        }
+      }
+      catch (const std::exception& e) {
+        std::cerr << "DEBUG: Exception during connection: " << e.what() << std::endl;
+        disconnect();
+        return false;
+      }
     }
+
 
     void SPDPowerSupply::disconnect() {
         if (pimpl_) {

@@ -41,7 +41,7 @@ if(VISA_FOUND)
         "SPDPowerSupply.h"
         "SPDPowerSupply.cpp"
         "test_spd_power_supply.cpp"
-    )
+     "SPDPowerSupplyManager.h")
     
     target_include_directories(testSPDPowerSupply PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}

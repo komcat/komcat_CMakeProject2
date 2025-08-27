@@ -26,12 +26,13 @@
 #include "ConsoleProgressDisplay.h"
 #include "CameraConfigManager.h"
 #include "include/cld101x/cld101x_manager.h"
-#include "keithley2400_manager.h"
+#include "include/SMU/keithley2400_manager.h"
 #include "include/ops/vision_ops.h"
 #include "include/ops/io_ops.h"
 #include "include/ops/motion_ops.h"
 #include "include/cld101x/cld101x_operations.h"
-#include "SimpleSplashScreen.h"
+#include "include/splashscreen/SimpleSplashScreen.h"
+#include "include/PowerSupply/SPDPowerSupplyManager.h"
 // Keep your debug function as-is
 bool g_deugMode = false; // Global debug mode flag
 
@@ -58,13 +59,13 @@ int main(int argc, char* argv[])
 	if (splashAvailable) {
 		initializer.SetProgressCallback([&splash](const ApplicationInitializer::InitProgress& progress) {
 			splash.UpdateProgress(progress);
-		});
+			});
 	}
 	else {
 		// Fallback to console
 		initializer.SetProgressCallback([](const ApplicationInitializer::InitProgress& progress) {
 			ConsoleProgressDisplay::DisplayProgress(progress);
-		});
+			});
 	}
 
 	// Create containers for hardware and operations
@@ -357,7 +358,7 @@ int main(int argc, char* argv[])
 	bool done = false;
 	menuManager->SetOnExitCallback([&done]() {
 		done = true;
-	});
+		});
 
 	if (menuManager && idsCameraUI) {
 		menuManager->SetIDSCameraUI(idsCameraUI.get());
@@ -365,6 +366,66 @@ int main(int argc, char* argv[])
 	}
 
 	logger->LogInfo("=== STARTING RENDER LOOP ===");
+
+	// ===========================================
+// SPDPowerSupplyManager Quick Test Integration
+// Add this code to your uaa3App.cpp main render loop
+// ===========================================
+
+// 1. ADD NEAR THE TOP OF MAIN FUNCTION (after logger initialization)
+// Create and initialize SPD Manager for testing
+
+	//if (false)
+	//{
+
+
+	//	std::unique_ptr<SPDPowerSupplyManager> testSpdManager;
+	//	bool spdManagerInitialized = false;
+
+	//	// Initialize SPD Manager
+	//	testSpdManager = std::make_unique<SPDPowerSupplyManager>();
+	//	logger->LogInfo("Created SPDPowerSupplyManager for testing");
+
+	//	// Try to initialize with config (will fall back to default if no config file)
+	//	if (testSpdManager->Initialize("spd_test_config.json")) {
+	//		logger->LogInfo("✅ SPD Manager initialized from config file");
+	//		spdManagerInitialized = true;
+	//	}
+	//	else {
+	//		logger->LogInfo("📄 Config file not found, loading default configuration");
+	//		testSpdManager->LoadDefaultConfiguration();
+	//		spdManagerInitialized = true;
+	//	}
+
+
+	//	// The Initialize() and LoadDefaultConfiguration() methods should automatically 
+	//// add devices, but we can trigger discovery for additional devices
+	//	if (spdManagerInitialized) {
+	//		logger->LogInfo("SPD Manager initialized, device count: " +
+	//			std::to_string(testSpdManager->GetDeviceNames().size()));
+
+	//		// Auto-discover any additional devices not in config
+	//		testSpdManager->AddDiscoveredDevices(false); // false = don't auto-connect yet
+
+	//		// Optional: Start polling for status updates (you can also do this manually via UI)
+	//		// testSpdManager->StartAllPolling(2000); // Poll every 2 seconds
+	//		testSpdManager->ConnectAll();
+
+
+	//		std::string spdID = testSpdManager->GetDevice("SPD1")->getInstrumentID();
+	//		logger->LogDebug("test get IDN SPDPowerSupply = " + spdID);
+
+	//		//testSpdManager->StartAllPolling(200); // Poll every 2 seconds
+
+	//		logger->LogInfo("SPD Manager ready for testing");
+	//	}
+
+
+
+
+	//}
+
+
 
 	// ===========================================
 	// PHASE 4: MAIN RENDER LOOP
@@ -419,6 +480,117 @@ int main(int argc, char* argv[])
 
 		// Render the main UI
 		uiManager.RenderUI();
+
+
+#pragma region SPD power supply manager test
+
+		// RENDER SPD POWER SUPPLY MANAGER UI
+		auto* testSpdManager = context.GetSPDPowerSupply();
+		if (testSpdManager) {
+			// Render the SPD Manager UI window
+			testSpdManager->RenderUI();
+
+			// Optional: Add a simple test control window
+			static bool showSpdTestWindow = true;
+			if (showSpdTestWindow) {
+				ImGui::Begin("SPD Test Controls", &showSpdTestWindow);
+
+				ImGui::Text("SPD Power Supply Manager Test");
+				ImGui::Separator();
+
+				// Manager status
+				ImGui::Text("Device Count: %zu", testSpdManager->GetDeviceNames().size());
+				ImGui::Text("Connected: %d", testSpdManager->GetConnectedCount());
+				ImGui::Text("Polling: %s", testSpdManager->IsPollingActive() ? "Active" : "Stopped");
+
+				ImGui::Separator();
+
+				// Quick action buttons
+				if (ImGui::Button("Connect All Devices")) {
+					testSpdManager->ConnectAll();
+					logger->LogInfo("Attempting to connect all SPD devices");
+				}
+
+				ImGui::SameLine();
+				if (ImGui::Button("Disconnect All")) {
+					testSpdManager->DisconnectAll();
+					logger->LogInfo("Disconnected all SPD devices");
+				}
+
+				if (ImGui::Button("Discover New Devices")) {
+					testSpdManager->AddDiscoveredDevices(false);
+					logger->LogInfo("Scanning for new SPD devices");
+				}
+
+				ImGui::SameLine();
+				if (ImGui::Button("Emergency Stop")) {
+					testSpdManager->EmergencyStop();
+					logger->LogWarning("EMERGENCY STOP - All outputs disabled");
+				}
+
+				ImGui::Separator();
+
+				// Quick test controls
+				static float testVoltage = 5.0f;
+				static float testCurrent = 1.0f;
+
+				ImGui::SliderFloat("Test Voltage (V)", &testVoltage, 0.0f, 30.0f);
+				ImGui::SliderFloat("Test Current (A)", &testCurrent, 0.0f, 5.0f);
+
+				if (ImGui::Button("Set All Voltages")) {
+					testSpdManager->SetAllVoltages(testVoltage);
+					logger->LogInfo("Set all voltages to " + std::to_string(testVoltage) + "V");
+				}
+
+				ImGui::SameLine();
+				if (ImGui::Button("Set All Current Limits")) {
+					testSpdManager->SetAllCurrentLimits(testCurrent);
+					logger->LogInfo("Set all current limits to " + std::to_string(testCurrent) + "A");
+				}
+
+				static bool allOutputs = false;
+				if (ImGui::Checkbox("Enable All Outputs", &allOutputs)) {
+					testSpdManager->SetAllOutputs(allOutputs);
+					logger->LogInfo("Set all outputs: " + std::string(allOutputs ? "ON" : "OFF"));
+				}
+
+				ImGui::Separator();
+
+				// Device status display
+				if (ImGui::CollapsingHeader("Device Status")) {
+					auto statuses = testSpdManager->GetAllStatuses();
+					for (const auto& [deviceName, status] : statuses) {
+						ImGui::Text("%s: %s", deviceName.c_str(), status.c_str());
+					}
+				}
+
+				// Polling controls
+				if (ImGui::CollapsingHeader("Polling Controls")) {
+					static int pollingInterval = 200;
+					ImGui::SliderInt("Interval (ms)", &pollingInterval, 100, 10000);
+
+					if (!testSpdManager->IsPollingActive()) {
+						if (ImGui::Button("Start Polling")) {
+							testSpdManager->StartAllPolling(pollingInterval);
+							logger->LogInfo("Started SPD polling");
+						}
+					}
+					else {
+						if (ImGui::Button("Stop Polling")) {
+							testSpdManager->StopAllPolling();
+							logger->LogInfo("Stopped SPD polling");
+						}
+					}
+				}
+
+				ImGui::End();
+			}
+		}
+
+#pragma endregion
+
+
+
 
 #pragma region rayLibwindow
 		// Update raylib with current machine data
@@ -584,11 +756,11 @@ int main(int argc, char* argv[])
 		raylibManager->Shutdown();
 		raylibManager.reset();
 	}
-// ===========================================
-// PHASE 5: CLEANUP
-// ===========================================
+	// ===========================================
+	// PHASE 5: CLEANUP
+	// ===========================================
 
-logger->LogInfo("=== SHUTTING DOWN ===");
+	logger->LogInfo("=== SHUTTING DOWN ===");
 
 	// Cleanup RaylibWindow
 	if (raylibManager) {

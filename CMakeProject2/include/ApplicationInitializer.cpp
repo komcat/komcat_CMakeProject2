@@ -18,6 +18,7 @@
 #include "include/cld101x/cld101x_operations.h"
 #include "include/SMU/keithley2400_manager.h"
 #include "include/SMU/keithley2400_operations.h"
+#include "include/PowerSupply/SPDPowerSupplyManager.h"
 #include "include/machine_operations.h"
 #include "include/ops/motion_ops.h"
 #include "include/ops/io_ops.h"
@@ -254,6 +255,10 @@ std::function<bool()> ApplicationInitializer::WrapRegisterWithContext(HardwareMa
 
 std::function<bool()> ApplicationInitializer::WrapInitConfigWatchdog(HardwareManagers& hw) {
   return [this, &hw]() { return InitConfigWatchdog(hw); };
+}
+
+std::function<bool()> ApplicationInitializer::WarpInitConfigSPDPowerSupply(HardwareManagers& hw) {
+  return [this, &hw]() { return InitConfigSPDPowerSupply(hw); };
 }
 
 // =======================
@@ -554,6 +559,10 @@ bool ApplicationInitializer::InitInstruments(HardwareManagers& hw) {
     }
   }
 
+
+  //Initialize SPDPowerSupply
+  InitConfigSPDPowerSupply(hw);
+
   return anySuccess;  // Return true if at least one instrument connected
 }
 
@@ -732,6 +741,9 @@ bool ApplicationInitializer::RegisterWithContext(HardwareManagers& hw, Operation
   if (hw.keithley) {
     context.RegisterExistingKeithley(hw.keithley.get());
   }
+  if (hw.spdPowerSupply)  {
+    context.RegisterExistingSPDPowerSupplyManager(hw.spdPowerSupply.get());
+  }
 
   // Register operations
   if (ops.machine) {
@@ -802,6 +814,71 @@ bool ApplicationInitializer::InitConfigWatchdog(HardwareManagers& hw) {
     return false;
   }
 }
+
+
+bool ApplicationInitializer::InitConfigSPDPowerSupply(HardwareManagers& hw) {
+  // Create the SPD Power Supply Manager
+  hw.spdPowerSupply = std::make_unique<SPDPowerSupplyManager>();
+
+  // Try to initialize with the config file
+  if (hw.spdPowerSupply->Initialize("spd_devices_config.json")) {
+    // Config file found and loaded successfully
+    logger->LogInfo("✅ SPD Power Supply initialized from config file");
+
+    // Log device count after initialization
+    logger->LogInfo("SPD Power Supply initialized, device count: " +
+      std::to_string(hw.spdPowerSupply->GetDeviceNames().size()));
+
+    // Auto-discover any additional devices not in config
+    hw.spdPowerSupply->AddDiscoveredDevices(false); // false = don't auto-connect yet
+
+    // Connect all devices
+    hw.spdPowerSupply->ConnectAll();
+
+    // Optional: Test first device if available
+    auto deviceNames = hw.spdPowerSupply->GetDeviceNames();
+    if (!deviceNames.empty()) {
+      try {
+        std::string spdID = hw.spdPowerSupply->GetDevice(deviceNames[0])->getInstrumentID();
+        logger->LogDebug("SPD Power Supply IDN: " + spdID);
+      }
+      catch (const std::exception& e) {
+        logger->LogWarning("Could not get instrument ID: " + std::string(e.what()));
+      }
+    }
+
+    // Optional: Start polling (uncomment if needed)
+    // hw.spdPowerSupply->StartAllPolling(2000); // Poll every 2 seconds
+
+    logger->LogInfo("SPD Power Supply Manager ready");
+    return true;
+  }
+  else {
+    // Config file not found, try loading default configuration
+    logger->LogInfo("📄 SPD config file not found, loading default configuration");
+
+    try {
+      hw.spdPowerSupply->LoadDefaultConfiguration();
+
+      // Auto-discover devices
+      hw.spdPowerSupply->AddDiscoveredDevices(false);
+
+      // Connect all devices
+      hw.spdPowerSupply->ConnectAll();
+
+      logger->LogInfo("SPD Power Supply initialized with default configuration, device count: " +
+        std::to_string(hw.spdPowerSupply->GetDeviceNames().size()));
+
+      return true;
+    }
+    catch (const std::exception& e) {
+      logger->LogError("Failed to initialize SPD Power Supply with default config: " + std::string(e.what()));
+      hw.spdPowerSupply.reset(); // Clean up on failure
+      return false;
+    }
+  }
+}
+
 
 void ApplicationInitializer::LogHardwareVelocities(PIControllerManager* pi, ACSControllerManager* acs) {
   // Log PI velocities
