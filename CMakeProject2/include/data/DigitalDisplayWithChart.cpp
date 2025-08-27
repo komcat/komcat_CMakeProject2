@@ -65,40 +65,41 @@ void DigitalDisplayWithChart::Render() {
 void DigitalDisplayWithChart::initializeUnitsMap() {
   m_unitsMap = {
       {"GPIB-Current", {"A", {
-          {1e-12, "pA"}, {1e-9, "nA"}, {1e-6, "uA"}, {1e-3, "mA"}, {1, "A"}
+          {1e-12f, "pA"}, {1e-9f, "nA"}, {1e-6f, "uA"}, {1e-3f, "mA"}, {1.0f, "A"}
       }}},
       {"SMU1-Current", {"A", {
-          {1e-12, "pA"}, {1e-9, "nA"}, {1e-6, "uA"}, {1e-3, "mA"}, {1, "A"}
+          {1e-12f, "pA"}, {1e-9f, "nA"}, {1e-6f, "uA"}, {1e-3f, "mA"}, {1.0f, "A"}
       }}},
       {"SMU1-Voltage", {"V", {
-          {1e-12, "pV"}, {1e-9, "nV"}, {1e-6, "uV"}, {1e-3, "mV"}, {1, "V"}
+          {1e-12f, "pV"}, {1e-9f, "nV"}, {1e-6f, "uV"}, {1e-3f, "mV"}, {1.0f, "V"}
       }}},
       {"SMU1-Resistance", {"Ω", {
-          {1e-3, "mΩ"}, {1, "Ω"}, {1e3, "kΩ"}, {1e6, "MΩ"}
+          {1e-3f, "mΩ"}, {1.0f, "Ω"}, {1e3f, "kΩ"}, {1e6f, "MΩ"}
       }}},
       {"SMU1-Power", {"W", {
-          {1e-12, "pW"}, {1e-9, "nW"}, {1e-6, "uW"}, {1e-3, "mW"}, {1, "W"}
+          {1e-12f, "pW"}, {1e-9f, "nW"}, {1e-6f, "uW"}, {1e-3f, "mW"}, {1.0f, "W"}
       }}},
       {"hex-right-A-5", {"V", {
-          {1e-12, "pV"}, {1e-9, "nV"}, {1e-6, "uV"}, {1e-3, "mV"}, {1, "V"}
+          {1e-12f, "pV"}, {1e-9f, "nV"}, {1e-6f, "uV"}, {1e-3f, "mV"}, {1.0f, "V"}
       }}},
       {"hex-left-A-5", {"V", {
-          {1e-12, "pV"}, {1e-9, "nV"}, {1e-6, "uV"}, {1e-3, "mV"}, {1, "V"}
+          {1e-12f, "pV"}, {1e-9f, "nV"}, {1e-6f, "uV"}, {1e-3f, "mV"}, {1.0f, "V"}
       }}},
       {"hex-right-A-6", {"V", {
-          {1e-12, "pV"}, {1e-9, "nV"}, {1e-6, "uV"}, {1e-3, "mV"}, {1, "V"}
+          {1e-12f, "pV"}, {1e-9f, "nV"}, {1e-6f, "uV"}, {1e-3f, "mV"}, {1.0f, "V"}
       }}},
       {"hex-left-A-6", {"V", {
-          {1e-12, "pV"}, {1e-9, "nV"}, {1e-6, "uV"}, {1e-3, "mV"}, {1, "V"}
+          {1e-12f, "pV"}, {1e-9f, "nV"}, {1e-6f, "uV"}, {1e-3f, "mV"}, {1.0f, "V"}
       }}},
       {"SagnacV", {"V", {
-          {1e-12, "pV"}, {1e-9, "nV"}, {1e-6, "uV"}, {1e-3, "mV"}, {1, "V"}
+          {1e-12f, "pV"}, {1e-9f, "nV"}, {1e-6f, "uV"}, {1e-3f, "mV"}, {1.0f, "V"}
       }}},
       {"gantry", {"", {
-          {1, ""}  // No unit for gantry
+          {1.0f, ""}  // No unit for gantry
       }}},
   };
 }
+
 
 void DigitalDisplayWithChart::initializeDisplayNameMap() {
   m_displayNameMap = {

@@ -431,7 +431,7 @@ void ManualAdjustmentOperation::RenderPositionDisplay() {
 
   if (m_enableZ) {
     if (m_hasSafetyLimits) {
-      float zRatio = (m_currentZ - m_minZ) / (m_maxZ - m_minZ);
+      float zRatio = static_cast<float>((m_currentZ - m_minZ) / (m_maxZ - m_minZ));
       ImVec4 color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
       if (zRatio < 0.1f || zRatio > 0.9f) {
         color = ImVec4(1.0f, 0.5f, 0.0f, 1.0f);

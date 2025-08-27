@@ -280,3 +280,234 @@ bool GlobalDataStore::ParseSPDStatus(const std::string& statusString, float& vol
 
 	return true;
 }
+
+
+// Add these method implementations:
+
+bool GlobalDataStore::SubscribeToProvider(std::shared_ptr<IDataProvider> provider,
+	const std::string& channelPrefix,
+	bool autoStart,
+	int pollingInterval) {
+	if (!provider) {
+		if (m_showDebug) {
+			std::cout << "[GlobalDataStore] Cannot subscribe - provider is null" << std::endl;
+		}
+		return false;
+	}
+
+	std::string providerName = provider->GetProviderName();
+
+	std::lock_guard<std::mutex> lock(m_subscriptionsMutex);
+
+	// Check if already subscribed
+	if (m_subscriptions.find(providerName) != m_subscriptions.end()) {
+		if (m_showDebug) {
+			std::cout << "[GlobalDataStore] Already subscribed to: " << providerName << std::endl;
+		}
+		return true;
+	}
+
+	// Create subscription
+	DataSubscription subscription;
+	subscription.providerName = providerName;
+	subscription.channelPrefix = channelPrefix;
+	subscription.provider = provider;
+	subscription.autoStarted = autoStart;
+
+	// Set up callback with proper capture
+	auto callback = [this, providerName, channelPrefix](const std::string& deviceName, const std::string& statusString) {
+		this->OnGenericDataUpdate(providerName, channelPrefix, deviceName, statusString);
+		};
+
+	provider->SetDataUpdateCallback(callback);
+
+	// Store unsubscribe callback
+	subscription.unsubscribeCallback = [provider]() {
+		if (provider) {
+			provider->SetDataUpdateCallback(nullptr);
+			provider->StopDataCollection();
+		}
+		};
+
+	subscription.active = true;
+	m_subscriptions[providerName] = subscription;
+
+	if (m_showDebug) {
+		std::cout << "[GlobalDataStore] Subscribed to provider: " << providerName
+			<< " with prefix: '" << channelPrefix << "'" << std::endl;
+	}
+
+	// Auto-start if requested
+	if (autoStart) {
+		provider->StartDataCollection(pollingInterval);
+		if (m_showDebug) {
+			std::cout << "[GlobalDataStore] Auto-started data collection for: " << providerName
+				<< " (" << pollingInterval << "ms interval)" << std::endl;
+		}
+	}
+
+	return true;
+}
+
+void GlobalDataStore::UnsubscribeFromProvider(const std::string& providerName) {
+	std::lock_guard<std::mutex> lock(m_subscriptionsMutex);
+
+	auto it = m_subscriptions.find(providerName);
+	if (it != m_subscriptions.end()) {
+		if (it->second.unsubscribeCallback) {
+			it->second.unsubscribeCallback();
+		}
+		m_subscriptions.erase(it);
+
+		if (m_showDebug) {
+			std::cout << "[GlobalDataStore] Unsubscribed from provider: " << providerName << std::endl;
+		}
+	}
+}
+
+bool GlobalDataStore::IsSubscribedTo(const std::string& providerName) const {
+	std::lock_guard<std::mutex> lock(m_subscriptionsMutex);
+
+	auto it = m_subscriptions.find(providerName);
+	return it != m_subscriptions.end() && it->second.active;
+}
+
+bool GlobalDataStore::StartProviderDataCollection(const std::string& providerName, int intervalMs) {
+	std::lock_guard<std::mutex> lock(m_subscriptionsMutex);
+
+	auto it = m_subscriptions.find(providerName);
+	if (it != m_subscriptions.end() && it->second.provider) {
+		return it->second.provider->StartDataCollection(intervalMs);
+	}
+	return false;
+}
+
+void GlobalDataStore::StopProviderDataCollection(const std::string& providerName) {
+	std::lock_guard<std::mutex> lock(m_subscriptionsMutex);
+
+	auto it = m_subscriptions.find(providerName);
+	if (it != m_subscriptions.end() && it->second.provider) {
+		it->second.provider->StopDataCollection();
+	}
+}
+
+std::vector<std::string> GlobalDataStore::GetActiveSubscriptions() const {
+	std::lock_guard<std::mutex> lock(m_subscriptionsMutex);
+
+	std::vector<std::string> providers;
+	for (const auto& [name, subscription] : m_subscriptions) {
+		if (subscription.active) {
+			providers.push_back(name);
+		}
+	}
+	return providers;
+}
+
+std::vector<std::string> GlobalDataStore::GetProviderChannels(const std::string& providerName) const {
+	std::lock_guard<std::mutex> lock(m_subscriptionsMutex);
+
+	auto it = m_subscriptions.find(providerName);
+	if (it == m_subscriptions.end() || !it->second.provider) {
+		return {};
+	}
+
+	std::vector<std::string> channels;
+	auto devices = it->second.provider->GetDeviceNames();
+	auto suffixes = it->second.provider->GetChannelSuffixes();
+
+	for (const auto& device : devices) {
+		for (const auto& [suffix, description] : suffixes) {
+			channels.push_back(it->second.channelPrefix + device + "-" + suffix);
+		}
+	}
+
+	return channels;
+}
+
+void GlobalDataStore::OnGenericDataUpdate(const std::string& providerName,
+	const std::string& channelPrefix,
+	const std::string& deviceName,
+	const std::string& statusString) {
+
+	std::map<std::string, float> parsedValues;
+	if (ParseProviderData(providerName, statusString, parsedValues)) {
+
+		// Store values with appropriate channel names
+		for (const auto& [key, value] : parsedValues) {
+			std::string channelName = channelPrefix + deviceName + "-" + key;
+			SetValue(channelName, value);
+		}
+
+		if (m_showDebug) {
+			static std::map<std::string, int> updateCounters;
+			updateCounters[providerName]++;
+
+			if (updateCounters[providerName] % 30 == 1) {
+				std::cout << "[GlobalDataStore] Provider '" << providerName
+					<< "' updated " << parsedValues.size() << " channels for " << deviceName << std::endl;
+			}
+		}
+	}
+}
+
+bool GlobalDataStore::ParseProviderData(const std::string& providerName,
+	const std::string& statusString,
+	std::map<std::string, float>& values) {
+
+	// Handle common error cases
+	if (statusString.find("Status read failed") != std::string::npos ||
+		statusString.find("Disconnected") != std::string::npos ||
+		statusString.find("Device not initialized") != std::string::npos) {
+		return false;
+	}
+
+	values.clear();
+
+	// Provider-specific parsing
+	if (providerName.find("SPD") != std::string::npos || providerName.find("PowerSupply") != std::string::npos) {
+		// Parse SPD format: "Connected | Output: ON | V: 3.300V | I: 0.002A"
+
+		// Parse voltage
+		size_t vPos = statusString.find("V: ");
+		if (vPos != std::string::npos) {
+			size_t vEnd = statusString.find("V", vPos + 3);
+			if (vEnd != std::string::npos) {
+				try {
+					float voltage = std::stof(statusString.substr(vPos + 3, vEnd - vPos - 3));
+					values["Voltage"] = voltage;
+				}
+				catch (...) { return false; }
+			}
+		}
+
+		// Parse current
+		size_t iPos = statusString.find("I: ");
+		if (iPos != std::string::npos) {
+			size_t iEnd = statusString.find("A", iPos + 3);
+			if (iEnd != std::string::npos) {
+				try {
+					float current = std::stof(statusString.substr(iPos + 3, iEnd - iPos - 3));
+					values["Current"] = current;
+
+					// Calculate power if we have voltage
+					if (values.find("Voltage") != values.end()) {
+						values["Power"] = values["Voltage"] * current;
+					}
+				}
+				catch (...) { return false; }
+			}
+		}
+
+		// Parse output state
+		bool outputState = statusString.find("Output: ON") != std::string::npos;
+		values["Output"] = outputState ? 1.0f : 0.0f;
+
+		return !values.empty();
+	}
+
+	// Add more provider types here...
+	// else if (providerName.find("SMU") != std::string::npos) { ... }
+	// else if (providerName.find("CLD") != std::string::npos) { ... }
+
+	return false;
+}

@@ -180,10 +180,10 @@ bool CLD101xOperations::WaitForTemperatureStabilization(
     float currentTemp = client->GetTemperature();
     bool inTolerance = std::abs(currentTemp - targetTemp) <= tolerance;
 
-    // Calculate time elapsed since last check
     auto now = std::chrono::steady_clock::now();
-    int elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
       now - lastCheckTime).count();
+    int elapsedMs = (duration > INT_MAX) ? INT_MAX : static_cast<int>(duration);
     lastCheckTime = now;
 
     if (inTolerance) {
@@ -210,7 +210,7 @@ bool CLD101xOperations::WaitForTemperatureStabilization(
     }
 
     // Log current temperature every second
-    int totalElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+    auto totalElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
       now - startTime).count();
     if (totalElapsedMs % 1000 < 100) {  // Log roughly every second
       m_logger->LogInfo("CLD101xOperations: Current temperature: " +

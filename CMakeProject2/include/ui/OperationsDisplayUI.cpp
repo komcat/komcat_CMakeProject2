@@ -343,7 +343,9 @@ void OperationsDisplayUI::RenderOperationDetails() {
   auto time_t = std::chrono::system_clock::to_time_t(localTime);
 
   std::stringstream fullTime;
-  fullTime << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+  std::tm timeinfo;
+  localtime_s(&timeinfo, &time_t);
+  fullTime << std::put_time(&timeinfo, "%Y-%m-%d %H:%M:%S");
 
   ImGui::Text("Operation Time: %s (%s)", fullTime.str().c_str(), m_timezoneDisplayName.c_str());
 
@@ -564,7 +566,9 @@ std::string OperationsDisplayUI::FormatTimestamp(const std::chrono::system_clock
   auto time_t = std::chrono::system_clock::to_time_t(localTime);
 
   std::stringstream ss;
-  ss << std::put_time(std::localtime(&time_t), "%H:%M:%S");
+  std::tm timeinfo;
+  localtime_s(&timeinfo, &time_t);
+  ss << std::put_time(&timeinfo, "%H:%M:%S");
   return ss.str();
 }
 
@@ -642,14 +646,19 @@ const char* OperationsDisplayUI::GetStatusIcon(const std::string& status) const 
   }
 }
 
+
 void OperationsDisplayUI::InitializeTimezone() {
   // Get current UTC time
   auto now_utc = std::chrono::system_clock::now();
   auto utc_time_t = std::chrono::system_clock::to_time_t(now_utc);
 
-  // Convert to local and UTC tm structures
-  std::tm local_tm = *std::localtime(&utc_time_t);
-  std::tm utc_tm = *std::gmtime(&utc_time_t);
+  // Convert to local and UTC tm structures using safe functions
+  std::tm local_tm{};
+  std::tm utc_tm{};
+
+  // Use thread-safe versions
+  localtime_s(&local_tm, &utc_time_t);
+  gmtime_s(&utc_tm, &utc_time_t);
 
   // Convert back to time_t to get actual time difference
   time_t local_time = std::mktime(&local_tm);

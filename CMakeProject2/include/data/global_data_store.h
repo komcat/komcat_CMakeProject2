@@ -1,5 +1,7 @@
 
 #pragma once
+#include "IDataProvider.h"
+#include <memory>
 #include <string>
 #include <map>
 #include <mutex>
@@ -21,6 +23,9 @@ private:
 	// NEW SPD subscription members
 	std::function<void()> m_spdUnsubscribeCallback;
 	bool m_spdSubscribed = false;
+	// NEW: Generic subscription management
+	std::map<std::string, DataSubscription> m_subscriptions;
+	mutable std::mutex m_subscriptionsMutex;
 
 public:
 	// Existing methods
@@ -60,9 +65,62 @@ public:
 		* @param deviceName Device name
 		* @param statusString Status string to parse
 		*/
-		void UpdateSPDStatus(const std::string & deviceName, const std::string & statusString) {
+	void UpdateSPDStatus(const std::string& deviceName, const std::string& statusString) {
 		OnSPDStatusUpdate(deviceName, statusString);
 	}
+
+
+
+
+	// NEW: Generic subscription methods
+
+	/**
+	 * @brief Subscribe to a generic data provider
+	 * @param provider Shared pointer to data provider
+	 * @param channelPrefix Prefix for channel names (e.g., "SPD-", "SMU-")
+	 * @param autoStart Whether to start data collection immediately
+	 * @param pollingInterval Polling interval if autoStart is true
+	 * @return true if subscription successful
+	 */
+	bool SubscribeToProvider(std::shared_ptr<IDataProvider> provider,
+		const std::string& channelPrefix = "",
+		bool autoStart = false,
+		int pollingInterval = 1000);
+
+	/**
+	 * @brief Unsubscribe from a data provider
+	 * @param providerName Name of provider to unsubscribe from
+	 */
+	void UnsubscribeFromProvider(const std::string& providerName);
+
+	/**
+	 * @brief Get list of active subscriptions
+	 */
+	std::vector<std::string> GetActiveSubscriptions() const;
+
+	/**
+	 * @brief Check if subscribed to a specific provider
+	 */
+	bool IsSubscribedTo(const std::string& providerName) const;
+
+	/**
+	 * @brief Start data collection for a subscribed provider
+	 */
+	bool StartProviderDataCollection(const std::string& providerName, int intervalMs = 1000);
+
+	/**
+	 * @brief Stop data collection for a subscribed provider
+	 */
+	void StopProviderDataCollection(const std::string& providerName);
+
+	/**
+	 * @brief Get expected channel names for a provider
+	 */
+	std::vector<std::string> GetProviderChannels(const std::string& providerName) const;
+
+
+
+
 
 private:
 	/**
@@ -81,4 +139,21 @@ private:
 	 * @return true if parsing successful
 	 */
 	bool ParseSPDStatus(const std::string& statusString, float& voltage, float& current, bool& outputState);
+
+	/**
+		 * @brief Generic callback handler for data updates
+		 */
+	void OnGenericDataUpdate(const std::string& providerName,
+		const std::string& channelPrefix,
+		const std::string& deviceName,
+		const std::string& statusString);
+
+	/**
+	 * @brief Parse provider-specific data format
+	 */
+	bool ParseProviderData(const std::string& providerName,
+		const std::string& statusString,
+		std::map<std::string, float>& values);
+
+
 };

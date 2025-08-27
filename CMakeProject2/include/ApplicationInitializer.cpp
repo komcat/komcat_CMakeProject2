@@ -1,5 +1,6 @@
 ﻿// ApplicationInitializer.cpp
 #include "ApplicationInitializer.h"
+#include "include/data/SPDDataProviderAdapter.h"
 #include "logger.h"
 #include "ConfigDatabaseUtils.h"
 #include "include/motions/MotionConfigManager.h"
@@ -839,37 +840,64 @@ bool ApplicationInitializer::InitConfigSPDPowerSupply(HardwareManagers& hw) {
     std::to_string(hw.spdPowerSupply->GetDeviceNames().size()));
 
   // === SUBSCRIBE GLOBALDATA STORE (NO POLLING YET) ===
-  if (hw.spdPowerSupply->GetDeviceNames().size() > 0) {
+  //if (hw.spdPowerSupply->GetDeviceNames().size() > 0) {
+  //  GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+  //  if (dataStore) {
+  //    // Enable debug mode to see subscription activity
+  //    dataStore->SetDebugMode(false);  // Enable for debugging
+
+  //    if (dataStore->SubscribeToSPDManager(hw.spdPowerSupply.get())) {
+  //      logger->LogInfo("✅ GlobalDataStore subscribed to SPD Power Manager");
+  //      logger->LogInfo("   📋 SPD data channels ready (will populate when polling starts):");
+
+  //      // Log the channel names that WILL BE created when polling starts
+  //      auto deviceNames = hw.spdPowerSupply->GetDeviceNames();
+  //      for (const auto& deviceName : deviceNames) {
+  //        logger->LogInfo("     - SPD-" + deviceName + "-Voltage");
+  //        logger->LogInfo("     - SPD-" + deviceName + "-Current");
+  //        logger->LogInfo("     - SPD-" + deviceName + "-Output");
+  //        logger->LogInfo("     - SPD-" + deviceName + "-Power");
+  //      }
+
+  //      logger->LogInfo("   ⏸️ No polling started - data will flow when you manually start polling");
+  //    }
+  //    else {
+  //      logger->LogWarning("⚠️ Failed to subscribe GlobalDataStore to SPD manager");
+  //    }
+  //  }
+  //  else {
+  //    logger->LogError("❌ GlobalDataStore instance not available");
+  //  }
+  //}
+  //else {
+  //  logger->LogInfo("SPD Manager initialized but no devices configured");
+  //}
+
+
+  // === GENERIC SUBSCRIPTION SETUP ===
+  if (hw.spdPowerSupply && hw.spdPowerSupply->GetDeviceNames().size() > 0) {
     GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
     if (dataStore) {
-      // Enable debug mode to see subscription activity
-      dataStore->SetDebugMode(false);  // Enable for debugging
+      dataStore->SetDebugMode(true);
 
-      if (dataStore->SubscribeToSPDManager(hw.spdPowerSupply.get())) {
-        logger->LogInfo("✅ GlobalDataStore subscribed to SPD Power Manager");
-        logger->LogInfo("   📋 SPD data channels ready (will populate when polling starts):");
+      // Create SPD adapter
+      auto spdAdapter = std::make_shared<SPDDataProviderAdapter>(hw.spdPowerSupply.get());
 
-        // Log the channel names that WILL BE created when polling starts
-        auto deviceNames = hw.spdPowerSupply->GetDeviceNames();
-        for (const auto& deviceName : deviceNames) {
-          logger->LogInfo("     - SPD-" + deviceName + "-Voltage");
-          logger->LogInfo("     - SPD-" + deviceName + "-Current");
-          logger->LogInfo("     - SPD-" + deviceName + "-Output");
-          logger->LogInfo("     - SPD-" + deviceName + "-Power");
+      // Subscribe using generic interface
+      if (dataStore->SubscribeToProvider(spdAdapter, "SPD-", false, 1000)) {
+        logger->LogInfo("✅ SPD Manager subscribed via generic interface");
+
+        // Log expected channels
+        auto expectedChannels = dataStore->GetProviderChannels("SPDPowerSupply");
+        logger->LogInfo("   Expected SPD channels:");
+        for (const auto& channel : expectedChannels) {
+          logger->LogInfo("     - " + channel);
         }
-
-        logger->LogInfo("   ⏸️ No polling started - data will flow when you manually start polling");
       }
       else {
-        logger->LogWarning("⚠️ Failed to subscribe GlobalDataStore to SPD manager");
+        logger->LogWarning("⚠️ Failed to subscribe SPD Manager via generic interface");
       }
     }
-    else {
-      logger->LogError("❌ GlobalDataStore instance not available");
-    }
-  }
-  else {
-    logger->LogInfo("SPD Manager initialized but no devices configured");
   }
 
 

@@ -979,7 +979,7 @@ bool ModuleAlignment::SaveAlignmentData(const std::string& alignmentName) {
     }
 
     // Get the alignment ID
-    int alignmentId = sqlite3_last_insert_rowid(m_alignmentDB);
+    int alignmentId = static_cast<int>(sqlite3_last_insert_rowid(m_alignmentDB));
 
     // Delete old points for this alignment
     const char* deletePointsSQL = "DELETE FROM alignment_points WHERE alignment_id = ?;";

@@ -148,7 +148,13 @@ bool Keithley2400Client::SendJsonCommand(const std::string& type, const std::str
     //Logger::GetInstance()->LogInfo("Sending: " + jsonStr); // ADD THIS LINE
 
     // Send command
-    if (send(m_socket, jsonStr.c_str(), jsonStr.length(), 0) == SOCKET_ERROR) {
+    auto length = jsonStr.length();
+    if (length > INT_MAX) {
+      m_lastError = "Message too large to send";
+      return false;
+    }
+
+    if (send(m_socket, jsonStr.c_str(), static_cast<int>(length), 0) == SOCKET_ERROR) {
       m_lastError = "Failed to send command";
       return false;
     }
