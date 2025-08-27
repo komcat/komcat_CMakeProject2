@@ -280,6 +280,7 @@ set(INCL_EZIIO "${CMAKE_CURRENT_SOURCE_DIR}/include/eziio")
 set(INCL_SMU "${CMAKE_CURRENT_SOURCE_DIR}/include/SMU")
 set(INCL_SCANNING "${CMAKE_CURRENT_SOURCE_DIR}/include/scanning")
 set(INCL_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/include/script")
+set(INCL_POWERSUPPLY "${CMAKE_CURRENT_SOURCE_DIR}/include/PowerSupply")
 set(INCL_UI "${CMAKE_CURRENT_SOURCE_DIR}/include/ui")
 set(INCLUDE_HALCON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/halcon")
 set(INCLUDE_VISION_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/vision")
@@ -727,6 +728,7 @@ target_include_directories(uaa3App PRIVATE
   ${INCL_SMU}
   ${INCL_SCANNING}
   ${INCL_SCRIPT}
+  ${INCL_POWERSUPPLY}
   ${INCL_UI}
   ${INCL_PROCESSES}
   ${INCL_CLD101x}

@@ -821,26 +821,12 @@ bool ApplicationInitializer::InitConfigSPDPowerSupply(HardwareManagers& hw) {
 
   if (hw.spdPowerSupply->Initialize("spd_devices_config.json")) {
     logger->LogInfo("✅ SPD Power Supply initialized from config file");
-
-    // Don't auto-connect during initialization - let user control this
-    // The devices will be discovered but not connected
-
-    logger->LogInfo("SPD Power Supply initialized, device count: " +
-      std::to_string(hw.spdPowerSupply->GetDeviceNames().size()));
-    return true;
   }
   else {
     logger->LogInfo("📄 SPD config file not found, loading default configuration");
-
     try {
       hw.spdPowerSupply->LoadDefaultConfiguration();
-
-      // Override the default autoConnect behavior
-      // We'll need to add a method to disable autoConnect after initialization
-
-      logger->LogInfo("SPD Power Supply initialized with default configuration, device count: " +
-        std::to_string(hw.spdPowerSupply->GetDeviceNames().size()));
-      return true;
+      logger->LogInfo("✅ SPD Power Supply initialized with default configuration");
     }
     catch (const std::exception& e) {
       logger->LogError("Failed to initialize SPD Power Supply: " + std::string(e.what()));
@@ -848,7 +834,75 @@ bool ApplicationInitializer::InitConfigSPDPowerSupply(HardwareManagers& hw) {
       return false;
     }
   }
+
+  logger->LogInfo("SPD Power Supply initialized, device count: " +
+    std::to_string(hw.spdPowerSupply->GetDeviceNames().size()));
+
+  // === SUBSCRIBE GLOBALDATA STORE (NO POLLING YET) ===
+  if (hw.spdPowerSupply->GetDeviceNames().size() > 0) {
+    GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+    if (dataStore) {
+      // Enable debug mode to see subscription activity
+      dataStore->SetDebugMode(false);  // Enable for debugging
+
+      if (dataStore->SubscribeToSPDManager(hw.spdPowerSupply.get())) {
+        logger->LogInfo("✅ GlobalDataStore subscribed to SPD Power Manager");
+        logger->LogInfo("   📋 SPD data channels ready (will populate when polling starts):");
+
+        // Log the channel names that WILL BE created when polling starts
+        auto deviceNames = hw.spdPowerSupply->GetDeviceNames();
+        for (const auto& deviceName : deviceNames) {
+          logger->LogInfo("     - SPD-" + deviceName + "-Voltage");
+          logger->LogInfo("     - SPD-" + deviceName + "-Current");
+          logger->LogInfo("     - SPD-" + deviceName + "-Output");
+          logger->LogInfo("     - SPD-" + deviceName + "-Power");
+        }
+
+        logger->LogInfo("   ⏸️ No polling started - data will flow when you manually start polling");
+      }
+      else {
+        logger->LogWarning("⚠️ Failed to subscribe GlobalDataStore to SPD manager");
+      }
+    }
+    else {
+      logger->LogError("❌ GlobalDataStore instance not available");
+    }
+  }
+  else {
+    logger->LogInfo("SPD Manager initialized but no devices configured");
+  }
+
+
+
+  // Quick test after initialization
+  if (hw.spdPowerSupply && hw.spdPowerSupply->GetDeviceNames().size() > 0) {
+    GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+    if (dataStore) {
+      dataStore->SetDebugMode(false);
+
+      if (dataStore->SubscribeToSPDManager(hw.spdPowerSupply.get())) {
+        logger->LogInfo("✅ GlobalDataStore subscribed to SPD Power Manager");
+
+        // Quick test: add a callback that manually updates GlobalDataStore
+        hw.spdPowerSupply->SetStatusUpdateCallback(
+          [dataStore](const std::string& deviceName, const std::string& status) {
+            std::cout << "[DEBUG CALLBACK] Received: " << deviceName << " -> " << status << std::endl;
+
+            // Simple test: just set a test value
+            dataStore->SetValue("SPD-TEST-" + deviceName, 123.456f);
+            std::cout << "[DEBUG CALLBACK] Set test value in GlobalDataStore" << std::endl;
+          }
+        );
+
+        logger->LogInfo("Test callback set - will create SPD-TEST-* channels when polling starts");
+      }
+    }
+  }
+
+  return true;
 }
+
+
 
 void ApplicationInitializer::LogHardwareVelocities(PIControllerManager* pi, ACSControllerManager* acs) {
   // Log PI velocities

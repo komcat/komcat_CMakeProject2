@@ -37,27 +37,184 @@
 bool g_deugMode = false; // Global debug mode flag
 
 
-class ExampleSPDSubscriber : public ISPDStatusSubscriber {
-private:
-	std::string m_name;
 
-public:
-	ExampleSPDSubscriber(const std::string& name) : m_name(name) {}
 
-	void OnDeviceStatusUpdate(const SPDDeviceStatus& status) override {
-		std::cout << "[" << m_name << "] Device: " << status.deviceName
-			<< " | V: " << status.voltage << "V"
-			<< " | I: " << status.current << "A"
-			<< " | Output: " << (status.outputEnabled ? "ON" : "OFF")
-			<< std::endl;
+
+// Add this function to test SPD -> GlobalDataStore flow manually
+void TestSPDToGlobalDataStore() {
+	Logger* logger = Logger::GetInstance();
+	logger->LogInfo("=== MANUAL SPD TEST START ===");
+
+	// Get managers
+	AppContext& context = AppContext::GetInstance();
+	auto* spdManager = context.GetSPDPowerSupply();
+	GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+
+	if (!spdManager) {
+		logger->LogError("SPD Manager not available");
+		return;
 	}
 
-	void OnDeviceConnectionChange(const std::string& deviceName, bool connected) override {
-		std::cout << "[" << m_name << "] Device " << deviceName
-			<< (connected ? " CONNECTED" : " DISCONNECTED") << std::endl;
+	if (!dataStore) {
+		logger->LogError("GlobalDataStore not available");
+		return;
 	}
-};
 
+	// Check subscription
+	bool subscribed = dataStore->IsSPDSubscribed();
+	logger->LogInfo("GlobalDataStore SPD subscription: " + std::string(subscribed ? "ACTIVE" : "INACTIVE"));
+
+	// 1. Connect devices
+	logger->LogInfo("1. Connecting SPD devices...");
+	int connected = spdManager->ConnectAll();
+	logger->LogInfo("   Connected: " + std::to_string(connected) + " devices");
+
+	if (connected == 0) {
+		logger->LogWarning("No devices connected - test aborted");
+		return;
+	}
+
+	// 2. Set CV mode: 3.3V, 0.5A limit
+	logger->LogInfo("2. Setting CV mode: 3.3V, 0.5A limit...");
+	bool cvSet = spdManager->SetConstantVoltageMode(3.3, 0.5);
+	logger->LogInfo("   CV mode result: " + std::string(cvSet ? "SUCCESS" : "FAILED"));
+
+	// 3. Turn on outputs
+	logger->LogInfo("3. Turning on outputs...");
+	bool outputsOn = spdManager->SetAllOutputs(true);
+	logger->LogInfo("   Outputs enabled: " + std::string(outputsOn ? "SUCCESS" : "FAILED"));
+
+	// 4. Set up callback that updates GlobalDataStore (this will override any existing callback)
+	logger->LogInfo("4. Setting up direct callback...");
+	spdManager->SetStatusUpdateCallback(
+		[dataStore, logger](const std::string& deviceName, const std::string& status) {
+			static int callbackCount = 0;
+			callbackCount++;
+
+			if (callbackCount <= 5) {  // Log first 5 callbacks
+				std::cout << "[SPD CALLBACK #" << callbackCount << "] Device: " << deviceName
+					<< " Status: " << status << std::endl;
+			}
+
+			// Parse and store in GlobalDataStore
+			if (status.find("Status read failed") == std::string::npos &&
+				status.find("Disconnected") == std::string::npos) {
+
+				float voltage = 0.0f, current = 0.0f;
+				bool outputState = false;
+
+				// Parse voltage: "V: X.XXXV"
+				size_t vPos = status.find("V: ");
+				if (vPos != std::string::npos) {
+					size_t vEnd = status.find("V", vPos + 3);
+					if (vEnd != std::string::npos) {
+						try {
+							voltage = std::stof(status.substr(vPos + 3, vEnd - vPos - 3));
+						}
+						catch (...) {
+							std::cout << "[PARSE ERROR] Failed to parse voltage from: " << status << std::endl;
+						}
+					}
+				}
+
+				// Parse current: "I: X.XXXA"  
+				size_t iPos = status.find("I: ");
+				if (iPos != std::string::npos) {
+					size_t iEnd = status.find("A", iPos + 3);
+					if (iEnd != std::string::npos) {
+						try {
+							current = std::stof(status.substr(iPos + 3, iEnd - iPos - 3));
+						}
+						catch (...) {
+							std::cout << "[PARSE ERROR] Failed to parse current from: " << status << std::endl;
+						}
+					}
+				}
+
+				// Parse output state
+				outputState = status.find("Output: ON") != std::string::npos;
+
+				// Update GlobalDataStore
+				std::string voltageChannel = "SPD-" + deviceName + "-Voltage";
+				std::string currentChannel = "SPD-" + deviceName + "-Current";
+				std::string outputChannel = "SPD-" + deviceName + "-Output";
+				std::string powerChannel = "SPD-" + deviceName + "-Power";
+
+				dataStore->SetValue(voltageChannel, voltage);
+				dataStore->SetValue(currentChannel, current);
+				dataStore->SetValue(outputChannel, outputState ? 1.0f : 0.0f);
+				dataStore->SetValue(powerChannel, voltage * current);
+
+				if (callbackCount <= 3) {
+					std::cout << "[GLOBALDATA UPDATE] Created channels: V=" << voltage
+						<< "V, I=" << current << "A, Power=" << (voltage * current)
+						<< "W, Output=" << (outputState ? "ON" : "OFF") << std::endl;
+				}
+			}
+		}
+	);
+
+	// 5. Start polling
+	logger->LogInfo("5. Starting polling (1000ms interval)...");
+	spdManager->StartAllPolling(1000);
+
+	// 6. Wait and check data
+	logger->LogInfo("6. Waiting 3 seconds for data...");
+	std::this_thread::sleep_for(std::chrono::seconds(3));
+
+	// Check GlobalDataStore channels
+	auto channels = dataStore->GetAvailableChannels();
+	int spdChannelCount = 0;
+
+	logger->LogInfo("7. Checking GlobalDataStore channels:");
+	logger->LogInfo("   Total channels: " + std::to_string(channels.size()));
+
+	for (const auto& ch : channels) {
+		if (ch.find("SPD-") == 0) {
+			spdChannelCount++;
+			float value = dataStore->GetValue(ch);
+			logger->LogInfo("   FOUND: " + ch + " = " + std::to_string(value));
+		}
+	}
+
+	if (spdChannelCount > 0) {
+		logger->LogInfo("   SUCCESS: " + std::to_string(spdChannelCount) + " SPD channels active!");
+	}
+	else {
+		logger->LogError("   FAILED: No SPD channels found!");
+		logger->LogInfo("   All available channels:");
+		for (const auto& ch : channels) {
+			logger->LogInfo("     - " + ch);
+		}
+	}
+
+	// 8. Stop polling  
+	logger->LogInfo("8. Stopping polling...");
+	spdManager->StopAllPolling();
+
+	// 9. Turn off outputs
+	logger->LogInfo("9. Turning off outputs...");
+	spdManager->SetAllOutputs(false);
+
+	// 10. Final report
+	auto finalChannels = dataStore->GetAvailableChannels();
+	int finalSpdCount = 0;
+
+	logger->LogInfo("10. Final channel values (outputs OFF, devices connected):");
+	for (const auto& ch : finalChannels) {
+		if (ch.find("SPD-") == 0) {
+			finalSpdCount++;
+			float value = dataStore->GetValue(ch);
+			logger->LogInfo("    " + ch + ": " + std::to_string(value));
+		}
+	}
+
+	logger->LogInfo("=== TEST COMPLETE ===");
+	logger->LogInfo("Final SPD channels in GlobalDataStore: " + std::to_string(finalSpdCount));
+}
+
+// Call this function after your app starts up to test the flow
+// You can add a button in your UI to trigger it, or call it from main() after initialization
 
 int main(int argc, char* argv[])
 {
@@ -183,7 +340,7 @@ int main(int argc, char* argv[])
 
 	// Load main font (try project font, fallback to default)
 	if (std::filesystem::exists("assets/fonts/Roboto-Regular.ttf")) {
-		mainFont = io.Fonts->AddFontFromFileTTF("assets/fonts/Roboto-Regular.ttf", 16.0f);
+		mainFont = io.Fonts->AddFontFromFileTTF("assets/fonts/Roboto-Regular.ttf", 24.0f);
 		std::cout << "✅ Loaded Roboto-Regular" << std::endl;
 	}
 	else {
@@ -390,69 +547,15 @@ int main(int argc, char* argv[])
 
 	logger->LogInfo("=== STARTING RENDER LOOP ===");
 
-	// ===========================================
-// SPDPowerSupplyManager Quick Test Integration
-// Add this code to your uaa3App.cpp main render loop
-// ===========================================
-
-// 1. ADD NEAR THE TOP OF MAIN FUNCTION (after logger initialization)
-// Create and initialize SPD Manager for testing
-
-	//if (false)
-	//{
-
-
-	//	std::unique_ptr<SPDPowerSupplyManager> testSpdManager;
-	//	bool spdManagerInitialized = false;
-
-	//	// Initialize SPD Manager
-	//	testSpdManager = std::make_unique<SPDPowerSupplyManager>();
-	//	logger->LogInfo("Created SPDPowerSupplyManager for testing");
-
-	//	// Try to initialize with config (will fall back to default if no config file)
-	//	if (testSpdManager->Initialize("spd_test_config.json")) {
-	//		logger->LogInfo("✅ SPD Manager initialized from config file");
-	//		spdManagerInitialized = true;
-	//	}
-	//	else {
-	//		logger->LogInfo("📄 Config file not found, loading default configuration");
-	//		testSpdManager->LoadDefaultConfiguration();
-	//		spdManagerInitialized = true;
-	//	}
-
-
-	//	// The Initialize() and LoadDefaultConfiguration() methods should automatically 
-	//// add devices, but we can trigger discovery for additional devices
-	//	if (spdManagerInitialized) {
-	//		logger->LogInfo("SPD Manager initialized, device count: " +
-	//			std::to_string(testSpdManager->GetDeviceNames().size()));
-
-	//		// Auto-discover any additional devices not in config
-	//		testSpdManager->AddDiscoveredDevices(false); // false = don't auto-connect yet
-
-	//		// Optional: Start polling for status updates (you can also do this manually via UI)
-	//		// testSpdManager->StartAllPolling(2000); // Poll every 2 seconds
-	//		testSpdManager->ConnectAll();
-
-
-	//		std::string spdID = testSpdManager->GetDevice("SPD1")->getInstrumentID();
-	//		logger->LogDebug("test get IDN SPDPowerSupply = " + spdID);
-
-	//		//testSpdManager->StartAllPolling(200); // Poll every 2 seconds
-
-	//		logger->LogInfo("SPD Manager ready for testing");
-	//	}
 
 
 
 
-	//}
 
-	// Create subscriber
-	auto subscriber = std::make_unique<ExampleSPDSubscriber>("MyApp");
-	auto* spdmanager = context.GetSPDPowerSupply();
-	// Subscribe to updates
-	spdmanager->Subscribe(subscriber.get(), "MyApp_Main");
+	//test PSD
+	
+	TestSPDToGlobalDataStore();
+
 
 	// ===========================================
 	// PHASE 4: MAIN RENDER LOOP
@@ -509,155 +612,281 @@ int main(int argc, char* argv[])
 		uiManager.RenderUI();
 
 
-#pragma region SPD power supply manager test
-
-		// RENDER SPD POWER SUPPLY MANAGER UI
-		auto* testSpdManager = context.GetSPDPowerSupply();
-		if (testSpdManager) {
-			// Render the SPD Manager UI window
-			testSpdManager->RenderUI();
-
-			// Optional: Add a simple test control window
-			static bool showSpdTestWindow = true;
-			if (showSpdTestWindow) {
-				ImGui::Begin("SPD Test Controls", &showSpdTestWindow);
-
-				ImGui::Text("SPD Power Supply Manager Test");
-				ImGui::Separator();
-
-				// Manager status
-				ImGui::Text("Device Count: %zu", testSpdManager->GetDeviceNames().size());
-				ImGui::Text("Connected: %d", testSpdManager->GetConnectedCount());
-				ImGui::Text("Polling: %s", testSpdManager->IsPollingActive() ? "Active" : "Stopped");
-
-				ImGui::Separator();
-
-				// Quick action buttons
-				if (ImGui::Button("Connect All Devices")) {
-					testSpdManager->ConnectAll();
-					logger->LogInfo("Attempting to connect all SPD devices");
-				}
-
-				ImGui::SameLine();
-				if (ImGui::Button("Disconnect All")) {
-					testSpdManager->DisconnectAll();
-					logger->LogInfo("Disconnected all SPD devices");
-				}
-
-				if (ImGui::Button("Discover New Devices")) {
-					testSpdManager->AddDiscoveredDevices(false);
-					logger->LogInfo("Scanning for new SPD devices");
-				}
-
-				ImGui::SameLine();
-				if (ImGui::Button("Emergency Stop")) {
-					testSpdManager->EmergencyStop();
-					logger->LogWarning("EMERGENCY STOP - All outputs disabled");
-				}
-
-				ImGui::Separator();
-
-				// Quick test controls
-				static float testVoltage = 5.0f;
-				static float testCurrent = 1.0f;
-
-				ImGui::SliderFloat("Test Voltage (V)", &testVoltage, 0.0f, 30.0f);
-				ImGui::SliderFloat("Test Current (A)", &testCurrent, 0.0f, 5.0f);
-
-				// Replace the existing controls with mode-specific ones
-				static float cvVoltage = 5.0f;
-				static float cvCurrentLimit = 1.0f;
-				static float ccCurrent = 1.0f;
-				static float ccVoltageLimit = 10.0f;
-
-				ImGui::Separator();
-				ImGui::Text("Constant Voltage (CV) Mode");
-				ImGui::SliderFloat("CV Voltage (V)", &cvVoltage, 0.0f, 30.0f);
-				ImGui::SliderFloat("CV Current Limit (A)", &cvCurrentLimit, 0.0f, 5.0f);
-				if (ImGui::Button("Set All to CV Mode")) {
-					testSpdManager->SetConstantVoltageMode(cvVoltage, cvCurrentLimit);
-					logger->LogInfo("Set all devices to CV mode: " + std::to_string(cvVoltage) + "V, " +
-						std::to_string(cvCurrentLimit) + "A limit");
-				}
-
-				ImGui::Separator();
-				ImGui::Text("Constant Current (CC) Mode");
-				ImGui::SliderFloat("CC Current (A)", &ccCurrent, 0.0f, 5.0f);
-				ImGui::SliderFloat("CC Voltage Limit (V)", &ccVoltageLimit, 0.0f, 30.0f);
-				if (ImGui::Button("Set All to CC Mode")) {
-					testSpdManager->SetConstantCurrentMode(ccCurrent, ccVoltageLimit);
-					logger->LogInfo("Set all devices to CC mode: " + std::to_string(ccCurrent) + "A, " +
-						std::to_string(ccVoltageLimit) + "V limit");
-				}
-
-				static bool allOutputs = false;
-				if (ImGui::Checkbox("Enable All Outputs", &allOutputs)) {
-					testSpdManager->SetAllOutputs(allOutputs);
-					logger->LogInfo("Set all outputs: " + std::string(allOutputs ? "ON" : "OFF"));
-				}
-
-				ImGui::Separator();
-
-				// Device status display
-				// Device status display
-				if (ImGui::CollapsingHeader("Device Status")) {
-					// Use static to persist the cached statuses across UI frames
-					static std::unordered_map<std::string, std::string> cachedStatuses;
-					static bool callbackRegistered = false;
-
-					// Register the callback once to update cached statuses
-					if (!callbackRegistered) {
-						testSpdManager->SetStatusUpdateCallback(
-							[](const std::string& deviceName, const std::string& status) {
-								cachedStatuses[deviceName] = status;
-							}
-						);
-						callbackRegistered = true;
-
-						// Initialize with current statuses if not polling yet
-						if (!testSpdManager->IsPollingActive()) {
-							cachedStatuses = testSpdManager->GetAllStatuses();
-						}
-					}
-
-					// Display the cached statuses (no hardware calls during rendering!)
-					for (const auto& [deviceName, status] : cachedStatuses) {
-						ImGui::Text("%s: %s", deviceName.c_str(), status.c_str());
-					}
-
-					// Show when statuses were last updated
-					if (testSpdManager->IsPollingActive()) {
-						ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Status: Live (Polling Active)");
-					}
-					else {
-						ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Status: Cached (Start Polling for Live Updates)");
-					}
-				}
-
-				// Polling controls
-				if (ImGui::CollapsingHeader("Polling Controls")) {
-					static int pollingInterval = 200;
-					ImGui::SliderInt("Interval (ms)", &pollingInterval, 100, 10000);
-
-					if (!testSpdManager->IsPollingActive()) {
-						if (ImGui::Button("Start Polling")) {
-							testSpdManager->StartAllPolling(pollingInterval);
-							logger->LogInfo("Started SPD polling");
-						}
-					}
-					else {
-						if (ImGui::Button("Stop Polling")) {
-							testSpdManager->StopAllPolling();
-							logger->LogInfo("Stopped SPD polling");
-						}
-					}
-				}
-
-				ImGui::End();
-			}
-		}
-
-#pragma endregion
+//#pragma region SPD power supply manager test
+//
+//		// RENDER SPD POWER SUPPLY MANAGER UI
+//		auto* testSpdManager = context.GetSPDPowerSupply();
+//		if (testSpdManager) {
+//			// Render the SPD Manager UI window
+//			testSpdManager->RenderUI();
+//
+//			// Optional: Add a simple test control window
+//			static bool showSpdTestWindow = true;
+//			if (showSpdTestWindow) {
+//				ImGui::Begin("SPD Test Controls", &showSpdTestWindow);
+//
+//				ImGui::Text("SPD Power Supply Manager Test");
+//				ImGui::Separator();
+//
+//				// Manager status
+//				ImGui::Text("Device Count: %zu", testSpdManager->GetDeviceNames().size());
+//				ImGui::Text("Connected: %d", testSpdManager->GetConnectedCount());
+//				ImGui::Text("Polling: %s", testSpdManager->IsPollingActive() ? "Active" : "Stopped");
+//
+//				ImGui::Separator();
+//
+//				// Quick action buttons
+//				if (ImGui::Button("Connect All Devices")) {
+//					testSpdManager->ConnectAll();
+//					logger->LogInfo("Attempting to connect all SPD devices");
+//				}
+//
+//				ImGui::SameLine();
+//				if (ImGui::Button("Disconnect All")) {
+//					testSpdManager->DisconnectAll();
+//					logger->LogInfo("Disconnected all SPD devices");
+//				}
+//
+//				if (ImGui::Button("Discover New Devices")) {
+//					testSpdManager->AddDiscoveredDevices(false);
+//					logger->LogInfo("Scanning for new SPD devices");
+//				}
+//
+//				ImGui::SameLine();
+//				if (ImGui::Button("Emergency Stop")) {
+//					testSpdManager->EmergencyStop();
+//					logger->LogWarning("EMERGENCY STOP - All outputs disabled");
+//				}
+//
+//				ImGui::Separator();
+//
+//				// Quick test controls
+//				static float testVoltage = 5.0f;
+//				static float testCurrent = 1.0f;
+//
+//				ImGui::SliderFloat("Test Voltage (V)", &testVoltage, 0.0f, 30.0f);
+//				ImGui::SliderFloat("Test Current (A)", &testCurrent, 0.0f, 5.0f);
+//
+//				// Replace the existing controls with mode-specific ones
+//				static float cvVoltage = 5.0f;
+//				static float cvCurrentLimit = 1.0f;
+//				static float ccCurrent = 1.0f;
+//				static float ccVoltageLimit = 10.0f;
+//
+//				ImGui::Separator();
+//				ImGui::Text("Constant Voltage (CV) Mode");
+//				ImGui::SliderFloat("CV Voltage (V)", &cvVoltage, 0.0f, 30.0f);
+//				ImGui::SliderFloat("CV Current Limit (A)", &cvCurrentLimit, 0.0f, 5.0f);
+//				if (ImGui::Button("Set All to CV Mode")) {
+//					testSpdManager->SetConstantVoltageMode(cvVoltage, cvCurrentLimit);
+//					logger->LogInfo("Set all devices to CV mode: " + std::to_string(cvVoltage) + "V, " +
+//						std::to_string(cvCurrentLimit) + "A limit");
+//				}
+//
+//				ImGui::Separator();
+//				ImGui::Text("Constant Current (CC) Mode");
+//				ImGui::SliderFloat("CC Current (A)", &ccCurrent, 0.0f, 5.0f);
+//				ImGui::SliderFloat("CC Voltage Limit (V)", &ccVoltageLimit, 0.0f, 30.0f);
+//				if (ImGui::Button("Set All to CC Mode")) {
+//					testSpdManager->SetConstantCurrentMode(ccCurrent, ccVoltageLimit);
+//					logger->LogInfo("Set all devices to CC mode: " + std::to_string(ccCurrent) + "A, " +
+//						std::to_string(ccVoltageLimit) + "V limit");
+//				}
+//
+//				static bool allOutputs = false;
+//				if (ImGui::Checkbox("Enable All Outputs", &allOutputs)) {
+//					testSpdManager->SetAllOutputs(allOutputs);
+//					logger->LogInfo("Set all outputs: " + std::string(allOutputs ? "ON" : "OFF"));
+//				}
+//
+//				ImGui::Separator();
+//
+//				// Device status display
+//				// Device status display
+//				// Device status display
+//				if (ImGui::CollapsingHeader("Device Status")) {
+//					// Use static to persist the cached statuses across UI frames
+//					static std::unordered_map<std::string, std::string> cachedStatuses;
+//					static bool callbackRegistered = false;
+//
+//					// FIXED: Chain callbacks for both UI and GlobalDataStore
+//					if (!callbackRegistered) {
+//						GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+//
+//						testSpdManager->SetStatusUpdateCallback(
+//							[dataStore](const std::string& deviceName, const std::string& status) {
+//								// 1. Update UI cache (original functionality)
+//								cachedStatuses[deviceName] = status;
+//
+//								// 2. ALSO update GlobalDataStore (NEW - chain the callback)
+//								if (dataStore && dataStore->IsSPDSubscribed()) {
+//									// Quick parse and store in GlobalDataStore
+//									if (status.find("Status read failed") == std::string::npos &&
+//										status.find("Disconnected") == std::string::npos) {
+//
+//										float voltage = 0.0f, current = 0.0f;
+//										bool outputState = false;
+//
+//										// Parse voltage: "V: X.XXXV"
+//										size_t vPos = status.find("V: ");
+//										if (vPos != std::string::npos) {
+//											size_t vEnd = status.find("V", vPos + 3);
+//											if (vEnd != std::string::npos) {
+//												try {
+//													voltage = std::stof(status.substr(vPos + 3, vEnd - vPos - 3));
+//												}
+//												catch (...) {}
+//											}
+//										}
+//
+//										// Parse current: "I: X.XXXA"
+//										size_t iPos = status.find("I: ");
+//										if (iPos != std::string::npos) {
+//											size_t iEnd = status.find("A", iPos + 3);
+//											if (iEnd != std::string::npos) {
+//												try {
+//													current = std::stof(status.substr(iPos + 3, iEnd - iPos - 3));
+//												}
+//												catch (...) {}
+//											}
+//										}
+//
+//										// Parse output state: "Output: ON/OFF"
+//										outputState = status.find("Output: ON") != std::string::npos;
+//
+//										// Store in GlobalDataStore
+//										dataStore->SetValue("SPD-" + deviceName + "-Voltage", voltage);
+//										dataStore->SetValue("SPD-" + deviceName + "-Current", current);
+//										dataStore->SetValue("SPD-" + deviceName + "-Output", outputState ? 1.0f : 0.0f);
+//										dataStore->SetValue("SPD-" + deviceName + "-Power", voltage * current);
+//									}
+//								}
+//							}
+//						);
+//						callbackRegistered = true;
+//
+//						// Initialize with current statuses if not polling yet
+//						if (!testSpdManager->IsPollingActive()) {
+//							cachedStatuses = testSpdManager->GetAllStatuses();
+//						}
+//					}
+//
+//					// Display the cached statuses (no hardware calls during rendering!)
+//					for (const auto& [deviceName, status] : cachedStatuses) {
+//						ImGui::Text("%s: %s", deviceName.c_str(), status.c_str());
+//					}
+//
+//					// Show when statuses were last updated
+//					if (testSpdManager->IsPollingActive()) {
+//						ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Status: Live (Polling Active)");
+//					}
+//					else {
+//						ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Status: Cached (Start Polling for Live Updates)");
+//					}
+//				}
+//
+//
+//				// Polling controls
+//				if (ImGui::CollapsingHeader("Polling Controls")) {
+//					static int pollingInterval = 200;
+//					ImGui::SliderInt("Interval (ms)", &pollingInterval, 100, 10000);
+//
+//					if (!testSpdManager->IsPollingActive()) {
+//						if (ImGui::Button("Start Polling")) {
+//							testSpdManager->StartAllPolling(pollingInterval);
+//							logger->LogInfo("Started SPD polling");
+//						}
+//					}
+//					else {
+//						if (ImGui::Button("Stop Polling")) {
+//							testSpdManager->StopAllPolling();
+//							logger->LogInfo("Stopped SPD polling");
+//						}
+//					}
+//				}
+//
+//
+//
+//				if (ImGui::CollapsingHeader("GlobalDataStore Status")) {
+//					GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+//					if (dataStore) {
+//						// Show subscription status
+//						bool subscribed = dataStore->IsSPDSubscribed();
+//						ImGui::TextColored(subscribed ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) : ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+//							"Subscription: %s", subscribed ? "ACTIVE" : "NOT SUBSCRIBED");
+//
+//						// Show available channels and their values
+//						auto channels = dataStore->GetAvailableChannels();
+//						int spdChannelCount = 0;
+//
+//						ImGui::Text("Total Channels: %zu", channels.size());
+//
+//						// Filter and display SPD channels
+//						ImGui::Separator();
+//						ImGui::Text("SPD Channels:");
+//
+//						for (const auto& channel : channels) {
+//							if (channel.find("SPD-") == 0) {
+//								spdChannelCount++;
+//								float value = dataStore->GetValue(channel);
+//
+//								// Color code the values
+//								ImVec4 color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);  // White default
+//								if (channel.find("-Voltage") != std::string::npos) {
+//									color = ImVec4(0.0f, 1.0f, 1.0f, 1.0f);  // Cyan for voltage
+//								}
+//								else if (channel.find("-Current") != std::string::npos) {
+//									color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);  // Yellow for current
+//								}
+//								else if (channel.find("-Power") != std::string::npos) {
+//									color = ImVec4(1.0f, 0.5f, 0.0f, 1.0f);  // Orange for power
+//								}
+//								else if (channel.find("-Output") != std::string::npos) {
+//									color = value > 0.5f ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) : ImVec4(1.0f, 0.0f, 0.0f, 1.0f);  // Green/Red for output
+//								}
+//
+//								ImGui::TextColored(color, "  %s: %.3f", channel.c_str(), value);
+//							}
+//						}
+//
+//						if (spdChannelCount == 0) {
+//							ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "  No SPD channels yet - start polling to see data");
+//						}
+//						else {
+//							ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "  %d SPD channels active", spdChannelCount);
+//						}
+//
+//						// Quick test button
+//						ImGui::Separator();
+//						if (ImGui::Button("Refresh Channel List")) {
+//							// Force a refresh - useful for debugging
+//						}
+//
+//						// Show data flow rate
+//						static int lastChannelCount = 0;
+//						static auto lastUpdateTime = std::chrono::steady_clock::now();
+//
+//						if (spdChannelCount != lastChannelCount) {
+//							lastChannelCount = spdChannelCount;
+//							lastUpdateTime = std::chrono::steady_clock::now();
+//						}
+//
+//						auto timeSinceUpdate = std::chrono::duration_cast<std::chrono::seconds>(
+//							std::chrono::steady_clock::now() - lastUpdateTime).count();
+//
+//						ImGui::Text("Last channel update: %ld seconds ago", timeSinceUpdate);
+//
+//					}
+//					else {
+//						ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "GlobalDataStore not available!");
+//					}
+//				}
+//
+//				ImGui::End();
+//			}
+//		}
+//
+//#pragma endregion
 
 
 
@@ -828,7 +1057,7 @@ int main(int argc, char* argv[])
 	}
 
 
-	spdmanager->Unsubscribe("MyApp_Main");
+
 
 	// ===========================================
 	// PHASE 5: CLEANUP

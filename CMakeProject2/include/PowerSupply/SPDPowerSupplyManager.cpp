@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
+#include <iostream>
 
 // Use PowerSupply namespace
 using PowerSupply::SPDPowerSupply;
@@ -752,56 +753,63 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
     }
   }
 
+
   void SPDPowerSupplyManager::PollingThreadFunction() {
+    LogMessage("INFO", "=== POLLING THREAD STARTED ===");
+    int iterationCount = 0;
+
     while (m_pollingActive.load()) {
+      iterationCount++;
+
       try {
-        // Get current statuses
-        std::unordered_map<std::string, SPDDeviceStatus> deviceStatuses;
+        LogMessage("INFO", "Polling iteration #" + std::to_string(iterationCount));
 
-        {
-          std::lock_guard<std::mutex> lock(m_devicesMutex);
+        // Check if callback is set
+        bool hasCallback = (m_statusUpdateCallback != nullptr);
+        LogMessage("INFO", "Callback status: " + std::string(hasCallback ? "SET" : "NOT SET"));
 
-          for (const auto& pair : m_devices) {
-            const std::string& name = pair.first;
-            auto& deviceInfo = pair.second;
+        // Get current statuses and notify callbacks
+        auto statuses = GetAllStatuses();
+        LogMessage("INFO", "Retrieved " + std::to_string(statuses.size()) + " device statuses");
 
-            SPDDeviceStatus status;
-            status.deviceName = name;
-            status.timestamp = std::chrono::steady_clock::now();
-            status.isConnected = deviceInfo->device && deviceInfo->device->isConnected();
-
-            if (status.isConnected) {
-              try {
-                auto voltage = deviceInfo->device->getVoltage(1);
-                auto current = deviceInfo->device->getCurrent(1);
-                auto outputState = deviceInfo->device->getOutputState(1);
-
-                if (voltage.has_value()) status.voltage = voltage.value();
-                if (current.has_value()) status.current = current.value();
-                if (outputState.has_value()) status.outputEnabled = outputState.value();
-              }
-              catch (const std::exception& e) {
-                LogMessage("ERROR", "Error reading status for " + name + ": " + e.what());
-              }
-            }
-
-            deviceStatuses[name] = status;
-          }
+        // Debug: Log each status
+        for (const auto& pair : statuses) {
+          LogMessage("INFO", "Device " + pair.first + " status: " + pair.second);
         }
 
-        // Notify subscribers
-        NotifySubscribers(deviceStatuses);
+        if (m_statusUpdateCallback) {
+          LogMessage("INFO", "Calling callback for each device...");
+          for (const auto& pair : statuses) {
+            LogMessage("INFO", "Calling callback for device: " + pair.first);
+            std::cout << "[POLLING THREAD] About to call callback for: " << pair.first << std::endl;
+
+            // Call the callback
+            m_statusUpdateCallback(pair.first, pair.second);
+
+            std::cout << "[POLLING THREAD] Callback called successfully for: " << pair.first << std::endl;
+          }
+          LogMessage("INFO", "All callbacks completed");
+        }
+        else {
+          LogMessage("ERROR", "*** NO CALLBACK SET - THIS IS THE PROBLEM! ***");
+        }
 
         // Sleep for the polling interval
-        std::this_thread::sleep_for(std::chrono::milliseconds(m_pollingInterval.load()));
+        int interval = m_pollingInterval.load();
+        LogMessage("INFO", "Sleeping for " + std::to_string(interval) + "ms");
+        std::this_thread::sleep_for(std::chrono::milliseconds(interval));
 
       }
       catch (const std::exception& e) {
         LogMessage("ERROR", "Exception in polling thread: " + std::string(e.what()));
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));  // Fallback delay
       }
     }
+
+    LogMessage("INFO", "=== POLLING THREAD ENDED ===");
   }
+
+
 
   // Add this helper method
   void SPDPowerSupplyManager::NotifySubscribers(const std::unordered_map<std::string, SPDDeviceStatus>& statuses) {
@@ -1041,9 +1049,21 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
 
   // === Callback Management ===
 
+
   void SPDPowerSupplyManager::SetStatusUpdateCallback(
     std::function<void(const std::string&, const std::string&)> callback) {
+
+    std::cout << "[SPD DEBUG] SetStatusUpdateCallback called!" << std::endl;
+    std::cout << "[SPD DEBUG] Callback address: " << &callback << std::endl;
+    std::cout << "[SPD DEBUG] Callback is null: " << (callback == nullptr ? "YES" : "NO") << std::endl;
+
     m_statusUpdateCallback = callback;
+
+    // Verify it was set
+    bool isSet = (m_statusUpdateCallback != nullptr);
+    std::cout << "[SPD DEBUG] Callback stored successfully: " << (isSet ? "YES" : "NO") << std::endl;
+
+    LogMessage("INFO", "Status update callback " + std::string(isSet ? "set" : "cleared"));
   }
 
   void SPDPowerSupplyManager::SetConnectionStateCallback(
