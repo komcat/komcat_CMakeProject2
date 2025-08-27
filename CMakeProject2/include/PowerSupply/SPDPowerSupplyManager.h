@@ -28,6 +28,25 @@ using PowerSupply::SPDPowerSupply;
 // Forward declarations
 class Logger;
 
+
+// Add this structure for device status data
+struct SPDDeviceStatus {
+  std::string deviceName;
+  bool outputEnabled = false;
+  double voltage = 0.0;
+  double current = 0.0;
+  bool isConnected = false;
+  std::chrono::steady_clock::time_point timestamp;
+};
+
+// Add this interface for subscribers
+class ISPDStatusSubscriber {
+public:
+  virtual ~ISPDStatusSubscriber() = default;
+  virtual void OnDeviceStatusUpdate(const SPDDeviceStatus& status) = 0;
+  virtual void OnDeviceConnectionChange(const std::string& deviceName, bool connected) = 0;
+};
+
 /**
  * @brief Manager class for multiple SPD Power Supply devices
  *
@@ -274,6 +293,27 @@ public:
    */
   bool SetConstantCurrentMode(double current, double voltageLimit);
 
+  // === Subscription Management ===
+
+    /**
+     * @brief Subscribe to device status updates
+     * @param subscriber Pointer to subscriber object
+     * @param subscriberId Unique identifier for this subscription
+     */
+  void Subscribe(ISPDStatusSubscriber* subscriber, const std::string& subscriberId);
+
+  /**
+   * @brief Unsubscribe from status updates
+   * @param subscriberId Subscriber ID to remove
+   */
+  void Unsubscribe(const std::string& subscriberId);
+
+  /**
+   * @brief Get list of active subscriber IDs
+   * @return Vector of subscriber IDs
+   */
+  std::vector<std::string> GetSubscriberIds() const;
+
 private:
   // === Private Types ===
   struct DeviceInfo {
@@ -290,6 +330,10 @@ private:
       pollingInterval(1000), lastUpdate(std::chrono::steady_clock::now()) {
     }
   };
+
+  // Add subscriber management members
+  std::unordered_map<std::string, ISPDStatusSubscriber*> m_subscribers;
+  mutable std::mutex m_subscribersMutex;
 
   // === Private Members ===
   std::unordered_map<std::string, std::unique_ptr<DeviceInfo>> m_devices;
@@ -378,4 +422,6 @@ private:
    * @return true if configuration is valid
    */
   bool ValidateDeviceConfig(const nlohmann::json& config) const;
+
+  void NotifySubscribers(const std::unordered_map<std::string, SPDDeviceStatus>& statuses);
 };

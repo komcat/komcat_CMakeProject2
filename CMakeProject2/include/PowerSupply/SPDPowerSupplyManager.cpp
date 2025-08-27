@@ -753,24 +753,44 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
   }
 
   void SPDPowerSupplyManager::PollingThreadFunction() {
-    LogMessage("INFO", "Polling thread started");
-
     while (m_pollingActive.load()) {
       try {
-        // Only poll if we have devices
-        if (GetDeviceCount() == 0) {
-          std::this_thread::sleep_for(std::chrono::milliseconds(m_pollingInterval.load()));
-          continue;
-        }
+        // Get current statuses
+        std::unordered_map<std::string, SPDDeviceStatus> deviceStatuses;
 
-        // Get current statuses and notify callbacks
-        auto statuses = GetAllStatuses();
+        {
+          std::lock_guard<std::mutex> lock(m_devicesMutex);
 
-        if (m_statusUpdateCallback && !statuses.empty()) {
-          for (const auto& pair : statuses) {
-            m_statusUpdateCallback(pair.first, pair.second);
+          for (const auto& pair : m_devices) {
+            const std::string& name = pair.first;
+            auto& deviceInfo = pair.second;
+
+            SPDDeviceStatus status;
+            status.deviceName = name;
+            status.timestamp = std::chrono::steady_clock::now();
+            status.isConnected = deviceInfo->device && deviceInfo->device->isConnected();
+
+            if (status.isConnected) {
+              try {
+                auto voltage = deviceInfo->device->getVoltage(1);
+                auto current = deviceInfo->device->getCurrent(1);
+                auto outputState = deviceInfo->device->getOutputState(1);
+
+                if (voltage.has_value()) status.voltage = voltage.value();
+                if (current.has_value()) status.current = current.value();
+                if (outputState.has_value()) status.outputEnabled = outputState.value();
+              }
+              catch (const std::exception& e) {
+                LogMessage("ERROR", "Error reading status for " + name + ": " + e.what());
+              }
+            }
+
+            deviceStatuses[name] = status;
           }
         }
+
+        // Notify subscribers
+        NotifySubscribers(deviceStatuses);
 
         // Sleep for the polling interval
         std::this_thread::sleep_for(std::chrono::milliseconds(m_pollingInterval.load()));
@@ -778,11 +798,30 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
       }
       catch (const std::exception& e) {
         LogMessage("ERROR", "Exception in polling thread: " + std::string(e.what()));
-        std::this_thread::sleep_for(std::chrono::milliseconds(5000));  // Longer delay on error
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
       }
     }
+  }
 
-    LogMessage("INFO", "Polling thread stopped");
+  // Add this helper method
+  void SPDPowerSupplyManager::NotifySubscribers(const std::unordered_map<std::string, SPDDeviceStatus>& statuses) {
+    std::lock_guard<std::mutex> lock(m_subscribersMutex);
+
+    if (m_subscribers.empty()) return;
+
+    for (const auto& statusPair : statuses) {
+      const SPDDeviceStatus& status = statusPair.second;
+
+      // Notify all subscribers of status update
+      for (const auto& subscriberPair : m_subscribers) {
+        try {
+          subscriberPair.second->OnDeviceStatusUpdate(status);
+        }
+        catch (const std::exception& e) {
+          LogMessage("ERROR", "Exception notifying subscriber " + subscriberPair.first + ": " + e.what());
+        }
+      }
+    }
   }
 
 
@@ -1092,4 +1131,38 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
       std::to_string(voltageLimit) + "V limit) on " + std::to_string(operationCount) + " devices");
 
     return allSuccess && operationCount > 0;
+  }
+
+  void SPDPowerSupplyManager::Subscribe(ISPDStatusSubscriber* subscriber, const std::string& subscriberId) {
+    std::lock_guard<std::mutex> lock(m_subscribersMutex);
+
+    if (m_subscribers.find(subscriberId) != m_subscribers.end()) {
+      LogMessage("WARNING", "Subscriber ID already exists, replacing: " + subscriberId);
+    }
+
+    m_subscribers[subscriberId] = subscriber;
+    LogMessage("INFO", "Subscriber registered: " + subscriberId);
+  }
+
+  void SPDPowerSupplyManager::Unsubscribe(const std::string& subscriberId) {
+    std::lock_guard<std::mutex> lock(m_subscribersMutex);
+
+    auto it = m_subscribers.find(subscriberId);
+    if (it != m_subscribers.end()) {
+      m_subscribers.erase(it);
+      LogMessage("INFO", "Subscriber unregistered: " + subscriberId);
+    }
+  }
+
+  std::vector<std::string> SPDPowerSupplyManager::GetSubscriberIds() const {
+    std::lock_guard<std::mutex> lock(m_subscribersMutex);
+
+    std::vector<std::string> ids;
+    ids.reserve(m_subscribers.size());
+
+    for (const auto& pair : m_subscribers) {
+      ids.push_back(pair.first);
+    }
+
+    return ids;
   }

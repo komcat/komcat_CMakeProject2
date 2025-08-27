@@ -36,6 +36,29 @@
 // Keep your debug function as-is
 bool g_deugMode = false; // Global debug mode flag
 
+
+class ExampleSPDSubscriber : public ISPDStatusSubscriber {
+private:
+	std::string m_name;
+
+public:
+	ExampleSPDSubscriber(const std::string& name) : m_name(name) {}
+
+	void OnDeviceStatusUpdate(const SPDDeviceStatus& status) override {
+		std::cout << "[" << m_name << "] Device: " << status.deviceName
+			<< " | V: " << status.voltage << "V"
+			<< " | I: " << status.current << "A"
+			<< " | Output: " << (status.outputEnabled ? "ON" : "OFF")
+			<< std::endl;
+	}
+
+	void OnDeviceConnectionChange(const std::string& deviceName, bool connected) override {
+		std::cout << "[" << m_name << "] Device " << deviceName
+			<< (connected ? " CONNECTED" : " DISCONNECTED") << std::endl;
+	}
+};
+
+
 int main(int argc, char* argv[])
 {
 	// Get the logger instance
@@ -425,7 +448,11 @@ int main(int argc, char* argv[])
 
 	//}
 
-
+	// Create subscriber
+	auto subscriber = std::make_unique<ExampleSPDSubscriber>("MyApp");
+	auto* spdmanager = context.GetSPDPowerSupply();
+	// Subscribe to updates
+	spdmanager->Subscribe(subscriber.get(), "MyApp_Main");
 
 	// ===========================================
 	// PHASE 4: MAIN RENDER LOOP
@@ -799,6 +826,10 @@ int main(int argc, char* argv[])
 		raylibManager->Shutdown();
 		raylibManager.reset();
 	}
+
+
+	spdmanager->Unsubscribe("MyApp_Main");
+
 	// ===========================================
 	// PHASE 5: CLEANUP
 	// ===========================================
