@@ -70,6 +70,12 @@ private:
   std::function<void(const CameraFrameData&)> m_frameCallback;
   std::string m_lastError;
 
+  // ADD THESE NEW MEMBERS:
+  mutable Pylon::CImageFormatConverter m_formatConverter;
+  mutable Pylon::CPylonImage m_cachedPylonImage;
+  mutable Pylon::CPylonImage m_cachedConvertedImage;
+  mutable std::mutex m_conversionMutex;  // For thread safety
+
   // Internal helper methods
   void SetError(const std::string& error);
   void ConvertPylonExposureToCommon(const PylonCamera::ExposureSettings& pylonSettings,
