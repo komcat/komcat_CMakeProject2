@@ -817,68 +817,38 @@ bool ApplicationInitializer::InitConfigWatchdog(HardwareManagers& hw) {
 
 
 bool ApplicationInitializer::InitConfigSPDPowerSupply(HardwareManagers& hw) {
-  // Create the SPD Power Supply Manager
   hw.spdPowerSupply = std::make_unique<SPDPowerSupplyManager>();
 
-  // Try to initialize with the config file
   if (hw.spdPowerSupply->Initialize("spd_devices_config.json")) {
-    // Config file found and loaded successfully
     logger->LogInfo("✅ SPD Power Supply initialized from config file");
 
-    // Log device count after initialization
+    // Don't auto-connect during initialization - let user control this
+    // The devices will be discovered but not connected
+
     logger->LogInfo("SPD Power Supply initialized, device count: " +
       std::to_string(hw.spdPowerSupply->GetDeviceNames().size()));
-
-    // Auto-discover any additional devices not in config
-    hw.spdPowerSupply->AddDiscoveredDevices(false); // false = don't auto-connect yet
-
-    // Connect all devices
-    hw.spdPowerSupply->ConnectAll();
-
-    // Optional: Test first device if available
-    auto deviceNames = hw.spdPowerSupply->GetDeviceNames();
-    if (!deviceNames.empty()) {
-      try {
-        std::string spdID = hw.spdPowerSupply->GetDevice(deviceNames[0])->getInstrumentID();
-        logger->LogDebug("SPD Power Supply IDN: " + spdID);
-      }
-      catch (const std::exception& e) {
-        logger->LogWarning("Could not get instrument ID: " + std::string(e.what()));
-      }
-    }
-
-    // Optional: Start polling (uncomment if needed)
-    // hw.spdPowerSupply->StartAllPolling(2000); // Poll every 2 seconds
-
-    logger->LogInfo("SPD Power Supply Manager ready");
     return true;
   }
   else {
-    // Config file not found, try loading default configuration
     logger->LogInfo("📄 SPD config file not found, loading default configuration");
 
     try {
       hw.spdPowerSupply->LoadDefaultConfiguration();
 
-      // Auto-discover devices
-      hw.spdPowerSupply->AddDiscoveredDevices(false);
-
-      // Connect all devices
-      hw.spdPowerSupply->ConnectAll();
+      // Override the default autoConnect behavior
+      // We'll need to add a method to disable autoConnect after initialization
 
       logger->LogInfo("SPD Power Supply initialized with default configuration, device count: " +
         std::to_string(hw.spdPowerSupply->GetDeviceNames().size()));
-
       return true;
     }
     catch (const std::exception& e) {
-      logger->LogError("Failed to initialize SPD Power Supply with default config: " + std::string(e.what()));
-      hw.spdPowerSupply.reset(); // Clean up on failure
+      logger->LogError("Failed to initialize SPD Power Supply: " + std::string(e.what()));
+      hw.spdPowerSupply.reset();
       return false;
     }
   }
 }
-
 
 void ApplicationInitializer::LogHardwareVelocities(PIControllerManager* pi, ACSControllerManager* acs) {
   // Log PI velocities

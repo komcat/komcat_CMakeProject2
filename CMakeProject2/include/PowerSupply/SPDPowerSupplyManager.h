@@ -256,6 +256,24 @@ public:
    */
   std::string GetConfigurationJSON() const;
 
+  // === Mode-Specific Operations ===
+
+/**
+ * @brief Set all devices to Constant Voltage (CV) mode
+ * @param voltage Target voltage in volts
+ * @param currentLimit Current compliance/limit in amps
+ * @return true if operation successful on all connected devices
+ */
+  bool SetConstantVoltageMode(double voltage, double currentLimit);
+
+  /**
+   * @brief Set all devices to Constant Current (CC) mode
+   * @param current Target current in amps
+   * @param voltageLimit Voltage compliance/limit in volts
+   * @return true if operation successful on all connected devices
+   */
+  bool SetConstantCurrentMode(double current, double voltageLimit);
+
 private:
   // === Private Types ===
   struct DeviceInfo {

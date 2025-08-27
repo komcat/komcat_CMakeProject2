@@ -5,6 +5,9 @@
 #include <optional>
 #include <vector>
 #include <chrono>
+// Add these includes at the top:
+#include <mutex>
+#include <atomic>
 
 namespace PowerSupply {
 
@@ -74,7 +77,7 @@ namespace PowerSupply {
      * @brief Check if currently connected
      * @return true if connected, false otherwise
      */
-    bool isConnected() const { return is_connected_; }
+    bool isConnected() const { return is_connected_.load(); }
 
     /**
      * @brief Get current resource string
@@ -193,11 +196,12 @@ namespace PowerSupply {
      * @return Vector of resource strings
      */
     static std::vector<std::string> scanAvailableResources();
-
+    bool SetDebug(bool debugmode);
   private:
     std::string resource_string_;
-    bool is_connected_;
-
+    std::atomic<bool> is_connected_;  // Change from: bool is_connected_;
+    mutable std::mutex visa_mutex_;   // Add this line
+    
     // PIMPL idiom to hide VISA implementation details
     class Impl;
     std::unique_ptr<Impl> pimpl_;
@@ -206,6 +210,8 @@ namespace PowerSupply {
     bool validateChannel(int channel) const;
     std::optional<double> parseDoubleResponse(const std::string& response) const;
     std::optional<bool> parseBoolResponse(const std::string& response) const;
+
+    bool m_debugverbose = false;
   };
 
   /**

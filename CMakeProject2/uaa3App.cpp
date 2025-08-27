@@ -537,15 +537,30 @@ int main(int argc, char* argv[])
 				ImGui::SliderFloat("Test Voltage (V)", &testVoltage, 0.0f, 30.0f);
 				ImGui::SliderFloat("Test Current (A)", &testCurrent, 0.0f, 5.0f);
 
-				if (ImGui::Button("Set All Voltages")) {
-					testSpdManager->SetAllVoltages(testVoltage);
-					logger->LogInfo("Set all voltages to " + std::to_string(testVoltage) + "V");
+				// Replace the existing controls with mode-specific ones
+				static float cvVoltage = 5.0f;
+				static float cvCurrentLimit = 1.0f;
+				static float ccCurrent = 1.0f;
+				static float ccVoltageLimit = 10.0f;
+
+				ImGui::Separator();
+				ImGui::Text("Constant Voltage (CV) Mode");
+				ImGui::SliderFloat("CV Voltage (V)", &cvVoltage, 0.0f, 30.0f);
+				ImGui::SliderFloat("CV Current Limit (A)", &cvCurrentLimit, 0.0f, 5.0f);
+				if (ImGui::Button("Set All to CV Mode")) {
+					testSpdManager->SetConstantVoltageMode(cvVoltage, cvCurrentLimit);
+					logger->LogInfo("Set all devices to CV mode: " + std::to_string(cvVoltage) + "V, " +
+						std::to_string(cvCurrentLimit) + "A limit");
 				}
 
-				ImGui::SameLine();
-				if (ImGui::Button("Set All Current Limits")) {
-					testSpdManager->SetAllCurrentLimits(testCurrent);
-					logger->LogInfo("Set all current limits to " + std::to_string(testCurrent) + "A");
+				ImGui::Separator();
+				ImGui::Text("Constant Current (CC) Mode");
+				ImGui::SliderFloat("CC Current (A)", &ccCurrent, 0.0f, 5.0f);
+				ImGui::SliderFloat("CC Voltage Limit (V)", &ccVoltageLimit, 0.0f, 30.0f);
+				if (ImGui::Button("Set All to CC Mode")) {
+					testSpdManager->SetConstantCurrentMode(ccCurrent, ccVoltageLimit);
+					logger->LogInfo("Set all devices to CC mode: " + std::to_string(ccCurrent) + "A, " +
+						std::to_string(ccVoltageLimit) + "V limit");
 				}
 
 				static bool allOutputs = false;
@@ -557,10 +572,38 @@ int main(int argc, char* argv[])
 				ImGui::Separator();
 
 				// Device status display
+				// Device status display
 				if (ImGui::CollapsingHeader("Device Status")) {
-					auto statuses = testSpdManager->GetAllStatuses();
-					for (const auto& [deviceName, status] : statuses) {
+					// Use static to persist the cached statuses across UI frames
+					static std::unordered_map<std::string, std::string> cachedStatuses;
+					static bool callbackRegistered = false;
+
+					// Register the callback once to update cached statuses
+					if (!callbackRegistered) {
+						testSpdManager->SetStatusUpdateCallback(
+							[](const std::string& deviceName, const std::string& status) {
+								cachedStatuses[deviceName] = status;
+							}
+						);
+						callbackRegistered = true;
+
+						// Initialize with current statuses if not polling yet
+						if (!testSpdManager->IsPollingActive()) {
+							cachedStatuses = testSpdManager->GetAllStatuses();
+						}
+					}
+
+					// Display the cached statuses (no hardware calls during rendering!)
+					for (const auto& [deviceName, status] : cachedStatuses) {
 						ImGui::Text("%s: %s", deviceName.c_str(), status.c_str());
+					}
+
+					// Show when statuses were last updated
+					if (testSpdManager->IsPollingActive()) {
+						ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Status: Live (Polling Active)");
+					}
+					else {
+						ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Status: Cached (Start Polling for Live Updates)");
 					}
 				}
 

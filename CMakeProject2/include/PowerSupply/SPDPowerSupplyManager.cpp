@@ -472,7 +472,6 @@ bool SPDPowerSupplyManager::SetAllCurrentLimits(double current) {
 
 std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatuses() const {
   std::lock_guard<std::mutex> lock(m_devicesMutex);
-
   std::unordered_map<std::string, std::string> statuses;
 
   for (const auto& pair : m_devices) {
@@ -480,41 +479,39 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
     auto& deviceInfo = pair.second;
 
     if (deviceInfo->device) {
-      if (deviceInfo->device) {
-        if (deviceInfo->device->isConnected()) {
-          try {
-            auto outputEnabled = deviceInfo->device->getOutputState(1);
-            auto voltage = deviceInfo->device->getVoltage(1);
-            auto current = deviceInfo->device->getCurrent(1);
+      if (deviceInfo->device->isConnected()) {
+        try {
+          auto outputEnabled = deviceInfo->device->getOutputState(1);
+          auto voltage = deviceInfo->device->getVoltage(1);
+          auto current = deviceInfo->device->getCurrent(1);
 
-            if (outputEnabled.has_value() && voltage.has_value() && current.has_value()) {
-              std::ostringstream status;
-              status << "Connected | Output: " << (outputEnabled.value() ? "ON" : "OFF")
-                << " | V: " << std::fixed << std::setprecision(3) << voltage.value()
-                << "V | I: " << std::fixed << std::setprecision(3) << current.value() << "A";
-
-              statuses[name] = status.str();
-            }
-            else {
-              statuses[name] = "Connected | Status read failed";
-            }
+          if (outputEnabled.has_value() && voltage.has_value() && current.has_value()) {
+            std::ostringstream status;
+            status << "Connected | Output: " << (outputEnabled.value() ? "ON" : "OFF")
+              << " | V: " << std::fixed << std::setprecision(3) << voltage.value()
+              << "V | I: " << std::fixed << std::setprecision(3) << current.value() << "A";
+            statuses[name] = status.str();
           }
-          catch (const std::exception& e) {
-            statuses[name] = "Connected | Error: " + std::string(e.what());
+          else {
+            statuses[name] = "Connected | Status read failed";
           }
         }
-        else {
-          statuses[name] = "Disconnected";
+        catch (const std::exception& e) {
+          statuses[name] = "Connected | Error: " + std::string(e.what());
         }
       }
       else {
-        statuses[name] = "Device not initialized";
+        statuses[name] = "Disconnected";
       }
     }
-
-    return statuses;
+    else {
+      statuses[name] = "Device not initialized";
+    }
   }
+
+  return statuses;  // ← This was incorrectly placed inside the loop
 }
+
 
   // === Polling & Monitoring ===
 
@@ -756,12 +753,20 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
   }
 
   void SPDPowerSupplyManager::PollingThreadFunction() {
+    LogMessage("INFO", "Polling thread started");
+
     while (m_pollingActive.load()) {
       try {
+        // Only poll if we have devices
+        if (GetDeviceCount() == 0) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(m_pollingInterval.load()));
+          continue;
+        }
+
         // Get current statuses and notify callbacks
         auto statuses = GetAllStatuses();
 
-        if (m_statusUpdateCallback) {
+        if (m_statusUpdateCallback && !statuses.empty()) {
           for (const auto& pair : statuses) {
             m_statusUpdateCallback(pair.first, pair.second);
           }
@@ -773,10 +778,13 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
       }
       catch (const std::exception& e) {
         LogMessage("ERROR", "Exception in polling thread: " + std::string(e.what()));
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));  // Fallback delay
+        std::this_thread::sleep_for(std::chrono::milliseconds(5000));  // Longer delay on error
       }
     }
+
+    LogMessage("INFO", "Polling thread stopped");
   }
+
 
   bool SPDPowerSupplyManager::ParseConfigurationFile(const std::string & configFile) {
     try {
@@ -1002,4 +1010,86 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
   void SPDPowerSupplyManager::SetConnectionStateCallback(
     std::function<void(const std::string&, bool)> callback) {
     m_connectionStateCallback = callback;
+  }
+
+  // === Mode-Specific Operations ===
+
+  bool SPDPowerSupplyManager::SetConstantVoltageMode(double voltage, double currentLimit) {
+    std::lock_guard<std::mutex> lock(m_devicesMutex);
+
+    bool allSuccess = true;
+    int operationCount = 0;
+
+    for (const auto& pair : m_devices) {
+      const std::string& name = pair.first;
+      auto& deviceInfo = pair.second;
+
+      if (deviceInfo->device && deviceInfo->device->isConnected()) {
+        try {
+          // Set voltage first (CV mode target)
+          bool voltageSet = deviceInfo->device->setVoltage(1, voltage);
+          // Set current limit (compliance)
+          bool currentSet = deviceInfo->device->setCurrent(1, currentLimit);
+
+          if (voltageSet && currentSet) {
+            operationCount++;
+            LogMessage("INFO", "Set " + name + " to CV mode: " +
+              std::to_string(voltage) + "V, " + std::to_string(currentLimit) + "A limit");
+          }
+          else {
+            LogMessage("WARNING", "Failed to set CV mode for device: " + name);
+            allSuccess = false;
+          }
+        }
+        catch (const std::exception& e) {
+          LogMessage("ERROR", "Exception setting CV mode for device " + name + ": " + e.what());
+          allSuccess = false;
+        }
+      }
+    }
+
+    LogMessage("INFO", "Set CV mode (" + std::to_string(voltage) + "V, " +
+      std::to_string(currentLimit) + "A limit) on " + std::to_string(operationCount) + " devices");
+
+    return allSuccess && operationCount > 0;
+  }
+
+  bool SPDPowerSupplyManager::SetConstantCurrentMode(double current, double voltageLimit) {
+    std::lock_guard<std::mutex> lock(m_devicesMutex);
+
+    bool allSuccess = true;
+    int operationCount = 0;
+
+    for (const auto& pair : m_devices) {
+      const std::string& name = pair.first;
+      auto& deviceInfo = pair.second;
+
+      if (deviceInfo->device && deviceInfo->device->isConnected()) {
+        try {
+          // Set current first (CC mode target)
+          bool currentSet = deviceInfo->device->setCurrent(1, current);
+          // Set voltage limit (compliance)
+          bool voltageSet = deviceInfo->device->setVoltage(1, voltageLimit);
+
+          if (currentSet && voltageSet) {
+            operationCount++;
+            LogMessage("INFO", "Set " + name + " to CC mode: " +
+              std::to_string(current) + "A, " + std::to_string(voltageLimit) + "V limit");
+          }
+          else {
+            LogMessage("WARNING", "Failed to set CC mode for device: " + name);
+            allSuccess = false;
+          }
+        }
+        catch (const std::exception& e) {
+          LogMessage("ERROR", "Exception setting CC mode for device " + name + ": " + e.what());
+          allSuccess = false;
+        }
+      }
+    }
+
+    LogMessage("INFO", "Set CC mode (" + std::to_string(current) + "A, " +
+      std::to_string(voltageLimit) + "V limit) on " + std::to_string(operationCount) + " devices");
+
+    return allSuccess && operationCount > 0;
   }
