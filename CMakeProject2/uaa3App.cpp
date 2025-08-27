@@ -341,9 +341,9 @@ int main(int argc, char* argv[])
 	bool emojiLoaded = false;
 
 	// Load main font (try project font, fallback to default)
-	if (std::filesystem::exists("assets/fonts/Roboto-Regular.ttf")) {
-		mainFont = io.Fonts->AddFontFromFileTTF("assets/fonts/Roboto-Regular.ttf", 20.0f);
-		std::cout << "✅ Loaded Roboto-Regular" << std::endl;
+	if (std::filesystem::exists("assets/fonts/NotoSans-Regular.ttf")) {
+		mainFont = io.Fonts->AddFontFromFileTTF("assets/fonts/NotoSans-Regular.ttf", 20.0f);
+		std::cout << "✅ Loaded NotoSans-Regular" << std::endl;
 	}
 	else {
 		mainFont = io.Fonts->AddFontDefault();
