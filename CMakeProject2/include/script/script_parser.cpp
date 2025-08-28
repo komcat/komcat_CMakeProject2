@@ -858,7 +858,7 @@ std::shared_ptr<SequenceOperation> ScriptParser::ParseMoveCommand(const std::vec
     try {
       distance = std::stod(tokens[3]);
     }
-    catch (const std::exception& e) {
+    catch (const std::exception&) {  // Remove the variable name 'e'
       throw std::runtime_error("Invalid distance value in MOVE_RELATIVE command: " + tokens[3]);
     }
 

@@ -9,6 +9,11 @@ project(CMakeProject2)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+
+
+
+
+
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141)
   cmake_policy(SET CMP0141 NEW)
@@ -396,8 +401,8 @@ add_executable(uaa3App
   "include/ProcessStep.cpp"
   "include/SequenceStep.h"
   "include/SequenceStep.cpp"
-  "InitializationWindow.h"
-  "InitializationWindow.cpp"
+  #"InitializationWindow.h"
+  #"InitializationWindow.cpp"
   "include/HexRightControllerWindow.h"
   "include/HexRightControllerWindow.cpp"
   "include/HexControllerWindow.h"
@@ -684,7 +689,17 @@ add_executable(uaa3App
  "include/PowerSupply/SPDPowerSupply.h"
  "include/PowerSupply/SPDPowerSupplyManager.cpp"
  "include/PowerSupply/SPDPowerSupplyManager.h"
-  "mainUI/UISPDPowerPanel.h" "mainUI/UISPDPowerPanel.cpp" "include/data/IDataProvider.h" "include/data/SPDDataProviderAdapter.h" "mainUI/SPDPowerSupplyUI.h" "mainUI/SPDPowerSupplyUI.cpp")
+  "mainUI/UISPDPowerPanel.h"
+  "mainUI/UISPDPowerPanel.cpp"
+  "include/data/IDataProvider.h"
+  "include/data/SPDDataProviderAdapter.h"
+  "mainUI/SPDPowerSupplyUI.h" 
+  "mainUI/SPDPowerSupplyUI.cpp" 
+ "include/PowerSupply/SPD_Ops.h" 
+ "include/PowerSupply/SPD_Ops.cpp"
+ "include/PowerSupply/SPDOperations.h"
+ "include/PowerSupply/SPDOperations.cpp"
+ "include/ACSC_wrapper.h")
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
@@ -773,6 +788,7 @@ target_compile_definitions(uaa3App PRIVATE
     SQLITE_ENABLE_RTREE
     SQLITE_THREADSAFE=1
     SQLITE_ENABLE_COLUMN_METADATA
+
 )
 
 

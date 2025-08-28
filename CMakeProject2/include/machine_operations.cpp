@@ -1,15 +1,13 @@
 ﻿// machine_operations.cpp
 #include "machine_operations.h"
-#include "include/cld101x/cld101x_operations.h"  // Include it here, not in the header
+
 #include <sstream>
 #include <filesystem>
 #include <chrono>
 #include <iomanip>
-#include "include/SMU/keithley2400_operations.h" // Include the SMU operations header
+
 #include "external/sqlite/sqlite3.h"
-// Add these includes at the top:
-#include "include/data/DatabaseManager.h"
-#include "include/data/OperationResultsManager.h"
+
 
 //
 //struct VoltageSweepResult {

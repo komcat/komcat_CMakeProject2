@@ -4,6 +4,14 @@
 
 #pragma once
 
+// Prevent winsock conflicts before any includes
+#ifdef _WIN32
+#define _WINSOCKAPI_   // Prevent winsock.h
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
+
 #include "include/halcon/VisionCircleDetection.h"
 #include "include/vision/VisionPresetManager.h"
 #include "VisionCoordinateCalculator.h"

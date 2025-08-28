@@ -1,6 +1,9 @@
 // acs_controller.h
 #pragma once
-#include <Windows.h>  // Include this first
+
+// Use ACSC wrapper first to handle all Windows/winsock includes
+#include "include/ACSC_wrapper.h"
+
 #include <string>
 #include <atomic>
 #include <thread>
@@ -9,10 +12,8 @@
 #include <vector>
 #include <map>
 #include "include/logger.h"
-#include "include/motions/MotionTypes.h"  // Make sure this is included
+#include "include/motions/MotionTypes.h"
 
-// Include ACS controller library
-#include "include/ACSC.h"
 
 class ACSController {
 public:

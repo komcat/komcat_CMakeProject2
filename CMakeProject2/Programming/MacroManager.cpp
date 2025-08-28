@@ -1,8 +1,4 @@
-﻿#ifdef _WIN32
-#include <windows.h>
-#else
-#include <filesystem>
-#endif
+﻿
 
 #include "MacroManager.h"
 #include "MachineBlockUI.h"

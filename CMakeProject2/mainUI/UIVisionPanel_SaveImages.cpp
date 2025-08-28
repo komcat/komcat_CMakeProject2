@@ -8,12 +8,21 @@
 #include <chrono>
 #include <iostream>
 
+// GDI+ includes AFTER other critical includes to prevent conflicts
 #ifdef _WIN32
+#define _WINSOCKAPI_   // Prevent winsock.h
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
+#include <objbase.h>    // Add this for COM interfaces
 #include <gdiplus.h>
 #pragma comment(lib, "gdiplus.lib")
-
 using namespace Gdiplus;
+#endif
 
 // =============================================================================
 // Helper function to get encoder CLSID
@@ -48,14 +57,6 @@ int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
 // Main guidance image saving method using Windows GDI+
 // =============================================================================
 
-// =============================================================================
-// Crash-Safe SaveGuidanceImageForNode Implementation
-// =============================================================================
-
-// =============================================================================
-// Crash-Safe SaveGuidanceImageForNode Implementation
-// =============================================================================
-
 bool UIVisionPanel::SaveGuidanceImageForNode(const std::string& nodeId) {
   if (!m_hasImageData || m_lastImageData.empty()) {
     std::cerr << "[UIVisionPanel] No image data available to save as guidance" << std::endl;
@@ -68,6 +69,7 @@ bool UIVisionPanel::SaveGuidanceImageForNode(const std::string& nodeId) {
     return false;
   }
 
+#ifdef _WIN32
   // Initialize GDI+
   GdiplusStartupInput gdiplusStartupInput;
   ULONG_PTR gdiplusToken;
@@ -336,8 +338,13 @@ bool UIVisionPanel::SaveGuidanceImageForNode(const std::string& nodeId) {
     return UpdateGuidanceImagePath(nodeId, imagePath.string());
   }
   return false;
-}
 
+#else
+  // Non-Windows fallback
+  std::cerr << "[UIVisionPanel] Image saving not implemented for non-Windows platforms" << std::endl;
+  return false;
+#endif
+}
 
 // =============================================================================
 // Advanced version with format options
@@ -355,6 +362,7 @@ bool UIVisionPanel::SaveGuidanceImageForNodeAdvanced(const std::string& nodeId,
     return false;
   }
 
+#ifdef _WIN32
   // Initialize GDI+
   GdiplusStartupInput gdiplusStartupInput;
   ULONG_PTR gdiplusToken;
@@ -476,87 +484,11 @@ bool UIVisionPanel::SaveGuidanceImageForNodeAdvanced(const std::string& nodeId,
     return UpdateGuidanceImagePath(nodeId, imagePath.string());
   }
   return false;
-}
-
 #else
-// =============================================================================
-// Non-Windows fallback (placeholder)
-// =============================================================================
-
-bool UIVisionPanel::SaveGuidanceImageForNode(const std::string& nodeId) {
-  std::cerr << "[UIVisionPanel] Image saving not implemented for non-Windows platforms" << std::endl;
-  return false;
-}
-
-bool UIVisionPanel::SaveGuidanceImageForNodeAdvanced(const std::string& nodeId,
-  const std::string& format) {
   std::cerr << "[UIVisionPanel] Advanced image saving not implemented for non-Windows platforms" << std::endl;
   return false;
+#endif
 }
-
-#endif // _WIN32
-
-// =============================================================================
-// Database helper method to update guidance image path
-// =============================================================================
-
-bool UIVisionPanel::UpdateGuidanceImagePath(const std::string& nodeId,
-  const std::string& imagePath) {
-  std::string dbPath = "vision_presets.db";
-  sqlite3* db = nullptr;
-
-  int result = sqlite3_open(dbPath.c_str(), &db);
-  if (result != SQLITE_OK) {
-    std::cerr << "[UIVisionPanel] Cannot open database for image path update: "
-      << sqlite3_errmsg(db) << std::endl;
-    if (db) sqlite3_close(db);
-    return false;
-  }
-
-  const char* updateSQL = R"(
-        UPDATE node_preset_mappings 
-        SET guidance_image_path = ?, updated_at = CURRENT_TIMESTAMP 
-        WHERE node_id = ?;
-    )";
-
-  sqlite3_stmt* stmt;
-  result = sqlite3_prepare_v2(db, updateSQL, -1, &stmt, nullptr);
-
-  if (result != SQLITE_OK) {
-    std::cerr << "[UIVisionPanel] Failed to prepare update statement: "
-      << sqlite3_errmsg(db) << std::endl;
-    sqlite3_close(db);
-    return false;
-  }
-
-  sqlite3_bind_text(stmt, 1, imagePath.c_str(), -1, SQLITE_STATIC);
-  sqlite3_bind_text(stmt, 2, nodeId.c_str(), -1, SQLITE_STATIC);
-
-  result = sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-  sqlite3_close(db);
-
-  if (result == SQLITE_DONE) {
-    std::cout << "[UIVisionPanel] Updated guidance image path in database for node '"
-      << nodeId << "'" << std::endl;
-
-    // Refresh in-memory mappings to show updated guidance image status
-    LoadNodePresetMappings();
-    return true;
-  }
-  else {
-    std::cerr << "[UIVisionPanel] Failed to update guidance image path in database" << std::endl;
-    return false;
-  }
-}
-
-// =============================================================================
-// Utility method to save current vision result with overlays
-// =============================================================================
-
-// =============================================================================
-// Utility method to save current vision result with overlays
-// =============================================================================
 
 bool UIVisionPanel::SaveVisionResultWithOverlay(const std::string& nodeId,
   const std::string& suffix) {
@@ -691,6 +623,61 @@ bool UIVisionPanel::SaveVisionResultWithOverlay(const std::string& nodeId,
   return false;
 #endif
 }
+
+// =============================================================================
+// Database helper method to update guidance image path
+// =============================================================================
+
+bool UIVisionPanel::UpdateGuidanceImagePath(const std::string& nodeId,
+  const std::string& imagePath) {
+  std::string dbPath = "vision_presets.db";
+  sqlite3* db = nullptr;
+
+  int result = sqlite3_open(dbPath.c_str(), &db);
+  if (result != SQLITE_OK) {
+    std::cerr << "[UIVisionPanel] Cannot open database for image path update: "
+      << sqlite3_errmsg(db) << std::endl;
+    if (db) sqlite3_close(db);
+    return false;
+  }
+
+  const char* updateSQL = R"(
+        UPDATE node_preset_mappings 
+        SET guidance_image_path = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE node_id = ?;
+    )";
+
+  sqlite3_stmt* stmt;
+  result = sqlite3_prepare_v2(db, updateSQL, -1, &stmt, nullptr);
+
+  if (result != SQLITE_OK) {
+    std::cerr << "[UIVisionPanel] Failed to prepare update statement: "
+      << sqlite3_errmsg(db) << std::endl;
+    sqlite3_close(db);
+    return false;
+  }
+
+  sqlite3_bind_text(stmt, 1, imagePath.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, nodeId.c_str(), -1, SQLITE_STATIC);
+
+  result = sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  sqlite3_close(db);
+
+  if (result == SQLITE_DONE) {
+    std::cout << "[UIVisionPanel] Updated guidance image path in database for node '"
+      << nodeId << "'" << std::endl;
+
+    // Refresh in-memory mappings to show updated guidance image status
+    LoadNodePresetMappings();
+    return true;
+  }
+  else {
+    std::cerr << "[UIVisionPanel] Failed to update guidance image path in database" << std::endl;
+    return false;
+  }
+}
+
 // =============================================================================
 // Method to get supported image formats
 // =============================================================================

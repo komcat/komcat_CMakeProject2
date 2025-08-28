@@ -1323,3 +1323,166 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
 
     return successCount;
   }
+
+
+  // Add these method implementations to SPDPowerSupplyManager.cpp:
+
+  bool SPDPowerSupplyManager::ReadVoltage(const std::string& deviceName, int channel, double& voltage) {
+    std::lock_guard<std::mutex> lock(m_devicesMutex);
+
+    auto it = m_devices.find(deviceName);
+    if (it == m_devices.end()) {
+      SetError("Device '" + deviceName + "' not found");
+      LogMessage("ERROR", "ReadVoltage: Device '" + deviceName + "' not found");
+      return false;
+    }
+
+    auto& deviceInfo = it->second;
+    if (!deviceInfo->device || !deviceInfo->device->isConnected()) {
+      SetError("Device '" + deviceName + "' is not connected");
+      LogMessage("ERROR", "ReadVoltage: Device '" + deviceName + "' is not connected");
+      return false;
+    }
+
+    try {
+      auto voltageOpt = deviceInfo->device->getVoltage(channel);
+      if (voltageOpt.has_value()) {
+        voltage = voltageOpt.value();
+        LogMessage("DEBUG", "ReadVoltage: " + deviceName + " CH" + std::to_string(channel) +
+          " = " + std::to_string(voltage) + "V");
+        return true;
+      }
+      else {
+        SetError("Failed to read voltage from device '" + deviceName + "' channel " + std::to_string(channel));
+        LogMessage("ERROR", "ReadVoltage: Failed to read voltage from " + deviceName + " CH" + std::to_string(channel));
+        return false;
+      }
+    }
+    catch (const std::exception& e) {
+      SetError("Exception reading voltage from '" + deviceName + "': " + e.what());
+      LogMessage("ERROR", "ReadVoltage: Exception for " + deviceName + ": " + e.what());
+      return false;
+    }
+  }
+
+  bool SPDPowerSupplyManager::ReadCurrent(const std::string& deviceName, int channel, double& current) {
+    std::lock_guard<std::mutex> lock(m_devicesMutex);
+
+    auto it = m_devices.find(deviceName);
+    if (it == m_devices.end()) {
+      SetError("Device '" + deviceName + "' not found");
+      LogMessage("ERROR", "ReadCurrent: Device '" + deviceName + "' not found");
+      return false;
+    }
+
+    auto& deviceInfo = it->second;
+    if (!deviceInfo->device || !deviceInfo->device->isConnected()) {
+      SetError("Device '" + deviceName + "' is not connected");
+      LogMessage("ERROR", "ReadCurrent: Device '" + deviceName + "' is not connected");
+      return false;
+    }
+
+    try {
+      auto currentOpt = deviceInfo->device->getCurrent(channel);
+      if (currentOpt.has_value()) {
+        current = currentOpt.value();
+        LogMessage("DEBUG", "ReadCurrent: " + deviceName + " CH" + std::to_string(channel) +
+          " = " + std::to_string(current) + "A");
+        return true;
+      }
+      else {
+        SetError("Failed to read current from device '" + deviceName + "' channel " + std::to_string(channel));
+        LogMessage("ERROR", "ReadCurrent: Failed to read current from " + deviceName + " CH" + std::to_string(channel));
+        return false;
+      }
+    }
+    catch (const std::exception& e) {
+      SetError("Exception reading current from '" + deviceName + "': " + e.what());
+      LogMessage("ERROR", "ReadCurrent: Exception for " + deviceName + ": " + e.what());
+      return false;
+    }
+  }
+
+  bool SPDPowerSupplyManager::IsOutputEnabled(const std::string& deviceName, int channel, bool& outputEnabled) {
+    std::lock_guard<std::mutex> lock(m_devicesMutex);
+
+    auto it = m_devices.find(deviceName);
+    if (it == m_devices.end()) {
+      SetError("Device '" + deviceName + "' not found");
+      LogMessage("ERROR", "IsOutputEnabled: Device '" + deviceName + "' not found");
+      return false;
+    }
+
+    auto& deviceInfo = it->second;
+    if (!deviceInfo->device || !deviceInfo->device->isConnected()) {
+      SetError("Device '" + deviceName + "' is not connected");
+      LogMessage("ERROR", "IsOutputEnabled: Device '" + deviceName + "' is not connected");
+      return false;
+    }
+
+    try {
+      auto outputOpt = deviceInfo->device->getOutputState(channel);
+      if (outputOpt.has_value()) {
+        outputEnabled = outputOpt.value();
+        LogMessage("DEBUG", "IsOutputEnabled: " + deviceName + " CH" + std::to_string(channel) +
+          " = " + (outputEnabled ? "ON" : "OFF"));
+        return true;
+      }
+      else {
+        SetError("Failed to read output state from device '" + deviceName + "' channel " + std::to_string(channel));
+        LogMessage("ERROR", "IsOutputEnabled: Failed to read output state from " + deviceName + " CH" + std::to_string(channel));
+        return false;
+      }
+    }
+    catch (const std::exception& e) {
+      SetError("Exception reading output state from '" + deviceName + "': " + e.what());
+      LogMessage("ERROR", "IsOutputEnabled: Exception for " + deviceName + ": " + e.what());
+      return false;
+    }
+  }
+
+  bool SPDPowerSupplyManager::ReadVoltageAndCurrent(const std::string& deviceName, int channel, double& voltage, double& current) {
+    std::lock_guard<std::mutex> lock(m_devicesMutex);
+
+    auto it = m_devices.find(deviceName);
+    if (it == m_devices.end()) {
+      SetError("Device '" + deviceName + "' not found");
+      LogMessage("ERROR", "ReadVoltageAndCurrent: Device '" + deviceName + "' not found");
+      return false;
+    }
+
+    auto& deviceInfo = it->second;
+    if (!deviceInfo->device || !deviceInfo->device->isConnected()) {
+      SetError("Device '" + deviceName + "' is not connected");
+      LogMessage("ERROR", "ReadVoltageAndCurrent: Device '" + deviceName + "' is not connected");
+      return false;
+    }
+
+    try {
+      auto voltageOpt = deviceInfo->device->getVoltage(channel);
+      auto currentOpt = deviceInfo->device->getCurrent(channel);
+
+      if (voltageOpt.has_value() && currentOpt.has_value()) {
+        voltage = voltageOpt.value();
+        current = currentOpt.value();
+        LogMessage("DEBUG", "ReadVoltageAndCurrent: " + deviceName + " CH" + std::to_string(channel) +
+          " = " + std::to_string(voltage) + "V, " + std::to_string(current) + "A");
+        return true;
+      }
+      else {
+        SetError("Failed to read voltage/current from device '" + deviceName + "' channel " + std::to_string(channel));
+        LogMessage("ERROR", "ReadVoltageAndCurrent: Failed to read measurements from " + deviceName + " CH" + std::to_string(channel));
+        return false;
+      }
+    }
+    catch (const std::exception& e) {
+      SetError("Exception reading voltage/current from '" + deviceName + "': " + e.what());
+      LogMessage("ERROR", "ReadVoltageAndCurrent: Exception for " + deviceName + ": " + e.what());
+      return false;
+    }
+  }
+
+  // Note: Also need to add GetConnectedDeviceCount() method if it doesn't exist:
+  int SPDPowerSupplyManager::GetConnectedDeviceCount() const {
+    return GetConnectedCount(); // This method already exists as GetConnectedCount()
+  }

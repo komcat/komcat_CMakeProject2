@@ -1,7 +1,8 @@
 #pragma once
 
-// === WINSOCK CONFLICT PREVENTION ===
+// Only prevent winsock for this specific header
 #ifdef _WIN32
+#define _WINSOCKAPI_   // Prevent inclusion of winsock.h in this file only
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -383,6 +384,57 @@ public:
   int PerformCurrentSweepAll(int channel, double startA, double stopA, int steps,
     double voltageLimit, double delayMs,
     std::unordered_map<std::string, std::vector<SPDSweepResult>>& allResults);
+
+
+
+  // Add these methods to SPDPowerSupplyManager.h in the public section:
+
+  // === Individual Device Reading Operations ===
+
+  /**
+   * @brief Read voltage from a specific device
+   * @param deviceName Name of the device to read from
+   * @param channel Channel number (typically 1)
+   * @param voltage Reference to store the voltage reading
+   * @return true if reading successful, false otherwise
+   */
+  bool ReadVoltage(const std::string& deviceName, int channel, double& voltage);
+
+  /**
+   * @brief Read current from a specific device
+   * @param deviceName Name of the device to read from
+   * @param channel Channel number (typically 1)
+   * @param current Reference to store the current reading
+   * @return true if reading successful, false otherwise
+   */
+  bool ReadCurrent(const std::string& deviceName, int channel, double& current);
+
+  /**
+   * @brief Check if output is enabled on a specific device
+   * @param deviceName Name of the device to check
+   * @param channel Channel number (typically 1)
+   * @param outputEnabled Reference to store the output state
+   * @return true if status check successful, false otherwise
+   */
+  bool IsOutputEnabled(const std::string& deviceName, int channel, bool& outputEnabled);
+
+  /**
+   * @brief Read both voltage and current from a specific device
+   * @param deviceName Name of the device to read from
+   * @param channel Channel number (typically 1)
+   * @param voltage Reference to store the voltage reading
+   * @param current Reference to store the current reading
+   * @return true if both readings successful, false otherwise
+   */
+  bool ReadVoltageAndCurrent(const std::string& deviceName, int channel, double& voltage, double& current);
+
+  /**
+  
+	@brieft Get count of connected devices
+  */
+  int GetConnectedDeviceCount() const;
+
+
 
 private:
   // === Private Types ===
