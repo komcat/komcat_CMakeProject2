@@ -316,3 +316,161 @@ std::string SPD_SetConstantCurrentOperation::GetDescription() const {
   }
   return desc;
 }
+
+bool SPD_VoltageSweepOperation::Execute(MachineOperations& ops) {
+  // Generate caller context
+  std::string callerContext = "SPD_VoltageSweepOperation_" +
+    std::to_string(m_startV) + "V_to_" + std::to_string(m_stopV) + "V";
+  if (!m_label.empty()) {
+    callerContext += "_" + m_label;
+  }
+
+  // Start operation tracking
+  std::string opId;
+  std::shared_ptr<OperationResultsManager> resultsManager = ops.GetResultsManager();
+  if (resultsManager) {
+    std::map<std::string, std::string> parameters;
+    parameters["start_voltage"] = std::to_string(m_startV);
+    parameters["stop_voltage"] = std::to_string(m_stopV);
+    parameters["steps"] = std::to_string(m_steps);
+    parameters["current_limit"] = std::to_string(m_currentLimit);
+    parameters["delay_ms"] = std::to_string(m_delayMs);
+    parameters["label"] = m_label;
+
+    opId = resultsManager->StartOperation("SPD_VoltageSweepOperation", "",
+      callerContext, "", parameters);
+  }
+
+  ops.LogInfo("Starting SPD voltage sweep: " + std::to_string(m_startV) + "V to " +
+    std::to_string(m_stopV) + "V, " + std::to_string(m_steps) + " steps" +
+    (m_label.empty() ? "" : " (" + m_label + ")"));
+
+  SPD_Ops spdOps;
+  if (!spdOps.IsAvailable()) {
+    ops.LogError("SPD_VoltageSweepOperation: SPD not available");
+    if (resultsManager && !opId.empty()) {
+      resultsManager->EndOperation(opId, "failed", "SPD not available");
+    }
+    return false;
+  }
+
+  std::vector<SPDSweepResult> results;
+  bool success = spdOps.PerformVoltageSweep(m_startV, m_stopV, m_steps,
+    m_currentLimit, m_delayMs, results);
+
+  if (success) {
+    ops.LogInfo("SPD voltage sweep completed: " + std::to_string(results.size()) + " points");
+
+    // Store individual sweep results
+    if (resultsManager && !opId.empty()) {
+      std::map<std::string, std::string> sweepResults;
+      sweepResults["sweep_points"] = std::to_string(results.size());
+
+      // Add individual data points
+      for (size_t i = 0; i < results.size(); ++i) {
+        const auto& point = results[i];
+        std::string pointPrefix = "point_" + std::to_string(i) + "_";
+
+        sweepResults[pointPrefix + "set_voltage"] = std::to_string(point.setValue);
+        sweepResults[pointPrefix + "measured_voltage"] = std::to_string(point.measuredVoltage);
+        sweepResults[pointPrefix + "measured_current"] = std::to_string(point.measuredCurrent);
+      }
+
+      resultsManager->EndOperation(opId, "completed", "Voltage sweep successful", sweepResults);
+    }
+  }
+  else {
+    ops.LogError("SPD voltage sweep failed: " + spdOps.GetLastError());
+    if (resultsManager && !opId.empty()) {
+      resultsManager->EndOperation(opId, "failed", spdOps.GetLastError());
+    }
+  }
+
+  return success;
+}
+
+std::string SPD_VoltageSweepOperation::GetDescription() const {
+  return "SPD voltage sweep: " + std::to_string(m_startV) + "V to " +
+    std::to_string(m_stopV) + "V (" + std::to_string(m_steps) + " steps)" +
+    (m_label.empty() ? "" : " (" + m_label + ")");
+}
+
+
+
+bool SPD_CurrentSweepOperation::Execute(MachineOperations& ops) {
+  // Generate caller context
+  std::string callerContext = "SPD_CurrentSweepOperation_" +
+    std::to_string(m_startA) + "A_to_" + std::to_string(m_stopA) + "A";
+  if (!m_label.empty()) {
+    callerContext += "_" + m_label;
+  }
+
+  // Start operation tracking
+  std::string opId;
+  std::shared_ptr<OperationResultsManager> resultsManager = ops.GetResultsManager();
+  if (resultsManager) {
+    std::map<std::string, std::string> parameters;
+    parameters["start_current"] = std::to_string(m_startA);
+    parameters["stop_current"] = std::to_string(m_stopA);
+    parameters["steps"] = std::to_string(m_steps);
+    parameters["voltage_limit"] = std::to_string(m_voltageLimit);
+    parameters["delay_ms"] = std::to_string(m_delayMs);
+    parameters["label"] = m_label;
+
+    opId = resultsManager->StartOperation("SPD_CurrentSweepOperation", "",
+      callerContext, "", parameters);
+  }
+
+  ops.LogInfo("Starting SPD current sweep: " + std::to_string(m_startA) + "A to " +
+    std::to_string(m_stopA) + "A, " + std::to_string(m_steps) + " steps" +
+    (m_label.empty() ? "" : " (" + m_label + ")"));
+
+  SPD_Ops spdOps;
+  if (!spdOps.IsAvailable()) {
+    ops.LogError("SPD_CurrentSweepOperation: SPD not available");
+    if (resultsManager && !opId.empty()) {
+      resultsManager->EndOperation(opId, "failed", "SPD not available");
+    }
+    return false;
+  }
+
+  std::vector<SPDSweepResult> results;
+  bool success = spdOps.PerformCurrentSweep(m_startA, m_stopA, m_steps,
+    m_voltageLimit, m_delayMs, results);
+
+  if (success) {
+    ops.LogInfo("SPD current sweep completed: " + std::to_string(results.size()) + " points");
+
+    // Store individual sweep results
+    if (resultsManager && !opId.empty()) {
+      std::map<std::string, std::string> sweepResults;
+      sweepResults["sweep_points"] = std::to_string(results.size());
+
+      // Add individual data points
+      for (size_t i = 0; i < results.size(); ++i) {
+        const auto& point = results[i];
+        std::string pointPrefix = "point_" + std::to_string(i) + "_";
+
+        sweepResults[pointPrefix + "set_current"] = std::to_string(point.setValue);
+        sweepResults[pointPrefix + "measured_voltage"] = std::to_string(point.measuredVoltage);
+        sweepResults[pointPrefix + "measured_current"] = std::to_string(point.measuredCurrent);
+      }
+
+      resultsManager->EndOperation(opId, "completed", "Current sweep successful", sweepResults);
+    }
+  }
+  else {
+    ops.LogError("SPD current sweep failed: " + spdOps.GetLastError());
+    if (resultsManager && !opId.empty()) {
+      resultsManager->EndOperation(opId, "failed", spdOps.GetLastError());
+    }
+  }
+
+  return success;
+}
+
+std::string SPD_CurrentSweepOperation::GetDescription() const {
+  return "SPD current sweep: " + std::to_string(m_startA) + "A to " +
+    std::to_string(m_stopA) + "A (" + std::to_string(m_steps) + " steps)" +
+    (m_label.empty() ? "" : " (" + m_label + ")");
+}

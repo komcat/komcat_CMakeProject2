@@ -249,3 +249,59 @@ void SPD_Ops::LogInfo(const std::string& message) const {
     m_logger->LogInfo(message);
   }
 }
+
+bool SPD_Ops::PerformVoltageSweep(double startV, double stopV, int steps,
+  double currentLimit, double delayMs,
+  std::vector<SPDSweepResult>& results) {
+  if (!m_spdManager) {
+    LogError("PerformVoltageSweep: SPD manager not available");
+    return false;
+  }
+
+  auto deviceNames = m_spdManager->GetDeviceNames();
+  if (deviceNames.empty()) {
+    LogError("PerformVoltageSweep: No devices available");
+    return false;
+  }
+
+  // Use first device, channel 1
+  bool success = m_spdManager->PerformVoltageSweep(deviceNames[0], 1,
+    startV, stopV, steps, currentLimit, delayMs, results);
+
+  if (success) {
+    LogInfo("PerformVoltageSweep: Completed " + std::to_string(results.size()) + " points");
+  }
+  else {
+    LogError("PerformVoltageSweep: Sweep failed on " + deviceNames[0]);
+  }
+
+  return success;
+}
+
+bool SPD_Ops::PerformCurrentSweep(double startA, double stopA, int steps,
+  double voltageLimit, double delayMs,
+  std::vector<SPDSweepResult>& results) {
+  if (!m_spdManager) {
+    LogError("PerformCurrentSweep: SPD manager not available");
+    return false;
+  }
+
+  auto deviceNames = m_spdManager->GetDeviceNames();
+  if (deviceNames.empty()) {
+    LogError("PerformCurrentSweep: No devices available");
+    return false;
+  }
+
+  // Use first device, channel 1
+  bool success = m_spdManager->PerformCurrentSweep(deviceNames[0], 1,
+    startA, stopA, steps, voltageLimit, delayMs, results);
+
+  if (success) {
+    LogInfo("PerformCurrentSweep: Completed " + std::to_string(results.size()) + " points");
+  }
+  else {
+    LogError("PerformCurrentSweep: Sweep failed on " + deviceNames[0]);
+  }
+
+  return success;
+}

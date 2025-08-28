@@ -105,11 +105,58 @@ public:
   double GetCurrent() const { return m_current; }
   double GetVoltageLimit() const { return m_voltageLimit; }
 
+
+
+
 private:
   double m_current;
   double m_voltageLimit;
   std::string m_label;
 };
+
+
+/**
+ * @brief Perform voltage sweep on SPD power supply
+ */
+class SPD_VoltageSweepOperation : public SequenceOperation {
+public:
+  SPD_VoltageSweepOperation(double startV, double stopV, int steps,
+    double currentLimit, double delayMs = 100.0,
+    const std::string& label = "")
+    : m_startV(startV), m_stopV(stopV), m_steps(steps),
+    m_currentLimit(currentLimit), m_delayMs(delayMs), m_label(label) {
+  }
+
+  bool Execute(MachineOperations& ops) override;
+  std::string GetDescription() const override;
+
+private:
+  double m_startV, m_stopV, m_currentLimit, m_delayMs;
+  int m_steps;
+  std::string m_label;
+};
+
+/**
+ * @brief Perform current sweep on SPD power supply
+ */
+class SPD_CurrentSweepOperation : public SequenceOperation {
+public:
+  SPD_CurrentSweepOperation(double startA, double stopA, int steps,
+    double voltageLimit, double delayMs = 100.0,
+    const std::string& label = "")
+    : m_startA(startA), m_stopA(stopA), m_steps(steps),
+    m_voltageLimit(voltageLimit), m_delayMs(delayMs), m_label(label) {
+  }
+
+  bool Execute(MachineOperations& ops) override;
+  std::string GetDescription() const override;
+
+private:
+  double m_startA, m_stopA, m_voltageLimit, m_delayMs;
+  int m_steps;
+  std::string m_label;
+};
+
 
 // ============================================================================
 // Usage Examples

@@ -236,9 +236,10 @@ namespace AuroraProcesses {
   }
 
 
+
   // ============================================================================
-// SPD POWER SUPPLY TEST - Simple CV/CC test
-// ============================================================================
+  // SPD POWER SUPPLY TEST WITH SWEEPS
+  // ============================================================================
   std::unique_ptr<SequenceStep> BuildAuroraSPDTest(
     MachineOperations& machineOps,
     UserPromptUI& promptUI) {
@@ -251,9 +252,10 @@ namespace AuroraProcesses {
       "Starting SPD Power Supply test.\n\n"
       "This will test:\n"
       "• CV mode: 3.3V with current limit\n"
+      "• Voltage sweep: 0V to 3.3V (11 steps)\n"
       "• CC mode: 0.1A with voltage limit\n"
-      "• Output enable/disable\n"
-      "• Voltage/current measurements\n\n"
+      "• Current sweep: 0A to 0.1A (11 steps)\n"
+      "• Output enable/disable\n\n"
       "Click Yes to start.",
       promptUI));
 
@@ -268,15 +270,26 @@ namespace AuroraProcesses {
 
     sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(false, 500));
 
-    // 3. User confirmation between tests
+    // 3. Voltage sweep test
     sequence->AddOperation(UserPromptOperation::CreateBasic(
-      "CV Test Complete",
+      "Voltage Sweep Test",
       "CV mode test completed (3.3V).\n\n"
+      "Next: Voltage sweep (0V to 3.3V, 11 steps)\n"
+      "Current limit: 0.5A, Step delay: 200ms\n\n"
+      "Click Yes to continue.",
+      promptUI));
+
+    sequence->AddOperation(std::make_shared<SPD_VoltageSweepOperation>(
+      0.0, 3.3, 11, 0.5, 200.0, "Voltage_Sweep_0_to_3V3"));
+
+    // 4. CC Mode test
+    sequence->AddOperation(UserPromptOperation::CreateBasic(
+      "CC Mode Test",
+      "Voltage sweep completed!\n\n"
       "Next: CC mode test (0.1A, 3.3V limit)\n"
       "Click Yes to continue.",
       promptUI));
 
-    // 4. Test CC Mode - 0.1A
     sequence->AddOperation(std::make_shared<SPD_SetConstantCurrentOperation>(
       0.1, 3.3, "CC_100mA_Test"));
 
@@ -287,12 +300,26 @@ namespace AuroraProcesses {
 
     sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(false, 500));
 
-    // 5. Completion message
+    // 5. Current sweep test
+    sequence->AddOperation(UserPromptOperation::CreateBasic(
+      "Current Sweep Test",
+      "CC mode test completed!\n\n"
+      "Next: Current sweep (0A to 0.1A, 11 steps)\n"
+      "Voltage limit: 3.3V, Step delay: 200ms\n\n"
+      "Click Yes to continue.",
+      promptUI));
+
+    sequence->AddOperation(std::make_shared<SPD_CurrentSweepOperation>(
+      0.0, 0.1, 11, 3.3, 200.0, "Current_Sweep_0_to_100mA"));
+
+    // 6. Final completion message
     sequence->AddOperation(UserPromptOperation::CreateBasic(
       "SPD Test Complete",
       "SPD Power Supply test completed!\n\n"
       "✓ CV mode: 3.3V test\n"
+      "✓ Voltage sweep: 0V to 3.3V (11 steps)\n"
       "✓ CC mode: 0.1A test\n"
+      "✓ Current sweep: 0A to 0.1A (11 steps)\n"
       "✓ All measurements recorded\n"
       "✓ Outputs safely disabled\n\n"
       "Check logs for measurement values.",
@@ -300,6 +327,7 @@ namespace AuroraProcesses {
 
     return sequence;
   }
+
 
   // ============================================================================
   // WRAPPER FUNCTIONS - Match ProcessRegistry signature

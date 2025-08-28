@@ -109,6 +109,39 @@ public:
    */
   void ClearError() { m_lastError.clear(); }
 
+
+
+  // === Sweep Operations ===
+
+/**
+ * @brief Perform voltage sweep on first available device
+ * @param startV Starting voltage in volts
+ * @param stopV Ending voltage in volts
+ * @param steps Number of steps in sweep
+ * @param currentLimit Current compliance/limit in amps
+ * @param delayMs Delay between steps in milliseconds
+ * @param results Vector to store sweep results
+ * @return true if sweep successful
+ */
+  bool PerformVoltageSweep(double startV, double stopV, int steps,
+    double currentLimit, double delayMs,
+    std::vector<SPDSweepResult>& results);
+
+  /**
+   * @brief Perform current sweep on first available device
+   * @param startA Starting current in amps
+   * @param stopA Ending current in amps
+   * @param steps Number of steps in sweep
+   * @param voltageLimit Voltage compliance/limit in volts
+   * @param delayMs Delay between steps in milliseconds
+   * @param results Vector to store sweep results
+   * @return true if sweep successful
+   */
+  bool PerformCurrentSweep(double startA, double stopA, int steps,
+    double voltageLimit, double delayMs,
+    std::vector<SPDSweepResult>& results);
+
+
 private:
   SPDPowerSupplyManager* m_spdManager;
   mutable std::string m_lastError;

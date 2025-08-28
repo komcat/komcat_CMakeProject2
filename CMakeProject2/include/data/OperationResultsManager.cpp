@@ -92,6 +92,19 @@ bool OperationResultsManager::EndOperation(const std::string& operationId,
   return m_dbManager->ExecutePreparedStatement(updateQuery.str(), parameters);
 }
 
+bool OperationResultsManager::EndOperation(const std::string& operationId,
+  const std::string& status,
+  const std::string& errorMessage,
+  const std::map<std::string, std::string>& results) {
+  // Store all the results first
+  if (!StoreResults(operationId, results)) {
+    // Continue anyway, but log the failure
+  }
+
+  // Then call the existing EndOperation method
+  return EndOperation(operationId, status, errorMessage);
+}
+
 bool OperationResultsManager::StoreResult(const std::string& operationId,
   const std::string& key,
   const std::string& value) {
