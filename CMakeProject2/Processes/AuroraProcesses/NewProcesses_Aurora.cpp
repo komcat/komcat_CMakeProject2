@@ -5,6 +5,7 @@
 #include "NewProcesses_Aurora.h"
 #include "ProcessRegistry.h"
 #include "SequenceStep.h"  // Has DUT operations
+#include "SPDOperations.h"
 #include "UserInputOperations.h"
 #include <memory>
 #include <chrono>       // For timestamp
@@ -234,6 +235,72 @@ namespace AuroraProcesses {
     return sequence;
   }
 
+
+  // ============================================================================
+// SPD POWER SUPPLY TEST - Simple CV/CC test
+// ============================================================================
+  std::unique_ptr<SequenceStep> BuildAuroraSPDTest(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI) {
+
+    auto sequence = std::make_unique<SequenceStep>("Aurora SPD Power Supply Test", machineOps);
+
+    // 1. Start prompt
+    sequence->AddOperation(UserPromptOperation::CreateBasic(
+      "SPD Power Supply Test",
+      "Starting SPD Power Supply test.\n\n"
+      "This will test:\n"
+      "• CV mode: 3.3V with current limit\n"
+      "• CC mode: 0.1A with voltage limit\n"
+      "• Output enable/disable\n"
+      "• Voltage/current measurements\n\n"
+      "Click Yes to start.",
+      promptUI));
+
+    // 2. Test CV Mode - 3.3V
+    sequence->AddOperation(std::make_shared<SPD_SetConstantVoltageOperation>(
+      3.3, 0.5, "CV_3V3_Test"));
+
+    sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(true, 1000));
+
+    sequence->AddOperation(std::make_shared<SPD_ReadCurrentVoltageOperation>(
+      true, "CV_Mode_Reading"));
+
+    sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(false, 500));
+
+    // 3. User confirmation between tests
+    sequence->AddOperation(UserPromptOperation::CreateBasic(
+      "CV Test Complete",
+      "CV mode test completed (3.3V).\n\n"
+      "Next: CC mode test (0.1A, 3.3V limit)\n"
+      "Click Yes to continue.",
+      promptUI));
+
+    // 4. Test CC Mode - 0.1A
+    sequence->AddOperation(std::make_shared<SPD_SetConstantCurrentOperation>(
+      0.1, 3.3, "CC_100mA_Test"));
+
+    sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(true, 1000));
+
+    sequence->AddOperation(std::make_shared<SPD_ReadCurrentVoltageOperation>(
+      true, "CC_Mode_Reading"));
+
+    sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(false, 500));
+
+    // 5. Completion message
+    sequence->AddOperation(UserPromptOperation::CreateBasic(
+      "SPD Test Complete",
+      "SPD Power Supply test completed!\n\n"
+      "✓ CV mode: 3.3V test\n"
+      "✓ CC mode: 0.1A test\n"
+      "✓ All measurements recorded\n"
+      "✓ Outputs safely disabled\n\n"
+      "Check logs for measurement values.",
+      promptUI));
+
+    return sequence;
+  }
+
   // ============================================================================
   // WRAPPER FUNCTIONS - Match ProcessRegistry signature
   // ============================================================================
@@ -245,6 +312,11 @@ namespace AuroraProcesses {
   std::unique_ptr<SequenceStep> WrapperAuroraBasicSMU(
     MachineOperations& machineOps, UserPromptUI& promptUI) {
     return BuildAuroraBasicSMUTest(machineOps, promptUI, nullptr);
+  }
+  // Add wrapper function for registration
+  std::unique_ptr<SequenceStep> WrapperAuroraSPD(
+    MachineOperations& machineOps, UserPromptUI& promptUI) {
+    return BuildAuroraSPDTest(machineOps, promptUI);
   }
 
   // ============================================================================
@@ -269,6 +341,14 @@ namespace AuroraProcesses {
       "Aurora Basic SMU functionality test",
       true,
       WrapperAuroraBasicSMU
+    );
+
+    registry.RegisterProcess(
+      "Aurora_SPDTest",
+      "Aurora_Core",
+      "Aurora SPD Power Supply test - CV/CC modes",
+      true,
+      WrapperAuroraSPD
     );
 
     printf("Aurora Processes: Successfully registered 2 Aurora SMU processes\n");

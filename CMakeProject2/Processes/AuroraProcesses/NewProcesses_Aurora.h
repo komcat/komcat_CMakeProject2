@@ -23,6 +23,11 @@ namespace AuroraProcesses {
     UserPromptUI& promptUI,
     std::shared_ptr<Keithley2400Operations> smuOps = nullptr);
 
+  // Add this function declaration after the existing ones
+  std::unique_ptr<SequenceStep> BuildAuroraSPDTest(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI);
+
   // ========================================================================
   // Registration Functions
   // ========================================================================
