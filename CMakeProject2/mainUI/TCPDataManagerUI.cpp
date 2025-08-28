@@ -103,7 +103,7 @@ void TCPDataManagerUI::RenderServerCard(const ServerDisplayInfo& serverInfo, int
   ImGui::PushStyleColor(ImGuiCol_Border, borderColor);
 
   // Card dimensions
-  ImVec2 cardSize(320, 180); // Fixed size for consistent card layout
+  ImVec2 cardSize(320, 300); // Fixed size for consistent card layout
   ImGui::BeginChild("ServerCard", cardSize, true, ImGuiWindowFlags_NoScrollbar);
 
   // === CARD HEADER ===
