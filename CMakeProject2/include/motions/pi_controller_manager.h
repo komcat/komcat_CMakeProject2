@@ -3,6 +3,7 @@
 
 #include "pi_controller.h"
 #include "MotionConfigManager.h"
+
 #include <string>
 #include <map>
 #include <memory>
@@ -24,6 +25,10 @@ public:
 
   // Disconnect all controllers
   void DisconnectAll();
+
+  // Connect/disconnect individual devices
+  bool ConnectDevice(const std::string& deviceName);
+  bool DisconnectDevice(const std::string& deviceName);
 
   // Get a specific controller by device name
   PIController* GetController(const std::string& deviceName);

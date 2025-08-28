@@ -1,5 +1,7 @@
 // acs_controller_manager.cpp
 #include "include/motions/acs_controller_manager.h"
+#include "include/data/global_data_store.h"
+#include "include/motions/ACSMotionSubscriber.h"
 #include "imgui.h"
 #include <iostream>
 
@@ -66,7 +68,19 @@ bool ACSControllerManager::ConnectAll() {
     if (device.IsEnabled) {
       m_logger->LogInfo("ACSControllerManager: Connecting to " + name + " (" + device.IpAddress + ")");
 
-      if (!controller->Connect(device.IpAddress, device.Port)) {
+      if (controller->Connect(device.IpAddress, device.Port)) {
+        // ADDED: Subscribe the ACS-specific subscriber
+        GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+        ACSMotionSubscriber* acsSubscriber = dataStore->GetACSSubscriber();
+
+        // Configure ACS subscriber if needed (optional)
+        // acsSubscriber->SetHomePosition(name, "X", 0.0);
+        // acsSubscriber->SetSoftLimit(name, "X", 500.0);
+
+        controller->SubscribeToPositions(acsSubscriber, "ACSMotionSubscriber");
+        m_logger->LogInfo("ACSControllerManager: ACS subscriber connected to " + name);
+      }
+      else {
         m_logger->LogError("ACSControllerManager: Failed to connect to " + name);
         allConnected = false;
       }
@@ -76,11 +90,16 @@ bool ACSControllerManager::ConnectAll() {
   return allConnected;
 }
 
+
+// Update DisconnectAll method
 void ACSControllerManager::DisconnectAll() {
   m_logger->LogInfo("ACSControllerManager: Disconnecting all controllers");
 
   for (auto& [name, controller] : m_controllers) {
     if (controller->IsConnected()) {
+      // ADDED: Unsubscribe before disconnecting
+      controller->UnsubscribeFromPositions("ACSMotionSubscriber");
+
       m_logger->LogInfo("ACSControllerManager: Disconnecting " + name);
       controller->Disconnect();
     }
@@ -429,4 +448,142 @@ bool ACSControllerManager::acsc_IsBufferRunning(const std::string& deviceName, i
 
   // For now, return false (not implemented yet in ACSController)
   return false;
+}
+
+// In acs_controller_manager.cpp - Add these methods
+
+bool ACSControllerManager::ConnectDevice(const std::string& deviceName) {
+  auto controller = GetController(deviceName);
+  if (!controller) {
+    m_logger->LogError("ACSControllerManager: Controller not found for device " + deviceName);
+    return false;
+  }
+
+  auto deviceOpt = m_configManager.GetDevice(deviceName);
+  if (!deviceOpt.has_value()) {
+    m_logger->LogError("ACSControllerManager: Device " + deviceName + " not found in configuration");
+    return false;
+  }
+
+  const auto& device = deviceOpt.value().get();
+
+  if (!device.IsEnabled) {
+    m_logger->LogWarning("ACSControllerManager: Device " + deviceName + " is disabled");
+    return false;
+  }
+
+  if (controller->IsConnected()) {
+    m_logger->LogInfo("ACSControllerManager: Device " + deviceName + " already connected");
+    return true;
+  }
+
+  m_logger->LogInfo("ACSControllerManager: Connecting device " + deviceName);
+
+  if (controller->Connect(device.IpAddress, device.Port)) {
+    // Subscribe to position updates
+    GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+    ACSMotionSubscriber* acsSubscriber = dataStore->GetACSSubscriber();
+
+    // Configure ACS-specific settings (optional)
+    // Set home positions if known
+    if (device.Positions.find("home") != device.Positions.end()) {
+      const auto& homePos = device.Positions.at("home");
+      acsSubscriber->SetHomePosition(deviceName, "X", homePos.x);
+      acsSubscriber->SetHomePosition(deviceName, "Y", homePos.y);
+      acsSubscriber->SetHomePosition(deviceName, "Z", homePos.z);
+      m_logger->LogInfo("ACSControllerManager: Set home positions for " + deviceName);
+    }
+
+    // Set soft limits if configured (example: could be in device config)
+    // These values could come from your config file
+    acsSubscriber->SetSoftLimit(deviceName, "X", 500.0);  // Example: 500mm limit
+    acsSubscriber->SetSoftLimit(deviceName, "Y", 500.0);
+    acsSubscriber->SetSoftLimit(deviceName, "Z", 200.0);
+
+    controller->SubscribeToPositions(acsSubscriber, "ACSMotionSubscriber");
+    m_logger->LogInfo("ACSControllerManager: Successfully connected and subscribed " + deviceName);
+    return true;
+  }
+
+  m_logger->LogError("ACSControllerManager: Failed to connect device " + deviceName);
+  return false;
+}
+
+bool ACSControllerManager::DisconnectDevice(const std::string& deviceName) {
+  auto controller = GetController(deviceName);
+  if (!controller) {
+    m_logger->LogError("ACSControllerManager: Controller not found for device " + deviceName);
+    return false;
+  }
+
+  if (!controller->IsConnected()) {
+    m_logger->LogInfo("ACSControllerManager: Device " + deviceName + " already disconnected");
+    return true;
+  }
+
+  m_logger->LogInfo("ACSControllerManager: Disconnecting device " + deviceName);
+
+  // Unsubscribe from position updates
+  controller->UnsubscribeFromPositions("ACSMotionSubscriber");
+
+  // Stop communication thread
+  controller->StopCommunicationThread();
+
+  // Disconnect
+  controller->Disconnect();
+
+  m_logger->LogInfo("ACSControllerManager: Successfully disconnected " + deviceName);
+  return true;
+}
+
+// Optional: Add method to reconnect a device
+bool ACSControllerManager::ReconnectDevice(const std::string& deviceName) {
+  m_logger->LogInfo("ACSControllerManager: Reconnecting device " + deviceName);
+
+  // First disconnect if connected
+  if (GetController(deviceName) && GetController(deviceName)->IsConnected()) {
+    if (!DisconnectDevice(deviceName)) {
+      m_logger->LogError("ACSControllerManager: Failed to disconnect before reconnecting " + deviceName);
+      return false;
+    }
+
+    // Small delay to ensure clean disconnect
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }
+
+  // Now connect
+  return ConnectDevice(deviceName);
+}
+
+// Optional: Add method to get connection status of all devices
+std::map<std::string, bool> ACSControllerManager::GetConnectionStatus() const {
+  std::map<std::string, bool> status;
+
+  for (const auto& [name, controller] : m_controllers) {
+    status[name] = controller->IsConnected();
+  }
+
+  return status;
+}
+
+// Optional: Connect only enabled devices
+int ACSControllerManager::ConnectEnabledDevices() {
+  m_logger->LogInfo("ACSControllerManager: Connecting only enabled devices");
+
+  int connectedCount = 0;
+  const auto& devices = m_configManager.GetAllDevices();
+
+  for (const auto& [name, device] : devices) {
+    // Check if this is an ACS device and is enabled
+    if (device.Port == ACSC_SOCKET_STREAM_PORT && device.IsEnabled) {
+      if (HasController(name)) {
+        if (ConnectDevice(name)) {
+          connectedCount++;
+        }
+      }
+    }
+  }
+
+  m_logger->LogInfo("ACSControllerManager: Connected " + std::to_string(connectedCount) + " enabled devices");
+  return connectedCount;
 }

@@ -1,6 +1,16 @@
 // acs_controller.h
 #pragma once
-#include <Windows.h>  // Include this first
+// Prevent Windows.h conflicts
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX  // Prevent min/max macro conflicts
+#endif
+#include <Windows.h>
+#endif
+
 #include <string>
 #include <atomic>
 #include <thread>
@@ -10,6 +20,8 @@
 #include <map>
 #include "include/logger.h"
 #include "include/motions/MotionTypes.h"  // Make sure this is included
+#include "IPositionSubscriber.h"
+#include <map>
 
 // Include ACS controller library
 #include "include/ACSC.h"
@@ -78,12 +90,23 @@ public:
 
   // Optional: Check if buffer is running (if you need status)
   bool IsBufferRunning(int bufferNumber);
-private:
+
+
+  // Subscribe/Unsubscribe for position updates
+  void SubscribeToPositions(IPositionSubscriber* subscriber, const std::string& subscriberId);
+  void UnsubscribeFromPositions(const std::string& subscriberId);
+
   // Communication thread methods
   void StartCommunicationThread();
   void StopCommunicationThread();
   void CommunicationThreadFunc();
+
+private:
+
   // Add to the private section of ACSController class in acs_controller.h
+
+
+
   void ProcessCommandQueue();
   void UpdatePositions();
   void UpdateMotorStatus();
@@ -143,4 +166,11 @@ private:
 
   std::string m_statusMessage;
   float m_statusMessageTime = 0.0f;
+
+  // Position subscribers
+  std::map<std::string, IPositionSubscriber*> m_positionSubscribers;
+  mutable std::mutex m_subscribersMutex;
+  // Notify all subscribers
+  void NotifyPositionSubscribers(const std::map<std::string, double>& positions);
+  void NotifyMotionStatusSubscribers(const std::string& axis, bool isMoving);
 };

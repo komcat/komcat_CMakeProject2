@@ -1,11 +1,15 @@
 // acs_controller_manager.h
 #pragma once
-
+// In acs_controller_manager.h - Add these includes at the top
+#include "include/data/global_data_store.h"
+#include "include/motions/ACSMotionSubscriber.h"
 #include "acs_controller.h"
 #include "MotionConfigManager.h"
 #include <string>
 #include <map>
 #include <memory>
+#include <chrono>
+#include <thread>
 
 class ACSControllerManager {
 public:
@@ -20,6 +24,17 @@ public:
 
   // Disconnect all controllers
   void DisconnectAll();
+
+  // Connect/disconnect individual devices
+  bool ConnectDevice(const std::string& deviceName);
+  bool DisconnectDevice(const std::string& deviceName);
+  bool ReconnectDevice(const std::string& deviceName);
+
+  // Connect only enabled devices (alternative to ConnectAll)
+  int ConnectEnabledDevices();
+
+  // Get connection status of all controllers
+  std::map<std::string, bool> GetConnectionStatus() const;
 
   // Get a specific controller by device name
   ACSController* GetController(const std::string& deviceName);

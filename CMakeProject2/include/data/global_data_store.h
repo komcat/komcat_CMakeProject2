@@ -1,6 +1,8 @@
 
 #pragma once
 #include "IDataProvider.h"
+#include "include/motions/PIMotionSubscriber.h"
+#include "include/motions/ACSMotionSubscriber.h"
 #include <memory>
 #include <string>
 #include <map>
@@ -27,6 +29,9 @@ private:
 	std::map<std::string, DataSubscription> m_subscriptions;
 	mutable std::mutex m_subscriptionsMutex;
 
+	// Motion subscribers
+	std::unique_ptr<PIMotionSubscriber> m_piSubscriber;
+	std::unique_ptr<ACSMotionSubscriber> m_acsSubscriber;
 public:
 	// Existing methods
 	static GlobalDataStore* GetInstance();
@@ -34,6 +39,16 @@ public:
 	float GetValue(const std::string& serverId, float defaultValue = 0.0f);
 	bool HasValue(const std::string& serverId);
 	std::vector<std::string> GetAvailableChannels() const;
+
+
+
+
+	// Get motion subscribers (creates them if needed)
+	PIMotionSubscriber* GetPISubscriber();
+	ACSMotionSubscriber* GetACSSubscriber();
+
+	// Configure motion subscribers
+	void ConfigureMotionSubscribers(bool enablePI = true, bool enableACS = true);
 
 	// NEW SPD subscription methods
 	/**

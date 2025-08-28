@@ -684,7 +684,7 @@ add_executable(uaa3App
  "include/PowerSupply/SPDPowerSupply.h"
  "include/PowerSupply/SPDPowerSupplyManager.cpp"
  "include/PowerSupply/SPDPowerSupplyManager.h"
-  "mainUI/UISPDPowerPanel.h" "mainUI/UISPDPowerPanel.cpp" "include/data/IDataProvider.h" "include/data/SPDDataProviderAdapter.h" "mainUI/SPDPowerSupplyUI.h" "mainUI/SPDPowerSupplyUI.cpp")
+  "mainUI/UISPDPowerPanel.h" "mainUI/UISPDPowerPanel.cpp" "include/data/IDataProvider.h" "include/data/SPDDataProviderAdapter.h" "mainUI/SPDPowerSupplyUI.h" "mainUI/SPDPowerSupplyUI.cpp" "include/motions/IPositionSubscriber.h" "include/motions/MotionDataSubscriber.h" "include/motions/PIMotionSubscriber.h" "include/motions/ACSMotionSubscriber.h" "include/motions/MotionDataSubscriber.cpp")
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")

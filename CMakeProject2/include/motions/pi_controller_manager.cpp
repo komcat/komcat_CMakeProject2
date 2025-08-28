@@ -1,5 +1,7 @@
 ﻿// pi_controller_manager.cpp
 #include "pi_controller_manager.h"
+#include "include/data/global_data_store.h"
+#include "include/motions/PIMotionSubscriber.h"
 #include "imgui.h"
 #include <iostream>
 
@@ -45,6 +47,7 @@ void PIControllerManager::InitializeControllers() {
   m_logger->LogInfo("PIControllerManager: Created " + std::to_string(m_controllers.size()) + " controllers");
 }
 
+// In pi_controller_manager.cpp - Update ConnectAll method
 bool PIControllerManager::ConnectAll() {
   m_logger->LogInfo("PIControllerManager: Connecting all enabled controllers");
 
@@ -64,26 +67,137 @@ bool PIControllerManager::ConnectAll() {
     if (device.IsEnabled) {
       m_logger->LogInfo("PIControllerManager: Connecting to " + name + " (" + device.IpAddress + ")");
 
-      if (!controller->Connect(device.IpAddress, device.Port)) {
+      if (controller->Connect(device.IpAddress, device.Port)) {
+        // ADDED: Subscribe the PI-specific subscriber
+        GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+        PIMotionSubscriber* piSubscriber = dataStore->GetPISubscriber();
+
+        // Configure PI subscriber with device-specific settings (optional)
+        piSubscriber->SetCalculateVelocity(true);      // Enable velocity calculation
+        piSubscriber->SetStoreRawPositions(true);      // Store raw positions
+        piSubscriber->SetStoreProcessedData(true);     // Store processed data (angles, radius)
+        piSubscriber->SetDecimationFactor(1);          // Store every update (no decimation)
+
+        // Subscribe to position updates
+        controller->SubscribeToPositions(piSubscriber, "PIMotionSubscriber");
+        m_logger->LogInfo("PIControllerManager: PI motion subscriber connected to " + name);
+
+        // Optional: Log configuration
+        if (m_logger) {
+          m_logger->LogInfo("PIControllerManager: Subscriber configured for " + name +
+            " - Velocity calc: ON, Decimation: 1");
+        }
+      }
+      else {
         m_logger->LogError("PIControllerManager: Failed to connect to " + name);
         allConnected = false;
       }
+    }
+    else {
+      m_logger->LogInfo("PIControllerManager: Skipping disabled device " + name);
     }
   }
 
   return allConnected;
 }
 
+// Update DisconnectAll method
 void PIControllerManager::DisconnectAll() {
   m_logger->LogInfo("PIControllerManager: Disconnecting all controllers");
 
   for (auto& [name, controller] : m_controllers) {
     if (controller->IsConnected()) {
-      m_logger->LogInfo("PIControllerManager: Disconnecting " + name);
+      // ADDED: Unsubscribe from position updates before disconnecting
+      controller->UnsubscribeFromPositions("PIMotionSubscriber");
+      m_logger->LogInfo("PIControllerManager: Unsubscribed PI motion subscriber from " + name);
+
+      // Stop the communication thread before disconnecting
+      m_logger->LogInfo("PIControllerManager: Stopping communication thread for " + name);
       controller->StopCommunicationThread();
+
+      // Now disconnect
+      m_logger->LogInfo("PIControllerManager: Disconnecting " + name);
       controller->Disconnect();
     }
   }
+
+  m_logger->LogInfo("PIControllerManager: All controllers disconnected");
+}
+
+// In pi_controller_manager.cpp - Add these methods
+
+bool PIControllerManager::ConnectDevice(const std::string& deviceName) {
+  auto controller = GetController(deviceName);
+  if (!controller) {
+    m_logger->LogError("PIControllerManager: Controller not found for device " + deviceName);
+    return false;
+  }
+
+  auto deviceOpt = m_configManager.GetDevice(deviceName);
+  if (!deviceOpt.has_value()) {
+    m_logger->LogError("PIControllerManager: Device " + deviceName + " not found in configuration");
+    return false;
+  }
+
+  const auto& device = deviceOpt.value().get();
+
+  if (!device.IsEnabled) {
+    m_logger->LogWarning("PIControllerManager: Device " + deviceName + " is disabled");
+    return false;
+  }
+
+  if (controller->IsConnected()) {
+    m_logger->LogInfo("PIControllerManager: Device " + deviceName + " already connected");
+    return true;
+  }
+
+  m_logger->LogInfo("PIControllerManager: Connecting device " + deviceName);
+
+  if (controller->Connect(device.IpAddress, device.Port)) {
+    // Subscribe to position updates
+    GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+    PIMotionSubscriber* piSubscriber = dataStore->GetPISubscriber();
+
+    // Configure subscriber
+    piSubscriber->SetCalculateVelocity(true);
+    piSubscriber->SetStoreRawPositions(true);
+    piSubscriber->SetStoreProcessedData(true);
+    piSubscriber->SetDecimationFactor(1);
+
+    controller->SubscribeToPositions(piSubscriber, "PIMotionSubscriber");
+    m_logger->LogInfo("PIControllerManager: Successfully connected and subscribed " + deviceName);
+    return true;
+  }
+
+  m_logger->LogError("PIControllerManager: Failed to connect device " + deviceName);
+  return false;
+}
+
+bool PIControllerManager::DisconnectDevice(const std::string& deviceName) {
+  auto controller = GetController(deviceName);
+  if (!controller) {
+    m_logger->LogError("PIControllerManager: Controller not found for device " + deviceName);
+    return false;
+  }
+
+  if (!controller->IsConnected()) {
+    m_logger->LogInfo("PIControllerManager: Device " + deviceName + " already disconnected");
+    return true;
+  }
+
+  m_logger->LogInfo("PIControllerManager: Disconnecting device " + deviceName);
+
+  // Unsubscribe from position updates
+  controller->UnsubscribeFromPositions("PIMotionSubscriber");
+
+  // Stop communication thread
+  controller->StopCommunicationThread();
+
+  // Disconnect
+  controller->Disconnect();
+
+  m_logger->LogInfo("PIControllerManager: Successfully disconnected " + deviceName);
+  return true;
 }
 
 PIController* PIControllerManager::GetController(const std::string& deviceName) {

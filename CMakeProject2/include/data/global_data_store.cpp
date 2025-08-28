@@ -511,3 +511,40 @@ bool GlobalDataStore::ParseProviderData(const std::string& providerName,
 
 	return false;
 }
+
+// global_data_store.cpp
+
+PIMotionSubscriber* GlobalDataStore::GetPISubscriber() {
+	if (!m_piSubscriber) {
+		m_piSubscriber = std::make_unique<PIMotionSubscriber>();
+		if (m_showDebug) {
+			std::cout << "[DEBUG GlobalDataStore] Created PI motion subscriber" << std::endl;
+		}
+	}
+	return m_piSubscriber.get();
+}
+
+ACSMotionSubscriber* GlobalDataStore::GetACSSubscriber() {
+	if (!m_acsSubscriber) {
+		m_acsSubscriber = std::make_unique<ACSMotionSubscriber>();
+		if (m_showDebug) {
+			std::cout << "[DEBUG GlobalDataStore] Created ACS motion subscriber" << std::endl;
+		}
+	}
+	return m_acsSubscriber.get();
+}
+
+void GlobalDataStore::ConfigureMotionSubscribers(bool enablePI, bool enableACS) {
+	if (enablePI && !m_piSubscriber) {
+		m_piSubscriber = std::make_unique<PIMotionSubscriber>();
+	}
+	if (enableACS && !m_acsSubscriber) {
+		m_acsSubscriber = std::make_unique<ACSMotionSubscriber>();
+	}
+
+	if (m_showDebug) {
+		std::cout << "[DEBUG GlobalDataStore] Motion subscribers configured - "
+			<< "PI: " << (enablePI ? "enabled" : "disabled") << ", "
+			<< "ACS: " << (enableACS ? "enabled" : "disabled") << std::endl;
+	}
+}

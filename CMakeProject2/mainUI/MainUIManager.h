@@ -9,6 +9,7 @@
 #include "UICameraPanel.h"
 #include "TCPDataManagerUI.h"
 #include "include/data/data_client_manager.h"
+#include "include/data/global_data_store.h"
 #include "CLD101xEquipmentUI.h"
 #include "include/machine_operations.h"
 #include "GlobalDataStoreViewerUI.h"

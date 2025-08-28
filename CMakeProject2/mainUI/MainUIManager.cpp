@@ -906,37 +906,134 @@ void MainUIManager::RenderManualPage() {
 	ImGui::SetWindowFontScale(1.5f);
 	ImGui::Text("Manual Control");
 	ImGui::SetWindowFontScale(1.0f);
-
 	ImGui::Spacing();
+
+	// ========== ADD THIS SECTION: Real-time Position Display ==========
+	// Get GlobalDataStore instance
+	GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+
+	// Display live position data in a collapsible section
+	if (ImGui::CollapsingHeader("Live Device Positions", ImGuiTreeNodeFlags_DefaultOpen)) {
+		// Create a nice table for position display
+		if (ImGui::BeginTable("PositionTable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+			// Setup columns
+			ImGui::TableSetupColumn("Device", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+			ImGui::TableSetupColumn("X", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Y", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Z", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("U", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("V", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("W", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+			ImGui::TableHeadersRow();
+
+			// UPDATE: Use your actual device names
+			std::vector<std::string> devices = { "hex-left", "hex-right", "gantry-main" };
+
+
+			for (const auto& device : devices) {
+				ImGui::TableNextRow();
+
+				// Device name
+				ImGui::TableNextColumn();
+				ImGui::Text("%s", device.c_str());
+
+				// X, Y, Z positions
+				for (const auto& axis : { "X", "Y", "Z" }) {
+					ImGui::TableNextColumn();
+					std::string posKey = device + "-POS-" + axis;
+					if (dataStore->HasValue(posKey)) {
+						float pos = dataStore->GetValue(posKey);
+						ImGui::Text("%.3f", pos);
+					}
+					else {
+						ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "N/A");
+					}
+				}
+
+				// U, V, W positions (for hexapods)
+				for (const auto& axis : { "U", "V", "W" }) {
+					ImGui::TableNextColumn();
+					std::string posKey = device + "-POS-" + axis;
+					if (dataStore->HasValue(posKey)) {
+						float pos = dataStore->GetValue(posKey);
+						// Convert to degrees if it's an angular axis
+						float angleDeg = dataStore->GetValue(device + "-ANGLE-" + axis, pos);
+						ImGui::Text("%.2f°", angleDeg);
+					}
+					else {
+						ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "---");
+					}
+				}
+
+				// Status column - check if any axis is moving
+				ImGui::TableNextColumn();
+				bool anyAxisMoving = false;
+				for (const auto& axis : { "X", "Y", "Z", "U", "V", "W" }) {
+					std::string movingKey = device + "-MOVING-" + axis;
+					if (dataStore->GetValue(movingKey, 0.0f) > 0.5f) {
+						anyAxisMoving = true;
+						break;
+					}
+				}
+
+				if (anyAxisMoving) {
+					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "MOVING");
+				}
+				else {
+					ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "IDLE");
+				}
+			}
+
+			ImGui::EndTable();
+		}
+
+		// Add a refresh indicator
+		ImGui::Text("Data updates automatically at 20Hz (PI) / 5Hz (ACS)");
+
+		// Display additional info
+		ImGui::Separator();
+		ImGui::Text("Available Channels: %zu", dataStore->GetAvailableChannels().size());
+
+		// Optional: Show all available channels in a combo box
+		static bool showAllChannels = false;
+		ImGui::Checkbox("Show All Channels", &showAllChannels);
+
+		if (showAllChannels) {
+			auto channels = dataStore->GetAvailableChannels();
+			if (ImGui::BeginChild("ChannelList", ImVec2(0, 200), true, ImGuiWindowFlags_HorizontalScrollbar)) {
+				for (const auto& channel : channels) {
+					float value = dataStore->GetValue(channel);
+					ImGui::Text("%s = %.3f", channel.c_str(), value);
+				}
+			}
+			ImGui::EndChild();
+		}
+	}
+
+	ImGui::Separator();
+	// ========== END OF ADDED SECTION ==========
+
 	ImGui::Text("Select a manual control option:");
 	ImGui::Spacing();
 
-
-
-	// OPTION 1: Use simple single-character emojis (avoid compound emojis)
+	// Original buttons
 	if (ImGui::Button(reinterpret_cast<const char*>(u8"1. PI 🤖"), ImVec2(200, 50))) {
 		currentManualSubPage = ManualSubPage::PI;
 	}
-
-	if (ImGui::Button(reinterpret_cast<const char*>(u8"2. Gantry 🦾"), ImVec2(200, 50))) { // Changed from 🦿 to 🦾
+	if (ImGui::Button(reinterpret_cast<const char*>(u8"2. Gantry 🦾"), ImVec2(200, 50))) {
 		currentManualSubPage = ManualSubPage::GANTRY;
 	}
-
-	if (ImGui::Button(reinterpret_cast<const char*>(u8"3. IO ⚡"), ImVec2(200, 50))) { // Changed from 🔌 to ⚡
+	if (ImGui::Button(reinterpret_cast<const char*>(u8"3. IO ⚡"), ImVec2(200, 50))) {
 		currentManualSubPage = ManualSubPage::IO;
 	}
-
 	if (ImGui::Button(reinterpret_cast<const char*>(u8"4. Pneumatic 💨"), ImVec2(200, 50))) {
 		currentManualSubPage = ManualSubPage::PNEUMATIC;
 	}
-
 	if (ImGui::Button(reinterpret_cast<const char*>(u8"5. Camera 📷"), ImVec2(200, 50))) {
 		currentManualSubPage = ManualSubPage::CAMERA;
 	}
-
-
 }
-
 
 // Update RenderManualSubPage() to include pneumatic case:
 void MainUIManager::RenderManualSubPage() {
