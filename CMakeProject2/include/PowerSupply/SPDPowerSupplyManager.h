@@ -14,8 +14,7 @@
 #include <nlohmann/json.hpp>
 #include <memory>
 
-// Use PowerSupply namespace
-using PowerSupply::SPDPowerSupply;
+
 #include <unordered_map>
 #include <vector>
 #include <string>
@@ -24,6 +23,10 @@ using PowerSupply::SPDPowerSupply;
 #include <atomic>
 #include <chrono>
 #include <functional>
+
+// Use PowerSupply namespace
+using PowerSupply::SPDPowerSupply;
+using PowerSupply::SPDSweepResult; // Add this with other using declarations
 
 // Forward declarations
 class Logger;
@@ -313,6 +316,73 @@ public:
    * @return Vector of subscriber IDs
    */
   std::vector<std::string> GetSubscriberIds() const;
+
+
+  // === Sweep Operations ===
+
+  /**
+   * @brief Perform voltage sweep on specified device
+   * @param deviceName Name of the device to perform sweep on
+   * @param channel Channel number (typically 1)
+   * @param startV Starting voltage (V)
+   * @param stopV Ending voltage (V)
+   * @param steps Number of steps in sweep
+   * @param currentLimit Current limit/compliance (A)
+   * @param delayMs Delay between steps (ms)
+   * @param results Vector to store sweep results
+   * @return true if sweep successful, false otherwise
+   */
+  bool PerformVoltageSweep(const std::string& deviceName, int channel,
+    double startV, double stopV, int steps,
+    double currentLimit, double delayMs,
+    std::vector<SPDSweepResult>& results);
+
+  /**
+   * @brief Perform current sweep on specified device
+   * @param deviceName Name of the device to perform sweep on
+   * @param channel Channel number (typically 1)
+   * @param startA Starting current (A)
+   * @param stopA Ending current (A)
+   * @param steps Number of steps in sweep
+   * @param voltageLimit Voltage limit/compliance (V)
+   * @param delayMs Delay between steps (ms)
+   * @param results Vector to store sweep results
+   * @return true if sweep successful, false otherwise
+   */
+  bool PerformCurrentSweep(const std::string& deviceName, int channel,
+    double startA, double stopA, int steps,
+    double voltageLimit, double delayMs,
+    std::vector<SPDSweepResult>& results);
+
+  /**
+   * @brief Perform voltage sweep on all connected devices simultaneously
+   * @param channel Channel number (typically 1)
+   * @param startV Starting voltage (V)
+   * @param stopV Ending voltage (V)
+   * @param steps Number of steps in sweep
+   * @param currentLimit Current limit/compliance (A)
+   * @param delayMs Delay between steps (ms)
+   * @param allResults Map of device name to sweep results
+   * @return Number of successful sweeps performed
+   */
+  int PerformVoltageSweepAll(int channel, double startV, double stopV, int steps,
+    double currentLimit, double delayMs,
+    std::unordered_map<std::string, std::vector<SPDSweepResult>>& allResults);
+
+  /**
+   * @brief Perform current sweep on all connected devices simultaneously
+   * @param channel Channel number (typically 1)
+   * @param startA Starting current (A)
+   * @param stopA Ending current (A)
+   * @param steps Number of steps in sweep
+   * @param voltageLimit Voltage limit/compliance (V)
+   * @param delayMs Delay between steps (ms)
+   * @param allResults Map of device name to sweep results
+   * @return Number of successful sweeps performed
+   */
+  int PerformCurrentSweepAll(int channel, double startA, double stopA, int steps,
+    double voltageLimit, double delayMs,
+    std::unordered_map<std::string, std::vector<SPDSweepResult>>& allResults);
 
 private:
   // === Private Types ===

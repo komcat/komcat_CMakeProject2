@@ -521,6 +521,207 @@ namespace PowerSupply {
 		return std::nullopt;
 	}
 
+
+	// Add these to SPDPowerSupply.cpp
+
+	bool SPDPowerSupply::voltageSweep(int channel, double startV, double stopV, int steps,
+		double currentLimit, double delayMs,
+		std::vector<SPDSweepResult>& results) {
+		if (m_debugverbose) {
+			std::cout << "SPD Voltage Sweep: " << startV << "V to " << stopV << "V, "
+				<< steps << " steps, " << currentLimit << "A limit" << std::endl;
+		}
+
+		// Validate inputs
+		if (!validateChannel(channel)) {
+			std::cerr << "SPD Voltage Sweep: Invalid channel " << channel << std::endl;
+			return false;
+		}
+
+		if (steps < 2) {
+			std::cerr << "SPD Voltage Sweep: Need at least 2 steps" << std::endl;
+			return false;
+		}
+
+		if (delayMs < 0) {
+			std::cerr << "SPD Voltage Sweep: Delay must be >= 0" << std::endl;
+			return false;
+		}
+
+		try {
+			results.clear();
+			results.reserve(steps);
+
+			// Set current limit first
+			if (!setCurrent(channel, currentLimit)) {
+				std::cerr << "SPD Voltage Sweep: Failed to set current limit" << std::endl;
+				return false;
+			}
+
+			// Calculate voltage step size
+			double stepSize = (stopV - startV) / (steps - 1);
+
+			// Perform sweep
+			for (int i = 0; i < steps; ++i) {
+				double targetVoltage = startV + (stepSize * i);
+
+				// Set voltage for this step
+				if (!setVoltage(channel, targetVoltage)) {
+					std::cerr << "SPD Voltage Sweep: Failed to set voltage at step " << i << std::endl;
+					return false;
+				}
+
+				// Enable output if not already enabled
+				if (!setOutput(channel, true)) {
+					std::cerr << "SPD Voltage Sweep: Failed to enable output at step " << i << std::endl;
+					return false;
+				}
+
+				// Wait for settling if delay specified
+				if (delayMs > 0) {
+					std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(delayMs)));
+				}
+
+				// Take measurements
+				auto voltage = getVoltage(channel);
+				auto current = getCurrent(channel);
+				auto timestamp = std::chrono::steady_clock::now();
+
+				if (voltage && current) {
+					SPDSweepResult result;
+					result.setValue = targetVoltage;
+					result.measuredVoltage = *voltage;
+					result.measuredCurrent = *current;
+					result.timestamp = timestamp;
+					results.push_back(result);
+
+					if (m_debugverbose) {
+						std::cout << "Step " << (i + 1) << "/" << steps
+							<< ": Set=" << targetVoltage << "V"
+							<< ", Meas=" << *voltage << "V, " << *current << "A" << std::endl;
+					}
+				}
+				else {
+					std::cerr << "SPD Voltage Sweep: Failed to read measurements at step " << i << std::endl;
+					return false;
+				}
+			}
+
+			if (m_debugverbose) {
+				std::cout << "SPD Voltage Sweep completed successfully with "
+					<< results.size() << " points" << std::endl;
+			}
+
+			return true;
+
+		}
+		catch (const std::exception& e) {
+			std::cerr << "SPD Voltage Sweep: Exception - " << e.what() << std::endl;
+			setOutput(channel, false); // Safety disable
+			return false;
+		}
+	}
+
+	bool SPDPowerSupply::currentSweep(int channel, double startA, double stopA, int steps,
+		double voltageLimit, double delayMs,
+		std::vector<SPDSweepResult>& results) {
+		if (m_debugverbose) {
+			std::cout << "SPD Current Sweep: " << startA << "A to " << stopA << "A, "
+				<< steps << " steps, " << voltageLimit << "V limit" << std::endl;
+		}
+
+		// Validate inputs
+		if (!validateChannel(channel)) {
+			std::cerr << "SPD Current Sweep: Invalid channel " << channel << std::endl;
+			return false;
+		}
+
+		if (steps < 2) {
+			std::cerr << "SPD Current Sweep: Need at least 2 steps" << std::endl;
+			return false;
+		}
+
+		if (delayMs < 0) {
+			std::cerr << "SPD Current Sweep: Delay must be >= 0" << std::endl;
+			return false;
+		}
+
+		try {
+			results.clear();
+			results.reserve(steps);
+
+			// Set voltage limit first
+			if (!setVoltage(channel, voltageLimit)) {
+				std::cerr << "SPD Current Sweep: Failed to set voltage limit" << std::endl;
+				return false;
+			}
+
+			// Calculate current step size
+			double stepSize = (stopA - startA) / (steps - 1);
+
+			// Perform sweep
+			for (int i = 0; i < steps; ++i) {
+				double targetCurrent = startA + (stepSize * i);
+
+				// Set current for this step
+				if (!setCurrent(channel, targetCurrent)) {
+					std::cerr << "SPD Current Sweep: Failed to set current at step " << i << std::endl;
+					return false;
+				}
+
+				// Enable output if not already enabled
+				if (!setOutput(channel, true)) {
+					std::cerr << "SPD Current Sweep: Failed to enable output at step " << i << std::endl;
+					return false;
+				}
+
+				// Wait for settling if delay specified
+				if (delayMs > 0) {
+					std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(delayMs)));
+				}
+
+				// Take measurements
+				auto voltage = getVoltage(channel);
+				auto current = getCurrent(channel);
+				auto timestamp = std::chrono::steady_clock::now();
+
+				if (voltage && current) {
+					SPDSweepResult result;
+					result.setValue = targetCurrent;
+					result.measuredVoltage = *voltage;
+					result.measuredCurrent = *current;
+					result.timestamp = timestamp;
+					results.push_back(result);
+
+					if (m_debugverbose) {
+						std::cout << "Step " << (i + 1) << "/" << steps
+							<< ": Set=" << targetCurrent << "A"
+							<< ", Meas=" << *voltage << "V, " << *current << "A" << std::endl;
+					}
+				}
+				else {
+					std::cerr << "SPD Current Sweep: Failed to read measurements at step " << i << std::endl;
+					return false;
+				}
+			}
+
+			if (m_debugverbose) {
+				std::cout << "SPD Current Sweep completed successfully with "
+					<< results.size() << " points" << std::endl;
+			}
+
+			return true;
+
+		}
+		catch (const std::exception& e) {
+			std::cerr << "SPD Current Sweep: Exception - " << e.what() << std::endl;
+			setOutput(channel, false); // Safety disable
+			return false;
+		}
+	}
+
+
+
 	// SafeOutputControl implementation
 	SafeOutputControl::SafeOutputControl(SPDPowerSupply& ps, int channel, double voltage, double current)
 		: power_supply_(ps), channel_(channel), output_enabled_(false) {

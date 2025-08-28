@@ -755,60 +755,33 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
 
 
   void SPDPowerSupplyManager::PollingThreadFunction() {
-    LogMessage("INFO", "=== POLLING THREAD STARTED ===");
+    LogMessage("INFO", "Polling thread started");
     int iterationCount = 0;
 
     while (m_pollingActive.load()) {
       iterationCount++;
-
       try {
-        LogMessage("INFO", "Polling iteration #" + std::to_string(iterationCount));
-
-        // Check if callback is set
-        bool hasCallback = (m_statusUpdateCallback != nullptr);
-        LogMessage("INFO", "Callback status: " + std::string(hasCallback ? "SET" : "NOT SET"));
-
-        // Get current statuses and notify callbacks
         auto statuses = GetAllStatuses();
-        LogMessage("INFO", "Retrieved " + std::to_string(statuses.size()) + " device statuses");
-
-        // Debug: Log each status
-        for (const auto& pair : statuses) {
-          LogMessage("INFO", "Device " + pair.first + " status: " + pair.second);
-        }
 
         if (m_statusUpdateCallback) {
-          LogMessage("INFO", "Calling callback for each device...");
           for (const auto& pair : statuses) {
-            LogMessage("INFO", "Calling callback for device: " + pair.first);
-            std::cout << "[POLLING THREAD] About to call callback for: " << pair.first << std::endl;
-
-            // Call the callback
             m_statusUpdateCallback(pair.first, pair.second);
-
-            std::cout << "[POLLING THREAD] Callback called successfully for: " << pair.first << std::endl;
           }
-          LogMessage("INFO", "All callbacks completed");
         }
         else {
-          LogMessage("ERROR", "*** NO CALLBACK SET - THIS IS THE PROBLEM! ***");
+          LogMessage("ERROR", "No callback set - iteration #" + std::to_string(iterationCount));
         }
 
-        // Sleep for the polling interval
-        int interval = m_pollingInterval.load();
-        LogMessage("INFO", "Sleeping for " + std::to_string(interval) + "ms");
-        std::this_thread::sleep_for(std::chrono::milliseconds(interval));
-
+        std::this_thread::sleep_for(std::chrono::milliseconds(m_pollingInterval.load()));
       }
       catch (const std::exception& e) {
-        LogMessage("ERROR", "Exception in polling thread: " + std::string(e.what()));
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));  // Fallback delay
+        LogMessage("ERROR", "Polling exception: " + std::string(e.what()));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
       }
     }
 
-    LogMessage("INFO", "=== POLLING THREAD ENDED ===");
+    LogMessage("INFO", "Polling thread ended");
   }
-
 
 
   // Add this helper method
@@ -1185,4 +1158,168 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
     }
 
     return ids;
+  }
+
+  // Add these to SPDPowerSupplyManager.cpp
+
+// === Sweep Operations Implementation ===
+
+  bool SPDPowerSupplyManager::PerformVoltageSweep(const std::string& deviceName, int channel,
+    double startV, double stopV, int steps,
+    double currentLimit, double delayMs,
+    std::vector<SPDSweepResult>& results) {
+    LogMessage("INFO", "Starting voltage sweep on device '" + deviceName + "' from " +
+      std::to_string(startV) + "V to " + std::to_string(stopV) + "V");
+
+    // Get device
+    SPDPowerSupply* device = GetDevice(deviceName);
+    if (!device) {
+      SetError("Device '" + deviceName + "' not found for voltage sweep");
+      return false;
+    }
+
+    // Check if connected
+    if (!device->isConnected()) {
+      SetError("Device '" + deviceName + "' is not connected for voltage sweep");
+      return false;
+    }
+
+    // Perform sweep using device's method
+    bool success = device->voltageSweep(channel, startV, stopV, steps, currentLimit, delayMs, results);
+
+    if (success) {
+      LogMessage("INFO", "Voltage sweep completed successfully on '" + deviceName + "' with " +
+        std::to_string(results.size()) + " data points");
+    }
+    else {
+      SetError("Voltage sweep failed on device '" + deviceName + "'");
+    }
+
+    return success;
+  }
+
+  bool SPDPowerSupplyManager::PerformCurrentSweep(const std::string& deviceName, int channel,
+    double startA, double stopA, int steps,
+    double voltageLimit, double delayMs,
+    std::vector<SPDSweepResult>& results) {
+    LogMessage("INFO", "Starting current sweep on device '" + deviceName + "' from " +
+      std::to_string(startA) + "A to " + std::to_string(stopA) + "A");
+
+    // Get device
+    SPDPowerSupply* device = GetDevice(deviceName);
+    if (!device) {
+      SetError("Device '" + deviceName + "' not found for current sweep");
+      return false;
+    }
+
+    // Check if connected
+    if (!device->isConnected()) {
+      SetError("Device '" + deviceName + "' is not connected for current sweep");
+      return false;
+    }
+
+    // Perform sweep using device's method
+    bool success = device->currentSweep(channel, startA, stopA, steps, voltageLimit, delayMs, results);
+
+    if (success) {
+      LogMessage("INFO", "Current sweep completed successfully on '" + deviceName + "' with " +
+        std::to_string(results.size()) + " data points");
+    }
+    else {
+      SetError("Current sweep failed on device '" + deviceName + "'");
+    }
+
+    return success;
+  }
+
+  int SPDPowerSupplyManager::PerformVoltageSweepAll(int channel, double startV, double stopV, int steps,
+    double currentLimit, double delayMs,
+    std::unordered_map<std::string, std::vector<SPDSweepResult>>& allResults) {
+    LogMessage("INFO", "Starting voltage sweep on all connected devices from " +
+      std::to_string(startV) + "V to " + std::to_string(stopV) + "V");
+
+    std::lock_guard<std::mutex> lock(m_devicesMutex);
+
+    allResults.clear();
+    int successCount = 0;
+
+    // Iterate through all devices
+    for (const auto& pair : m_devices) {
+      const std::string& deviceName = pair.first;
+      const auto& deviceInfo = pair.second;
+
+      // Skip if not connected
+      if (!deviceInfo->device || !deviceInfo->device->isConnected()) {
+        LogMessage("WARNING", "Skipping voltage sweep on '" + deviceName + "' - not connected");
+        continue;
+      }
+
+      // Perform sweep on this device
+      std::vector<SPDSweepResult> deviceResults;
+      bool success = deviceInfo->device->voltageSweep(channel, startV, stopV, steps,
+        currentLimit, delayMs, deviceResults);
+
+      if (success) {
+        allResults[deviceName] = std::move(deviceResults);
+        successCount++;
+        LogMessage("INFO", "Voltage sweep succeeded on '" + deviceName + "' with " +
+          std::to_string(allResults[deviceName].size()) + " points");
+      }
+      else {
+        LogMessage("ERROR", "Voltage sweep failed on '" + deviceName + "'");
+        // Add empty results vector to indicate this device was attempted
+        allResults[deviceName] = std::vector<SPDSweepResult>();
+      }
+    }
+
+    LogMessage("INFO", "Voltage sweep completed on " + std::to_string(successCount) +
+      " out of " + std::to_string(m_devices.size()) + " devices");
+
+    return successCount;
+  }
+
+  int SPDPowerSupplyManager::PerformCurrentSweepAll(int channel, double startA, double stopA, int steps,
+    double voltageLimit, double delayMs,
+    std::unordered_map<std::string, std::vector<SPDSweepResult>>& allResults) {
+    LogMessage("INFO", "Starting current sweep on all connected devices from " +
+      std::to_string(startA) + "A to " + std::to_string(stopA) + "A");
+
+    std::lock_guard<std::mutex> lock(m_devicesMutex);
+
+    allResults.clear();
+    int successCount = 0;
+
+    // Iterate through all devices
+    for (const auto& pair : m_devices) {
+      const std::string& deviceName = pair.first;
+      const auto& deviceInfo = pair.second;
+
+      // Skip if not connected
+      if (!deviceInfo->device || !deviceInfo->device->isConnected()) {
+        LogMessage("WARNING", "Skipping current sweep on '" + deviceName + "' - not connected");
+        continue;
+      }
+
+      // Perform sweep on this device
+      std::vector<SPDSweepResult> deviceResults;
+      bool success = deviceInfo->device->currentSweep(channel, startA, stopA, steps,
+        voltageLimit, delayMs, deviceResults);
+
+      if (success) {
+        allResults[deviceName] = std::move(deviceResults);
+        successCount++;
+        LogMessage("INFO", "Current sweep succeeded on '" + deviceName + "' with " +
+          std::to_string(allResults[deviceName].size()) + " points");
+      }
+      else {
+        LogMessage("ERROR", "Current sweep failed on '" + deviceName + "'");
+        // Add empty results vector to indicate this device was attempted
+        allResults[deviceName] = std::vector<SPDSweepResult>();
+      }
+    }
+
+    LogMessage("INFO", "Current sweep completed on " + std::to_string(successCount) +
+      " out of " + std::to_string(m_devices.size()) + " devices");
+
+    return successCount;
   }

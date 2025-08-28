@@ -825,8 +825,37 @@ void MainUIManager::RenderMainPage() {
 	ImGui::Text("All systems operational. You can use the Config Editor to manage motion settings");
 	ImGui::Text("and the Node Visualizer to view and edit motion graphs interactively.");
 
-	// Add this to any render method in MainUIManager (like RenderMainPage)
+	// Add this to your MainUIManager render method (like RenderMainPage)
 	ImGuiIO& io = ImGui::GetIO();
+
+	ImGui::Text("=== FONT SIZE CONTROLS ===");
+
+	// High res button - scale up font
+	if (ImGui::Button("High Res (1.5x)")) {
+		io.FontGlobalScale = 1.8f;  // Scale up existing font
+	}
+	ImGui::SameLine();
+
+	// Normal res button - default scale
+	if (ImGui::Button("Normal (1.0x)")) {
+		io.FontGlobalScale = 1.0f;  // Default scale
+	}
+	ImGui::SameLine();
+
+	// Low res button - scale down font
+	if (ImGui::Button("Low Res (0.75x)")) {
+		io.FontGlobalScale = 0.65f;  // Scale down existing font
+	}
+
+	// Show current scaling info
+	ImGui::Text("Font global scale: %.2fx", io.FontGlobalScale);
+	ImGui::Text("Current DPI: %.0f x %.0f",
+		96.0f * io.DisplayFramebufferScale.x,
+		96.0f * io.DisplayFramebufferScale.y);
+
+
+
+
 	// In any MainUIManager render method
 	ImFont* currentFont = ImGui::GetFont();
 	if (currentFont) {
@@ -851,6 +880,20 @@ void MainUIManager::RenderMainPage() {
 		// Calculate what the actual rendered size should be
 		float actualSize = currentFont->FontSize * io.FontGlobalScale * currentFont->Scale;
 		ImGui::Text("Calculated actual size: %.1f", actualSize);
+	}
+
+
+	ImGui::Text("=== RESOLUTION DEBUG ===");
+	ImGui::Text("Display size: %.0fx%.0f", io.DisplaySize.x, io.DisplaySize.y);
+	ImGui::Text("Framebuffer size: %.0fx%.0f",
+		io.DisplaySize.x * io.DisplayFramebufferScale.x,
+		io.DisplaySize.y * io.DisplayFramebufferScale.y);
+	// Calculate DPI from framebuffer scale (assuming 96 base DPI)
+	float dpiX = 96.0f * io.DisplayFramebufferScale.x;
+	float dpiY = 96.0f * io.DisplayFramebufferScale.y;
+	ImGui::Text("Estimated DPI: %.0f x %.0f", dpiX, dpiY);
+	if (io.DisplayFramebufferScale.x != 1.0f || io.DisplayFramebufferScale.y != 1.0f) {
+		ImGui::Text("High DPI detected: %.0f%% scaling", io.DisplayFramebufferScale.x * 100.0f);
 	}
 }
 

@@ -11,6 +11,15 @@
 
 namespace PowerSupply {
 
+/**
+ * @brief Structure to hold sweep measurement results
+ */
+  struct SPDSweepResult {
+    double setValue;           // What we set (voltage or current)
+    double measuredVoltage;    // Measured voltage (V)
+    double measuredCurrent;    // Measured current (A)
+    std::chrono::steady_clock::time_point timestamp;
+  };
   /**
    * @brief Structure to hold channel status information
    */
@@ -197,6 +206,40 @@ namespace PowerSupply {
      */
     static std::vector<std::string> scanAvailableResources();
     bool SetDebug(bool debugmode);
+
+
+
+    /**
+     * @brief Perform voltage sweep in CV mode
+     * @param channel Channel number (typically 1)
+     * @param startV Starting voltage (V)
+     * @param stopV Ending voltage (V)
+     * @param steps Number of steps in sweep
+     * @param currentLimit Current limit/compliance (A)
+     * @param delayMs Delay between steps (ms)
+     * @param results Vector to store sweep results
+     * @return true if sweep successful, false otherwise
+     */
+    bool voltageSweep(int channel, double startV, double stopV, int steps,
+      double currentLimit, double delayMs,
+      std::vector<SPDSweepResult>& results);
+
+    /**
+     * @brief Perform current sweep in CC mode
+     * @param channel Channel number (typically 1)
+     * @param startA Starting current (A)
+     * @param stopA Ending current (A)
+     * @param steps Number of steps in sweep
+     * @param voltageLimit Voltage limit/compliance (V)
+     * @param delayMs Delay between steps (ms)
+     * @param results Vector to store sweep results
+     * @return true if sweep successful, false otherwise
+     */
+    bool currentSweep(int channel, double startA, double stopA, int steps,
+      double voltageLimit, double delayMs,
+      std::vector<SPDSweepResult>& results);
+
+
   private:
     std::string resource_string_;
     std::atomic<bool> is_connected_;  // Change from: bool is_connected_;
