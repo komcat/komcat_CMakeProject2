@@ -274,7 +274,7 @@ void UIPneumaticPanel::UpdateStateTimestamp(const std::string& slideName, SlideS
 
   // If this is the first time we see this slide, or state has changed
   if (lastStateIt == m_lastKnownState.end() || lastStateIt->second != currentState) {
-    float currentTime = ImGui::GetTime();
+    float currentTime = static_cast<float>(ImGui::GetTime());
 
     // If we were moving and now we're not, calculate the movement duration
     if (lastStateIt != m_lastKnownState.end() &&
@@ -296,7 +296,7 @@ void UIPneumaticPanel::UpdateStateTimestamp(const std::string& slideName, SlideS
 float UIPneumaticPanel::GetElapsedTime(const std::string& slideName) const {
   auto timestampIt = m_stateChangeTimestamp.find(slideName);
   if (timestampIt != m_stateChangeTimestamp.end()) {
-    return ImGui::GetTime() - timestampIt->second;
+    return static_cast<float>(ImGui::GetTime()) - timestampIt->second;
   }
   return 0.0f;
 }

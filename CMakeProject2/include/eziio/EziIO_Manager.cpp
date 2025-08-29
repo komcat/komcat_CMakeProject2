@@ -50,7 +50,11 @@ EziIODevice::EziIODevice(int id, const std::string& name, const std::string& ip,
   m_lastLatch(0),
   m_lastOutputs(0),
   m_lastOutputStatus(0),
-  m_statusUpdated(false)
+  m_statusUpdated(false),
+  m_changeDetectionEnabled(true),  // Enable by default
+  m_previousInputs(0),
+  m_previousOutputs(0),
+  m_firstRead(true)
 {
   // Parse IP address string into bytes
   std::istringstream iss(ip);
@@ -91,6 +95,7 @@ bool EziIODevice::connect() {
 
   if (PE::FAS_ConnectTCP(m_ipBytes[0], m_ipBytes[1], m_ipBytes[2], m_ipBytes[3], m_deviceId)) {
     m_isConnected = true;
+    m_firstRead = true;  // Reset first read flag on new connection
     std::cout << "✓ Connected successfully!" << std::endl;
     return true;
   }
@@ -100,7 +105,6 @@ bool EziIODevice::connect() {
     return false;
   }
 }
-
 
 bool EziIODevice::disconnect() {
   if (!m_isConnected) {
@@ -138,6 +142,11 @@ bool EziIODevice::readInputs(uint32_t& inputs, uint32_t& latch) {
       m_lastInputs = inputs;
       m_lastLatch = latch;
       m_statusUpdated = true;
+    }
+
+    // Check for changes and notify observers if enabled
+    if (m_changeDetectionEnabled) {
+      checkAndNotifyInputChanges(inputs);
     }
 
     return true;
@@ -197,6 +206,11 @@ bool EziIODevice::getOutputs(uint32_t& outputs, uint32_t& status) {
       m_lastOutputStatus = status;
     }
 
+    // Check for changes and notify observers if enabled
+    if (m_changeDetectionEnabled) {
+      checkAndNotifyOutputChanges(outputs);
+    }
+
     return true;
   }
   else {
@@ -216,6 +230,12 @@ bool EziIODevice::setOutputs(uint32_t setMask, uint32_t clearMask) {
   if (!m_isConnected) {
     std::cerr << "Device " << m_name << " not connected" << std::endl;
     return false;
+  }
+
+  // Get current state before change for notification
+  uint32_t previousOutputs = 0, previousStatus = 0;
+  if (m_changeDetectionEnabled) {
+    getLastOutputStatus(previousOutputs, previousStatus);
   }
 
   // Convert to unsigned long for the API call
@@ -243,6 +263,9 @@ bool EziIODevice::setOutputs(uint32_t setMask, uint32_t clearMask) {
   }
 }
 
+
+
+// Alternative fix: Ensure the device reads back its state after setting
 bool EziIODevice::setOutput(int outputPin, bool state) {
   if (!m_isConnected || outputPin < 0 || outputPin >= m_outputCount) {
     std::cerr << "Invalid output pin or not connected" << std::endl;
@@ -254,14 +277,90 @@ bool EziIODevice::setOutput(int outputPin, bool state) {
   std::cout << "Setting output pin " << outputPin << " to " << (state ? "ON" : "OFF")
     << " with mask 0x" << std::hex << mask << std::dec << std::endl;
 
+  bool result;
   if (state) {
-    // Set the output pin (don't clear any)
-    return setOutputs(mask, 0);
+    result = setOutputs(mask, 0);
   }
   else {
-    // Clear the output pin (don't set any)
-    return setOutputs(0, mask);
+    result = setOutputs(0, mask);
   }
+
+  // IMPORTANT: Force an immediate read-back to update cached state
+  if (result) {
+    uint32_t outputs = 0, status = 0;
+    getOutputs(outputs, status);  // This will trigger observer notifications
+  }
+
+  return result;
+}
+
+
+// New observer pattern helper methods
+void EziIODevice::checkAndNotifyInputChanges(uint32_t newInputs) {
+  if (m_firstRead) {
+    m_previousInputs = newInputs;
+    m_firstRead = false;
+    return;
+  }
+
+  // Check each input pin for changes
+  for (int pin = 0; pin < m_inputCount; ++pin) {
+    bool previousState = (m_previousInputs & (1U << pin)) != 0;
+    bool newState = (newInputs & (1U << pin)) != 0;
+
+    if (previousState != newState) {
+      PinChangeEvent event;
+      event.deviceName = m_name;
+      event.deviceId = m_deviceId;
+      event.pinNumber = pin;
+      event.isInput = true;
+      event.newState = newState;
+      event.previousState = previousState;
+      event.timestamp = getCurrentTimestamp();
+
+      notifyPinChange(event);
+    }
+  }
+
+  m_previousInputs = newInputs;
+}
+
+void EziIODevice::checkAndNotifyOutputChanges(uint32_t newOutputs) {
+  // Don't check on first read to avoid false notifications
+  if (m_firstRead) {
+    m_previousOutputs = newOutputs;
+    return;
+  }
+
+  // Check each output pin for changes
+  for (int pin = 0; pin < m_outputCount; ++pin) {
+    uint32_t mask = (1U << pin);
+    bool previousState = (m_previousOutputs & mask) != 0;
+    bool newState = (newOutputs & mask) != 0;
+
+    if (previousState != newState) {
+      PinChangeEvent event;
+      event.deviceName = m_name;
+      event.deviceId = m_deviceId;
+      event.pinNumber = pin;
+      event.isInput = false;
+      event.newState = newState;
+      event.previousState = previousState;
+      event.timestamp = getCurrentTimestamp();
+
+      notifyPinChange(event);
+    }
+  }
+
+  m_previousOutputs = newOutputs;
+}
+
+uint32_t EziIODevice::getCurrentTimestamp() const {
+  auto now = std::chrono::steady_clock::now();
+  auto duration = now.time_since_epoch();
+  return static_cast<uint32_t>(
+    std::chrono::duration_cast<std::chrono::milliseconds>(duration).count()
+    );
 }
 
 // EziIOManager Implementation
@@ -585,6 +684,7 @@ void EziIOManager::pollingThreadFunc() {
         uint32_t inputs = 0, latch = 0;
         uint32_t outputs = 0, status = 0;
 
+        // These calls will automatically trigger notifications if changes detected
         device->readInputs(inputs, latch);
         device->getOutputs(outputs, status);
       }
@@ -606,7 +706,39 @@ void EziIOManager::pollingThreadFunc() {
   std::cout << "Polling thread stopped" << std::endl;
 }
 
-
 bool EziIOManager::isPolling() const {
   return m_pollingThread != nullptr && !m_stopPolling;
+}
+
+// Observer pattern methods for manager
+void EziIOManager::subscribeToDevice(int deviceId, std::shared_ptr<IEziIOObserver> observer) {
+  auto device = getDevice(deviceId);
+  if (device) {
+    device->subscribe(observer);
+  }
+}
+
+void EziIOManager::subscribeCallbackToDevice(int deviceId, std::function<void(const PinChangeEvent&)> callback) {
+  auto device = getDevice(deviceId);
+  if (device) {
+    device->subscribeCallback(callback);
+  }
+}
+
+void EziIOManager::subscribeToAllDevices(std::shared_ptr<IEziIOObserver> observer) {
+  for (auto& device : m_devices) {
+    device->subscribe(observer);
+  }
+}
+
+void EziIOManager::subscribeCallbackToAllDevices(std::function<void(const PinChangeEvent&)> callback) {
+  for (auto& device : m_devices) {
+    device->subscribeCallback(callback);
+  }
+}
+
+void EziIOManager::setChangeDetectionEnabled(bool enabled) {
+  for (auto& device : m_devices) {
+    device->setChangeDetectionEnabled(enabled);
+  }
 }

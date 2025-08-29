@@ -24,7 +24,7 @@
 #include <map>
 
 // Include ACS controller library
-#include "include/ACSC.h"
+#include "include/ACSC_wrapper.h"
 
 class ACSController {
 public:

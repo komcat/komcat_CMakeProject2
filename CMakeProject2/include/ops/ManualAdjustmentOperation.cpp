@@ -341,9 +341,9 @@ void ManualAdjustmentOperation::RenderImGui() {
 
     ImGui::Spacing();
     ImGui::Text("Enabled Axes:");
-    if (m_enableX) ImGui::Text("  ✓ X-axis");
-    if (m_enableY) ImGui::Text("  ✓ Y-axis");
-    if (m_enableZ) ImGui::Text("  ✓ Z-axis");
+    if (m_enableX) ImGui::Text(reinterpret_cast<const char*>(u8"  ✓ X-axis"));
+    if (m_enableY) ImGui::Text(reinterpret_cast<const char*>(u8"  ✓ Y-axis"));
+    if (m_enableZ) ImGui::Text(reinterpret_cast<const char*>(u8"  ✓ Z-axis"));
 
     ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f),
       "Note: Use external jog controls or keyboard to adjust position");
@@ -455,9 +455,9 @@ void ManualAdjustmentOperation::RenderPositionDisplay() {
   // Show delta from start
   ImGui::Text("Change from start:");
   ImGui::Indent();
-  ImGui::Text("ΔX: %.3f mm", m_currentX - m_startX);
-  ImGui::Text("ΔY: %.3f mm", m_currentY - m_startY);
-  ImGui::Text("ΔZ: %.3f mm", m_currentZ - m_startZ);
+  ImGui::Text(reinterpret_cast<const char*>(u8"ΔX: %.3f mm"), m_currentX - m_startX);
+  ImGui::Text(reinterpret_cast<const char*>(u8"ΔY: %.3f mm"), m_currentY - m_startY);
+  ImGui::Text(reinterpret_cast<const char*>(u8"ΔZ: %.3f mm"), m_currentZ - m_startZ);
   ImGui::Unindent();
 }
 

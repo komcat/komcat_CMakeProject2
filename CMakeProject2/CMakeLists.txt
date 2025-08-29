@@ -699,7 +699,11 @@ add_executable(uaa3App
  "include/PowerSupply/SPD_Ops.cpp"
  "include/PowerSupply/SPDOperations.h"
  "include/PowerSupply/SPDOperations.cpp"
- "include/ACSC_wrapper.h")
+ "include/ACSC_wrapper.h"
+ "include/motions/MotionDataSubscriber.h"
+  "include/motions/MotionDataSubscriber.cpp"
+
+  "include/eziio/EziIO_Observer.h" "include/eziio/EziIO_Observer.cpp")
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
@@ -812,10 +816,14 @@ target_compile_definitions(uaa3App PRIVATE
 
 
 
-
+#compile warning suppression emoji
 if(MSVC)
     target_compile_options(uaa3App PRIVATE /wd4566)
 endif()
+
+
+
+
 
 # Copy DLLs for Windows
 if(WIN32)

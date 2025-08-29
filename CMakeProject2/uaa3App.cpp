@@ -511,6 +511,8 @@ if (io.Fonts->Build()) {
 		std::cout << "✗ RunPageUI not accessible - check setup" << std::endl;
 	}
 
+
+
 	// Connect watchdog to UI manager (if available)
 	if (hardware.configWatchdog) {
 		uiManager.SetConfigWatchdog(hardware.configWatchdog.get());

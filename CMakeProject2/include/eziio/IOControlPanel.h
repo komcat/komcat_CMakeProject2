@@ -1,5 +1,14 @@
 #pragma once
 
+// Prevent winsock conflicts before any includes
+#ifdef _WIN32
+#define _WINSOCKAPI_   // Prevent winsock.h
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
+
+
 #include "EziIO_Manager.h"
 #include "imgui.h"
 #include <string>
@@ -84,4 +93,5 @@ private:
 
   // Default configuration filename
   static const std::string DEFAULT_CONFIG_FILE;
+
 };

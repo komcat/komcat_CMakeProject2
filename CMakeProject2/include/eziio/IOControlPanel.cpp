@@ -223,8 +223,6 @@ void IOControlPanel::RenderUI() {
 
   ImGui::Separator();
 
-  // Render notifications
-  RenderNotifications();
 
   // Create table for the buttons
   if (m_compactMode) {
@@ -333,7 +331,10 @@ void IOControlPanel::RenderUI() {
       AddNotification("Failed to reload config", true);
     }
   }
+  ImGui::Separator();
 
+  // Render notifications
+  RenderNotifications();
   ImGui::End();
 }
 
