@@ -434,7 +434,32 @@ public:
   */
   int GetConnectedDeviceCount() const;
 
+  /**
+ * @brief Set output state for a specific device and channel
+ * @param deviceName Name of the device
+ * @param channel Channel number (typically 1)
+ * @param enable true to enable, false to disable
+ * @return true if successful
+ */
+  bool SetOutput(const std::string& deviceName, int channel, bool enable);
 
+  /**
+   * @brief Set CV mode on a specific device
+   * @param deviceName Name of the device
+   * @param voltage Target voltage in volts
+   * @param currentLimit Current limit in amps
+   * @return true if successful
+   */
+  bool SetConstantVoltageMode(const std::string& deviceName, double voltage, double currentLimit);
+
+  /**
+   * @brief Set CC mode on a specific device
+   * @param deviceName Name of the device
+   * @param current Target current in amps
+   * @param voltageLimit Voltage limit in volts
+   * @return true if successful
+   */
+  bool SetConstantCurrentMode(const std::string& deviceName, double current, double voltageLimit);
 
 private:
   // === Private Types ===

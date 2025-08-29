@@ -142,6 +142,80 @@ public:
     std::vector<SPDSweepResult>& results);
 
 
+  // === Device-Specific Operations ===
+
+/**
+ * @brief Read voltage and current from a specific device
+ * @param deviceName Name of the device to read from
+ * @param voltages Vector to store voltage readings
+ * @param currents Vector to store current readings
+ * @return true if readings successful
+ */
+  bool ReadCurrentAndVoltageFromDevice(const std::string& deviceName,
+    std::vector<double>& voltages,
+    std::vector<double>& currents);
+
+  /**
+   * @brief Enable/disable output on a specific device
+   * @param deviceName Name of the device
+   * @param enable true to enable, false to disable
+   * @return true if operation successful
+   */
+  bool SetDeviceOutputEnabled(const std::string& deviceName, bool enable);
+
+  /**
+   * @brief Set CV mode on a specific device
+   * @param deviceName Name of the device
+   * @param voltage Target voltage in volts
+   * @param currentLimit Current compliance/limit in amps
+   * @return true if operation successful
+   */
+  bool SetDeviceConstantVoltageMode(const std::string& deviceName,
+    double voltage, double currentLimit);
+
+  /**
+   * @brief Set CC mode on a specific device
+   * @param deviceName Name of the device
+   * @param current Target current in amps
+   * @param voltageLimit Voltage compliance/limit in volts
+   * @return true if operation successful
+   */
+  bool SetDeviceConstantCurrentMode(const std::string& deviceName,
+    double current, double voltageLimit);
+
+  /**
+   * @brief Perform voltage sweep on a specific device
+   * @param deviceName Name of the device
+   * @param startV Starting voltage
+   * @param stopV Ending voltage
+   * @param steps Number of steps
+   * @param currentLimit Current limit
+   * @param delayMs Delay between steps
+   * @param results Vector to store results
+   * @return true if successful
+   */
+  bool PerformDeviceVoltageSweep(const std::string& deviceName,
+    double startV, double stopV, int steps,
+    double currentLimit, double delayMs,
+    std::vector<SPDSweepResult>& results);
+
+  /**
+   * @brief Perform current sweep on a specific device
+   * @param deviceName Name of the device
+   * @param startA Starting current
+   * @param stopA Ending current
+   * @param steps Number of steps
+   * @param voltageLimit Voltage limit
+   * @param delayMs Delay between steps
+   * @param results Vector to store results
+   * @return true if successful
+   */
+  bool PerformDeviceCurrentSweep(const std::string& deviceName,
+    double startA, double stopA, int steps,
+    double voltageLimit, double delayMs,
+    std::vector<SPDSweepResult>& results);
+
+
 private:
   SPDPowerSupplyManager* m_spdManager;
   mutable std::string m_lastError;

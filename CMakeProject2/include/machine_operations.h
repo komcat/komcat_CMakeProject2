@@ -115,6 +115,16 @@ public:
 	std::vector<OperationResult> GetOperationsBySequence(const std::string& sequenceName, int limit = 50);
 	double GetSequenceSuccessRate(const std::string& sequenceName = "");
 
+	/**
+ * @brief Store a data value in the GlobalDataStore
+ * @param key Data key/channel name
+ * @param value Value to store
+ * @return true if successful
+ */
+	bool SetDataValue(const std::string& dataKey, double value,
+		const std::string& callerContext);
+
+
 
 	//update method with caller Context
 	//updated

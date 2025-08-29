@@ -1486,3 +1486,59 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
   int SPDPowerSupplyManager::GetConnectedDeviceCount() const {
     return GetConnectedCount(); // This method already exists as GetConnectedCount()
   }
+
+  bool SPDPowerSupplyManager::SetOutput(const std::string& deviceName, int channel, bool enable) {
+    LogMessage("INFO", std::string(enable ? "Enabling" : "Disabling") +
+      " output on device '" + deviceName + "' channel " + std::to_string(channel));
+
+    SPDPowerSupply* device = GetDevice(deviceName);
+    if (!device) {
+      SetError("Device '" + deviceName + "' not found for output control");
+      return false;
+    }
+
+    if (!device->isConnected()) {
+      SetError("Device '" + deviceName + "' is not connected");
+      return false;
+    }
+
+    return device->setOutput(channel, enable);
+  }
+
+  bool SPDPowerSupplyManager::SetConstantVoltageMode(const std::string& deviceName,
+    double voltage, double currentLimit) {
+    LogMessage("INFO", "Setting CV mode on device '" + deviceName + "': " +
+      std::to_string(voltage) + "V, " + std::to_string(currentLimit) + "A limit");
+
+    SPDPowerSupply* device = GetDevice(deviceName);
+    if (!device) {
+      SetError("Device '" + deviceName + "' not found for CV mode");
+      return false;
+    }
+
+    if (!device->isConnected()) {
+      SetError("Device '" + deviceName + "' is not connected");
+      return false;
+    }
+
+    return device->setConstantVoltageMode(1, voltage, currentLimit);
+  }
+
+  bool SPDPowerSupplyManager::SetConstantCurrentMode(const std::string& deviceName,
+    double current, double voltageLimit) {
+    LogMessage("INFO", "Setting CC mode on device '" + deviceName + "': " +
+      std::to_string(current) + "A, " + std::to_string(voltageLimit) + "V limit");
+
+    SPDPowerSupply* device = GetDevice(deviceName);
+    if (!device) {
+      SetError("Device '" + deviceName + "' not found for CC mode");
+      return false;
+    }
+
+    if (!device->isConnected()) {
+      SetError("Device '" + deviceName + "' is not connected");
+      return false;
+    }
+
+    return device->setConstantCurrentMode(1, current, voltageLimit);
+  }

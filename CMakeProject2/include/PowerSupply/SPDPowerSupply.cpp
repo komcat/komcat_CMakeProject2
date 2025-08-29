@@ -720,7 +720,77 @@ namespace PowerSupply {
 		}
 	}
 
+	bool SPDPowerSupply::setConstantVoltageMode(int channel, double voltage, double currentLimit) {
+		if (!validateChannel(channel)) {
+			std::cerr << "setConstantVoltageMode: Invalid channel " << channel << std::endl;
+			return false;
+		}
 
+		if (!isConnected()) {
+			std::cerr << "setConstantVoltageMode: Device not connected" << std::endl;
+			return false;
+		}
+
+		try {
+			// Set voltage
+			if (!setVoltage(channel, voltage)) {
+				std::cerr << "setConstantVoltageMode: Failed to set voltage" << std::endl;
+				return false;
+			}
+
+			// Set current limit
+			if (!setCurrent(channel, currentLimit)) {
+				std::cerr << "setConstantVoltageMode: Failed to set current limit" << std::endl;
+				return false;
+			}
+
+			if (m_debugverbose) {
+				std::cout << "SPD CV mode set: " << voltage << "V, " << currentLimit << "A limit" << std::endl;
+			}
+
+			return true;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "setConstantVoltageMode: Exception - " << e.what() << std::endl;
+			return false;
+		}
+	}
+
+	bool SPDPowerSupply::setConstantCurrentMode(int channel, double current, double voltageLimit) {
+		if (!validateChannel(channel)) {
+			std::cerr << "setConstantCurrentMode: Invalid channel " << channel << std::endl;
+			return false;
+		}
+
+		if (!isConnected()) {
+			std::cerr << "setConstantCurrentMode: Device not connected" << std::endl;
+			return false;
+		}
+
+		try {
+			// Set current
+			if (!setCurrent(channel, current)) {
+				std::cerr << "setConstantCurrentMode: Failed to set current" << std::endl;
+				return false;
+			}
+
+			// Set voltage limit
+			if (!setVoltage(channel, voltageLimit)) {
+				std::cerr << "setConstantCurrentMode: Failed to set voltage limit" << std::endl;
+				return false;
+			}
+
+			if (m_debugverbose) {
+				std::cout << "SPD CC mode set: " << current << "A, " << voltageLimit << "V limit" << std::endl;
+			}
+
+			return true;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "setConstantCurrentMode: Exception - " << e.what() << std::endl;
+			return false;
+		}
+	}
 
 	// SafeOutputControl implementation
 	SafeOutputControl::SafeOutputControl(SPDPowerSupply& ps, int channel, double voltage, double current)

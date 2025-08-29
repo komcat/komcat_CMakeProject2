@@ -305,3 +305,187 @@ bool SPD_Ops::PerformCurrentSweep(double startA, double stopA, int steps,
 
   return success;
 }
+
+
+bool SPD_Ops::ReadCurrentAndVoltageFromDevice(const std::string& deviceName,
+  std::vector<double>& voltages,
+  std::vector<double>& currents) {
+  voltages.clear();
+  currents.clear();
+
+  if (!m_spdManager) {
+    LogError("ReadCurrentAndVoltageFromDevice: SPD manager not available");
+    return false;
+  }
+
+  if (deviceName.empty()) {
+    LogError("ReadCurrentAndVoltageFromDevice: Device name is required");
+    return false;
+  }
+
+  try {
+    double voltage = 0.0, current = 0.0;
+
+    bool voltageOk = m_spdManager->ReadVoltage(deviceName, 1, voltage);
+    bool currentOk = m_spdManager->ReadCurrent(deviceName, 1, current);
+
+    if (voltageOk && currentOk) {
+      voltages.push_back(voltage);
+      currents.push_back(current);
+      LogInfo("ReadCurrentAndVoltageFromDevice: " + deviceName + " = " +
+        std::to_string(voltage) + "V, " + std::to_string(current) + "A");
+      return true;
+    }
+    else {
+      LogError("ReadCurrentAndVoltageFromDevice: Failed to read from " + deviceName);
+      return false;
+    }
+  }
+  catch (const std::exception& e) {
+    LogError("ReadCurrentAndVoltageFromDevice: Exception - " + std::string(e.what()));
+    return false;
+  }
+}
+
+bool SPD_Ops::SetDeviceOutputEnabled(const std::string& deviceName, bool enable) {
+  if (!m_spdManager) {
+    LogError("SetDeviceOutputEnabled: SPD manager not available");
+    return false;
+  }
+
+  if (deviceName.empty()) {
+    LogError("SetDeviceOutputEnabled: Device name is required");
+    return false;
+  }
+
+  try {
+    bool result = m_spdManager->SetOutput(deviceName, 1, enable);
+    if (result) {
+      LogInfo("SetDeviceOutputEnabled: " + std::string(enable ? "Enabled" : "Disabled") +
+        " output on " + deviceName);
+    }
+    else {
+      LogError("SetDeviceOutputEnabled: Failed to " +
+        std::string(enable ? "enable" : "disable") + " output on " + deviceName);
+    }
+    return result;
+  }
+  catch (const std::exception& e) {
+    LogError("SetDeviceOutputEnabled: Exception - " + std::string(e.what()));
+    return false;
+  }
+}
+
+bool SPD_Ops::SetDeviceConstantVoltageMode(const std::string& deviceName,
+  double voltage, double currentLimit) {
+  if (!m_spdManager) {
+    LogError("SetDeviceConstantVoltageMode: SPD manager not available");
+    return false;
+  }
+
+  if (deviceName.empty()) {
+    LogError("SetDeviceConstantVoltageMode: Device name is required");
+    return false;
+  }
+
+  try {
+    bool result = m_spdManager->SetConstantVoltageMode(deviceName, voltage, currentLimit);
+    if (result) {
+      LogInfo("SetDeviceConstantVoltageMode: Set CV mode on " + deviceName + " to " +
+        std::to_string(voltage) + "V with " + std::to_string(currentLimit) + "A limit");
+    }
+    else {
+      LogError("SetDeviceConstantVoltageMode: Failed to set CV mode on " + deviceName);
+    }
+    return result;
+  }
+  catch (const std::exception& e) {
+    LogError("SetDeviceConstantVoltageMode: Exception - " + std::string(e.what()));
+    return false;
+  }
+}
+
+bool SPD_Ops::SetDeviceConstantCurrentMode(const std::string& deviceName,
+  double current, double voltageLimit) {
+  if (!m_spdManager) {
+    LogError("SetDeviceConstantCurrentMode: SPD manager not available");
+    return false;
+  }
+
+  if (deviceName.empty()) {
+    LogError("SetDeviceConstantCurrentMode: Device name is required");
+    return false;
+  }
+
+  try {
+    bool result = m_spdManager->SetConstantCurrentMode(deviceName, current, voltageLimit);
+    if (result) {
+      LogInfo("SetDeviceConstantCurrentMode: Set CC mode on " + deviceName + " to " +
+        std::to_string(current) + "A with " + std::to_string(voltageLimit) + "V limit");
+    }
+    else {
+      LogError("SetDeviceConstantCurrentMode: Failed to set CC mode on " + deviceName);
+    }
+    return result;
+  }
+  catch (const std::exception& e) {
+    LogError("SetDeviceConstantCurrentMode: Exception - " + std::string(e.what()));
+    return false;
+  }
+}
+
+bool SPD_Ops::PerformDeviceVoltageSweep(const std::string& deviceName,
+  double startV, double stopV, int steps,
+  double currentLimit, double delayMs,
+  std::vector<SPDSweepResult>& results) {
+  if (!m_spdManager) {
+    LogError("PerformDeviceVoltageSweep: SPD manager not available");
+    return false;
+  }
+
+  if (deviceName.empty()) {
+    LogError("PerformDeviceVoltageSweep: Device name is required");
+    return false;
+  }
+
+  bool success = m_spdManager->PerformVoltageSweep(deviceName, 1,
+    startV, stopV, steps, currentLimit, delayMs, results);
+
+  if (success) {
+    LogInfo("PerformDeviceVoltageSweep: Completed " + std::to_string(results.size()) +
+      " points on " + deviceName);
+  }
+  else {
+    LogError("PerformDeviceVoltageSweep: Sweep failed on " + deviceName);
+  }
+
+  return success;
+}
+
+bool SPD_Ops::PerformDeviceCurrentSweep(const std::string& deviceName,
+  double startA, double stopA, int steps,
+  double voltageLimit, double delayMs,
+  std::vector<SPDSweepResult>& results) {
+  if (!m_spdManager) {
+    LogError("PerformDeviceCurrentSweep: SPD manager not available");
+    return false;
+  }
+
+  if (deviceName.empty()) {
+    LogError("PerformDeviceCurrentSweep: Device name is required");
+    return false;
+  }
+
+  bool success = m_spdManager->PerformCurrentSweep(deviceName, 1,
+    startA, stopA, steps, voltageLimit, delayMs, results);
+
+  if (success) {
+    LogInfo("PerformDeviceCurrentSweep: Completed " + std::to_string(results.size()) +
+      " points on " + deviceName);
+  }
+  else {
+    LogError("PerformDeviceCurrentSweep: Sweep failed on " + deviceName);
+  }
+
+  return success;
+}

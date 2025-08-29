@@ -4,7 +4,6 @@
 #include "SPD_Ops.h"
 #include <memory>
 #include <vector>
-
 /**
  * @brief Read current and voltage measurements from SPD power supplies
  */
@@ -12,11 +11,14 @@ class SPD_ReadCurrentVoltageOperation : public SequenceOperation {
 public:
   /**
    * @brief Constructor
+   * @param deviceName Name of SPD device to read from (empty = first available)
    * @param storeResults If true, store results in operation tracking system
    * @param label Optional label for identification
    */
-  SPD_ReadCurrentVoltageOperation(bool storeResults = true, const std::string& label = "")
-    : m_storeResults(storeResults), m_label(label) {
+  SPD_ReadCurrentVoltageOperation(const std::string& deviceName = "",
+    bool storeResults = true,
+    const std::string& label = "")
+    : m_deviceName(deviceName), m_storeResults(storeResults), m_label(label) {
   }
 
   bool Execute(MachineOperations& ops) override;
@@ -27,6 +29,7 @@ public:
   const std::vector<double>& GetCurrents() const { return m_currents; }
 
 private:
+  std::string m_deviceName;  // NEW
   bool m_storeResults;
   std::string m_label;
   std::vector<double> m_voltages;
@@ -41,10 +44,11 @@ public:
   /**
    * @brief Constructor
    * @param enable true to enable outputs, false to disable
+   * @param deviceName Name of SPD device (empty = all devices)
    * @param delayMs Optional delay after operation (ms)
    */
-  SPD_EnablePowerOperation(bool enable, int delayMs = 500)
-    : m_enable(enable), m_delayMs(delayMs) {
+  SPD_EnablePowerOperation(bool enable, const std::string& deviceName = "", int delayMs = 500)
+    : m_enable(enable), m_deviceName(deviceName), m_delayMs(delayMs) {
   }
 
   bool Execute(MachineOperations& ops) override;
@@ -52,6 +56,7 @@ public:
 
 private:
   bool m_enable;
+  std::string m_deviceName;  // NEW
   int m_delayMs;
 };
 
@@ -64,10 +69,13 @@ public:
    * @brief Constructor
    * @param voltage Target voltage in volts
    * @param currentLimit Current compliance/limit in amps
+   * @param deviceName Name of SPD device (empty = all devices)
    * @param label Optional label for identification
    */
-  SPD_SetConstantVoltageOperation(double voltage, double currentLimit, const std::string& label = "")
-    : m_voltage(voltage), m_currentLimit(currentLimit), m_label(label) {
+  SPD_SetConstantVoltageOperation(double voltage, double currentLimit,
+    const std::string& deviceName = "",
+    const std::string& label = "")
+    : m_voltage(voltage), m_currentLimit(currentLimit), m_deviceName(deviceName), m_label(label) {
   }
 
   bool Execute(MachineOperations& ops) override;
@@ -76,10 +84,12 @@ public:
   // Getters for parameters
   double GetVoltage() const { return m_voltage; }
   double GetCurrentLimit() const { return m_currentLimit; }
+  const std::string& GetDeviceName() const { return m_deviceName; }
 
 private:
   double m_voltage;
   double m_currentLimit;
+  std::string m_deviceName;  // NEW
   std::string m_label;
 };
 
@@ -92,10 +102,13 @@ public:
    * @brief Constructor
    * @param current Target current in amps
    * @param voltageLimit Voltage compliance/limit in volts
+   * @param deviceName Name of SPD device (empty = all devices)
    * @param label Optional label for identification
    */
-  SPD_SetConstantCurrentOperation(double current, double voltageLimit, const std::string& label = "")
-    : m_current(current), m_voltageLimit(voltageLimit), m_label(label) {
+  SPD_SetConstantCurrentOperation(double current, double voltageLimit,
+    const std::string& deviceName = "",
+    const std::string& label = "")
+    : m_current(current), m_voltageLimit(voltageLimit), m_deviceName(deviceName), m_label(label) {
   }
 
   bool Execute(MachineOperations& ops) override;
@@ -104,16 +117,14 @@ public:
   // Getters for parameters
   double GetCurrent() const { return m_current; }
   double GetVoltageLimit() const { return m_voltageLimit; }
-
-
-
+  const std::string& GetDeviceName() const { return m_deviceName; }
 
 private:
   double m_current;
   double m_voltageLimit;
+  std::string m_deviceName;  // NEW
   std::string m_label;
 };
-
 
 /**
  * @brief Perform voltage sweep on SPD power supply
@@ -121,10 +132,11 @@ private:
 class SPD_VoltageSweepOperation : public SequenceOperation {
 public:
   SPD_VoltageSweepOperation(double startV, double stopV, int steps,
-    double currentLimit, double delayMs = 100.0,
-    const std::string& label = "")
+    double currentLimit, const std::string& deviceName = "",
+    double delayMs = 100.0, const std::string& label = "")
     : m_startV(startV), m_stopV(stopV), m_steps(steps),
-    m_currentLimit(currentLimit), m_delayMs(delayMs), m_label(label) {
+    m_currentLimit(currentLimit), m_deviceName(deviceName),
+    m_delayMs(delayMs), m_label(label) {
   }
 
   bool Execute(MachineOperations& ops) override;
@@ -133,6 +145,7 @@ public:
 private:
   double m_startV, m_stopV, m_currentLimit, m_delayMs;
   int m_steps;
+  std::string m_deviceName;  // NEW
   std::string m_label;
 };
 
@@ -142,10 +155,11 @@ private:
 class SPD_CurrentSweepOperation : public SequenceOperation {
 public:
   SPD_CurrentSweepOperation(double startA, double stopA, int steps,
-    double voltageLimit, double delayMs = 100.0,
-    const std::string& label = "")
+    double voltageLimit, const std::string& deviceName = "",
+    double delayMs = 100.0, const std::string& label = "")
     : m_startA(startA), m_stopA(stopA), m_steps(steps),
-    m_voltageLimit(voltageLimit), m_delayMs(delayMs), m_label(label) {
+    m_voltageLimit(voltageLimit), m_deviceName(deviceName),
+    m_delayMs(delayMs), m_label(label) {
   }
 
   bool Execute(MachineOperations& ops) override;
@@ -154,35 +168,6 @@ public:
 private:
   double m_startA, m_stopA, m_voltageLimit, m_delayMs;
   int m_steps;
+  std::string m_deviceName;  // NEW
   std::string m_label;
 };
-
-
-// ============================================================================
-// Usage Examples
-// ============================================================================
-
-/*
-// Example 1: Enable power supplies
-sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(true, 1000)); // Enable with 1s delay
-
-// Example 2: Set CV mode - 3.3V with 0.5A current limit
-sequence->AddOperation(std::make_shared<SPD_SetConstantVoltageOperation>(3.3, 0.5, "3V3_Supply"));
-
-// Example 3: Read measurements and store results
-sequence->AddOperation(std::make_shared<SPD_ReadCurrentVoltageOperation>(true, "PowerCheck"));
-
-// Example 4: Set CC mode - 100mA with 10V voltage limit
-sequence->AddOperation(std::make_shared<SPD_SetConstantCurrentOperation>(0.1, 10.0, "100mA_Test"));
-
-// Example 5: Disable power supplies
-sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(false, 0)); // Disable immediately
-
-// Example 6: Complete power supply sequence
-sequence->AddOperation(std::make_shared<SPD_SetConstantVoltageOperation>(5.0, 1.0, "5V_Rail"));
-sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(true, 500));
-sequence->AddOperation(std::make_shared<SPD_ReadCurrentVoltageOperation>(true, "Initial_Check"));
-// ... do other operations ...
-sequence->AddOperation(std::make_shared<SPD_ReadCurrentVoltageOperation>(true, "Final_Check"));
-sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(false, 0));
-*/

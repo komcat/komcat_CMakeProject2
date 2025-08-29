@@ -237,9 +237,7 @@ namespace AuroraProcesses {
 
 
 
-  // ============================================================================
-  // SPD POWER SUPPLY TEST WITH SWEEPS
-  // ============================================================================
+
   std::unique_ptr<SequenceStep> BuildAuroraSPDTest(
     MachineOperations& machineOps,
     UserPromptUI& promptUI) {
@@ -253,77 +251,136 @@ namespace AuroraProcesses {
       "This will test:\n"
       "• CV mode: 3.3V with current limit\n"
       "• Voltage sweep: 0V to 3.3V (11 steps)\n"
-      "• CC mode: 0.1A with voltage limit\n"
-      "• Current sweep: 0A to 0.1A (11 steps)\n"
-      "• Output enable/disable\n\n"
+      "• CC mode: 0.3A with voltage limit\n"
+      "• Current sweep: 0A to 0.3A (11 steps)\n"
+      "• Output enable/disable\n"
+      "• DUT data recording\n\n"
       "Click Yes to start.",
       promptUI));
 
-    // 2. Test CV Mode - 3.3V
-    sequence->AddOperation(std::make_shared<SPD_SetConstantVoltageOperation>(
-      3.3, 0.5, "CV_3V3_Test"));
+    // 2. Get DUT serial number from user - always ask, no default
+    sequence->AddOperation(std::make_shared<UserInputOperation>(
+      "spd_dut_serial",
+      "Enter SPD DUT Serial Number",
+      "Please enter the DUT serial number for this test:",
+      promptUI,
+      "",  // No default - force user to enter
+      true,  // Required
+      300    // 5 minute timeout
+    ));
 
-    sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(true, 1000));
+    // 3. START DUT RECORDING
+    sequence->AddOperation(std::make_shared<UseStoredInputOperation>(
+      "spd_dut_serial",
+      [](MachineOperations& ops, const std::string& dutSerialNumber) {
+        auto startRecording = std::make_shared<DUTStartRecordingOperation>(dutSerialNumber);
+        return startRecording->Execute(ops);
+      }
+    ));
+
+    // 4. Test CV Mode - 3.3V
+    sequence->AddOperation(std::make_shared<SPD_SetConstantVoltageOperation>(
+      3.3, 0.3, "SPD1", "CV_3V3_Test"));
+
+    sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(
+      true, "SPD1", 1000));
 
     sequence->AddOperation(std::make_shared<SPD_ReadCurrentVoltageOperation>(
-      true, "CV_Mode_Reading"));
+      "SPD1", true, "CV_Mode_Reading"));
 
-    sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(false, 500));
+    // Record CV mode data to DUT
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SPD1-Voltage"));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SPD1-Current"));
 
-    // 3. Voltage sweep test
+    sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(
+      false, "SPD1", 500));
+
+    // 5. Voltage sweep test
     sequence->AddOperation(UserPromptOperation::CreateBasic(
       "Voltage Sweep Test",
       "CV mode test completed (3.3V).\n\n"
       "Next: Voltage sweep (0V to 3.3V, 11 steps)\n"
-      "Current limit: 0.5A, Step delay: 200ms\n\n"
+      "Current limit: 0.3A, Step delay: 200ms\n\n"
       "Click Yes to continue.",
       promptUI));
 
     sequence->AddOperation(std::make_shared<SPD_VoltageSweepOperation>(
-      0.0, 3.3, 11, 0.5, 200.0, "Voltage_Sweep_0_to_3V3"));
+      0.0, 3.3, 11, 0.3, "SPD1", 200.0, "Voltage_Sweep_0_to_3V3"));
 
-    // 4. CC Mode test
+    // Record post-sweep measurements
+    sequence->AddOperation(std::make_shared<SPD_ReadCurrentVoltageOperation>(
+      "SPD1", true, "Post_Voltage_Sweep"));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SPD1-Voltage"));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SPD1-Current"));
+
+    // 6. CC Mode test
     sequence->AddOperation(UserPromptOperation::CreateBasic(
       "CC Mode Test",
       "Voltage sweep completed!\n\n"
-      "Next: CC mode test (0.1A, 3.3V limit)\n"
+      "Next: CC mode test (0.3A, 3.3V limit)\n"
       "Click Yes to continue.",
       promptUI));
 
     sequence->AddOperation(std::make_shared<SPD_SetConstantCurrentOperation>(
-      0.1, 3.3, "CC_100mA_Test"));
+      0.3, 3.3, "SPD1", "CC_300mA_Test"));
 
-    sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(true, 1000));
+    sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(
+      true, "SPD1", 1000));
 
     sequence->AddOperation(std::make_shared<SPD_ReadCurrentVoltageOperation>(
-      true, "CC_Mode_Reading"));
+      "SPD1", true, "CC_Mode_Reading"));
 
-    sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(false, 500));
+    // Record CC mode data to DUT
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SPD1-Voltage"));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SPD1-Current"));
 
-    // 5. Current sweep test
+    sequence->AddOperation(std::make_shared<SPD_EnablePowerOperation>(
+      false, "SPD1", 500));
+
+    // 7. Current sweep test
     sequence->AddOperation(UserPromptOperation::CreateBasic(
       "Current Sweep Test",
       "CC mode test completed!\n\n"
-      "Next: Current sweep (0A to 0.1A, 11 steps)\n"
+      "Next: Current sweep (0A to 0.3A, 11 steps)\n"
       "Voltage limit: 3.3V, Step delay: 200ms\n\n"
       "Click Yes to continue.",
       promptUI));
 
     sequence->AddOperation(std::make_shared<SPD_CurrentSweepOperation>(
-      0.0, 0.1, 11, 3.3, 200.0, "Current_Sweep_0_to_100mA"));
+      0.0, 0.3, 11, 3.3, "SPD1", 200.0, "Current_Sweep_0_to_300mA"));
 
-    // 6. Final completion message
-    sequence->AddOperation(UserPromptOperation::CreateBasic(
-      "SPD Test Complete",
-      "SPD Power Supply test completed!\n\n"
-      "✓ CV mode: 3.3V test\n"
-      "✓ Voltage sweep: 0V to 3.3V (11 steps)\n"
-      "✓ CC mode: 0.1A test\n"
-      "✓ Current sweep: 0A to 0.1A (11 steps)\n"
-      "✓ All measurements recorded\n"
-      "✓ Outputs safely disabled\n\n"
-      "Check logs for measurement values.",
-      promptUI));
+    // Record post-current-sweep measurements
+    sequence->AddOperation(std::make_shared<SPD_ReadCurrentVoltageOperation>(
+      "SPD1", true, "Post_Current_Sweep"));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SPD1-Voltage"));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("SPD1-Current"));
+
+    // 8. END DUT RECORDING AND EXPORT DATA
+    sequence->AddOperation(std::make_shared<DUTEndRecordingOperation>(true, true));
+
+    // 9. Final completion message with serial number
+    sequence->AddOperation(std::make_shared<UseStoredInputOperation>(
+      "spd_dut_serial",
+      [&promptUI](MachineOperations& ops, const std::string& dutSerialNumber) {
+        auto completionPrompt = UserPromptOperation::CreateBasic(
+          "SPD Test Complete",
+          "SPD Power Supply test completed!\n\n"
+          "✓ CV mode: 3.3V test\n"
+          "✓ Voltage sweep: 0V to 3.3V (11 steps)\n"
+          "✓ CC mode: 0.3A test\n"
+          "✓ Current sweep: 0A to 0.3A (11 steps)\n"
+          "✓ All measurements recorded\n"
+          "✓ Outputs safely disabled\n"
+          "✓ DUT data saved to dut_saved/" + dutSerialNumber + "\n\n"
+          "Serial Number: " + dutSerialNumber + "\n"
+          "Check logs and saved data files.",
+          promptUI);
+        return completionPrompt->Execute(ops);
+      }
+    ));
+
+    // Clear the stored input at the end
+    sequence->AddOperation(std::make_shared<ClearUserInputOperation>("spd_dut_serial"));
 
     return sequence;
   }
