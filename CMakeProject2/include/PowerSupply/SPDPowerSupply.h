@@ -239,6 +239,23 @@ namespace PowerSupply {
       double voltageLimit, double delayMs,
       std::vector<SPDSweepResult>& results);
 
+    /**
+ * @brief Set constant voltage mode on specified channel
+ * @param channel Channel number (typically 1)
+ * @param voltage Target voltage in volts
+ * @param currentLimit Current compliance/limit in amps
+ * @return true if successful
+ */
+    bool setConstantVoltageMode(int channel, double voltage, double currentLimit);
+
+    /**
+     * @brief Set constant current mode on specified channel
+     * @param channel Channel number (typically 1)
+     * @param current Target current in amps
+     * @param voltageLimit Voltage compliance/limit in volts
+     * @return true if successful
+     */
+    bool setConstantCurrentMode(int channel, double current, double voltageLimit);
 
   private:
     std::string resource_string_;

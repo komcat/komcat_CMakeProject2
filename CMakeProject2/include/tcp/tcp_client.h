@@ -1,15 +1,13 @@
 #pragma once
 
-#include <string>
-#include <thread>
-#include <mutex>
-#include <atomic>
-#include <deque>
-#include <algorithm> // Add this line for std::min and std::max
-
+// === WINSOCK CONFLICT PREVENTION ===
 #ifdef _WIN32
-#include <WinSock2.h>
-#include <WS2tcpip.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
 #else
 #include <sys/socket.h>
@@ -24,6 +22,12 @@
 #define closesocket close
 #endif
 
+#include <string>
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <deque>
+#include <algorithm>
 class TcpClient {
 public:
     TcpClient();

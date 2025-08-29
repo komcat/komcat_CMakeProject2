@@ -13,6 +13,7 @@
 // NOW include other headers
 #include "AppContext.h"  // Safe to include after winsock headers
 #include "include/data/DUTDataRecorder.h"
+#include "UserInputOperations.h"
 #include "SequenceStep.h"
 #include "include/logger.h"
 
@@ -79,14 +80,19 @@ bool DUTRecordDataOperation::Execute(MachineOperations& ops) {
   double value = 0.0;
   if (ops.GetDataValue(m_dataKey, value)) {
     // This AUTOMATICALLY saves to database when batch threshold is reached!
-    recorder->AddDataPoint(m_dataKey, value);
+    // Pass label to recorder (once DUTDataRecorder is updated)
+    recorder->AddDataPoint(m_dataKey, value, m_label);
 
     // Log first few points and then periodically
     static size_t totalPoints = 0;
     totalPoints++;
 
     if (totalPoints <= 5 || totalPoints % 100 == 0) {  // First 5 points, then every 100
-      ops.LogDebug("Recorded: " + m_dataKey + " = " + std::to_string(value));
+      std::string logMsg = "Recorded: " + m_dataKey + " = " + std::to_string(value);
+      if (!m_label.empty()) {
+        logMsg += " [" + m_label + "]";
+      }
+      ops.LogDebug(logMsg);
 
       if (totalPoints % 100 == 0) {  // Detailed status every 100 points
         ops.LogInfo("DUT Progress - Total: " +
@@ -256,3 +262,8 @@ public:
     return "Force flush pending DUT data to database";
   }
 };
+
+
+
+
+

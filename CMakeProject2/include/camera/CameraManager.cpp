@@ -1110,7 +1110,7 @@ bool CameraManager::SaveFrameToBMP(const CameraFrameData& frameData, const std::
     std::vector<uint8_t> padding(paddingSize, 0);
 
     for (int y = frameData.height - 1; y >= 0; y--) {
-      for (int x = 0; x < frameData.width; x++) {
+      for (int x = 0; x < static_cast<int>(frameData.width); x++) {
         int idx = (y * frameData.width + x) * 3;
         // Convert RGB to BGR for BMP format
         uint8_t b = frameData.imageData[idx + 2];
@@ -1152,7 +1152,9 @@ std::string CameraManager::GenerateImageFilename(const std::string& cameraId, co
 
   std::stringstream ss;
   ss << cameraId << "_";
-  ss << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
+	std::tm timeinfo;
+	localtime_s(&timeinfo, &time_t);
+  ss << std::put_time(&timeinfo, "%Y%m%d_%H%M%S");
 
   // Add milliseconds for uniqueness
   auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(

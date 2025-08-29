@@ -1,15 +1,13 @@
 ﻿// machine_operations.cpp
 #include "machine_operations.h"
-#include "include/cld101x/cld101x_operations.h"  // Include it here, not in the header
+
 #include <sstream>
 #include <filesystem>
 #include <chrono>
 #include <iomanip>
-#include "include/SMU/keithley2400_operations.h" // Include the SMU operations header
+
 #include "external/sqlite/sqlite3.h"
-// Add these includes at the top:
-#include "include/data/DatabaseManager.h"
-#include "include/data/OperationResultsManager.h"
+
 
 //
 //struct VoltageSweepResult {
@@ -191,6 +189,29 @@ double MachineOperations::GetSequenceSuccessRate(const std::string& sequenceName
   return m_resultsManager->GetSequenceSuccessRate(sequenceName);
 }
 
+bool MachineOperations::SetDataValue(const std::string& dataKey, double value,
+  const std::string& callerContext) {
+  // Log operation
+  LogInfo("SetDataValue for key: " + dataKey + " = " + std::to_string(value) +
+    (callerContext.empty() ? "" : " (context: " + callerContext + ")"));
+
+  GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+  if (!dataStore) {
+    LogError("GlobalDataStore not available");
+    return false;
+  }
+
+  try {
+    // Set the value in GlobalDataStore
+    dataStore->SetValue(dataKey, value);
+    LogInfo("Successfully stored: " + dataKey + " = " + std::to_string(value));
+    return true;
+  }
+  catch (const std::exception& e) {
+    LogError("SetDataValue exception for key '" + dataKey + "': " + std::string(e.what()));
+    return false;
+  }
+}
 
 bool MachineOperations::MoveDeviceToPosition(const std::string& deviceName,
   const PositionStruct& position,

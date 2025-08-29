@@ -2,6 +2,7 @@
 //#include "AppContext.h"
 #include "ProcessStep.h"
 #include "include/SMU/keithley2400_operations.h"
+#include "AppContext.h"
 
 #include <vector>
 #include <string>
@@ -4510,18 +4511,27 @@ private:
 
 class DUTRecordDataOperation : public SequenceOperation {
 public:
-  DUTRecordDataOperation(const std::string& dataKey)
-    : m_dataKey(dataKey) {
+  // Updated constructor to accept optional label parameter
+  DUTRecordDataOperation(const std::string& dataKey, const std::string& label = "")
+    : m_dataKey(dataKey), m_label(label) {
   }
 
   bool Execute(MachineOperations& ops) override;  // Implement in .cpp
+
   std::string GetDescription() const override {
-    return "Record DUT data: " + m_dataKey;
+    std::string result = "Record DUT data: " + m_dataKey;
+    if (!m_label.empty()) {
+      result += " [" + m_label + "]";
+    }
+    return result;
   }
 
 private:
   std::string m_dataKey;
+  std::string m_label;  // NEW: label member variable
 };
+
+
 
 class DUTEndRecordingOperation : public SequenceOperation {
 public:
@@ -4538,3 +4548,7 @@ private:
   bool m_exportCsv;
   bool m_exportJson;
 };
+
+
+
+

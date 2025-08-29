@@ -67,8 +67,7 @@ void UIVisionPanel::RenderNodeListControls() {
   }
 
   char filterBuffer[256];
-  strncpy(filterBuffer, m_filterText.c_str(), sizeof(filterBuffer) - 1);
-  filterBuffer[sizeof(filterBuffer) - 1] = '\0';
+  strncpy_s(filterBuffer, sizeof(filterBuffer), m_filterText.c_str(), _TRUNCATE);
 
   if (ImGui::InputText("Filter", filterBuffer, sizeof(filterBuffer))) {
     m_filterText = filterBuffer;

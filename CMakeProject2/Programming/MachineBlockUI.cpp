@@ -3172,7 +3172,7 @@ void MachineBlockUI::UpdateBlockLabel(MachineBlock& block) {
 				else {
 					// For small values, show 2-3 decimals: "0.25mm"
 					char buffer[32];
-					sprintf(buffer, "%.3f", distValue);
+					sprintf_s(buffer, sizeof(buffer), "%.3f", distValue);
 					formattedDistance = buffer;
 					// Remove trailing zeros
 					std::string temp(formattedDistance);

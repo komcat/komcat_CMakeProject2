@@ -1,6 +1,16 @@
 // machine_operations.h - FIXED VERSION
 #pragma once
 
+// Prevent winsock conflicts before any includes
+#ifdef _WIN32
+#define _WINSOCKAPI_   // Prevent winsock.h
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
+
+#include "include/SMU/keithley2400_operations.h" // Include the SMU operations header
+#include "include/cld101x/cld101x_operations.h"  // Include it here, not in the header
 #include "include/motions/motion_control_layer.h"
 #include "include/motions/pi_controller_manager.h"
 #include "include/eziio/EziIO_Manager.h"
@@ -15,6 +25,8 @@
 #include "include/data/DatabaseManager.h"
 #include "include/data/OperationResultsManager.h"
 #include "include/camera/CameraManager.h"
+// Add these includes at the top:
+
 #include <string>
 #include <vector>
 #include <chrono>
@@ -102,6 +114,16 @@ public:
 	// NEW: Sequence-level queries
 	std::vector<OperationResult> GetOperationsBySequence(const std::string& sequenceName, int limit = 50);
 	double GetSequenceSuccessRate(const std::string& sequenceName = "");
+
+	/**
+ * @brief Store a data value in the GlobalDataStore
+ * @param key Data key/channel name
+ * @param value Value to store
+ * @return true if successful
+ */
+	bool SetDataValue(const std::string& dataKey, double value,
+		const std::string& callerContext);
+
 
 
 	//update method with caller Context
