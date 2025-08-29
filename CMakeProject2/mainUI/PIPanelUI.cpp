@@ -91,7 +91,7 @@ void PIPanelUI::RenderControllerList() {
         ImVec4(0.8f, 0.2f, 0.2f, 1.0f);   // Red for disconnected
 
       // Status dot
-      ImGui::TextColored(statusColor, "●");
+      ImGui::TextColored(statusColor, reinterpret_cast<const char*>(u8"●"));
       ImGui::SameLine();
 
       // Selectable controller name

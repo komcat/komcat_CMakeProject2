@@ -336,10 +336,10 @@ void RunPageUI::RenderCompletedSteps() {
 
       // Different colors for success vs failure
       if (completed.isSuccess) {
-        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Complete %s", completed.processName.c_str());
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), reinterpret_cast<const char*>(u8"✓ Complete %s"), completed.processName.c_str());
       }
       else {
-        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "✗ Failed %s", completed.processName.c_str());
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), reinterpret_cast<const char*>(u8"✗ Failed %s"), completed.processName.c_str());
       }
 
       ImGui::Indent();
