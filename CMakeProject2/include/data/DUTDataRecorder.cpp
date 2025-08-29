@@ -45,7 +45,7 @@ bool DUTDataRecorder::ConnectToDatabase(const std::string& connectionString) {
     EnsureDirectoryExists(path.parent_path().string());
   }
 
-  // Create database connection - YOU NEED TO UNCOMMENT THIS LINE!
+  // Create database connection
   m_dbConnection = std::make_unique<SQLiteConnection>();
 
   if (!m_dbConnection) {
@@ -102,7 +102,7 @@ void DUTDataRecorder::Start(const std::string& serialNumber) {
   logger->LogInfo("DUTDataRecorder: Started recording for DUT: " + serialNumber);
 }
 
-void DUTDataRecorder::AddDataPoint(const std::string& key, double value) {
+void DUTDataRecorder::AddDataPoint(const std::string& key, double value, const std::string& label) {
   if (!m_isRecording) {
     auto* logger = Logger::GetInstance();
     logger->LogWarning("DUTDataRecorder: Cannot add data point - not recording");
@@ -112,6 +112,7 @@ void DUTDataRecorder::AddDataPoint(const std::string& key, double value) {
   DataPoint point;
   point.key = key;
   point.value = value;
+  point.label = label;  // Store label
   point.timestamp = std::chrono::system_clock::now();
 
   {
@@ -127,6 +128,24 @@ void DUTDataRecorder::AddDataPoint(const std::string& key, double value) {
   // Check if we should flush to database
   CheckAutoFlush();
 }
+
+
+std::string DUTDataRecorder::GetLatestSerialNumber() {
+  std::lock_guard<std::mutex> lock(m_dbMutex);
+
+  if (!m_dbConnection || !m_dbConnection->IsConnected()) {
+    return "";
+  }
+
+  // Cast to SQLiteConnection to access the GetLatestSerialNumber method
+  SQLiteConnection* sqliteConn = static_cast<SQLiteConnection*>(m_dbConnection.get());
+  if (!sqliteConn) {
+    return "";
+  }
+
+  return sqliteConn->GetLatestSerialNumber();
+}
+
 
 void DUTDataRecorder::CheckAutoFlush() {
   if (!m_enableDatabase || !m_dbConnection) {
@@ -211,10 +230,11 @@ bool DUTDataRecorder::SaveBatchToDatabase(const std::vector<DataPoint>& batch) {
     return false;
   }
 
-  // Insert all data points
+  // Insert all data points WITH LABELS
   for (const auto& point : batch) {
+    // FIXED: Now passing the label parameter
     if (!m_dbConnection->InsertDataPoint(m_currentSerialNumber, point.key,
-      point.value, point.timestamp)) {
+      point.value, point.timestamp, point.label)) {
       auto* logger = Logger::GetInstance();
       logger->LogError("DUTDataRecorder: Failed to insert data point: " +
         m_dbConnection->GetLastError());
@@ -272,8 +292,8 @@ bool DUTDataRecorder::ExportToCSV(const std::string& filename) {
     return false;
   }
 
-  // Write header
-  file << "Serial_Number,Key,Value,Timestamp\n";
+  // Write header with label column
+  file << "Serial_Number,Key,Value,Timestamp,Label\n";
 
   // Write data points
   for (const auto& point : m_dataPoints) {
@@ -281,21 +301,19 @@ bool DUTDataRecorder::ExportToCSV(const std::string& filename) {
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
       point.timestamp.time_since_epoch()) % 1000;
 
-
     std::tm timeinfo;
     localtime_s(&timeinfo, &time_t);
     file << m_currentSerialNumber << ","
       << point.key << ","
       << std::fixed << std::setprecision(6) << point.value << ","
-      << std::put_time(&timeinfo, "%Y-%m-%d %H:%M:%S")  // <-- Fixed: removed duplicate std::put_time
-      << "." << std::setfill('0') << std::setw(3) << ms.count()
-      << "\n";
+      << std::put_time(&timeinfo, "%Y-%m-%d %H:%M:%S")
+      << "." << std::setfill('0') << std::setw(3) << ms.count() << ","
+      << point.label << "\n";  // Include label
   }
 
   file.close();
-
   auto* logger = Logger::GetInstance();
-  logger->LogInfo("DUTDataRecorder: Exported CSV to: " + filepath);
+  logger->LogInfo("DUTDataRecorder: Data exported to CSV: " + filepath);
   return true;
 }
 
@@ -325,7 +343,6 @@ bool DUTDataRecorder::ExportToJSON(const std::string& filename) {
 
   auto start_time_t = std::chrono::system_clock::to_time_t(m_sessionStartTime);
 
-  // Use localtime_s for Windows
   std::tm timeinfo;
   localtime_s(&timeinfo, &start_time_t);
 
@@ -340,13 +357,13 @@ bool DUTDataRecorder::ExportToJSON(const std::string& filename) {
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
       point.timestamp.time_since_epoch()) % 1000;
 
-    // Use localtime_s for Windows
     std::tm timeinfo;
     localtime_s(&timeinfo, &time_t);
 
     file << "    {\n";
     file << "      \"key\": \"" << point.key << "\",\n";
     file << "      \"value\": " << std::fixed << std::setprecision(6) << point.value << ",\n";
+    file << "      \"label\": \"" << point.label << "\",\n";  // Added label to JSON
     file << "      \"timestamp\": \"" << std::put_time(&timeinfo, "%Y-%m-%d %H:%M:%S")
       << "." << std::setfill('0') << std::setw(3) << ms.count() << "\"\n";
     file << "    }";
@@ -376,7 +393,6 @@ std::string DUTDataRecorder::GenerateFilename(const std::string& extension) {
   auto time_t = std::chrono::system_clock::to_time_t(now);
   std::stringstream ss;
 
-  // Use localtime_s for Windows
   std::tm timeinfo;
   localtime_s(&timeinfo, &time_t);
 

@@ -37,8 +37,11 @@ public:
   void Start(const std::string& serialNumber);
 
   // Add data point from global data store
-  void AddDataPoint(const std::string& key, double value);
+  // Updated method with label parameter
+  void AddDataPoint(const std::string& key, double value, const std::string& label = "");
 
+  // NEW: Get the most recent serial number from database
+  std::string GetLatestSerialNumber();
   // End current recording session
   void End();
 
@@ -60,6 +63,7 @@ private:
   struct DataPoint {
     std::string key;
     double value;
+    std::string label;  // NEW: label field
     std::chrono::system_clock::time_point timestamp;
   };
 
@@ -107,11 +111,13 @@ public:
   virtual bool CommitTransaction() = 0;
   virtual bool RollbackTransaction() = 0;
 
+  // Updated method signature to include label parameter
   virtual bool InsertDataPoint(
     const std::string& serialNumber,
     const std::string& key,
     double value,
-    const std::chrono::system_clock::time_point& timestamp
+    const std::chrono::system_clock::time_point& timestamp,
+    const std::string& label = ""  // NEW: label parameter with default
   ) = 0;
 
   virtual std::string GetLastError() const = 0;
