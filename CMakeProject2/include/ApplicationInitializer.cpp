@@ -19,6 +19,8 @@
 #include "include/cld101x/cld101x_operations.h"
 #include "include/SMU/keithley2400_manager.h"
 #include "include/SMU/keithley2400_operations.h"
+    // Add this at the top of ApplicationInitializer.cpp if not already present
+#include "include/Keithley6482/Keithley6482Manager.h"
 #include "include/PowerSupply/SPDPowerSupplyManager.h"
 #include "include/machine_operations.h"
 #include "include/ops/motion_ops.h"
@@ -87,6 +89,10 @@ void ApplicationInitializer::PrepareInitializationSteps(HardwareManagers& hw, Op
 
         {"Config Watchdog", "Starting configuration file monitor",
          WrapInitConfigWatchdog(hw), false},  // Optional
+         {"Keithley 6482", "Initializing Keithley 6482 Picoammeter",
+          WrapInitKeithley6482(hw), false},  // Optional
+					{"SPD Power Supply", "Initializing SPD Power Supply",
+					WarpInitConfigSPDPowerSupply(hw), false}  // Optional
   };
 
   currentProgress.totalSteps = static_cast<int>(initSteps.size());
@@ -260,6 +266,10 @@ std::function<bool()> ApplicationInitializer::WrapInitConfigWatchdog(HardwareMan
 
 std::function<bool()> ApplicationInitializer::WarpInitConfigSPDPowerSupply(HardwareManagers& hw) {
   return [this, &hw]() { return InitConfigSPDPowerSupply(hw); };
+}
+
+std::function<bool()> ApplicationInitializer::WrapInitKeithley6482(HardwareManagers& hw) {
+  return [this, &hw]() { return InitKeithley6482(hw); };
 }
 
 // =======================
@@ -564,6 +574,11 @@ bool ApplicationInitializer::InitInstruments(HardwareManagers& hw) {
   //Initialize SPDPowerSupply
   InitConfigSPDPowerSupply(hw);
 
+
+	//Initialize Keithley 6482 (Electrometer)
+	InitKeithley6482(hw);
+
+
   return anySuccess;  // Return true if at least one instrument connected
 }
 
@@ -745,6 +760,10 @@ bool ApplicationInitializer::RegisterWithContext(HardwareManagers& hw, Operation
   if (hw.spdPowerSupply)  {
     context.RegisterExistingSPDPowerSupplyManager(hw.spdPowerSupply.get());
   }
+  if (hw.keithley6482)
+  {
+    context.RegisterKeithley6482(hw.keithley6482.get());
+	}
 
   // Register operations
   if (ops.machine) {
@@ -826,8 +845,11 @@ bool ApplicationInitializer::InitConfigSPDPowerSupply(HardwareManagers& hw) {
   else {
     logger->LogInfo("SPD config file not found, loading default configuration");
     try {
-      hw.spdPowerSupply->LoadDefaultConfiguration();
-      logger->LogInfo("SPD Power Supply initialized with default configuration");
+     // hw.spdPowerSupply->LoadDefaultConfiguration();
+      //logger->LogInfo("SPD Power Supply initialized with default configuration");
+
+
+      logger->LogInfo("No SPD Power Supply connected.");
     }
     catch (const std::exception& e) {
       logger->LogError("Failed to initialize SPD Power Supply: " + std::string(e.what()));
@@ -871,7 +893,46 @@ bool ApplicationInitializer::InitConfigSPDPowerSupply(HardwareManagers& hw) {
   }
 
   return true;
+
 }
+
+
+bool ApplicationInitializer::InitKeithley6482(HardwareManagers& hw) {
+  // Create the Keithley 6482 manager with namespace
+  hw.keithley6482 = std::make_unique<Keithley::Keithley6482Manager>();
+
+  // Try to initialize from config file
+  if (hw.keithley6482->Initialize("keithley6482_devices_config.json")) {
+    logger->LogInfo("Keithley 6482 initialized from config file");
+  }
+  else {
+    logger->LogInfo("Keithley 6482 config file not found, loading default configuration");
+    try {
+      hw.keithley6482->LoadDefaultConfiguration();
+      logger->LogInfo("Keithley 6482 initialized with default configuration");
+    }
+    catch (const std::exception& e) {
+      logger->LogError("Failed to initialize Keithley 6482: " + std::string(e.what()));
+      hw.keithley6482.reset();
+      return false;
+    }
+  }
+
+  // Log device information
+  logger->LogInfo("Keithley 6482 initialized, device count: " +
+    std::to_string(hw.keithley6482->GetDeviceCount()));
+  logger->LogInfo("Keithley 6482 connected devices: " +
+    std::to_string(hw.keithley6482->GetConnectedCount()));
+
+  // List all configured devices
+  auto deviceNames = hw.keithley6482->GetDeviceNames();
+  for (const auto& name : deviceNames) {
+    logger->LogInfo("  - " + name);
+  }
+
+  return true;
+}
+
 
 void ApplicationInitializer::LogHardwareVelocities(PIControllerManager* pi, ACSControllerManager* acs) {
   // Log PI velocities

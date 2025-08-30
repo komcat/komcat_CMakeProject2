@@ -36,6 +36,8 @@ SPDPowerSupplyManager::SPDPowerSupplyManager()
   , m_showWindow(false)
   , m_pollingActive(false)
   , m_pollingInterval(1000)
+  , m_discoveryInProgress(false)  // Add this
+  , m_discoveryComplete(false)     // Add this
   , m_logger(nullptr)
 {
   // Get logger instance if available
@@ -43,8 +45,21 @@ SPDPowerSupplyManager::SPDPowerSupplyManager()
   LogMessage("INFO", "SPDPowerSupplyManager created");
 }
 
+
+
 SPDPowerSupplyManager::~SPDPowerSupplyManager() {
   LogMessage("INFO", "SPDPowerSupplyManager destructor called");
+
+  // Wait for discovery to complete if in progress
+  if (m_discoveryInProgress.load()) {
+    LogMessage("INFO", "Waiting for discovery to complete...");
+    // Give it max 1 second to finish
+    for (int i = 0; i < 10 && m_discoveryInProgress.load(); i++) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+  }
+
+  
 
   // Stop polling first
   StopAllPolling();
@@ -94,12 +109,13 @@ void SPDPowerSupplyManager::LoadDefaultConfiguration() {
   m_autoDiscovery = true;
   m_safetyMode = true;
 
-  // Try to discover devices automatically
+  // Use async discovery instead of blocking
   if (m_autoDiscovery) {
-    int discovered = AddDiscoveredDevices(m_autoConnect);
-    LogMessage("INFO", "Auto-discovered " + std::to_string(discovered) + " devices");
+    StartAsyncDiscovery(m_autoConnect);
+    LogMessage("INFO", "Started async device discovery (non-blocking)");
   }
 }
+
 
 // === Device Management ===
 
@@ -968,6 +984,9 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
 
     // Initialize VISA
     if (viOpenDefaultRM(&defaultRM) == VI_SUCCESS) {
+      // Set 3 second timeout for all VISA operations
+      viSetAttribute(defaultRM, VI_ATTR_TMO_VALUE, 3000);
+
       // Search for SPD devices using different patterns
       std::vector<std::string> searchPatterns = {
           "USB?*SPD*::INSTR",
@@ -977,9 +996,11 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
       };
 
       for (const auto& pattern : searchPatterns) {
-        if (viFindRsrc(defaultRM, const_cast<ViChar*>(pattern.c_str()),
-          &findList, &nmatches, instrDesc) == VI_SUCCESS) {
+        // Set timeout for find operations
+        ViStatus status = viFindRsrc(defaultRM, const_cast<ViChar*>(pattern.c_str()),
+          &findList, &nmatches, instrDesc);
 
+        if (status == VI_SUCCESS) {
           devices.push_back(std::string(instrDesc));
 
           // Get additional matches
@@ -988,8 +1009,11 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
               devices.push_back(std::string(instrDesc));
             }
           }
-
           viClose(findList);
+        }
+        else if (status == VI_ERROR_TMO) {
+          LogMessage("WARNING", "VISA discovery timeout for pattern: " + pattern);
+          break; // Stop searching if we hit timeout
         }
       }
 
@@ -1002,6 +1026,35 @@ std::unordered_map<std::string, std::string> SPDPowerSupplyManager::GetAllStatus
     devices.erase(std::unique(devices.begin(), devices.end()), devices.end());
 
     return devices;
+  }
+
+  void SPDPowerSupplyManager::StartAsyncDiscovery(bool connectImmediately) {
+    if (m_discoveryInProgress.load()) {
+      LogMessage("WARNING", "Discovery already in progress");
+      return;
+    }
+
+    m_discoveryInProgress.store(true);
+    m_discoveryComplete.store(false);
+
+    // Launch discovery in a separate thread
+    m_discoveryThread = std::thread([this, connectImmediately]() {
+      LogMessage("INFO", "Starting async device discovery...");
+
+      try {
+        int discovered = AddDiscoveredDevices(connectImmediately);
+        LogMessage("INFO", "Async discovery completed. Found " + std::to_string(discovered) + " devices");
+      }
+      catch (const std::exception& e) {
+        LogMessage("ERROR", "Exception during async discovery: " + std::string(e.what()));
+      }
+
+      m_discoveryInProgress.store(false);
+      m_discoveryComplete.store(true);
+    });
+
+    // Detach the thread so it runs independently
+    m_discoveryThread.detach();
   }
 
   bool SPDPowerSupplyManager::ValidateDeviceConfig(const nlohmann::json & config) const {

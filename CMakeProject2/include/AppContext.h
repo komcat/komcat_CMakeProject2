@@ -44,6 +44,10 @@ class IOperations;
 class DUTDataRecorder;
 class Logger;
 class SPDPowerSupplyManager;
+namespace Keithley {
+  class Keithley6482Manager;
+}
+
 
 /**
  * Application Context - Centralized service container
@@ -81,6 +85,7 @@ public:
   CLD101xManager* cld101xManager = nullptr;
   Keithley2400Manager* keithleyManager = nullptr;
   SPDPowerSupplyManager* spdPowerSupplyManager = nullptr;
+	Keithley::Keithley6482Manager* keithley6482Manager = nullptr;
 
   // === High-Level Operations ===
   // Use raw pointers for ops classes to avoid incomplete type issues
@@ -120,6 +125,7 @@ private:
   IOOps* m_ioOpsPtr = nullptr;
   VisionOps* m_visionOpsPtr = nullptr;
   DUTDataRecorder* m_dutDataRecorderPtr = nullptr;
+	Keithley::Keithley6482Manager* m_keithley6482Ptr = nullptr;
 
 
 public:
@@ -257,6 +263,14 @@ public:
     spdPowerSupplyManager = service;
     m_spdPowerSupplyManagerPtr = service;
   }
+
+  void RegisterExistingKeithley6482(Keithley::Keithley6482Manager* service) {
+    keithley6482Manager = service;
+    m_keithley6482Ptr = service;
+	} 
+
+
+
   void RegisterExistingMachineOps(MachineOperations* service) {
     machineOperations = service;
     m_machineOperationsPtr = service;
@@ -329,6 +343,13 @@ public:
   {
     spdPowerSupplyManager = service;
   }
+  void RegisterKeithley6482(Keithley::Keithley6482Manager* service) {
+    keithley6482Manager = service;
+	}
+
+
+
+
 
   // Register high-level operations
   void RegisterMachineOperations(MachineOperations* service) {
@@ -424,6 +445,9 @@ public:
   {
     return spdPowerSupplyManager ? spdPowerSupplyManager : m_spdPowerSupplyManagerPtr;
   }
+  Keithley::Keithley6482Manager* GetKeithley6482() const {
+    return keithley6482Manager ? keithley6482Manager : m_keithley6482Ptr;
+  }
 
   // High-level operations
   MachineOperations* GetMachineOperations() const {
@@ -483,6 +507,16 @@ public:
   bool HasSPDPowerSupply() const {
     return spdPowerSupplyManager != nullptr;
   }
+  bool HasKeithley6482Managers() const {
+    return keithley6482Manager != nullptr;
+  }
+
+
+
+
+
+
+
 
   bool HasLogger() const {
     return logger != nullptr;
@@ -532,6 +566,8 @@ public:
     log->LogInfo("Equipment Managers:");
     log->LogInfo("  - CLD101x: " + std::string(GetCLD101x() ? "✓" : "✗"));
     log->LogInfo("  - Keithley: " + std::string(GetKeithley() ? "✓" : "✗"));
+		log->LogInfo("  - SPD Power Supply: " + std::string(GetSPDPowerSupply() ? "✓" : "✗")); 
+		log->LogInfo("  - Keithley 6482: " + std::string(GetKeithley6482() ? "✓" : "✗"));
 
     log->LogInfo("High-Level Operations:");
     log->LogInfo("  - Machine Ops: " + std::string(GetMachineOperations() ? "✓" : "✗"));

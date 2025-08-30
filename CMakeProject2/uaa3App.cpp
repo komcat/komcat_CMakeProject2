@@ -33,6 +33,11 @@
 #include "include/cld101x/cld101x_operations.h"
 #include "include/splashscreen/SimpleSplashScreen.h"
 #include "include/PowerSupply/SPDPowerSupplyManager.h"
+#include "include/Keithley6482/Keithley6482.h"
+#include "include/Keithley6482/Keithley6482Manager.h"
+#include "include/Keithley6482/Keithley6482DebugUI.h"
+
+
 // Keep your debug function as-is
 bool g_deugMode = false; // Global debug mode flag
 
@@ -88,70 +93,70 @@ void TestSPDToGlobalDataStore() {
 	logger->LogInfo("4. Setting up direct callback...");
 	spdManager->SetStatusUpdateCallback(
 		[dataStore, logger](const std::string& deviceName, const std::string& status) {
-			static int callbackCount = 0;
-			callbackCount++;
+		static int callbackCount = 0;
+		callbackCount++;
 
-			if (callbackCount <= 5) {  // Log first 5 callbacks
-				std::cout << "[SPD CALLBACK #" << callbackCount << "] Device: " << deviceName
-					<< " Status: " << status << std::endl;
+		if (callbackCount <= 5) {  // Log first 5 callbacks
+			std::cout << "[SPD CALLBACK #" << callbackCount << "] Device: " << deviceName
+				<< " Status: " << status << std::endl;
+		}
+
+		// Parse and store in GlobalDataStore
+		if (status.find("Status read failed") == std::string::npos &&
+			status.find("Disconnected") == std::string::npos) {
+
+			float voltage = 0.0f, current = 0.0f;
+			bool outputState = false;
+
+			// Parse voltage: "V: X.XXXV"
+			size_t vPos = status.find("V: ");
+			if (vPos != std::string::npos) {
+				size_t vEnd = status.find("V", vPos + 3);
+				if (vEnd != std::string::npos) {
+					try {
+						voltage = std::stof(status.substr(vPos + 3, vEnd - vPos - 3));
+					}
+					catch (...) {
+						std::cout << "[PARSE ERROR] Failed to parse voltage from: " << status << std::endl;
+					}
+				}
 			}
 
-			// Parse and store in GlobalDataStore
-			if (status.find("Status read failed") == std::string::npos &&
-				status.find("Disconnected") == std::string::npos) {
-
-				float voltage = 0.0f, current = 0.0f;
-				bool outputState = false;
-
-				// Parse voltage: "V: X.XXXV"
-				size_t vPos = status.find("V: ");
-				if (vPos != std::string::npos) {
-					size_t vEnd = status.find("V", vPos + 3);
-					if (vEnd != std::string::npos) {
-						try {
-							voltage = std::stof(status.substr(vPos + 3, vEnd - vPos - 3));
-						}
-						catch (...) {
-							std::cout << "[PARSE ERROR] Failed to parse voltage from: " << status << std::endl;
-						}
+			// Parse current: "I: X.XXXA"  
+			size_t iPos = status.find("I: ");
+			if (iPos != std::string::npos) {
+				size_t iEnd = status.find("A", iPos + 3);
+				if (iEnd != std::string::npos) {
+					try {
+						current = std::stof(status.substr(iPos + 3, iEnd - iPos - 3));
+					}
+					catch (...) {
+						std::cout << "[PARSE ERROR] Failed to parse current from: " << status << std::endl;
 					}
 				}
+			}
 
-				// Parse current: "I: X.XXXA"  
-				size_t iPos = status.find("I: ");
-				if (iPos != std::string::npos) {
-					size_t iEnd = status.find("A", iPos + 3);
-					if (iEnd != std::string::npos) {
-						try {
-							current = std::stof(status.substr(iPos + 3, iEnd - iPos - 3));
-						}
-						catch (...) {
-							std::cout << "[PARSE ERROR] Failed to parse current from: " << status << std::endl;
-						}
-					}
-				}
+			// Parse output state
+			outputState = status.find("Output: ON") != std::string::npos;
 
-				// Parse output state
-				outputState = status.find("Output: ON") != std::string::npos;
+			// Update GlobalDataStore
+			std::string voltageChannel = "SPD-" + deviceName + "-Voltage";
+			std::string currentChannel = "SPD-" + deviceName + "-Current";
+			std::string outputChannel = "SPD-" + deviceName + "-Output";
+			std::string powerChannel = "SPD-" + deviceName + "-Power";
 
-				// Update GlobalDataStore
-				std::string voltageChannel = "SPD-" + deviceName + "-Voltage";
-				std::string currentChannel = "SPD-" + deviceName + "-Current";
-				std::string outputChannel = "SPD-" + deviceName + "-Output";
-				std::string powerChannel = "SPD-" + deviceName + "-Power";
+			dataStore->SetValue(voltageChannel, voltage);
+			dataStore->SetValue(currentChannel, current);
+			dataStore->SetValue(outputChannel, outputState ? 1.0f : 0.0f);
+			dataStore->SetValue(powerChannel, voltage * current);
 
-				dataStore->SetValue(voltageChannel, voltage);
-				dataStore->SetValue(currentChannel, current);
-				dataStore->SetValue(outputChannel, outputState ? 1.0f : 0.0f);
-				dataStore->SetValue(powerChannel, voltage * current);
-
-				if (callbackCount <= 3) {
-					std::cout << "[GLOBALDATA UPDATE] Created channels: V=" << voltage
-						<< "V, I=" << current << "A, Power=" << (voltage * current)
-						<< "W, Output=" << (outputState ? "ON" : "OFF") << std::endl;
-				}
+			if (callbackCount <= 3) {
+				std::cout << "[GLOBALDATA UPDATE] Created channels: V=" << voltage
+					<< "V, I=" << current << "A, Power=" << (voltage * current)
+					<< "W, Output=" << (outputState ? "ON" : "OFF") << std::endl;
 			}
 		}
+	}
 	);
 
 	// 5. Start polling
@@ -239,13 +244,13 @@ int main(int argc, char* argv[])
 	if (splashAvailable) {
 		initializer.SetProgressCallback([&splash](const ApplicationInitializer::InitProgress& progress) {
 			splash.UpdateProgress(progress);
-			});
+		});
 	}
 	else {
 		// Fallback to console
 		initializer.SetProgressCallback([](const ApplicationInitializer::InitProgress& progress) {
 			ConsoleProgressDisplay::DisplayProgress(progress);
-			});
+		});
 	}
 
 	// Create containers for hardware and operations
@@ -445,35 +450,38 @@ int main(int argc, char* argv[])
 	}
 
 	// Build fonts
-if (io.Fonts->Build()) {
-    std::cout << "✅ Font atlas built successfully" << std::endl;
-    std::cout << "   Total fonts: " << io.Fonts->Fonts.Size << std::endl;
+	if (io.Fonts->Build()) {
+		std::cout << "✅ Font atlas built successfully" << std::endl;
+		std::cout << "   Total fonts: " << io.Fonts->Fonts.Size << std::endl;
 
-    // Debug: Show glyph counts
-    for (int i = 0; i < io.Fonts->Fonts.Size; i++) {
-        ImFont* font = io.Fonts->Fonts[i];
-        std::cout << "   Font " << i << ": " << font->Glyphs.Size << " glyphs, "
-            << font->FontSize << "px" << std::endl;
-    }
+		// Debug: Show glyph counts
+		for (int i = 0; i < io.Fonts->Fonts.Size; i++) {
+			ImFont* font = io.Fonts->Fonts[i];
+			std::cout << "   Font " << i << ": " << font->Glyphs.Size << " glyphs, "
+				<< font->FontSize << "px" << std::endl;
+		}
 
-    if (emojiLoaded) {
-        std::cout << "🎉 Emoji support enabled with extended character ranges" << std::endl;
-    }
+		if (emojiLoaded) {
+			std::cout << "🎉 Emoji support enabled with extended character ranges" << std::endl;
+		}
 
-    // FIXED: Always set mainFont as default, regardless of emoji status
-    if (mainFont) {
-        io.FontDefault = mainFont;  // This makes it the default for everything
-        if (emojiLoaded) {
-            std::cout << "✅ Set emoji-enabled font as default application font" << std::endl;
-        } else {
-            std::cout << "✅ Set main font as default application font (no emojis)" << std::endl;
-        }
-    } else {
-        std::cout << "⚠️ No main font loaded, using ImGui default" << std::endl;
-    }
-} else {
-    std::cout << "❌ Failed to build font atlas" << std::endl;
-}
+		// FIXED: Always set mainFont as default, regardless of emoji status
+		if (mainFont) {
+			io.FontDefault = mainFont;  // This makes it the default for everything
+			if (emojiLoaded) {
+				std::cout << "✅ Set emoji-enabled font as default application font" << std::endl;
+			}
+			else {
+				std::cout << "✅ Set main font as default application font (no emojis)" << std::endl;
+			}
+		}
+		else {
+			std::cout << "⚠️ No main font loaded, using ImGui default" << std::endl;
+		}
+	}
+	else {
+		std::cout << "❌ Failed to build font atlas" << std::endl;
+	}
 
 	// Set the emoji-enabled font as the default font for the entire application
 	if (mainFont && emojiLoaded) {
@@ -557,29 +565,199 @@ if (io.Fonts->Build()) {
 	bool done = false;
 	menuManager->SetOnExitCallback([&done]() {
 		done = true;
-		});
+	});
 
 	if (menuManager && idsCameraUI) {
 		menuManager->SetIDSCameraUI(idsCameraUI.get());
 		logger->LogInfo("IDS Camera UI connected to menu system");
 	}
 
-	logger->LogInfo("=== STARTING RENDER LOOP ===");
+
+
+	// In your main application (uaa3App.cpp), replace the direct device code with:
+
+// In your main application (uaa3App.cpp), replace the direct device code with:
+
+//// Initialize Keithley 6482 Manager from config
+//	auto keithley6482Manager = std::make_shared<Keithley::Keithley6482Manager>();
+//
+//	// Initialize from config file (will create default if not exists)
+//	if (keithley6482Manager->Initialize("keithley6482_devices_config.json")) {
+//		logger->LogInfo("Keithley 6482 Manager initialized successfully");
+//
+//		// Start polling all connected devices
+//		keithley6482Manager->StartAllPolling(100);
+//
+//		// Set up a callback to monitor measurements
+//		int readingCount = 0;
+//		auto lastPrintTime = std::chrono::steady_clock::now();
+//
+//		keithley6482Manager->SetStatusUpdateCallback(
+//			[&readingCount, &lastPrintTime](const std::string& deviceName, const Keithley::K6482DeviceStatus& status) {
+//			// Print readings every 500ms for cleaner output
+//			auto now = std::chrono::steady_clock::now();
+//			auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastPrintTime).count();
+//
+//			if (elapsed >= 500 && status.isConnected) {
+//				readingCount++;
+//
+//				// Print header every 5 readings
+//				if (readingCount % 5 == 1) {
+//					std::cout << "\n" << std::string(80, '=') << std::endl;
+//					std::cout << std::setw(20) << "Device"
+//						<< std::setw(20) << "Ch1 Current (A)"
+//						<< std::setw(20) << "Ch1 (pA)"
+//						<< std::setw(20) << "Ch2 Current (A)"
+//						<< std::setw(20) << "Ch2 (pA)" << std::endl;
+//					std::cout << std::string(80, '-') << std::endl;
+//				}
+//
+//				std::cout << std::setw(20) << deviceName
+//					<< std::setw(20) << std::scientific << std::setprecision(3) << status.channel1Current
+//					<< std::setw(20) << std::fixed << std::setprecision(2) << (status.channel1Current * 1e12)
+//					<< std::setw(20) << std::scientific << std::setprecision(3) << status.channel2Current
+//					<< std::setw(20) << std::fixed << std::setprecision(2) << (status.channel2Current * 1e12)
+//					<< std::endl;
+//
+//				lastPrintTime = now;
+//			}
+//		}
+//		);
+//
+//		// Run test for 5 seconds
+//		std::cout << "\n=== Starting 5-second measurement test ===" << std::endl;
+//		std::cout << "Connected devices: " << keithley6482Manager->GetConnectedCount()
+//			<< " of " << keithley6482Manager->GetDeviceCount() << std::endl;
+//
+//		auto testStartTime = std::chrono::steady_clock::now();
+//		auto testDuration = std::chrono::seconds(5);
+//
+//		// Main test loop - run for 5 seconds
+//		while (std::chrono::steady_clock::now() - testStartTime < testDuration) {
+//			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+//
+//			// Optional: Show countdown
+//			auto remaining = testDuration - (std::chrono::steady_clock::now() - testStartTime);
+//			auto seconds_left = std::chrono::duration_cast<std::chrono::seconds>(remaining).count();
+//			static int last_seconds = -1;
+//			if (seconds_left != last_seconds && seconds_left >= 0) {
+//				std::cout << "\rTime remaining: " << seconds_left << " seconds... " << std::flush;
+//				last_seconds = seconds_left;
+//			}
+//		}
+//
+//		std::cout << "\n\n=== Test complete, cleaning up ===" << std::endl;
+//
+//		// Stop polling
+//		keithley6482Manager->StopAllPolling();
+//		std::cout << "Stopped polling" << std::endl;
+//
+//		// Get final status
+//		auto finalStatuses = keithley6482Manager->GetAllStatuses();
+//		std::cout << "\n=== Final Readings ===" << std::endl;
+//		for (const auto& [deviceName, status] : finalStatuses) {
+//			if (status.isConnected) {
+//				std::cout << deviceName << ":" << std::endl;
+//				std::cout << "  Channel 1: " << std::scientific << std::setprecision(6)
+//					<< status.channel1Current << " A ("
+//					<< std::fixed << std::setprecision(3)
+//					<< status.channel1Current * 1e12 << " pA)" << std::endl;
+//				std::cout << "  Channel 2: " << std::scientific << std::setprecision(6)
+//					<< status.channel2Current << " A ("
+//					<< std::fixed << std::setprecision(3)
+//					<< status.channel2Current * 1e12 << " pA)" << std::endl;
+//			}
+//		}
+//
+//		// Disconnect all devices
+//		keithley6482Manager->DisconnectAll();
+//		std::cout << "\nAll devices disconnected" << std::endl;
+//
+//		// Clean up manager
+//		keithley6482Manager.reset();
+//		std::cout << "Keithley 6482 Manager cleaned up successfully" << std::endl;
+//
+//	}
+//	else {
+//		logger->LogError("Failed to initialize Keithley 6482 Manager");
+//	}
+//
+//	std::cout << "\n=== Keithley 6482 test completed ===" << std::endl;
+
+
+
+	// Test Keithley 6482 with continuous monitoring
+	//Keithley::Keithley6482 k6482("GPIB0::1::INSTR");
+
+	//if (k6482.connect()) {
+	//	std::cout << "Successfully connected to Keithley 6482!" << std::endl;
+
+	//	// Configure the instrument
+	//	k6482.setAutoRange(1, true);  // Auto range for channel 1
+	//	k6482.setAutoRange(2, true);  // Auto range for channel 2
+	//	k6482.setIntegrationTime(1.0); // 1 PLC for good noise rejection
+
+	//	// Optional: Enable filters for more stable readings
+	//	k6482.setFilter(1, true, 10);  // 10-reading moving average filter
+	//	k6482.setFilter(2, true, 10);
+
+	//	// Start polling for continuous updates
+	//	k6482.startPolling(100);  // Poll every 100ms
+
+	//	// Display a few readings
+	//	std::cout << "\n=== Current Measurements ===" << std::endl;
+	//	std::cout << std::setw(10) << "Channel"
+	//		<< std::setw(15) << "Current (A)"
+	//		<< std::setw(15) << "Current (pA)"
+	//		<< std::setw(15) << "Current (nA)" << std::endl;
+	//	std::cout << std::string(55, '-') << std::endl;
+
+	//	for (int i = 0; i < 5; i++) {
+	//		auto measurement = k6482.readBothChannels();
+	//		if (measurement.has_value()) {
+	//			// Channel 1
+	//			std::cout << std::setw(10) << "Ch1"
+	//				<< std::setw(15) << std::scientific << measurement->channel1_current
+	//				<< std::setw(15) << std::fixed << std::setprecision(2)
+	//				<< measurement->channel1_current * 1e12
+	//				<< std::setw(15) << std::fixed << std::setprecision(4)
+	//				<< measurement->channel1_current * 1e9 << std::endl;
+
+	//			// Channel 2
+	//			std::cout << std::setw(10) << "Ch2"
+	//				<< std::setw(15) << std::scientific << measurement->channel2_current
+	//				<< std::setw(15) << std::fixed << std::setprecision(2)
+	//				<< measurement->channel2_current * 1e12
+	//				<< std::setw(15) << std::fixed << std::setprecision(4)
+	//				<< measurement->channel2_current * 1e9 << std::endl;
+
+	//			std::cout << std::endl;
+	//		}
+
+	//		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+	//	}
+
+	//	// Stop polling when done
+	//	k6482.stopPolling();
+
+	//}
+	//else {
+	//	std::cout << "Failed to connect to Keithley 6482" << std::endl;
+	//}
 
 
 
 
-
-
-	//test PSD
-	
-	//TestSPDToGlobalDataStore();
-
-
+// With this:
+	std::unique_ptr<Keithley6482DebugUI> keithley6482DebugUI;
+	if (hardware.keithley6482 && hardware.keithley6482->GetDeviceCount() > 0) {
+		keithley6482DebugUI = std::make_unique<Keithley6482DebugUI>(hardware.keithley6482.get());
+		logger->LogInfo("Keithley 6482 Debug UI initialized");
+	}
 	// ===========================================
 	// PHASE 4: MAIN RENDER LOOP
 	// ===========================================
-
+	logger->LogInfo("=== STARTING RENDER LOOP ===");
 	while (!done)
 	{
 		// Poll and handle events
@@ -630,6 +808,11 @@ if (io.Fonts->Build()) {
 		// Render the main UI
 		uiManager.RenderUI();
 
+
+		// With:
+		if (keithley6482DebugUI) {
+			keithley6482DebugUI->Render();
+		}
 
 
 

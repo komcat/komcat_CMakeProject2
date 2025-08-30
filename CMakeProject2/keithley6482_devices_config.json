@@ -1,0 +1,78 @@
+{
+  "keithley6482Manager": {
+    "name": "Keithley6482Manager",
+    "autoConnect": false,
+    "defaultPollingInterval": 100,
+    "autoDiscovery": false,
+    "enableDataLogging": true
+  },
+  "devices": [
+    {
+      "name": "Keithley6482_1",
+      "resourceString": "GPIB0::1::INSTR",
+      "description": "Primary Keithley 6482 Picoammeter",
+      "autoConnect": true,
+      "pollingInterval": 100,
+      "settings": {
+        "autoRange": true,
+        "integrationTime": 1.0,
+        "filterEnabled": true,
+        "filterCount": 10,
+        "channel1": {
+          "enabled": true,
+          "range": "AUTO",
+          "sourceVoltage": 0.0,
+          "sourceEnabled": false
+        },
+        "channel2": {
+          "enabled": true,
+          "range": "AUTO",
+          "sourceVoltage": 0.0,
+          "sourceEnabled": false
+        }
+      }
+    },
+    {
+      "name": "Keithley6482_2",
+      "resourceString": "GPIB0::2::INSTR",
+      "description": "Secondary Keithley 6482 Picoammeter",
+      "autoConnect": false,
+      "pollingInterval": 100,
+      "settings": {
+        "autoRange": true,
+        "integrationTime": 1.0,
+        "filterEnabled": false,
+        "filterCount": 10,
+        "channel1": {
+          "enabled": true,
+          "range": "20e-9",
+          "sourceVoltage": 5.0,
+          "sourceEnabled": true
+        },
+        "channel2": {
+          "enabled": true,
+          "range": "20e-6",
+          "sourceVoltage": 0.0,
+          "sourceEnabled": false
+        }
+      }
+    }
+  ],
+  "globalSettings": {
+    "enableSourceVoltageOnConnect": false,
+    "resetOnConnect": true,
+    "logAllMeasurements": false,
+    "measurementTimeout": 5000,
+    "dataFormat": "CSV",
+    "currentRanges": [
+      "2nA",
+      "20nA",
+      "200nA",
+      "2uA",
+      "20uA",
+      "200uA",
+      "2mA",
+      "20mA"
+    ]
+  }
+}

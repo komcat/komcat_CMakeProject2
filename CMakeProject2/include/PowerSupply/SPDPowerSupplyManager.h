@@ -461,6 +461,18 @@ public:
    */
   bool SetConstantCurrentMode(const std::string& deviceName, double current, double voltageLimit);
 
+  /**
+ * @brief Check if device discovery is in progress
+ * @return true if discovery is running
+ */
+  bool IsDiscoveryInProgress() const { return m_discoveryInProgress.load(); }
+
+  /**
+   * @brief Start asynchronous device discovery
+   * @param connectImmediately If true, connect to discovered devices
+   */
+  void StartAsyncDiscovery(bool connectImmediately = true);
+
 private:
   // === Private Types ===
   struct DeviceInfo {
@@ -477,6 +489,12 @@ private:
       pollingInterval(1000), lastUpdate(std::chrono::steady_clock::now()) {
     }
   };
+
+
+  // Add discovery thread management
+  std::thread m_discoveryThread;
+  std::atomic<bool> m_discoveryInProgress;
+  std::atomic<bool> m_discoveryComplete;
 
   // Add subscriber management members
   std::unordered_map<std::string, ISPDStatusSubscriber*> m_subscribers;
@@ -571,4 +589,7 @@ private:
   bool ValidateDeviceConfig(const nlohmann::json& config) const;
 
   void NotifySubscribers(const std::unordered_map<std::string, SPDDeviceStatus>& statuses);
+
+
+ 
 };

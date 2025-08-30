@@ -703,7 +703,7 @@ add_executable(uaa3App
  "include/motions/MotionDataSubscriber.h"
   "include/motions/MotionDataSubscriber.cpp"
 
-  "include/eziio/EziIO_Observer.h" "include/eziio/EziIO_Observer.cpp")
+  "include/eziio/EziIO_Observer.h" "include/eziio/EziIO_Observer.cpp" "include/Keithley6482/Keithley6482.h" "include/Keithley6482/Keithley6482.cpp" "include/Keithley6482/Keithley6482Manager.h" "include/Keithley6482/Keithley6482Manager.cpp" "include/Keithley6482/IK6482MeasurementSubscriber.h" "include/Keithley6482/Keithley6482DebugUI.h")
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
@@ -1036,6 +1036,7 @@ set(CONFIG_FILES
     "toolbar_state.json"
     "transformation_matrix.json"
     "camera_config.json"
+    "keithley6482_devices_config.json"
 )
 
 # Copy configuration files
