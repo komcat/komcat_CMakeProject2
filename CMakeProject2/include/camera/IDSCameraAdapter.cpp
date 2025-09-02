@@ -549,9 +549,9 @@ void IDSCameraAdapter::GrabThreadFunction() {
 					}
 
 					// Debug logging every 30 frames
-					if ((frameCounter % 30) == 0 && logger) {
+					/*if ((frameCounter % 30) == 0 && logger) {
 						logger->LogInfo("IDS camera grabbed " + std::to_string(frameCounter) + " frames: " + m_cameraId);
-					}
+					}*/
 				}
 			}
 			else if (result != IS_SUCCESS) {
@@ -642,10 +642,45 @@ bool IDSCameraAdapter::SetExposureTime(double exposureTimeUs) {
 		return false;
 	}
 
+	// Get exposure range limits
+	double minExposureMs = 0.0;
+	double maxExposureMs = 0.0;
+	double incrementMs = 0.0;
+
+	INT result = is_Exposure(m_hCam, IS_EXPOSURE_CMD_GET_EXPOSURE_RANGE,
+		&minExposureMs, sizeof(minExposureMs));
+	if (result == IS_SUCCESS) {
+		is_Exposure(m_hCam, IS_EXPOSURE_CMD_GET_EXPOSURE_RANGE_MAX,
+			&maxExposureMs, sizeof(maxExposureMs));
+		is_Exposure(m_hCam, IS_EXPOSURE_CMD_GET_EXPOSURE_RANGE_INC,
+			&incrementMs, sizeof(incrementMs));
+	}
+
 	// Convert microseconds to milliseconds for IDS API
 	double exposureMs = exposureTimeUs / 1000.0;
 
-	INT result = is_Exposure(m_hCam, IS_EXPOSURE_CMD_SET_EXPOSURE, &exposureMs, sizeof(exposureMs));
+	// Clamp to valid range if we got the limits
+	if (minExposureMs > 0 && maxExposureMs > 0) {
+		if (exposureMs < minExposureMs) {
+			exposureMs = minExposureMs;
+			Logger* logger = Logger::GetInstance();
+			if (logger) {
+				logger->LogWarning("Exposure time clamped to minimum: " +
+					std::to_string(minExposureMs) + " ms");
+			}
+		}
+		if (exposureMs > maxExposureMs) {
+			exposureMs = maxExposureMs;
+			Logger* logger = Logger::GetInstance();
+			if (logger) {
+				logger->LogWarning("Exposure time clamped to maximum: " +
+					std::to_string(maxExposureMs) + " ms");
+			}
+		}
+	}
+
+	result = is_Exposure(m_hCam, IS_EXPOSURE_CMD_SET_EXPOSURE,
+		&exposureMs, sizeof(exposureMs));
 	return CheckIDSResult(result, "SetExposureTime");
 }
 
@@ -668,15 +703,30 @@ bool IDSCameraAdapter::SetAutoExposure(bool enable) {
 		return false;
 	}
 
-	if (!enable) {
-		// Manual mode - this always works
-		return true;
+	// IDS cameras use is_SetAutoParameter for auto exposure control
+	double param1 = enable ? 1.0 : 0.0;
+	double param2 = 0.0; // Reserved
+
+	INT result = is_SetAutoParameter(m_hCam, IS_SET_ENABLE_AUTO_SHUTTER,
+		&param1, &param2);
+
+	if (result == IS_SUCCESS && enable) {
+		// Set reasonable auto exposure parameters
+		double targetBrightness = 128.0; // Mid-range brightness (0-255)
+		is_SetAutoParameter(m_hCam, IS_SET_AUTO_REFERENCE,
+			&targetBrightness, &param2);
+
+		// Set auto exposure speed (optional)
+		double speed = 50.0; // Medium speed
+		is_SetAutoParameter(m_hCam, IS_SET_AUTO_SPEED, &speed, &param2);
+
+		// Set hysteresis to avoid oscillation
+		double hysteresis = 3.0; // Small hysteresis
+		is_SetAutoParameter(m_hCam, IS_SET_AUTO_HYSTERESIS,
+			&hysteresis, &param2);
 	}
-	else {
-		// Auto mode - skip for now, return false to indicate not supported
-		SetError("Auto exposure not implemented yet for IDS cameras");
-		return false;
-	}
+
+	return CheckIDSResult(result, "SetAutoExposure");
 }
 
 bool IDSCameraAdapter::SetAutoGain(bool enable) {
@@ -684,15 +734,29 @@ bool IDSCameraAdapter::SetAutoGain(bool enable) {
 		return false;
 	}
 
-	if (!enable) {
-		// Manual mode - this always works
-		return true;
-	}
-	else {
-		// Auto mode - skip for now, return false to indicate not supported
-		SetError("Auto gain not implemented yet for IDS cameras");
+	double param1 = enable ? 1.0 : 0.0;
+	double param2 = 0.0; // Reserved, must be 0
+
+	INT result = is_SetAutoParameter(m_hCam, IS_SET_ENABLE_AUTO_GAIN, &param1, &param2);
+
+	return CheckIDSResult(result, "SetAutoGain");
+}
+
+bool IDSCameraAdapter::GetAutoGain() const {
+	if (!m_isConnected.load()) {
 		return false;
 	}
+
+	double param1 = 0.0;
+	double param2 = 0.0;
+
+	INT result = is_SetAutoParameter(m_hCam, IS_GET_ENABLE_AUTO_GAIN, &param1, &param2);
+
+	if (result == IS_SUCCESS) {
+		return (param1 > 0.0);
+	}
+
+	return false;
 }
 
 double IDSCameraAdapter::GetExposureTime() const {
@@ -727,18 +791,18 @@ bool IDSCameraAdapter::GetAutoExposure() const {
 		return false;
 	}
 
-	// Simplified approach: return false and let the application track the state
-	return false;
-}
+	double param1 = 0.0;
+	double param2 = 0.0;
 
-bool IDSCameraAdapter::GetAutoGain() const {
-	if (!m_isConnected.load()) {
-		return false;
+	INT result = is_SetAutoParameter(m_hCam, IS_GET_ENABLE_AUTO_SHUTTER, &param1, &param2);
+
+	if (result == IS_SUCCESS) {
+		return (param1 > 0.0);
 	}
 
-	// Simplified approach: return false and let the application track the state
 	return false;
 }
+
 
 std::string IDSCameraAdapter::GetIDSErrorString(INT result) const {
 	switch (result) {
