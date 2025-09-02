@@ -329,7 +329,7 @@ void SPDPowerSupplyUI::RenderSweepControls() {
       }
 
       ImGui::SameLine();
-      if (ImGui::Button(reinterpret_cast<const char*>(u8"🔄 All Devices"), ImVec2(120, 30))) {
+      if (ImGui::Button("🔄 All Devices", ImVec2(120, 30))) {
         if (m_spdManager) {
           std::unordered_map<std::string, std::vector<PowerSupply::SPDSweepResult>> allResults;
           int successCount = m_spdManager->PerformVoltageSweepAll(
@@ -346,7 +346,7 @@ void SPDPowerSupplyUI::RenderSweepControls() {
     }
 
     // CURRENT SWEEP TAB
-    if (ImGui::BeginTabItem(reinterpret_cast<const char*>(u8"🔋 CC Sweep"))) {
+    if (ImGui::BeginTabItem("🔋 CC Sweep")) {
       ImGui::Spacing();
 
       // Compact current sweep parameters
@@ -369,7 +369,7 @@ void SPDPowerSupplyUI::RenderSweepControls() {
       ImGui::Spacing();
 
       // Sweep buttons - compact layout
-      if (ImGui::Button(reinterpret_cast<const char*>(u8"🚀 Start CC Sweep"), ImVec2(150, 30))) {
+      if (ImGui::Button("🚀 Start CC Sweep", ImVec2(150, 30))) {
         if (m_spdManager) {
           auto deviceNames = m_spdManager->GetDeviceNames();
           if (!deviceNames.empty()) {
@@ -390,7 +390,7 @@ void SPDPowerSupplyUI::RenderSweepControls() {
       }
 
       ImGui::SameLine();
-      if (ImGui::Button(reinterpret_cast<const char*>(u8"🔄 All Devices##CC"), ImVec2(120, 30))) {
+      if (ImGui::Button("🔄 All Devices##CC", ImVec2(120, 30))) {
         if (m_spdManager) {
           std::unordered_map<std::string, std::vector<PowerSupply::SPDSweepResult>> allResults;
           int successCount = m_spdManager->PerformCurrentSweepAll(
@@ -477,7 +477,7 @@ void SPDPowerSupplyUI::RenderSweepResultsTable() {
   ImGui::Spacing();
 
   // Action buttons for results
-  if (ImGui::Button(reinterpret_cast<const char*>(u8"📋 Copy Results"), ImVec2(120, 25))) {
+  if (ImGui::Button("📋 Copy Results", ImVec2(120, 25))) {
     // Create CSV-style text for clipboard
     std::string csvData = "Step," + m_lastSweepType + ",MeasuredV,MeasuredA\n";
     for (size_t i = 0; i < m_lastSweepResults.size(); ++i) {
@@ -492,7 +492,7 @@ void SPDPowerSupplyUI::RenderSweepResultsTable() {
   }
 
   ImGui::SameLine();
-  if (ImGui::Button(reinterpret_cast<const char*>(u8"🗑️ Clear"), ImVec2(80, 25))) {
+  if (ImGui::Button("🗑️ Clear", ImVec2(80, 25))) {
     m_lastSweepResults.clear();
     m_lastSweepDevice.clear();
     m_lastSweepType.clear();
