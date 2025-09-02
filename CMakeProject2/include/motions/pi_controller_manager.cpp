@@ -79,7 +79,7 @@ bool PIControllerManager::ConnectAll() {
         piSubscriber->SetDecimationFactor(1);          // Store every update (no decimation)
 
         // Subscribe to position updates
-        controller->SubscribeToPositions(piSubscriber, "PIMotionSubscriber");
+        //controller->SubscribeToPositions(piSubscriber, "PIMotionSubscriber");
         m_logger->LogInfo("PIControllerManager: PI motion subscriber connected to " + name);
 
         // Optional: Log configuration

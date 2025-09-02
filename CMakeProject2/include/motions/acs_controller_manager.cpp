@@ -77,7 +77,7 @@ bool ACSControllerManager::ConnectAll() {
         // acsSubscriber->SetHomePosition(name, "X", 0.0);
         // acsSubscriber->SetSoftLimit(name, "X", 500.0);
 
-        controller->SubscribeToPositions(acsSubscriber, "ACSMotionSubscriber");
+        //controller->SubscribeToPositions(acsSubscriber, "ACSMotionSubscriber");
         m_logger->LogInfo("ACSControllerManager: ACS subscriber connected to " + name);
       }
       else {

@@ -33,9 +33,7 @@ class ConfigFileWatchdog;
 class DUTDataRecorder;
 class GlobalDataStore;
 class SPDPowerSupplyManager;
-namespace Keithley {
-  class Keithley6482Manager;
-}
+
 
 
 
@@ -83,7 +81,7 @@ public:
     std::unique_ptr<DUTDataRecorder> dutRecorder;
     std::unique_ptr<ConfigFileWatchdog> configWatchdog;
     std::unique_ptr<SPDPowerSupplyManager> spdPowerSupply;
-    std::unique_ptr<Keithley::Keithley6482Manager> keithley6482;
+
   };
 
   struct Operations {
@@ -145,7 +143,6 @@ private:
   std::function<bool()> WrapRegisterWithContext(HardwareManagers& hw, Operations& ops);
   std::function<bool()> WrapInitConfigWatchdog(HardwareManagers& hw);
   std::function<bool()> WarpInitConfigSPDPowerSupply(HardwareManagers& hw);
-	std::function<bool()> WrapInitKeithley6482(HardwareManagers& hw); // Added for Keithley 6482
 
 
 
@@ -161,7 +158,7 @@ private:
   bool RegisterWithContext(HardwareManagers& hw, Operations& ops);
   bool InitConfigWatchdog(HardwareManagers& hw);
   bool InitConfigSPDPowerSupply(HardwareManagers& hw);
-	bool InitKeithley6482(HardwareManagers& hw); // Added for Keithley 6482
+
 
 
   // Helper methods
