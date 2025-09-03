@@ -96,6 +96,18 @@ class MainWindow(QMainWindow):
         control_layout.addStretch()
         control_group.setLayout(control_layout)
         main_layout.addWidget(control_group)
+
+        self.voltage_1v_button = QPushButton('Set 1V')
+        self.voltage_1v_button.clicked.connect(lambda: self.set_bias_voltage(1.0))
+        control_layout.addWidget(self.voltage_1v_button)
+
+        self.voltage_2v_button = QPushButton('Set 2V')
+        self.voltage_2v_button.clicked.connect(lambda: self.set_bias_voltage(2.0))
+        control_layout.addWidget(self.voltage_2v_button)
+
+        self.voltage_off_button = QPushButton('Voltage OFF')
+        self.voltage_off_button.clicked.connect(self.disable_voltage)
+        control_layout.addWidget(self.voltage_off_button)
         
         # === Status Panel ===
         status_group = QGroupBox("System Status")
@@ -373,6 +385,19 @@ class MainWindow(QMainWindow):
                 self.fast_mode_button.setText("Switch to Fast Mode")
                 self.fast_mode_button.setEnabled(True)
     
+    # Add methods:
+    def set_bias_voltage(self, voltage):
+        """Set bias voltage on both channels."""
+        if self.multimeter:
+            success, msg = self.multimeter.set_both_channels_voltage(voltage, voltage)
+            self.status_bar.showMessage(msg)
+            
+    def disable_voltage(self):
+        """Disable all voltage outputs."""
+        if self.multimeter:
+            success, msg = self.multimeter.disable_all_voltage_outputs()
+            self.status_bar.showMessage(msg)
+
     def _switch_to_fast_mode(self):
         """Quick switch to fast monitoring mode."""
         self.mode_combo.setCurrentText("MONITOR")
