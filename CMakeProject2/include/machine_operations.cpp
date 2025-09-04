@@ -1,6 +1,6 @@
 ﻿// machine_operations.cpp
 #include "machine_operations.h"
-
+//#include "AppContext.h" 
 #include <sstream>
 #include <filesystem>
 #include <chrono>
@@ -8,7 +8,7 @@
 
 #include "external/sqlite/sqlite3.h"
 
-
+class AppContext;
 //
 //struct VoltageSweepResult {
 //  double voltage;
@@ -4092,6 +4092,98 @@ bool MachineOperations::GetDataValue(const std::string& dataKey, double& value,
   value = dataStore->GetValue(dataKey, 0.0);
 
   LogInfo("Retrieved value: " + std::to_string(value));
+
+  return true;
+}
+
+
+
+
+std::vector<DataPoint> MachineOperations::GetChannelDataBuffer(const std::string& channelId,
+  size_t maxPoints) {
+  AppContext& context = AppContext::GetInstance();  // Reference, not pointer
+  DataClientManager* dataClientManager = context.GetDataClient();  // Use . not ->
+  if (dataClientManager) {
+    return dataClientManager->GetLastDataPoints(channelId, maxPoints);
+  }
+  return std::vector<DataPoint>();
+}
+
+std::vector<DataPoint> MachineOperations::GetChannelDataSince(const std::string& channelId,
+  const std::chrono::system_clock::time_point& sinceTime) {
+  AppContext& context = AppContext::GetInstance();
+  DataClientManager* dataClientManager = context.GetDataClient();
+  if (dataClientManager) {
+    return dataClientManager->GetDataPointsFromTime(channelId, sinceTime);
+  }
+  return std::vector<DataPoint>();
+}
+
+
+bool MachineOperations::StartChannelRecording(const std::vector<std::string>& channels,
+  const std::string& filename,
+  const std::string& recordingId) {
+
+  AppContext& context = AppContext::GetInstance();
+  DataClientManager* dataClientManager = context.GetDataClient();
+
+  if (!dataClientManager) {
+    LogError("DataClientManager not available for recording");
+    return false;
+  }
+
+  // Check if recording ID already exists
+  if (m_activeRecorders.find(recordingId) != m_activeRecorders.end()) {
+    LogError("Recording with ID " + recordingId + " already exists");
+    return false;
+  }
+
+  // Create recorder
+  auto recorder = std::make_unique<ChannelRecorder>(filename, channels);
+
+  // Subscribe to each channel
+  for (const auto& channel : channels) {
+    dataClientManager->Subscribe(channel, recorder.get());
+  }
+
+  // Store recorder
+  m_activeRecorders[recordingId] = std::move(recorder);
+
+  LogInfo("Started recording " + std::to_string(channels.size()) +
+    " channels to " + filename + " (ID: " + recordingId + ")");
+
+  return true;
+}
+
+bool MachineOperations::StopChannelRecording(const std::string& recordingId, size_t& recordedPoints) {
+
+  AppContext& context = AppContext::GetInstance();
+  DataClientManager* dataClientManager = context.GetDataClient();
+
+  if (!dataClientManager) {
+    LogError("DataClientManager not available");
+    return false;
+  }
+
+  // Find recorder
+  auto it = m_activeRecorders.find(recordingId);
+  if (it == m_activeRecorders.end()) {
+    LogError("Recording ID not found: " + recordingId);
+    recordedPoints = 0;
+    return false;
+  }
+
+  // Get recorded points count
+  recordedPoints = it->second->GetRecordCount();
+
+  // Unsubscribe from DataClientManager
+  dataClientManager->UnsubscribeCompletely(it->second.get());
+
+  // Remove recorder (destructor will close file)
+  m_activeRecorders.erase(it);
+
+  LogInfo("Stopped recording " + recordingId +
+    ". Recorded " + std::to_string(recordedPoints) + " points");
 
   return true;
 }

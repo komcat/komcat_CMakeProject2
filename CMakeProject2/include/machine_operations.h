@@ -9,9 +9,11 @@
 #endif
 #endif
 
+#include "AppContext.h"
 #include "include/SMU/keithley2400_operations.h" // Include the SMU operations header
 #include "include/cld101x/cld101x_operations.h"  // Include it here, not in the header
 #include "include/motions/motion_control_layer.h"
+#include "include/data/data_client_manager.h"
 #include "include/motions/pi_controller_manager.h"
 #include "include/eziio/EziIO_Manager.h"
 #include "include/eziio/PneumaticManager.h"
@@ -39,6 +41,7 @@
 
 class CLD101xOperations;
 class Keithley2400Operations;
+
 
 extern "C" {
 	bool MachineOperations_PerformScan(void* machineOpsPtr,
@@ -519,6 +522,18 @@ public:
 	bool GetDataValue(const std::string& dataKey, double& value,
 		const std::string& callerContext = "");
 
+
+	// Data channel operations
+	//float ReadDataValue(const std::string& channelId);
+	std::vector<DataPoint> GetChannelDataBuffer(const std::string& channelId, size_t maxPoints);
+	std::vector<DataPoint> GetChannelDataSince(const std::string& channelId,
+		const std::chrono::system_clock::time_point& sinceTime);
+	bool StartChannelRecording(const std::vector<std::string>& channels,
+		const std::string& filename,
+		const std::string& recordingId);
+	bool StopChannelRecording(const std::string& recordingId, size_t& recordedPoints);
+
+
 private:
 	
 	bool m_enableDebug = false;
@@ -600,6 +615,63 @@ private:
 	void StorePositionResult(const std::string& operationId, const std::string& prefix,
 		const PositionStruct& position);
 
+
+
+	struct RecordingInfo {
+		std::vector<std::string> channels;
+		std::string filename;
+		std::chrono::system_clock::time_point startTime;
+	};
+	std::map<std::string, RecordingInfo> m_activeRecordings;
+
+	class ChannelRecorder : public IDataSubscriber {
+	public:
+		ChannelRecorder(const std::string& filename, const std::vector<std::string>& channels)
+			: m_filename(filename), m_channels(channels), m_recordCount(0) {
+			// Open file for writing
+			m_file.open(m_filename);  // Use m_filename here
+			if (m_file.is_open()) {
+				// Write CSV header
+				m_file << "timestamp,channel,value\n";
+			}
+		}
+
+		~ChannelRecorder() {
+			if (m_file.is_open()) {
+				m_file.close();
+			}
+		}
+
+		void OnDataReceived(const std::string& channelId, float value, const DataPoint& dataPoint) override {
+			// Check if this channel is in our list
+			if (std::find(m_channels.begin(), m_channels.end(), channelId) != m_channels.end()) {
+				if (m_file.is_open()) {
+					auto time_t = std::chrono::system_clock::to_time_t(dataPoint.timestamp);
+					m_file << time_t << "," << channelId << "," << value << "\n";
+					m_file.flush();
+					m_recordCount++;
+				}
+			}
+		}
+
+		void OnConnectionChanged(const std::string& channelId, bool connected) override {}
+		void OnDataError(const std::string& channelId, const std::string& errorMessage) override {}
+
+		std::string GetSubscriberName() const override {
+			return "ChannelRecorder_" + m_filename;  // Use m_filename here
+		}
+
+		size_t GetRecordCount() const { return m_recordCount; }
+		const std::vector<std::string>& GetChannels() const { return m_channels; }
+
+	private:
+		std::string m_filename;  // Add this member variable
+		std::ofstream m_file;
+		std::vector<std::string> m_channels;
+		std::atomic<size_t> m_recordCount;
+	};
+
+	std::map<std::string, std::unique_ptr<ChannelRecorder>> m_activeRecorders;
 
 };
 

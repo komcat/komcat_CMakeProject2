@@ -4551,4 +4551,284 @@ private:
 
 
 
+// Add these to your SequenceStep.h file with the other operation classes
 
+// ============================================================================
+// DATA CHANNEL OPERATIONS
+// Operations for working with real-time data channels from DataClientManager
+// ============================================================================
+
+/// <summary>
+/// Operation to get the latest value from a data channel
+/// </summary>
+class GetLatestChannelValueOperation : public SequenceOperation {
+public:
+  GetLatestChannelValueOperation(const std::string& channelId, bool logValue = true)
+    : m_channelId(channelId), m_logValue(logValue), m_latestValue(0.0f) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Get value from GlobalDataStore or DataClientManager
+    m_latestValue = ops.ReadDataValue(m_channelId);
+
+    if (m_logValue) {
+      ops.LogInfo("Channel " + m_channelId + " latest value: " + std::to_string(m_latestValue));
+    }
+
+    return true;
+  }
+
+  std::string GetDescription() const override {
+    return "Get latest value from channel " + m_channelId;
+  }
+
+  float GetValue() const { return m_latestValue; }
+
+private:
+  std::string m_channelId;
+  bool m_logValue;
+  float m_latestValue;
+};
+
+/// <summary>
+/// Operation to get buffer of data points from a channel
+/// </summary>
+class GetChannelBufferOperation : public SequenceOperation {
+public:
+  GetChannelBufferOperation(const std::string& channelId, size_t maxPoints = 100)
+    : m_channelId(channelId), m_maxPoints(maxPoints) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // This would call into DataClientManager to get the buffer
+    // You'll need to expose this through MachineOperations
+    m_dataPoints = ops.GetChannelDataBuffer(m_channelId, m_maxPoints);
+
+    ops.LogInfo("Retrieved " + std::to_string(m_dataPoints.size()) +
+      " data points from channel " + m_channelId);
+
+    return !m_dataPoints.empty();
+  }
+
+  std::string GetDescription() const override {
+    return "Get buffer from channel " + m_channelId + " (max " +
+      std::to_string(m_maxPoints) + " points)";
+  }
+
+  const std::vector<DataPoint>& GetDataPoints() const { return m_dataPoints; }
+
+private:
+  std::string m_channelId;
+  size_t m_maxPoints;
+  std::vector<DataPoint> m_dataPoints;
+};
+
+/// <summary>
+/// Operation to get buffer since a specific timestamp
+/// </summary>
+class GetChannelBufferSinceOperation : public SequenceOperation {
+public:
+  GetChannelBufferSinceOperation(const std::string& channelId,
+    std::chrono::system_clock::time_point sinceTime)
+    : m_channelId(channelId), m_sinceTime(sinceTime) {
+  }
+
+  // Constructor for "since N seconds ago"
+  GetChannelBufferSinceOperation(const std::string& channelId, int secondsAgo)
+    : m_channelId(channelId) {
+    m_sinceTime = std::chrono::system_clock::now() - std::chrono::seconds(secondsAgo);
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // This would call into DataClientManager to get data since timestamp
+    m_dataPoints = ops.GetChannelDataSince(m_channelId, m_sinceTime);
+
+    ops.LogInfo("Retrieved " + std::to_string(m_dataPoints.size()) +
+      " data points from channel " + m_channelId + " since timestamp");
+
+    return true; // Can be empty if no data since timestamp
+  }
+
+  std::string GetDescription() const override {
+    auto now = std::chrono::system_clock::now();
+    auto secondsAgo = std::chrono::duration_cast<std::chrono::seconds>(now - m_sinceTime).count();
+    return "Get buffer from channel " + m_channelId + " since " +
+      std::to_string(secondsAgo) + " seconds ago";
+  }
+
+  const std::vector<DataPoint>& GetDataPoints() const { return m_dataPoints; }
+
+private:
+  std::string m_channelId;
+  std::chrono::system_clock::time_point m_sinceTime;
+  std::vector<DataPoint> m_dataPoints;
+};
+
+/// <summary>
+/// Operation to start recording data channels to CSV
+/// </summary>
+class StartChannelRecordingOperation : public SequenceOperation {
+public:
+  StartChannelRecordingOperation(const std::vector<std::string>& channels,
+    const std::string& filename)
+    : m_channels(channels), m_filename(filename), m_recordingId("") {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Generate unique recording ID based on timestamp
+    auto now = std::chrono::system_clock::now();
+    auto timestamp = std::chrono::system_clock::to_time_t(now);
+    m_recordingId = "recording_" + std::to_string(timestamp);
+
+    // Start recording through MachineOperations
+    bool success = ops.StartChannelRecording(m_channels, m_filename, m_recordingId);
+
+    if (success) {
+      ops.LogInfo("Started recording " + std::to_string(m_channels.size()) +
+        " channels to " + m_filename);
+    }
+    else {
+      ops.LogError("Failed to start channel recording to " + m_filename);
+    }
+
+    return success;
+  }
+
+  std::string GetDescription() const override {
+    return "Start recording " + std::to_string(m_channels.size()) +
+      " channels to " + m_filename;
+  }
+
+  const std::string& GetRecordingId() const { return m_recordingId; }
+
+private:
+  std::vector<std::string> m_channels;
+  std::string m_filename;
+  std::string m_recordingId;
+};
+
+/// <summary>
+/// Operation to stop recording data channels
+/// </summary>
+class StopChannelRecordingOperation : public SequenceOperation {
+public:
+  StopChannelRecordingOperation(const std::string& recordingId = "")
+    : m_recordingId(recordingId), m_recordedPoints(0) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Stop recording through MachineOperations
+    bool success = ops.StopChannelRecording(m_recordingId, m_recordedPoints);
+
+    if (success) {
+      ops.LogInfo("Stopped recording. Total points recorded: " +
+        std::to_string(m_recordedPoints));
+    }
+    else {
+      ops.LogError("Failed to stop channel recording");
+    }
+
+    return success;
+  }
+
+  std::string GetDescription() const override {
+    return "Stop channel recording" +
+      (m_recordingId.empty() ? "" : " (ID: " + m_recordingId + ")");
+  }
+
+  size_t GetRecordedPoints() const { return m_recordedPoints; }
+
+private:
+  std::string m_recordingId;
+  size_t m_recordedPoints;
+};
+
+/// <summary>
+/// Combined operation to record channels for a specific duration
+/// </summary>
+class RecordChannelsForDurationOperation : public SequenceOperation {
+public:
+  RecordChannelsForDurationOperation(const std::vector<std::string>& channels,
+    const std::string& filename,
+    int durationSeconds)
+    : m_channels(channels), m_filename(filename), m_durationSeconds(durationSeconds) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    std::string callerContext = "RecordChannelsForDurationOperation_" +
+      std::to_string(m_durationSeconds) + "s";
+
+    // Start recording
+    std::string recordingId = "recording_" +
+      std::to_string(std::chrono::system_clock::to_time_t(
+        std::chrono::system_clock::now()));
+
+    if (!ops.StartChannelRecording(m_channels, m_filename, recordingId)) {
+      ops.LogError("Failed to start channel recording");
+      return false;
+    }
+
+    ops.LogInfo("Recording " + std::to_string(m_channels.size()) +
+      " channels for " + std::to_string(m_durationSeconds) + " seconds");
+
+    // Wait for specified duration
+    std::this_thread::sleep_for(std::chrono::seconds(m_durationSeconds));
+
+    // Stop recording
+    size_t recordedPoints = 0;
+    bool success = ops.StopChannelRecording(recordingId, recordedPoints);
+
+    if (success) {
+      ops.LogInfo("Recording completed. Total points: " +
+        std::to_string(recordedPoints));
+    }
+    else {
+      ops.LogError("Failed to stop recording properly");
+    }
+
+    return success;
+  }
+
+  std::string GetDescription() const override {
+    return "Record " + std::to_string(m_channels.size()) + " channels to " +
+      m_filename + " for " + std::to_string(m_durationSeconds) + " seconds";
+  }
+
+private:
+  std::vector<std::string> m_channels;
+  std::string m_filename;
+  int m_durationSeconds;
+};
+
+// ============================================================================
+// Usage Example in a Sequence
+// ============================================================================
+
+/*
+// In your process or sequence setup:
+
+// Example 1: Get latest value
+sequence->AddOperation(std::make_shared<GetLatestChannelValueOperation>(
+    "voltage_channel", true));
+
+// Example 2: Get buffer of last 100 points
+sequence->AddOperation(std::make_shared<GetChannelBufferOperation>(
+    "current_channel", 100));
+
+// Example 3: Get data from last 30 seconds
+sequence->AddOperation(std::make_shared<GetChannelBufferSinceOperation>(
+    "power_channel", 30));
+
+// Example 4: Record multiple channels for 60 seconds
+std::vector<std::string> channelsToRecord = {"voltage_channel", "current_channel"};
+sequence->AddOperation(std::make_shared<RecordChannelsForDurationOperation>(
+    channelsToRecord, "test_data.csv", 60));
+
+// Example 5: Start/stop recording manually
+sequence->AddOperation(std::make_shared<StartChannelRecordingOperation>(
+    channelsToRecord, "manual_recording.csv"));
+
+// ... do other operations ...
+
+sequence->AddOperation(std::make_shared<StopChannelRecordingOperation>());
+*/

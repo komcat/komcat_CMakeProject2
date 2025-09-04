@@ -1,6 +1,7 @@
 #pragma once
 
 #include "include/tcp/tcp_client.h"
+#include "data_subscriber_interface.h"
 #include <vector>
 #include <string>
 #include <memory>
@@ -10,6 +11,11 @@
 #include <cmath>
 #include <sstream>
 #include <iomanip>
+#include <deque>
+#include <unordered_map>
+#include <set>
+
+class IDataSubscriber; // Forward declaration
 
 // Structure to hold a single data point with timestamp
 struct DataPoint {
@@ -143,6 +149,10 @@ struct DataClientInfo {
   int dataPointCount;
   int dataPointCursor;
 
+  // Timestamp buffer - stores all data updates with timestamps
+  std::deque<DataPoint> timestampBuffer;
+  static const size_t MAX_TIMESTAMP_BUFFER_SIZE = 10000; // Max entries to keep
+
   // Latest value
   float latestValue;
 
@@ -157,9 +167,8 @@ struct DataClientInfo {
     dataPointCount(0),
     dataPointCursor(0),
     latestValue(0.0f),
-    dataMutex(std::make_shared<std::mutex>()) {  // Initialize with a shared_ptr
+    dataMutex(std::make_shared<std::mutex>()) {
     strcpy_s(statusMessage, sizeof(statusMessage), "Not connected");
-
     // Initialize the data points vector with 100 elements
     dataPoints.resize(100);
   }
@@ -172,6 +181,7 @@ struct DataClientInfo {
     dataPoints(other.dataPoints),
     dataPointCount(other.dataPointCount),
     dataPointCursor(other.dataPointCursor),
+    timestampBuffer(other.timestampBuffer),
     latestValue(other.latestValue),
     dataMutex(other.dataMutex) {
     strcpy_s(statusMessage, sizeof(statusMessage), other.statusMessage);
@@ -185,6 +195,7 @@ struct DataClientInfo {
     dataPoints(std::move(other.dataPoints)),
     dataPointCount(other.dataPointCount),
     dataPointCursor(other.dataPointCursor),
+    timestampBuffer(std::move(other.timestampBuffer)),
     latestValue(other.latestValue),
     dataMutex(std::move(other.dataMutex)) {
     strcpy_s(statusMessage, sizeof(statusMessage), other.statusMessage);
@@ -199,6 +210,7 @@ struct DataClientInfo {
       dataPoints = other.dataPoints;
       dataPointCount = other.dataPointCount;
       dataPointCursor = other.dataPointCursor;
+      timestampBuffer = other.timestampBuffer;
       latestValue = other.latestValue;
       dataMutex = other.dataMutex;
       strcpy_s(statusMessage, sizeof(statusMessage), other.statusMessage);
@@ -215,11 +227,61 @@ struct DataClientInfo {
       dataPoints = std::move(other.dataPoints);
       dataPointCount = other.dataPointCount;
       dataPointCursor = other.dataPointCursor;
+      timestampBuffer = std::move(other.timestampBuffer);
       latestValue = other.latestValue;
       dataMutex = std::move(other.dataMutex);
       strcpy_s(statusMessage, sizeof(statusMessage), other.statusMessage);
     }
     return *this;
+  }
+
+  // Get last N data points from the timestamp buffer
+  std::vector<DataPoint> GetLastDataPoints(size_t n) const {
+    std::lock_guard<std::mutex> lock(*dataMutex);
+    std::vector<DataPoint> result;
+    size_t count = (std::min)(n, timestampBuffer.size());
+    if (count > 0) {
+      result.assign(timestampBuffer.end() - count, timestampBuffer.end());
+    }
+    return result;
+  }
+
+  // Get data points from a specific time onwards
+  std::vector<DataPoint> GetDataPointsFromTime(const std::chrono::system_clock::time_point& fromTime) const {
+    std::lock_guard<std::mutex> lock(*dataMutex);
+    std::vector<DataPoint> result;
+    for (const auto& dp : timestampBuffer) {
+      if (dp.timestamp >= fromTime) {
+        result.push_back(dp);
+      }
+    }
+    return result;
+  }
+
+  // Get data points within a time range
+  std::vector<DataPoint> GetDataPointsInTimeRange(
+    const std::chrono::system_clock::time_point& startTime,
+    const std::chrono::system_clock::time_point& endTime) const {
+    std::lock_guard<std::mutex> lock(*dataMutex);
+    std::vector<DataPoint> result;
+    for (const auto& dp : timestampBuffer) {
+      if (dp.timestamp >= startTime && dp.timestamp <= endTime) {
+        result.push_back(dp);
+      }
+    }
+    return result;
+  }
+
+  // Clear timestamp buffer
+  void ClearTimestampBuffer() {
+    std::lock_guard<std::mutex> lock(*dataMutex);
+    timestampBuffer.clear();
+  }
+
+  // Get timestamp buffer size
+  size_t GetTimestampBufferSize() const {
+    std::lock_guard<std::mutex> lock(*dataMutex);
+    return timestampBuffer.size();
   }
 };
 
@@ -237,8 +299,8 @@ private:
   bool m_autoSaveData;
   int m_dataSaveInterval;
   bool m_isVisible = true;
+  bool m_showDebug = false;
 
-  bool m_showDebug = false; // Add this line
   // Check if a client is already connected to the same host:port
   bool IsAlreadyConnectedTo(const std::string& host, int port) const;
 
@@ -246,6 +308,16 @@ private:
   DataClientInfo* GetClientConnectedTo(const std::string& host, int port);
 
   static bool s_instanceExists;
+
+  // Subscription management
+  std::unordered_map<std::string, std::set<IDataSubscriber*>> m_subscribers;
+  std::set<IDataSubscriber*> m_allChannelSubscribers; // Subscribe to all channels
+  mutable std::mutex m_subscriberMutex;
+
+  // Internal notification methods
+  void NotifyDataReceived(const std::string& channelId, float value, const DataPoint& dataPoint);
+  void NotifyConnectionChanged(const std::string& channelId, bool connected);
+  void NotifyDataError(const std::string& channelId, const std::string& errorMessage);
 
 public:
   // Constructor takes the path to the config file
@@ -287,14 +359,70 @@ public:
   // Get raw configuration
   const nlohmann::json& GetConfig() const { return m_config; }
 
-  // Add these methods to the public section:
+  // Window visibility
   bool IsVisible() const { return m_isVisible; }
   void ToggleWindow() { m_isVisible = !m_isVisible; }
+
   // Check for duplicate connections before connecting
   bool HasDuplicateConnection(const std::string& serverId) const;
 
   // Get connection conflicts for a specific server
   std::vector<std::string> GetConnectionConflicts(const std::string& serverId) const;
 
+  // Get last N data points for a specific channel
+  std::vector<DataPoint> GetLastDataPoints(const std::string& serverId, size_t n) const {
+    auto* clientInfo = const_cast<DataClientManager*>(this)->GetClientInfoById(serverId);
+    if (clientInfo) {
+      return clientInfo->GetLastDataPoints(n);
+    }
+    return std::vector<DataPoint>();
+  }
 
+  // Get data points from a specific time for a channel
+  std::vector<DataPoint> GetDataPointsFromTime(const std::string& serverId,
+    const std::chrono::system_clock::time_point& fromTime) const {
+    auto* clientInfo = const_cast<DataClientManager*>(this)->GetClientInfoById(serverId);
+    if (clientInfo) {
+      return clientInfo->GetDataPointsFromTime(fromTime);
+    }
+    return std::vector<DataPoint>();
+  }
+
+  // Get data points within a time range for a channel
+  std::vector<DataPoint> GetDataPointsInTimeRange(const std::string& serverId,
+    const std::chrono::system_clock::time_point& startTime,
+    const std::chrono::system_clock::time_point& endTime) const {
+    auto* clientInfo = const_cast<DataClientManager*>(this)->GetClientInfoById(serverId);
+    if (clientInfo) {
+      return clientInfo->GetDataPointsInTimeRange(startTime, endTime);
+    }
+    return std::vector<DataPoint>();
+  }
+
+  // Clear timestamp buffer for a specific channel
+  void ClearTimestampBuffer(const std::string& serverId) {
+    auto* clientInfo = GetClientInfoById(serverId);
+    if (clientInfo) {
+      clientInfo->ClearTimestampBuffer();
+    }
+  }
+
+  // Clear all timestamp buffers
+  void ClearAllTimestampBuffers() {
+    for (auto& client : m_clients) {
+      client.ClearTimestampBuffer();
+    }
+  }
+
+  // Subscription methods
+  void Subscribe(const std::string& channelId, IDataSubscriber* subscriber);
+  void SubscribeToAll(IDataSubscriber* subscriber);
+  void Unsubscribe(const std::string& channelId, IDataSubscriber* subscriber);
+  void UnsubscribeFromAll(IDataSubscriber* subscriber);
+  void UnsubscribeCompletely(IDataSubscriber* subscriber);
+
+  // Get subscription info
+  std::vector<std::string> GetSubscribedChannels(IDataSubscriber* subscriber) const;
+  std::set<IDataSubscriber*> GetChannelSubscribers(const std::string& channelId) const;
+  size_t GetSubscriberCount(const std::string& channelId) const;
 };
