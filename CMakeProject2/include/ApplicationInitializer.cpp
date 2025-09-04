@@ -20,7 +20,7 @@
 #include "include/SMU/keithley2400_manager.h"
 #include "include/SMU/keithley2400_operations.h"
     // Add this at the top of ApplicationInitializer.cpp if not already present
-#include "include/Keithley6482/Keithley6482Manager.h"
+
 #include "include/PowerSupply/SPDPowerSupplyManager.h"
 #include "include/machine_operations.h"
 #include "include/ops/motion_ops.h"

@@ -34,6 +34,12 @@
 #include "include/splashscreen/SimpleSplashScreen.h"
 #include "include/PowerSupply/SPDPowerSupplyManager.h"
 
+// Add these with your other includes
+#include "include/scanning/grid_scanner.h"
+#include "include/scanning/grid_scanner_ui.h"
+#include "include/scanning/i_scan_motion_controller.h"
+#include "include/scanning/PIScanMotionAdapter.h"
+#include "include/scanning/grid_scanner_manager.h"
 
 // Keep your debug function as-is
 bool g_deugMode = false; // Global debug mode flag
@@ -569,6 +575,32 @@ int main(int argc, char* argv[])
 		logger->LogInfo("IDS Camera UI connected to menu system");
 	}
 
+	// ===========================================
+// PHASE 3.5: CREATE GRID SCANNER FOR TESTING
+// ===========================================
+
+// Create GridScanner manager - always shows UI
+	std::unique_ptr<GridScannerManager> gridScannerManager;
+	gridScannerManager = std::make_unique<GridScannerManager>();
+
+	// Get managers from AppContext
+	auto* piManager = AppContext::GetInstance().GetPIController();
+	auto* dataClient = AppContext::GetInstance().GetDataClient();
+
+	// Set the managers (can be null, UI will still show)
+	if (piManager) {
+		gridScannerManager->SetPIManager(piManager);
+		logger->LogInfo("GridScanner: PI manager set");
+	}
+
+	if (dataClient) {
+		gridScannerManager->SetDataClient(dataClient);
+		logger->LogInfo("GridScanner: Data client set");
+	}
+
+	// Show the UI
+	gridScannerManager->Show();
+	logger->LogInfo("GridScanner UI created (hardware will connect when available)");
 
 
 
@@ -630,7 +662,19 @@ int main(int argc, char* argv[])
 		uiManager.RenderUI();
 
 
+		// In render loop
+		if (gridScannerManager) {
+			// Check for hardware connections periodically
+			static auto lastCheck = std::chrono::steady_clock::now();
+			auto now = std::chrono::steady_clock::now();
+			if (std::chrono::duration_cast<std::chrono::seconds>(now - lastCheck).count() >= 2) {
+				gridScannerManager->UpdateHardwareConnections();
+				lastCheck = now;
+			}
 
+			// Always render the UI
+			gridScannerManager->Render();
+		}
 
 
 

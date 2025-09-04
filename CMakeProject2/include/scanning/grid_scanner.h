@@ -1,0 +1,160 @@
+// include/scanning/grid_scanner.h
+#pragma once
+
+#include "include/scanning/i_scan_motion_controller.h"
+#include "include/data/data_client_manager.h"
+#include "include/data/global_data_store.h"
+#include "include/logger.h"
+#include <vector>
+#include <map>
+#include <mutex>
+#include <thread>
+#include <atomic>
+#include <functional>
+#include <memory>
+#include <chrono>
+
+// Forward declaration
+struct DataPoint;
+
+struct GridPoint {
+  double x;
+  double y;
+  int row;
+  int col;
+
+  GridPoint() : x(0), y(0), row(0), col(0) {}
+  GridPoint(double _x, double _y, int _row, int _col)
+    : x(_x), y(_y), row(_row), col(_col) {
+  }
+};
+
+struct GridScanData {
+  GridPoint position;
+  double value;
+  double timestamp;
+  std::vector<double> trajectory;
+};
+
+class GridScanner : public IDataSubscriber {
+public:
+  // Constructor now takes the motion interface
+  // Modified constructor - allow null motion controller
+  GridScanner(std::shared_ptr<IScanMotionController> motionController,  // can be null
+    DataClientManager& dataManager,
+    const std::string& dataChannel);
+
+  virtual ~GridScanner();
+
+  // Configuration
+  void SetGridParameters(double xStep = 50.0,
+    double yStep = 10.0,
+    int xPoints = 2,
+    int yPoints = 5);
+
+  void SetSettlingTime(int milliseconds) { m_settlingTimeMs = milliseconds; }
+  void SetMoveTimeout(int seconds) { m_moveTimeoutSec = seconds; }
+
+  // Main scanning interface
+  bool StartScan(std::function<void(const GridPoint&, double)> updateCallback = nullptr);
+  void StopScan();
+  bool IsScanActive() const { return m_scanning.load(); }
+  double GetProgress() const { return m_progress.load(); }
+
+  // Data access
+  std::vector<GridScanData> GetCollectedData() const;
+  std::vector<std::vector<double>> GetDataGrid() const;
+  GridPoint GetCurrentPosition() const;
+  double GetLastValue() const;
+
+  // IDataSubscriber implementation
+  void OnDataReceived(const std::string& channelId,
+    float value,
+    const DataPoint& dataPoint) override;
+  void OnConnectionChanged(const std::string& channelId, bool connected) override;
+  void OnDataError(const std::string& channelId,
+    const std::string& errorMessage) override;
+  // include/scanning/grid_scanner.h
+  std::string GetSubscriberName() const override {
+    // FIX: Check for null motion controller
+    if (m_motionController) {
+      return "GridScanner_" + m_motionController->GetDeviceName();
+    }
+    return "GridScanner_NoDevice";
+  }
+
+
+  // Add method to set/change motion controller
+  void SetMotionController(std::shared_ptr<IScanMotionController> controller);
+  bool HasMotionController() const { return m_motionController != nullptr; }
+  bool IsMotionControllerConnected() const {
+    return m_motionController && m_motionController->IsConnected();
+  }
+  bool IsDataChannelConnected() const;
+
+  // Add method to change data channel
+  void SetDataChannel(const std::string& channel);
+
+
+  double GetPeakValue() const { return m_peakValue; }
+  GridPoint GetPeakPosition() const { return m_peakPosition; }
+  bool HasValidPeak() const { return m_peakValue > -std::numeric_limits<double>::infinity(); }
+
+private:
+  // Motion controller interface
+  std::shared_ptr<IScanMotionController> m_motionController;
+  DataClientManager& m_dataManager;
+
+  // Data channel
+  std::string m_dataChannel;
+
+  // Grid parameters
+  double m_xStep;
+  double m_yStep;
+  int m_xPoints;
+  int m_yPoints;
+  int m_settlingTimeMs;
+  int m_moveTimeoutSec;
+
+  // Origin position
+  double m_originX;
+  double m_originY;
+
+  // Scan state
+  std::atomic<bool> m_scanning;
+  std::atomic<double> m_progress;
+  std::thread m_scanThread;
+  std::atomic<bool> m_stopRequested;
+
+  // Data collection
+  mutable std::mutex m_dataMutex;
+  std::vector<GridScanData> m_scanData;
+  std::vector<double> m_continuousData;
+  GridPoint m_currentTarget;
+  double m_lastValue;
+
+  // Callback for UI updates
+  std::function<void(const GridPoint&, double)> m_updateCallback;
+
+  // Internal methods
+  std::vector<GridPoint> GenerateSnakePattern();
+  void ScanThreadFunc();
+  bool WaitForMove(int timeoutMs);
+  void LogScanInfo(const std::string& message);
+
+
+
+
+  // Add these member variables
+  mutable std::chrono::steady_clock::time_point m_lastDataTime;
+  std::atomic<bool> m_dataChannelActive{ false };
+
+  // Peak tracking
+  double m_peakValue = -std::numeric_limits<double>::infinity();
+  GridPoint m_peakPosition;
+
+  // Original position (before scan started)
+  double m_originalX = 0.0;
+  double m_originalY = 0.0;
+
+};

@@ -702,8 +702,18 @@ add_executable(uaa3App
  "include/ACSC_wrapper.h"
  "include/motions/MotionDataSubscriber.h"
   "include/motions/MotionDataSubscriber.cpp"
-
-  "include/eziio/EziIO_Observer.h" "include/eziio/EziIO_Observer.cpp" "include/Keithley6482/Keithley6482.h" "include/Keithley6482/Keithley6482.cpp" "include/Keithley6482/Keithley6482Manager.h" "include/Keithley6482/Keithley6482Manager.cpp" "include/Keithley6482/IK6482MeasurementSubscriber.h" "include/Keithley6482/Keithley6482DebugUI.h" "include/data/data_subscriber_interface.h" "include/data/DataClient_Ops.h" "include/data/DataClient_Ops.cpp")
+  "include/eziio/EziIO_Observer.h"
+  "include/eziio/EziIO_Observer.cpp"   
+  "include/data/data_subscriber_interface.h"
+  "include/data/DataClient_Ops.h"
+  "include/data/DataClient_Ops.cpp"
+  "include/scanning/grid_scanner.h"
+  "include/scanning/grid_scanner.cpp"
+  "include/scanning/grid_scanner_ui.h"
+  "include/scanning/grid_scanner_ui.cpp"
+  "include/scanning/i_scan_motion_controller.h"
+  "include/scanning/PIScanMotionAdapter.h"
+   "include/scanning/grid_scanner_manager.h")
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
