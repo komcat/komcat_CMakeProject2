@@ -18,7 +18,11 @@ GridVolumeScannerUI::GridVolumeScannerUI()
 void GridVolumeScannerUI::SetScanner(std::shared_ptr<GridVolumeScanner> scanner) {
   m_scanner = scanner;
   if (scanner) {
-    Logger::GetInstance()->LogInfo("Volume scanner connected");
+    // NEW: Set up real-time layer completion callback
+    m_scanner->SetLayerCompletedCallback([this](int layerIndex, const std::vector<std::vector<double>>& layerData, double z) {
+      OnLayerCompleted(layerIndex, layerData, z);
+    });
+    Logger::GetInstance()->LogInfo("Volume scanner connected with real-time layer updates");
   }
 }
 
@@ -28,14 +32,55 @@ void GridVolumeScannerUI::SetDeviceInfo(const std::string& deviceName, const std
 }
 
 void GridVolumeScannerUI::ResetVolumeData() {
+  std::lock_guard<std::mutex> lock(m_layerDataMutex);
   m_volumeData.data.clear();
   m_volumeData.zPositions.clear();
   m_currentLayerData.clear();
   m_currentLayer = 0;
+  m_latestCompletedLayer = -1;
+  m_dataUpdated = false;
+}
+
+// NEW: Real-time layer completion handler
+void GridVolumeScannerUI::OnLayerCompleted(int layerIndex, const std::vector<std::vector<double>>& layerData, double z) {
+  std::lock_guard<std::mutex> lock(m_layerDataMutex);
+
+  // Ensure volume data structure can accommodate this layer
+  if (m_volumeData.data.size() <= layerIndex) {
+    m_volumeData.data.resize(layerIndex + 1);
+    m_volumeData.zPositions.resize(layerIndex + 1);
+  }
+
+  // Store the layer data immediately
+  m_volumeData.data[layerIndex] = layerData;
+  m_volumeData.zPositions[layerIndex] = z;
+
+  // Update latest completed layer
+  m_latestCompletedLayer = layerIndex;
+
+  // Auto-switch to display the latest completed layer
+  m_currentLayer = layerIndex;
+  m_currentLayerData = layerData;
+
+  // Mark data as updated for immediate UI refresh
+  m_dataUpdated = true;
+
+  Logger::GetInstance()->LogInfo("Real-time UI update: Layer " + std::to_string(layerIndex) + " completed and displayed");
 }
 
 void GridVolumeScannerUI::Render() {
   if (!m_visible) return;
+
+  // NEW: Check for real-time data updates
+  if (m_dataUpdated.exchange(false)) {
+    // Data was updated, refresh display if current layer is valid
+    if (m_currentLayer >= 0 && m_currentLayer < m_volumeData.data.size()) {
+      // Layer data is already updated in OnLayerCompleted, just trigger auto-scale
+      if (m_autoScale) {
+        UpdateLayerDisplay(m_currentLayer);
+      }
+    }
+  }
 
   ImGui::SetNextWindowSize(ImVec2(1000, 700), ImGuiCond_FirstUseEver);
   if (!ImGui::Begin("3D Volume Scanner", &m_visible)) {
@@ -48,14 +93,19 @@ void GridVolumeScannerUI::Render() {
     bool wasScanning = m_scanInProgress;
     m_scanInProgress = m_scanner->IsVolumeScanActive();
 
-    // Get volume data when scan completes OR when viewing results
-    if ((!m_scanInProgress && wasScanning) ||
-      (!m_scanInProgress && m_scanner->GetVolumeData().data.size() > 0 && m_volumeData.data.empty())) {
-      m_volumeData = m_scanner->GetVolumeData();
+    // Get final volume data when scan completes (if not already updated real-time)
+    if (!m_scanInProgress && wasScanning) {
+      const auto& finalVolumeData = m_scanner->GetVolumeData();
 
-      // Auto-select first layer for display
-      if (!m_volumeData.data.empty() && m_currentLayer < m_volumeData.data.size()) {
-        UpdateLayerDisplay(0);
+      // Only update if we don't have real-time data or if final data is more complete
+      std::lock_guard<std::mutex> lock(m_layerDataMutex);
+      if (finalVolumeData.data.size() > m_volumeData.data.size()) {
+        m_volumeData = finalVolumeData;
+
+        // Auto-select first layer for display if no layer was selected
+        if (m_currentLayer >= m_volumeData.data.size() && !m_volumeData.data.empty()) {
+          UpdateLayerDisplay(0);
+        }
       }
     }
   }
@@ -275,6 +325,12 @@ void GridVolumeScannerUI::RenderControls() {
       ImGui::Text("Step %d of %d (Z=%.1f µm)",
         m_currentScanLayer + 1, m_zSteps, m_currentZ * 1000.0);
 
+      // NEW: Show real-time layer completion status
+      int completedLayers = m_latestCompletedLayer + 1;
+      if (completedLayers > 0) {
+        ImGui::TextColored(ImVec4(0, 1, 0, 1), "✓ %d layers completed and visible", completedLayers);
+      }
+
       ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0, 1));
       ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1, 0.3f, 0, 1));
 
@@ -307,19 +363,31 @@ void GridVolumeScannerUI::RenderControls() {
   ImGui::Combo("Colormap", &m_colormapIndex, colormaps, IM_ARRAYSIZE(colormaps));
 }
 
-
-
 void GridVolumeScannerUI::RenderLayerView() {
-  ImGui::Text("Layer View");
+  ImGui::Text("Layer View (Real-time Updates)");
   ImGui::Separator();
 
   // Layer selector
+  std::lock_guard<std::mutex> lock(m_layerDataMutex);
+
   if (!m_volumeData.data.empty()) {
     int previousLayer = m_currentLayer;
     ImGui::SliderInt("Layer", &m_currentLayer, 0,
       static_cast<int>(m_volumeData.data.size()) - 1);
 
-    if (m_currentLayer != previousLayer || m_currentLayerData.empty()) {
+    // NEW: Show real-time status for each layer
+    ImGui::SameLine();
+    if (m_currentLayer <= m_latestCompletedLayer) {
+      ImGui::TextColored(ImVec4(0, 1, 0, 1), "✓ Complete");
+    }
+    else if (m_scanInProgress && m_currentLayer == m_currentScanLayer) {
+      ImGui::TextColored(ImVec4(1, 1, 0, 1), "⚡ Scanning...");
+    }
+    else {
+      ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "⏳ Pending");
+    }
+
+    if (m_currentLayer != previousLayer && m_currentLayer < m_volumeData.data.size()) {
       UpdateLayerDisplay(m_currentLayer);
     }
 
@@ -334,7 +402,6 @@ void GridVolumeScannerUI::RenderLayerView() {
   // Plot current layer heatmap
   if (!m_currentLayerData.empty() && m_currentLayerData.size() == m_yPoints) {
     if (ImPlot::BeginPlot("##LayerHeatmap", ImVec2(-1, 400))) {
-      //ImPlot::PushColormap(static_cast<ImPlotColormap>(m_colormapIndex));
       // Use same colormap as grid scanner
       ImPlotColormap colormap = ImPlotColormap_Viridis;
       switch (m_colormapIndex) {
@@ -412,39 +479,56 @@ void GridVolumeScannerUI::RenderLayerView() {
   }
 }
 
-
-// Add to GridVolumeScannerUI::RenderVolumeStats() method
-
 void GridVolumeScannerUI::RenderVolumeStats() {
   ImGui::Text("Volume Statistics");
   ImGui::Separator();
+
+  std::lock_guard<std::mutex> lock(m_layerDataMutex);
 
   if (m_scanner && !m_volumeData.data.empty()) {
     const auto& volData = m_scanner->GetVolumeData();
 
     ImGui::Text("Scan ID: %s", volData.scanId.c_str());
-    ImGui::Text("Total Layers: %zu", volData.data.size());
+    ImGui::Text("Total Layers: %zu", m_volumeData.data.size());
     ImGui::Text("Points per Layer: %d", m_xPoints * m_yPoints);
-    ImGui::Text("Total Points: %zu", volData.data.size() * m_xPoints * m_yPoints);
+    ImGui::Text("Total Points: %zu", m_volumeData.data.size() * m_xPoints * m_yPoints);
+
+    // NEW: Real-time completion status
+    ImGui::Separator();
+    ImGui::Text("Real-time Status:");
+    ImGui::Indent();
+
+    int completedCount = m_latestCompletedLayer + 1;
+    ImGui::Text("Completed: %d/%zu layers", completedCount, m_volumeData.data.size());
+
+    if (m_scanInProgress) {
+      float completionPercent = (completedCount * 100.0f) / m_zSteps;
+      ImGui::Text("Progress: %.1f%%", completionPercent);
+    }
+
+    ImGui::Unindent();
 
     // NEW: Show Z movement confirmation
     ImGui::Separator();
     ImGui::Text("Z Movement Status:");
     ImGui::Indent();
 
-    // Show Z positions for each layer
-    for (size_t i = 0; i < volData.zPositions.size() && i < 5; ++i) { // Show first 5 layers
-      ImGui::Text("Layer %zu: Z = %.6f mm", i + 1, volData.zPositions[i]);
+    // Show Z positions for completed layers
+    int layersToShow = (std::min)(5, static_cast<int>(m_volumeData.zPositions.size()));
+    for (int i = 0; i < layersToShow; ++i) {
+      if (i < m_volumeData.zPositions.size()) {
+        ImGui::Text("Layer %d: Z = %.6f mm", i + 1, m_volumeData.zPositions[i]);
+      }
     }
 
-    if (volData.zPositions.size() > 5) {
-      ImGui::Text("... (%zu more layers)", volData.zPositions.size() - 5);
+    if (m_volumeData.zPositions.size() > 5) {
+      ImGui::Text("... (%zu more layers)", m_volumeData.zPositions.size() - 5);
     }
 
-    // Calculate Z travel
-    if (volData.zPositions.size() > 1) {
-      double zTravel = volData.zPositions.back() - volData.zPositions.front();
-      ImGui::Text("Total Z Travel: %.6f mm", zTravel);
+    // Calculate Z travel for completed layers
+    if (m_volumeData.zPositions.size() > 1) {
+      double zTravel = m_volumeData.zPositions.back() - m_volumeData.zPositions.front();
+      ImGui::Text("Z Travel so far: %.6f mm", zTravel);
 
       // Check if Z actually moved
       if (std::abs(zTravel) < 0.000001) { // Less than 1 µm
@@ -504,9 +588,6 @@ void GridVolumeScannerUI::RenderVolumeStats() {
     ImGui::Text("No volume data available");
   }
 }
-
-
-
 
 void GridVolumeScannerUI::RenderResultsDialog() {
   ImGui::OpenPopup("Volume Scan Results");
@@ -608,8 +689,6 @@ void GridVolumeScannerUI::CalculateZRange(float& zStart, float& zEnd) const {
     zEnd = (m_zSteps - 1) * m_zStepSize;
   }
 }
-
-
 
 void GridVolumeScannerUI::TestZMovement() {
   if (!m_scanner || !m_piManager) return;

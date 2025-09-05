@@ -7,6 +7,7 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
+#include <functional>
 
 struct VolumeGridPoint {
   double x, y, z;
@@ -51,6 +52,11 @@ public:
   // Check if volume scan is active
   bool IsVolumeScanActive() const { return m_volumeScanActive; }
 
+  // NEW: Set callback for real-time layer completion
+  void SetLayerCompletedCallback(std::function<void(int, const std::vector<std::vector<double>>&, double)> callback) {
+    m_layerCompletedCallback = callback;
+  }
+
 private:
   // Z scanning parameters
   double m_zStart = -1.0;
@@ -63,6 +69,8 @@ private:
   std::atomic<bool> m_volumeScanActive{ false };
   std::atomic<bool> m_stopVolumeRequested{ false };
 
+  // NEW: Layer completion callback for real-time updates
+  std::function<void(int, const std::vector<std::vector<double>>&, double)> m_layerCompletedCallback;
 
   // Save functions
   void SaveLayerData(int layerIndex, double z, const std::vector<std::vector<double>>& data);
@@ -76,5 +84,6 @@ private:
   std::tuple<double, double, double> CalculateStats(const std::vector<std::vector<double>>& data) const;
   nlohmann::json FindLayerPeak(const std::vector<std::vector<double>>& data, double z) const;
 
-
+  // NEW: Emit layer completion event
+  void OnLayerCompleted(int layerIndex, const std::vector<std::vector<double>>& layerData, double z);
 };

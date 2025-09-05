@@ -11,6 +11,7 @@
 #include <vector>
 #include <string>
 #include <mutex>
+#include <atomic>
 
 class GridVolumeScannerUI {
 public:
@@ -89,6 +90,11 @@ private:
   double m_lastPeakValue = 0.0;
   double m_lastScanDuration = 0.0;
 
+  // NEW: Real-time layer update system
+  std::mutex m_layerDataMutex;
+  std::atomic<bool> m_dataUpdated{ false };
+  std::atomic<int> m_latestCompletedLayer{ -1 };
+
   // Internal methods
   void RenderControls();
   void RenderLayerView();
@@ -101,5 +107,6 @@ private:
   // Helper to calculate Z scan range
   void CalculateZRange(float& zStart, float& zEnd) const;
 
-
+  // NEW: Real-time layer completion handler
+  void OnLayerCompleted(int layerIndex, const std::vector<std::vector<double>>& layerData, double z);
 };

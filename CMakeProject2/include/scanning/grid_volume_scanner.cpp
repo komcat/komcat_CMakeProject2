@@ -36,6 +36,13 @@ void GridVolumeScanner::SetZScanParameters(double zStart, double zEnd, int zLaye
     " to Z=" + std::to_string(m_zEnd));
 }
 
+// NEW: Emit layer completion event for real-time UI updates
+void GridVolumeScanner::OnLayerCompleted(int layerIndex, const std::vector<std::vector<double>>& layerData, double z) {
+  if (m_layerCompletedCallback) {
+    m_layerCompletedCallback(layerIndex, layerData, z);
+  }
+}
+
 bool GridVolumeScanner::StartVolumeScan(std::function<void(int layer, int total, double z)> progressCallback) {
   if (m_volumeScanActive) {
     LogScanInfo("Volume scan already in progress");
@@ -129,7 +136,7 @@ bool GridVolumeScanner::StartVolumeScan(std::function<void(int layer, int total,
       // Add settling time for movement
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-      // Notify progress callback
+      // Notify progress callback BEFORE starting layer scan
       if (progressCallback) {
         progressCallback(layer, m_zLayers, currentZ);
       }
@@ -140,6 +147,9 @@ bool GridVolumeScanner::StartVolumeScan(std::function<void(int layer, int total,
       // Store layer data
       m_volumeData.data.push_back(layerData);
       m_volumeData.zPositions.push_back(currentZ);
+
+      // NEW: Emit layer completion event immediately after layer completes
+      OnLayerCompleted(layer, layerData, currentZ);
 
       // Save individual layer
       SaveLayerData(layer, currentZ, layerData);
