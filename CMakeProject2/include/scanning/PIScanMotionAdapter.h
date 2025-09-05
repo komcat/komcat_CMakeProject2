@@ -14,6 +14,19 @@ public:
     : m_controller(controller), m_deviceName(deviceName) {
   }
 
+  // Add method to subscribe scanner to position updates
+  void SubscribeScanner(IPositionSubscriber* scanner) {
+    if (m_controller && scanner) {
+      m_controller->SubscribeToPositions(scanner, "GridScanner_" + m_deviceName);
+    }
+  }
+
+  void UnsubscribeScanner() {
+    if (m_controller) {
+      m_controller->UnsubscribeFromPositions("GridScanner_" + m_deviceName);
+    }
+  }
+
   bool IsConnected() const override {
     return m_controller && m_controller->IsConnected();
   }

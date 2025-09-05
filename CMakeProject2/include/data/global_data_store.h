@@ -75,6 +75,9 @@ public:
 	 */
 	void SetDebugMode(bool enable) { m_showDebug = enable; }
 
+	// In global_data_store.h, add after GetValue declaration:
+	bool TryGetValue(const std::string& serverId, float& value);
+
 	/**
 		*@brief Manual SPD status update(for chaining callbacks)
 		* @param deviceName Device name

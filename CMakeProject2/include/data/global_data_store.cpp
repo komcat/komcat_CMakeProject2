@@ -548,3 +548,36 @@ void GlobalDataStore::ConfigureMotionSubscribers(bool enablePI, bool enableACS) 
 			<< "ACS: " << (enableACS ? "enabled" : "disabled") << std::endl;
 	}
 }
+
+// In global_data_store.cpp, add this method:
+bool GlobalDataStore::TryGetValue(const std::string& serverId, float& value) {
+	std::lock_guard<std::mutex> lock(m_mutex);
+	auto it = m_latestValues.find(serverId);
+	if (it != m_latestValues.end()) {
+		value = it->second;
+
+		// Debug log for successful retrieval
+		if (m_showDebug) {
+			static int tryGetCounter = 0;
+			tryGetCounter++;
+			if (tryGetCounter % 100 == 0 && serverId == "GPIB-Current") {
+				std::cout << "[DEBUG GlobalDataStore] TryGetValue: " << serverId
+					<< " = " << value << " (SUCCESS)" << std::endl;
+			}
+		}
+
+		return true;
+	}
+
+	// Debug log for missing channel
+	if (m_showDebug) {
+		static std::set<std::string> loggedMissing;
+		if (loggedMissing.find(serverId) == loggedMissing.end()) {
+			std::cout << "[DEBUG GlobalDataStore] TryGetValue: Channel '" << serverId
+				<< "' not found" << std::endl;
+			loggedMissing.insert(serverId);
+		}
+	}
+
+	return false;
+}

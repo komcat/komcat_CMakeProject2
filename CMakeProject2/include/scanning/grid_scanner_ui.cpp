@@ -410,13 +410,15 @@ void GridScannerUI::RenderHeatmap() {
     m_colorScaleMax = m_colorScaleMin + 1.0f;
   }
 
-  // Create flat array for ImPlot (row-major order)
+  // Create flat array for ImPlot - FIXED ORDER
   std::vector<double> flatData;
   flatData.reserve(m_yPoints * m_xPoints);
 
-  for (const auto& row : m_heatmapData) {
-    for (double val : row) {
-      // Replace NaN/Inf with scale minimum for display
+  // ImPlot expects data from bottom-left, but our grid starts from top
+  // So we need to reverse the row order
+  for (int row = m_yPoints - 1; row >= 0; --row) {  // Start from bottom row
+    for (int col = 0; col < m_xPoints; ++col) {
+      double val = m_heatmapData[row][col];
       if (std::isnan(val) || std::isinf(val)) {
         flatData.push_back(m_colorScaleMin);
       }
@@ -440,17 +442,14 @@ void GridScannerUI::RenderHeatmap() {
     // Setup axes - keep display in µm for clarity
     ImPlot::SetupAxes("X Position (µm)", "Y Position (µm)");
 
-    // Set axis limits - these are for display only, still in µm
-    double xMin = 0;
-    double xMax = (m_xPoints - 1) * m_xStep;
-    double yMin = -(m_yPoints - 1) * m_yStep;
-    double yMax = 0;
+    // Set axis limits centered around origin
+    double xExtent = ((m_xPoints - 1) * m_xStep) / 2.0;
+    double yExtent = ((m_yPoints - 1) * m_yStep) / 2.0;
 
-    ImPlot::SetupAxisLimits(ImAxis_X1, xMin - m_xStep / 2, xMax + m_xStep / 2, ImPlotCond_Always);
-    ImPlot::SetupAxisLimits(ImAxis_Y1, yMin - m_yStep / 2, yMax + m_yStep / 2, ImPlotCond_Always);
+    ImPlot::SetupAxisLimits(ImAxis_X1, -xExtent - m_xStep / 2, xExtent + m_xStep / 2, ImPlotCond_Always);
+    ImPlot::SetupAxisLimits(ImAxis_Y1, -yExtent - m_yStep / 2, yExtent + m_yStep / 2, ImPlotCond_Always);
 
-
-    // Plot heatmap with validated data
+    // Plot heatmap with corrected bounds for centered grid
     ImPlot::PlotHeatmap("Scan Data",
       flatData.data(),
       m_yPoints,  // rows
@@ -458,8 +457,8 @@ void GridScannerUI::RenderHeatmap() {
       m_colorScaleMin,
       m_colorScaleMax,
       "",  // no label format
-      ImPlotPoint(0, 0),  // bounds min
-      ImPlotPoint((m_xPoints - 1) * m_xStep, -(m_yPoints - 1) * m_yStep));  // bounds max
+      ImPlotPoint(-xExtent, -yExtent),  // bounds min (bottom-left of centered grid)
+      ImPlotPoint(xExtent, yExtent));    // bounds max (top-right of centered grid)
 
     // Draw current position marker if scanning
     if (m_scanInProgress && m_scanner) {
@@ -468,8 +467,11 @@ void GridScannerUI::RenderHeatmap() {
       // Validate position is within bounds
       if (pos.col >= 0 && pos.col < m_xPoints &&
         pos.row >= 0 && pos.row < m_yPoints) {
-        double markerX = pos.col * m_xStep;
-        double markerY = -pos.row * m_yStep;
+
+        // Calculate marker position for centered grid
+        // Map grid indices to centered coordinates
+        double markerX = -xExtent + (pos.col * m_xStep);
+        double markerY = yExtent - (pos.row * m_yStep);  // Flip Y for display
 
         // Draw crosshair at current position
         ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(1, 0, 0, 1));
@@ -495,8 +497,6 @@ void GridScannerUI::RenderHeatmap() {
   // Show colorbar scale values
   ImGui::Text("Scale: %.3e to %.3e", m_colorScaleMin, m_colorScaleMax);
 }
-
-
 // In grid_scanner_ui.cpp - Modify UpdateHeatmap to detect scan completion
 void GridScannerUI::UpdateHeatmap(const GridPoint& point, double value) {
   // Update heatmap data

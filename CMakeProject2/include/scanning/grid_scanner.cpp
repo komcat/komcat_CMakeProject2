@@ -1,12 +1,12 @@
 // include/scanning/grid_scanner.cpp
 #include "include/scanning/grid_scanner.h"
 #include "include/data/global_data_store.h"
+#include "include/scanning/PIScanMotionAdapter.h"
 #include <chrono>
 #include <cmath>
 #include <algorithm>
 #include <sstream>
 
-// include/scanning/grid_scanner.cpp
 GridScanner::GridScanner(std::shared_ptr<IScanMotionController> motionController,
   DataClientManager& dataManager,
   const std::string& dataChannel)
@@ -35,15 +35,12 @@ GridScanner::GridScanner(std::shared_ptr<IScanMotionController> motionController
   m_dataManager.Subscribe(m_dataChannel, this);
 }
 
-// MISSING: Destructor implementation
 GridScanner::~GridScanner() {
   StopScan();
   m_dataManager.Unsubscribe(m_dataChannel, this);
   LogScanInfo("GridScanner destroyed");
 }
 
-// MISSING: SetGridParameters implementation
-// In grid_scanner.cpp - Add to SetGridParameters
 void GridScanner::SetGridParameters(double xStep, double yStep,
   int xPoints, int yPoints) {
   if (m_scanning) {
@@ -71,7 +68,6 @@ void GridScanner::SetGridParameters(double xStep, double yStep,
     " points, step: " + std::to_string(m_xStep) + "x" + std::to_string(m_yStep) + " µm");
 }
 
-// In grid_scanner.cpp - Update StartScan method
 bool GridScanner::StartScan(std::function<void(const GridPoint&, double)> updateCallback) {
   if (m_scanning) {
     Logger::GetInstance()->LogWarning("GridScanner: Scan already in progress");
@@ -95,29 +91,32 @@ bool GridScanner::StartScan(std::function<void(const GridPoint&, double)> update
     return false;
   }
 
+  // Check that we can access GlobalDataStore
+  GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+  if (!dataStore) {
+    Logger::GetInstance()->LogError("GridScanner: GlobalDataStore not available");
+    return false;
+  }
+
   m_updateCallback = updateCallback;
   m_scanning = true;
   m_progress = 0.0;
   m_stopRequested = false;
 
-  // Clear previous data
+  // Clear previous scan data
   {
     std::lock_guard<std::mutex> lock(m_dataMutex);
     m_scanData.clear();
-    m_continuousData.clear();
   }
 
   LogScanInfo("Starting grid scan...");
 
-  // Start scan thread - use move assignment to avoid issues
+  // Start scan thread
   m_scanThread = std::thread(&GridScanner::ScanThreadFunc, this);
 
   return true;
 }
 
-
-// MISSING: StopScan implementation
-// In grid_scanner.cpp - Update StopScan
 void GridScanner::StopScan() {
   if (!m_scanning && !m_scanThread.joinable()) {
     return;  // Nothing to stop
@@ -138,7 +137,6 @@ void GridScanner::StopScan() {
   LogScanInfo("Scan stopped");
 }
 
-// MISSING: GetDataGrid implementation
 std::vector<std::vector<double>> GridScanner::GetDataGrid() const {
   std::lock_guard<std::mutex> lock(m_dataMutex);
 
@@ -157,57 +155,30 @@ std::vector<std::vector<double>> GridScanner::GetDataGrid() const {
   return grid;
 }
 
-// MISSING: GetCurrentPosition implementation
 GridPoint GridScanner::GetCurrentPosition() const {
   return m_currentTarget;
 }
 
-// MISSING: GetLastValue implementation
 double GridScanner::GetLastValue() const {
-  return m_lastValue;
+  return m_lastValue.load();
 }
 
-// MISSING: GetCollectedData implementation
 std::vector<GridScanData> GridScanner::GetCollectedData() const {
   std::lock_guard<std::mutex> lock(m_dataMutex);
   return m_scanData;
 }
 
-// In grid_scanner.cpp - Update OnDataReceived
 void GridScanner::OnDataReceived(const std::string& channelId,
   float value,
   const DataPoint& dataPoint) {
-  // More flexible channel matching
-  bool isOurChannel = false;
-
-  // Check various formats
-  if (channelId == m_dataChannel ||                    // Exact match
-    channelId == "(" + m_dataChannel + ")" ||        // With parentheses
-    channelId.find(m_dataChannel) != std::string::npos) {  // Contains our channel name
-    isOurChannel = true;
+  // Just track that channel is active, don't store values
+  if (channelId == m_dataChannel || channelId == "(" + m_dataChannel + ")") {
+    m_lastDataTime = std::chrono::steady_clock::now();
+    m_dataChannelActive = true;
+    m_lastValue = static_cast<double>(value);
   }
-
-  if (!isOurChannel) {
-    return;
-  }
-
-  // Update last data time and mark channel as active
-  m_lastDataTime = std::chrono::steady_clock::now();
-  m_dataChannelActive = true;
-
-  // Only collect data if scanning
-  if (!m_scanning) {
-    return;
-  }
-
-  std::lock_guard<std::mutex> lock(m_dataMutex);
-  m_continuousData.push_back(static_cast<double>(value));
-  m_lastValue = static_cast<double>(value);
 }
 
-
-
-// MISSING: OnConnectionChanged implementation
 void GridScanner::OnConnectionChanged(const std::string& channelId, bool connected) {
   LogScanInfo("Data channel " + channelId + " connection changed: " +
     (connected ? "connected" : "disconnected"));
@@ -217,7 +188,6 @@ void GridScanner::OnConnectionChanged(const std::string& channelId, bool connect
   }
 }
 
-// MISSING: OnDataError implementation
 void GridScanner::OnDataError(const std::string& channelId,
   const std::string& errorMessage) {
   if (channelId != m_dataChannel) {
@@ -232,14 +202,11 @@ void GridScanner::OnDataError(const std::string& channelId,
   }
 }
 
-// MISSING: LogScanInfo implementation
-// include/scanning/grid_scanner.cpp
 void GridScanner::LogScanInfo(const std::string& message) {
   std::string deviceName = m_motionController ? m_motionController->GetDeviceName() : "NoDevice";
   Logger::GetInstance()->LogInfo("GridScanner[" + deviceName + "]: " + message);
 }
 
-// In grid_scanner.cpp - Revised GenerateSnakePattern
 std::vector<GridPoint> GridScanner::GenerateSnakePattern() {
   std::vector<GridPoint> points;
 
@@ -253,8 +220,6 @@ std::vector<GridPoint> GridScanner::GenerateSnakePattern() {
     "mm, Y=" + std::to_string(m_originY) + "mm");
 
   // Calculate the starting position (top-left corner of the grid)
-  // For even number of points, offset by (n-1)/2 * step
-  // For odd number of points, offset by n/2 * step
   double xOffset = ((m_xPoints - 1) * m_xStep / 2.0) / 1000.0; // Convert µm to mm
   double yOffset = ((m_yPoints - 1) * m_yStep / 2.0) / 1000.0; // Convert µm to mm
 
@@ -304,12 +269,18 @@ std::vector<GridPoint> GridScanner::GenerateSnakePattern() {
   return points;
 }
 
-
-// In grid_scanner.cpp - Complete ScanThreadFunc
 void GridScanner::ScanThreadFunc() {
   // Check connection
   if (!m_motionController || !m_motionController->IsConnected()) {
     Logger::GetInstance()->LogError("GridScanner: Motion controller not connected");
+    m_scanning = false;
+    return;
+  }
+
+  // Get GlobalDataStore instance
+  GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+  if (!dataStore) {
+    Logger::GetInstance()->LogError("GridScanner: GlobalDataStore not available");
     m_scanning = false;
     return;
   }
@@ -338,6 +309,19 @@ void GridScanner::ScanThreadFunc() {
   int totalPoints = static_cast<int>(gridPoints.size());
   LogScanInfo("Scanning " + std::to_string(totalPoints) + " points");
 
+  // Determine the correct data key format
+  std::string dataKey = m_dataChannel;  // Start with plain channel name
+  float testValue = 0.0f;
+  if (!dataStore->TryGetValue(dataKey, testValue)) {
+    // Try with parentheses
+    dataKey = "(" + m_dataChannel + ")";
+    if (!dataStore->TryGetValue(dataKey, testValue)) {
+      Logger::GetInstance()->LogWarning("GridScanner: Channel " + m_dataChannel +
+        " not found in GlobalDataStore");
+    }
+  }
+  LogScanInfo("Using data key: " + dataKey);
+
   // Scan each point
   for (int i = 0; i < totalPoints && !m_stopRequested; ++i) {
     const GridPoint& target = gridPoints[i];
@@ -348,12 +332,6 @@ void GridScanner::ScanThreadFunc() {
       << " (row:" << target.row << ", col:" << target.col << ")"
       << " X:" << target.x << " Y:" << target.y;
     LogScanInfo(logMsg.str());
-
-    // Clear continuous data for this move
-    {
-      std::lock_guard<std::mutex> lock(m_dataMutex);
-      m_continuousData.clear();
-    }
 
     // Move to target position using interface
     bool moveSuccess = m_motionController->MoveToXY(target.x, target.y, false); // non-blocking
@@ -378,43 +356,33 @@ void GridScanner::ScanThreadFunc() {
     scanData.timestamp = std::chrono::duration<double>(
       std::chrono::system_clock::now().time_since_epoch()).count();
 
+    // Get single current value directly from GlobalDataStore - NO AVERAGING
+    float currentValue = 0.0f;
+    if (dataStore->TryGetValue(dataKey, currentValue)) {
+      scanData.value = static_cast<double>(currentValue);
+      m_lastValue = scanData.value;
+    }
+    else {
+      // If can't get value from store, use last known value
+      scanData.value = m_lastValue.load();
+      Logger::GetInstance()->LogWarning("Could not get value from GlobalDataStore at point " +
+        std::to_string(i + 1));
+    }
+
+    // Check for peak value
+    if (scanData.value > m_peakValue) {
+      m_peakValue = scanData.value;
+      m_peakPosition = target;
+      LogScanInfo("New peak found: " + std::to_string(m_peakValue) +
+        " at grid[" + std::to_string(target.col) + "," +
+        std::to_string(target.row) + "] physical(" +
+        std::to_string(target.x) + "mm, " +
+        std::to_string(target.y) + "mm)");
+    }
+
+    // Store the scan data
     {
       std::lock_guard<std::mutex> lock(m_dataMutex);
-
-      // Get final value (average of last few samples if available)
-      double finalValue = 0.0;
-
-      if (!m_continuousData.empty()) {
-        int samplesToAverage = (std::min)(5, static_cast<int>(m_continuousData.size()));
-        double sum = 0.0;
-        for (int j = static_cast<int>(m_continuousData.size()) - samplesToAverage;
-          j < static_cast<int>(m_continuousData.size()); ++j) {
-          sum += m_continuousData[j];
-        }
-        finalValue = sum / samplesToAverage;
-        m_lastValue = finalValue;
-      }
-      else {
-        finalValue = m_lastValue;
-      }
-
-      scanData.value = finalValue;
-
-      // Check for peak value
-      if (finalValue > m_peakValue) {
-        m_peakValue = finalValue;
-        m_peakPosition = target;
-        LogScanInfo("New peak found: " + std::to_string(m_peakValue) +
-          " at grid[" + std::to_string(target.col) + "," +
-          std::to_string(target.row) + "] physical(" +
-          std::to_string(target.x) + "mm, " +
-          std::to_string(target.y) + "mm)");
-      }
-
-      // Store trajectory data
-      scanData.trajectory = m_continuousData;
-
-      // Add to collected data
       m_scanData.push_back(scanData);
     }
 
@@ -463,15 +431,53 @@ void GridScanner::ScanThreadFunc() {
   }
 }
 
-
-
 bool GridScanner::WaitForMove(int timeoutMs) {
   auto startTime = std::chrono::steady_clock::now();
 
+  // For very small movements, use position-based detection
+  double startX, startY;
+  m_motionController->GetCurrentXY(startX, startY);
+
+  // Calculate expected distance
+  double expectedDistance = std::sqrt(
+    std::pow(m_currentTarget.x - startX, 2) +
+    std::pow(m_currentTarget.y - startY, 2)
+  );
+
+  // If movement is very small, use position tolerance instead of IsMoving
+  const double POSITION_TOLERANCE = 0.0001; // 0.1 µm tolerance
+  bool usePositionCheck = expectedDistance < 0.001; // Less than 1 µm
+
+  int checkCount = 0;
   while (true) {
-    // Check if move is complete using interface
-    if (!m_motionController->IsMoving()) {
-      return true;
+    checkCount++;
+
+    if (usePositionCheck) {
+      // For small moves, check if we reached target position
+      double currentX, currentY;
+      if (m_motionController->GetCurrentXY(currentX, currentY)) {
+        double distanceToTarget = std::sqrt(
+          std::pow(m_currentTarget.x - currentX, 2) +
+          std::pow(m_currentTarget.y - currentY, 2)
+        );
+
+        if (distanceToTarget < POSITION_TOLERANCE) {
+          // We're close enough to target
+          return true;
+        }
+      }
+
+      // Also check IsMoving as backup
+      if (!m_motionController->IsMoving() && checkCount > 5) {
+        // Motion controller says we're not moving after a few checks
+        return true;
+      }
+    }
+    else {
+      // For larger moves, use normal IsMoving check
+      if (!m_motionController->IsMoving()) {
+        return true;
+      }
     }
 
     // Check for stop request
@@ -484,6 +490,12 @@ bool GridScanner::WaitForMove(int timeoutMs) {
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime).count();
     if (elapsed > timeoutMs) {
+      // For very small moves, might be already there
+      if (usePositionCheck) {
+        Logger::GetInstance()->LogWarning("GridScanner: Timeout on small move, assuming complete");
+        return true; // Assume we made it for tiny moves
+      }
+
       Logger::GetInstance()->LogError("GridScanner: Move timeout after " +
         std::to_string(elapsed) + " ms");
       m_motionController->StopMotion();
@@ -495,8 +507,6 @@ bool GridScanner::WaitForMove(int timeoutMs) {
   }
 }
 
-// Add these new methods
-// In grid_scanner.cpp
 bool GridScanner::IsDataChannelConnected() const {
   // First check if channel exists in GlobalDataStore
   GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
@@ -526,8 +536,20 @@ bool GridScanner::IsDataChannelConnected() const {
 }
 
 void GridScanner::SetMotionController(std::shared_ptr<IScanMotionController> controller) {
+  // Unsubscribe from old controller if exists
+  if (m_motionController) {
+    if (auto* adapter = dynamic_cast<PIScanMotionAdapter*>(m_motionController.get())) {
+      adapter->UnsubscribeScanner();
+    }
+  }
+
   m_motionController = controller;
+
+  // Subscribe to new controller
   if (controller) {
+    if (auto* adapter = dynamic_cast<PIScanMotionAdapter*>(controller.get())) {
+      adapter->SubscribeScanner(this);
+    }
     LogScanInfo("Motion controller set: " + controller->GetDeviceName());
   }
 }
@@ -544,3 +566,36 @@ void GridScanner::SetDataChannel(const std::string& channel) {
   }
 }
 
+void GridScanner::OnPositionsUpdate(const std::string& deviceName,
+  const std::map<std::string, double>& positions) {
+  // Only process if it's our device
+  if (m_motionController &&
+    deviceName == m_motionController->GetDeviceName()) {
+
+    std::lock_guard<std::mutex> lock(m_dataMutex);
+    m_currentPositions = positions;
+
+    // Update origin if needed
+    auto xIt = positions.find("X");
+    auto yIt = positions.find("Y");
+    if (xIt != positions.end() && yIt != positions.end()) {
+      // These are always up-to-date
+      // Could use for real-time tracking during scan
+    }
+  }
+}
+
+void GridScanner::OnMotionStatusChange(const std::string& deviceName,
+  const std::string& axis,
+  bool isMoving) {
+  if (m_motionController &&
+    deviceName == m_motionController->GetDeviceName()) {
+
+    // Track when motion completes
+    if (!isMoving && (axis == "X" || axis == "Y")) {
+      // Check if both X and Y are idle
+      // This helps WaitForMove complete faster
+      m_motionComplete = true;
+    }
+  }
+}

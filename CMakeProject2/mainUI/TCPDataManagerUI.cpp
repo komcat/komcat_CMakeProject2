@@ -320,29 +320,28 @@ void TCPDataManagerUI::Render() {
     float cardSpacing = ImGui::GetStyle().ItemSpacing.x;
     int columns = (std::max)(1, (int)((availableWidth + cardSpacing) / (cardWidth + cardSpacing)));
 
-    // Convert map to vector for index-based access
-    std::vector<ServerDisplayInfo> serverConfigs;
-    for (const auto& [id, config] : m_serverConfigs) {
-      serverConfigs.push_back(config);
-    }
-
     for (size_t i = 0; i < clientCount; ++i) {
       auto& clientInfo = m_dataClientManager->GetClientInfo(static_cast<int>(i));
 
-      // Get server config by index position (assumes same order as JSON)
+      // Get the matching server config by ID from our loaded configs
       ServerDisplayInfo serverInfo;
-      if (i < serverConfigs.size()) {
-        serverInfo = serverConfigs[i];
+      auto it = m_serverConfigs.find(clientInfo.config.id);
+
+      if (it != m_serverConfigs.end()) {
+        // Found matching config in our loaded configs
+        serverInfo = it->second;
       }
       else {
-        // Fallback if no config found for this index
-        serverInfo.id = "server_" + std::to_string(i);
-        serverInfo.name = "Server " + std::to_string(i + 1);
-        serverInfo.description = "Configuration not found in DataServerConfig.json";
-        serverInfo.host = "Unknown";
-        serverInfo.port = 0;
-        serverInfo.autoConnect = false;
-        serverInfo.logData = false;
+        // Fallback - create ServerDisplayInfo from clientInfo.config
+        serverInfo.id = clientInfo.config.id;
+        serverInfo.name = clientInfo.config.name;
+        serverInfo.description = clientInfo.config.description;
+        serverInfo.host = clientInfo.config.host;
+        serverInfo.port = clientInfo.config.port;
+        serverInfo.autoConnect = clientInfo.config.autoConnect;
+        serverInfo.unit = clientInfo.config.unit;
+        serverInfo.displayUnitSuffix = clientInfo.config.displayUnitSuffix;
+        serverInfo.logData = clientInfo.config.logData;
       }
 
       // Column layout with proper spacing
