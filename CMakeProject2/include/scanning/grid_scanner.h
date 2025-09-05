@@ -36,6 +36,26 @@ struct GridScanData {
   std::vector<double> trajectory;
 };
 
+// Add to grid_scanner.h
+struct GridPoint3D {
+  double x, y, z;
+  int row, col, layer;
+
+  GridPoint3D() : x(0), y(0), z(0), row(0), col(0), layer(0) {}
+  GridPoint3D(double _x, double _y, double _z, int _row, int _col, int _layer)
+    : x(_x), y(_y), z(_z), row(_row), col(_col), layer(_layer) {
+  }
+};
+
+struct Volume3DData {
+  std::vector<std::vector<std::vector<double>>> data;  // [layer][row][col]
+  std::vector<double> zPositions;                      // Z position for each layer
+  GridPoint3D peakPosition;
+  double peakValue;
+  std::string scanId;
+  double timestamp;
+};
+
 class GridScanner : public IDataSubscriber, public IPositionSubscriber {
 public:
   // Constructor now takes the motion interface
@@ -106,7 +126,28 @@ public:
   GridPoint GetPeakPosition() const { return m_peakPosition; }
   bool HasValidPeak() const { return m_peakValue > -std::numeric_limits<double>::infinity(); }
 
-private:
+  // Add these accessor methods to expose protected members
+  std::shared_ptr<IScanMotionController> GetMotionController() const {
+    return m_motionController;
+  }
+
+  DataClientManager& GetDataManager() const {
+    return m_dataManager;
+  }
+
+  // Grid parameter accessors
+  double GetXStep() const { return m_xStep; }
+  double GetYStep() const { return m_yStep; }
+  int GetXPoints() const { return m_xPoints; }
+  int GetYPoints() const { return m_yPoints; }
+  double GetOriginX() const { return m_originX; }
+  double GetOriginY() const { return m_originY; }
+
+  // Timing accessors
+  int GetSettlingTimeMs() const { return m_settlingTimeMs; }
+  int GetMoveTimeoutSec() const { return m_moveTimeoutSec; }
+
+protected:
   // Motion controller interface
   std::shared_ptr<IScanMotionController> m_motionController;
   DataClientManager& m_dataManager;
@@ -148,8 +189,7 @@ private:
   // Internal methods
   std::vector<GridPoint> GenerateSnakePattern();
   void ScanThreadFunc();
-  bool WaitForMove(int timeoutMs);
-  void LogScanInfo(const std::string& message);
+
 
   // Peak tracking
   double m_peakValue = -std::numeric_limits<double>::infinity();
@@ -162,4 +202,7 @@ private:
   // Add member to track current positions
   std::map<std::string, double> m_currentPositions;
   std::atomic<bool> m_motionComplete{ false };
+
+  bool WaitForMove(int timeoutMs);
+  void LogScanInfo(const std::string& message);
 };

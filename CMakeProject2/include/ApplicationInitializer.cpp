@@ -580,6 +580,9 @@ bool ApplicationInitializer::InitDataClients(HardwareManagers& hw) {
   try {
     hw.dataClient = std::make_unique<DataClientManager>("DataServerConfig.json");
     logger->LogInfo("DataClientManager initialized successfully");
+
+		hw.dataClient->ConnectAutoClients();
+    logger->LogInfo("DataClientManager Autoconnect..");
     return true;
   }
   catch (const std::exception& e) {

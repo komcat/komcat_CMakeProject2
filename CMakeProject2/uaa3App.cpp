@@ -40,6 +40,7 @@
 #include "include/scanning/i_scan_motion_controller.h"
 #include "include/scanning/PIScanMotionAdapter.h"
 #include "include/scanning/grid_scanner_manager.h"
+#include "include/scanning/grid_volume_scanner_manager.h"
 
 // Keep your debug function as-is
 bool g_deugMode = false; // Global debug mode flag
@@ -602,7 +603,22 @@ int main(int argc, char* argv[])
 	gridScannerManager->Show();
 	logger->LogInfo("GridScanner UI created (hardware will connect when available)");
 
+	std::unique_ptr<GridVolumeScannerManager> volumeScannerManager;
+	volumeScannerManager = std::make_unique<GridVolumeScannerManager>();
 
+	// Set managers
+	if (piManager) {
+		volumeScannerManager->SetPIManager(piManager);
+		logger->LogInfo("Volume Scanner: PI manager set");
+	}
+
+	if (dataClient) {
+		volumeScannerManager->SetDataClient(dataClient);
+		logger->LogInfo("Volume Scanner: Data client set");
+	}
+
+	// Show UI
+	volumeScannerManager->Show();
 
 
 
@@ -676,8 +692,18 @@ int main(int argc, char* argv[])
 			gridScannerManager->Render();
 		}
 
+		if (volumeScannerManager) {
+			// Periodic hardware check
+			static auto lastCheckVolume = std::chrono::steady_clock::now();
+			auto now = std::chrono::steady_clock::now();
+			if (std::chrono::duration_cast<std::chrono::seconds>(now - lastCheckVolume).count() >= 2) {
+				volumeScannerManager->UpdateHardwareConnections();
+				lastCheckVolume = now;
+			}
 
-
+			// Always render UI
+			volumeScannerManager->Render();
+		}
 
 #pragma region rayLibwindow
 		// Update raylib with current machine data
