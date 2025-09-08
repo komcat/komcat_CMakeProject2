@@ -1,36 +1,50 @@
-// include/scanning/grid_volume_scanner_ui.h
-#pragma once
 
+// Fixed grid_volume_scanner_ui.h
+#pragma once
 #include "grid_volume_scanner.h"
 #include "PIScanMotionAdapter.h"
 #include "include/motions/pi_controller_manager.h"
 #include "include/data/data_client_manager.h"
 #include "imgui.h"
 #include "implot/implot.h"
+#include "../mainUI/MenuManager_uaa3.h"
 #include <memory>
 #include <vector>
 #include <string>
 #include <mutex>
 #include <atomic>
 
-class GridVolumeScannerUI {
+class GridVolumeScannerUI : public IImguiUI {  // FIX: Added 'public' keyword
 public:
   GridVolumeScannerUI();
   ~GridVolumeScannerUI() = default;
 
-  // Main render function
-  void Render();
+  // IImguiUI interface implementation
+  void Render() override;
+  void Show() override { m_visible = true; }
+  void Hide() override { m_visible = false; }
+  bool IsVisible() const override { return m_visible; }
+
+  // FIX: GetName() should return const std::string& not std::string&
+  const std::string& GetName() const override {
+    static std::string name = "Grid Volume Scanner";
+    return name;
+  }
+
+  void Toggle() override {
+    if (IsVisible()) {
+      Hide();
+    }
+    else {
+      Show();
+    }
+  }
 
   // Set the scanner instance
   void SetScanner(std::shared_ptr<GridVolumeScanner> scanner);
 
   // Set device and channel names for display
   void SetDeviceInfo(const std::string& deviceName, const std::string& dataChannel);
-
-  // Control visibility
-  void Show() { m_visible = true; }
-  void Hide() { m_visible = false; }
-  bool IsVisible() const { return m_visible; }
 
   // Set managers for reconnection
   void SetManagers(PIControllerManager* piManager, DataClientManager* dataManager) {
@@ -41,61 +55,40 @@ public:
   void TestZMovement();
 
 private:
-  // Scanner instance
+  // All your existing private members remain the same
   std::shared_ptr<GridVolumeScanner> m_scanner;
-
-  // Managers
   PIControllerManager* m_piManager = nullptr;
   DataClientManager* m_dataManager = nullptr;
-
-  // Window state
   bool m_visible = false;
-
-  // Device info
   std::string m_deviceName = "Unknown";
   std::string m_dataChannel = "Unknown";
-
-  // Grid parameters (for UI controls)
-  float m_xStep = 50.0f;     // µm
-  float m_yStep = 10.0f;      // µm
+  float m_xStep = 50.0f;
+  float m_yStep = 10.0f;
   int m_xPoints = 5;
   int m_yPoints = 5;
-  int m_settlingTime = 100;   // ms
-
-  // NEW Z scan parameters
-  int m_zDirection = 1;       // 0 = negative, 1 = positive
-  float m_zStepSize = 5.0f;   // µm per step
-  int m_zSteps = 10;          // number of steps (this replaces m_zLayers)
-
-  // Volume data for display
+  int m_settlingTime = 100;
+  int m_zDirection = 1;
+  float m_zStepSize = 5.0f;
+  int m_zSteps = 10;
   VolumeScanData m_volumeData;
   int m_currentLayer = 0;
   std::vector<std::vector<double>> m_currentLayerData;
-
-  // Display settings
   float m_colorScaleMin = 0.0f;
   float m_colorScaleMax = 1.0f;
   bool m_autoScale = true;
   int m_colormapIndex = 0;
-
-  // UI state
   bool m_scanInProgress = false;
   float m_scanProgress = 0.0f;
   int m_currentScanLayer = 0;
-  double m_currentZ = 0.0;  // in mm from scanner
-
-  // Results dialog
+  double m_currentZ = 0.0;
   bool m_showResultsDialog = false;
   VolumeGridPoint m_lastPeakPosition;
   double m_lastPeakValue = 0.0;
   double m_lastScanDuration = 0.0;
-
-  // NEW: Real-time layer update system
   std::mutex m_layerDataMutex;
   std::atomic<bool> m_dataUpdated{ false };
   std::atomic<int> m_latestCompletedLayer{ -1 };
 
-  // Internal methods
   void RenderControls();
   void RenderLayerView();
   void RenderVolumeStats();
@@ -103,10 +96,6 @@ private:
   void CheckAndReconnectHardware();
   void UpdateLayerDisplay(int layer);
   void ResetVolumeData();
-
-  // Helper to calculate Z scan range
   void CalculateZRange(float& zStart, float& zEnd) const;
-
-  // NEW: Real-time layer completion handler
   void OnLayerCompleted(int layerIndex, const std::vector<std::vector<double>>& layerData, double z);
 };

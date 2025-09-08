@@ -600,7 +600,7 @@ int main(int argc, char* argv[])
 	}
 
 	// Show the UI
-	gridScannerManager->Show();
+	//gridScannerManager->Show();
 	logger->LogInfo("GridScanner UI created (hardware will connect when available)");
 
 	std::unique_ptr<GridVolumeScannerManager> volumeScannerManager;
@@ -618,10 +618,17 @@ int main(int argc, char* argv[])
 	}
 
 	// Show UI
-	volumeScannerManager->Show();
+	//volumeScannerManager->Show();
+	logger->LogInfo("GridVolumeScanner UI created (hardware will connect when available)");
 
+	// In your initialization code:
+	if (gridScannerManager && gridScannerManager->GetUI()) {
+		menuManager->RegisterUI("grid_scanner", gridScannerManager->GetUI(), "Scanners");
+	}
 
-
+	if (volumeScannerManager && volumeScannerManager->GetUI()) {
+		menuManager->RegisterUI("volume_scanner", volumeScannerManager->GetUI(), "Scanners");
+	}
 
 	// ===========================================
 	// PHASE 4: MAIN RENDER LOOP

@@ -48,6 +48,15 @@ public:
     if (m_ui) m_ui->Show();
   }
 
+  // FIX: Return raw pointer from unique_ptr using .get()
+  GridVolumeScannerUI* GetUI() {
+    return m_ui.get();  // This returns the raw pointer managed by unique_ptr
+  }
+
+  std::shared_ptr<GridVolumeScanner> GetScanner() {
+    return m_scanner;
+  }
+
   bool IsReady() const {
     return m_scanner &&
       m_scanner->IsMotionControllerConnected() &&

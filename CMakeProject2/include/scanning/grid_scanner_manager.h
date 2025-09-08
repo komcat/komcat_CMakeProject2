@@ -50,6 +50,15 @@ public:
     if (m_ui) m_ui->Show();
   }
 
+  // FIX: Return raw pointer from unique_ptr using .get()
+  GridScannerUI* GetUI() {
+    return m_ui.get();  // This returns the raw pointer managed by unique_ptr
+  }
+
+  std::shared_ptr<GridScanner> GetScanner() {
+    return m_scanner;
+  }
+
 private:
   void TryCreateScanner() {
     // Only create scanner if we have data manager and haven't created it yet
