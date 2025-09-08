@@ -52,6 +52,14 @@ public:
     m_dataManager = dataManager;
   }
 
+  // Set available devices for selection
+  void SetAvailableDevices(const std::vector<std::string>& devices);
+
+  // Callback when device selection changes
+  void SetDeviceChangeCallback(std::function<void(const std::string&)> callback) {
+    m_deviceChangeCallback = callback;
+  }
+
   void TestZMovement();
 
 private:
@@ -88,6 +96,13 @@ private:
   std::mutex m_layerDataMutex;
   std::atomic<bool> m_dataUpdated{ false };
   std::atomic<int> m_latestCompletedLayer{ -1 };
+
+  // Device selection
+  std::vector<std::string> m_availableDevices;
+  int m_selectedDeviceIndex = 0;
+  std::function<void(const std::string&)> m_deviceChangeCallback;
+
+
 
   void RenderControls();
   void RenderLayerView();

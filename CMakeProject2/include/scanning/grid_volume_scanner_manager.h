@@ -17,13 +17,48 @@ public:
 
     // Create UI immediately
     m_ui = std::make_unique<GridVolumeScannerUI>();
-    m_ui->SetDeviceInfo(m_deviceName, m_dataChannel);
+
+    // Set up device change callback
+    m_ui->SetDeviceChangeCallback(
+      [this](const std::string& deviceName) {
+      this->SetSelectedDevice(deviceName);
+    });
   }
 
   void SetPIManager(PIControllerManager* piManager) {
     m_piManager = piManager;
     m_ui->SetManagers(m_piManager, m_dataManager);
+
+    // Get and set available devices
+    if (m_piManager) {
+      auto devices = m_piManager->GetDeviceNames();
+      m_ui->SetAvailableDevices(devices);
+
+      // Auto-select first device if available
+      if (!devices.empty() && m_deviceName.empty()) {
+        SetSelectedDevice(devices[0]);
+      }
+    }
+
     TryCreateScanner();
+  }
+
+  void SetSelectedDevice(const std::string& deviceName) {
+    if (m_deviceName != deviceName) {
+      Logger::GetInstance()->LogInfo("GridScannerManager: Changing device from " +
+        m_deviceName + " to " + deviceName);
+
+      m_deviceName = deviceName;
+      m_ui->SetDeviceInfo(m_deviceName, m_dataChannel);
+
+      // Reset scanner with new device
+      if (m_scanner) {
+        m_scanner.reset();
+        m_motionAdapter.reset();
+      }
+
+      TryCreateScanner();
+    }
   }
 
   void SetDataClient(DataClientManager* dataClient) {
