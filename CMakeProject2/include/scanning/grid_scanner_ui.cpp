@@ -150,6 +150,42 @@ void GridScannerUI::RenderControls() {
   ImGui::Text("Grid Scanner Control");
   ImGui::Separator();
 
+  // NEW: Device Selection Section
+  if (!m_availableDevices.empty()) {
+    ImGui::Text("Device Selection");
+    ImGui::Separator();
+
+    // Convert vector to array of C strings for ImGui
+    std::vector<const char*> deviceNames;
+    for (const auto& device : m_availableDevices) {
+      deviceNames.push_back(device.c_str());
+    }
+
+    // Device dropdown
+    int previousIndex = m_selectedDeviceIndex;
+    if (ImGui::Combo("Motion Device", &m_selectedDeviceIndex,
+      deviceNames.data(), static_cast<int>(deviceNames.size()))) {
+      // Device changed
+      if (m_selectedDeviceIndex != previousIndex &&
+        m_selectedDeviceIndex >= 0 &&
+        m_selectedDeviceIndex < static_cast<int>(m_availableDevices.size())) {
+
+        std::string newDevice = m_availableDevices[m_selectedDeviceIndex];
+        Logger::GetInstance()->LogInfo("GridScannerUI: Device changed to " + newDevice);
+
+        // Update device name
+        m_deviceName = newDevice;
+
+        // Notify manager of change
+        if (m_deviceChangeCallback) {
+          m_deviceChangeCallback(newDevice);
+        }
+      }
+    }
+
+    ImGui::Spacing();
+  }
+
   // Connection Status Section
   ImGui::Text("Connection Status");
   ImGui::Separator();
@@ -589,6 +625,19 @@ void GridScannerUI::CheckAndReconnectHardware() {
           break;
         }
       }
+    }
+  }
+}
+
+void GridScannerUI::SetAvailableDevices(const std::vector<std::string>& devices) {
+  m_availableDevices = devices;
+
+  // Find current device in list
+  m_selectedDeviceIndex = 0;
+  for (size_t i = 0; i < devices.size(); ++i) {
+    if (devices[i] == m_deviceName) {
+      m_selectedDeviceIndex = static_cast<int>(i);
+      break;
     }
   }
 }

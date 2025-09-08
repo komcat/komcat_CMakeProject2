@@ -49,6 +49,14 @@ public:
     m_dataManager = dataManager;
   }
 
+  // Set available devices for selection
+  void SetAvailableDevices(const std::vector<std::string>& devices);
+
+  // Callback when device selection changes
+  void SetDeviceChangeCallback(std::function<void(const std::string&)> callback) {
+    m_deviceChangeCallback = callback;
+  }
+
 private:
   std::shared_ptr<GridScanner> m_scanner;
   bool m_visible = false;
@@ -74,6 +82,12 @@ private:
   bool m_showResultsDialog = false;
   double m_lastPeakValue = 0.0;
   GridPoint m_lastPeakPosition;
+
+  // Device selection
+  std::vector<std::string> m_availableDevices;
+  int m_selectedDeviceIndex = 0;
+  std::function<void(const std::string&)> m_deviceChangeCallback;
+
 
   void UpdateHeatmap(const GridPoint& point, double value);
   void RenderControls();

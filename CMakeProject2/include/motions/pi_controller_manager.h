@@ -75,6 +75,29 @@ public:
   //    controller->SetWindowVisible(m_isWindowVisible);
   //  }
   //}
+
+
+
+  // Get list of all device names managed by this controller
+  std::vector<std::string> GetDeviceNames() const {
+    std::vector<std::string> names;
+    for (const auto& [name, controller] : m_controllers) {
+      names.push_back(name);
+    }
+    return names;
+  }
+
+  // Get list of connected device names only
+  std::vector<std::string> GetConnectedDeviceNames() const {
+    std::vector<std::string> names;
+    for (const auto& [name, controller] : m_controllers) {
+      if (controller && controller->IsConnected()) {
+        names.push_back(name);
+      }
+    }
+    return names;
+  }
+
 private:
   MotionConfigManager& m_configManager;
   std::map<std::string, std::unique_ptr<PIController>> m_controllers;

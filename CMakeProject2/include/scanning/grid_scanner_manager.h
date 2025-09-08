@@ -17,15 +17,47 @@ public:
 
     // Create UI immediately (always visible)
     m_ui = std::make_unique<GridScannerUI>();
-    m_ui->SetDeviceInfo(m_deviceName, m_dataChannel);
+
+		
+    // Set up device change callback
+    m_ui->SetDeviceChangeCallback(
+      [this](const std::string& deviceName) {
+      this->SetSelectedDevice(deviceName);
+    });
   }
 
-  // Set managers after construction
   void SetPIManager(PIControllerManager* piManager) {
     m_piManager = piManager;
     m_ui->SetManagers(m_piManager, m_dataManager);
+
+    // Pass available devices to UI
+    if (m_piManager) {
+      auto devices = m_piManager->GetDeviceNames();
+      m_ui->SetAvailableDevices(devices);
+
+      // Auto-select first device if available
+      if (!devices.empty() && m_deviceName.empty()) {
+        SetSelectedDevice(devices[0]);
+      }
+    }
+
     TryCreateScanner();
   }
+
+  void SetSelectedDevice(const std::string& deviceName) {
+    if (m_deviceName != deviceName) {
+      m_deviceName = deviceName;
+      m_ui->SetDeviceInfo(m_deviceName, m_dataChannel);
+
+      // Recreate scanner with new device
+      if (m_scanner) {
+        m_scanner.reset();
+        m_motionAdapter.reset();
+      }
+      TryCreateScanner();
+    }
+  }
+
 
   void SetDataClient(DataClientManager* dataClient) {
     m_dataManager = dataClient;
