@@ -1,5 +1,6 @@
 // Core/uaa3_uv_curing_sequence.cpp
 #include "../uaa3_process_builders.h"
+#include "UserInputOperations.h"
 
 namespace UAA3ProcessBuilders {
 
@@ -11,7 +12,14 @@ namespace UAA3ProcessBuilders {
     sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
       "gantry-main", "Process_Flow", "node_4426"));
 
+    sequence->AddOperation(std::make_shared<WaitOperation>(300));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("GPIB-Current", "high current @250mA"));
+
+
     sequence->AddOperation(std::make_shared<SetLaserCurrentOperation>(0.150f)); // 150mA
+
+    sequence->AddOperation(std::make_shared<WaitOperation>(300));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("GPIB-Current", "low correction @150mA"));
 
     // 2. Extend UV_Head pneumatic
     sequence->AddOperation(std::make_shared<ExtendSlideOperation>("UV_Head"));
@@ -22,6 +30,9 @@ namespace UAA3ProcessBuilders {
       "", "Read laser temperature"));
     sequence->AddOperation(std::make_shared<ReadAndLogDataValueOperation>(
       "GPIB-Current", "(GPIB-Current) Dry Alignment (before fine tune)"));
+
+    sequence->AddOperation(std::make_shared<WaitOperation>(300));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("GPIB-Current", "before fine correction @150mA"));
 
     // 4. Wait for user to do fine alignment
     sequence->AddOperation(UserPromptOperation::CreateBasic(
@@ -50,6 +61,10 @@ namespace UAA3ProcessBuilders {
       "", "Read laser temperature"));
     sequence->AddOperation(std::make_shared<ReadAndLogDataValueOperation>(
       "GPIB-Current", "(GPIB-Current) Dry Alignment (Before UV)"));
+    sequence->AddOperation(std::make_shared<WaitOperation>(300));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("GPIB-Current", "before UV @150mA"));
+
+
 
     // 4. Wait for user confirmation that grip is successful
     sequence->AddOperation(UserPromptOperation::CreateBasic(
@@ -76,19 +91,9 @@ namespace UAA3ProcessBuilders {
     sequence->AddOperation(std::make_shared<PeriodicMonitorDataValueOperation>(
       "GPIB-Current", 210000, 5000)); // Monitor every 5 seconds for 210 seconds total
 
-    //example
-    //-------------------------
-    //// Enable threshold alerts for your nano current range
-    //sequence->AddOperation(std::make_shared<PeriodicMonitorDataValueOperation>(
-    //	"GPIB-Current", 210000, 5000, false, 10, true, 0.0005e-9, 0.15e-9));
-
-    //// Or use the nano-scale factory method
-    //auto monitor = PeriodicMonitorDataValueOperation::CreateForNanoScale(
-    //	"GPIB-Current", 210000, 5000, 0.001, 0.1);
-    //sequence->AddOperation(monitor);
-    //-------------------------
-    // 
-    // 
+    // 6. Wait 150ms
+    sequence->AddOperation(std::make_shared<WaitOperation>(1500));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("GPIB-Current", "after UV @150mA"));
     // 8. Retract UV_Head
     sequence->AddOperation(std::make_shared<RetractSlideOperation>("UV_Head"));
 
@@ -99,8 +104,7 @@ namespace UAA3ProcessBuilders {
     sequence->AddOperation(std::make_shared<SetOutputOperation>(
       "IOBottom", 2, false)); // Right gripper
 
-    // 6. Wait 150ms
-    sequence->AddOperation(std::make_shared<WaitOperation>(1500));
+
 
     // 10. Move hex-left to approach position
     sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
@@ -129,6 +133,14 @@ namespace UAA3ProcessBuilders {
       "", "Read laser temperature"));
     sequence->AddOperation(std::make_shared<ReadAndLogDataValueOperation>(
       "GPIB-Current", "(GPIB-Current) After UV reading"));
+
+
+    sequence->AddOperation(std::make_shared<WaitOperation>(300));
+    sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("GPIB-Current", "after unload @150mA"));
+    //CRITICAL END DUT RECORDING AND EXPORT DATA
+    sequence->AddOperation(std::make_shared<DUTEndRecordingOperation>(true, true));
+    // Clear the stored input at the end
+    sequence->AddOperation(std::make_shared<ClearUserInputOperation>("dut_serial"));
 
     // 5. Turn off laser and TEC
     sequence->AddOperation(std::make_shared<LaserOffOperation>());

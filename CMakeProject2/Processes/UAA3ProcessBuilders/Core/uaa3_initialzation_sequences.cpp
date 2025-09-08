@@ -8,7 +8,12 @@ namespace UAA3ProcessBuilders {
     MachineOperations& machineOps, UserPromptUI& promptUI) {
 
     auto sequence = std::make_unique<SequenceStep>("UAA3 Initialization", machineOps);
-    // 6. Retract UV_Head pneumatic
+
+
+    //CRITICAL END DUT RECORDING AND EXPORT DATA
+    sequence->AddOperation(std::make_shared<DUTEndRecordingOperation>(true, true));
+
+
     sequence->AddOperation(std::make_shared<RetractSlideOperation>(
       "UV_Head"));
 
@@ -55,22 +60,9 @@ namespace UAA3ProcessBuilders {
     sequence->AddOperation(std::make_shared<ClearOutputOperationDedicated>(
       "IOBottom", 10));  // Clear Vacuum_Base (pin 10)
 
-    // Optional: User confirmation after initialization (UAA3 enhancement)
-    sequence->AddOperation(UserPromptOperation::CreateBasic(
-      "Initialization Complete",
-      "System initialization completed successfully.\n\n"
-      "All devices moved to safe positions:\n"
-      "• Gantry: Safe position\n"
-      "• Hex-left: Home position\n"
-      "• Hex-right: Home position\n"
-      "• All grippers: Released\n"
-      "• All pneumatics: Retracted\n\n"
-      "Click YES to continue with operations.",
-      promptUI));
 
-    //// Optional: Set output Vacuum_Base (pin 10) - commented out as in original
-    //sequence->AddOperation(std::make_shared<SetOutputOperation>(
-    //  "IOBottom", 10, true));  // Set output Vacuum_Base (pin 10)
+
+
 
     return sequence;
   }

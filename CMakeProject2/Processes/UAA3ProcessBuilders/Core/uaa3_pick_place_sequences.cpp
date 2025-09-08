@@ -1,6 +1,6 @@
 // Core/uaa3_pick_place_sequences.cpp
 #include "../uaa3_process_builders.h"
-
+#include "UserInputOperations.h"
 namespace UAA3ProcessBuilders {
 
   std::unique_ptr<SequenceStep> BuildPickPlaceLeftLensSequence_uaa3(
