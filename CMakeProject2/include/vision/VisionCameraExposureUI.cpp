@@ -509,6 +509,8 @@ void VisionCameraExposureUI::RenderRightPanel() {
   RenderQuickActions();
 }
 
+
+// Update RenderSettingsEditor to include the delete button with confirmation
 void VisionCameraExposureUI::RenderSettingsEditor() {
   ImGui::Text("Exposure Settings");
   ImGui::Separator();
@@ -520,6 +522,7 @@ void VisionCameraExposureUI::RenderSettingsEditor() {
 
   ImGui::Text("Node: %s", m_selectedNodeId.c_str());
 
+  // Existing exposure controls
   if (ImGui::Checkbox("Auto Exposure", &m_editingSettings.auto_exposure)) {
     m_hasUnsavedChanges = true;
   }
@@ -545,6 +548,8 @@ void VisionCameraExposureUI::RenderSettingsEditor() {
     }
   }
 
+  // Save/Apply buttons
+  ImGui::Separator();
   if (m_hasUnsavedChanges) {
     if (ImGui::Button("Apply to Camera", ImVec2(-1, 30))) {
       ApplySettingsToCamera();
@@ -559,7 +564,71 @@ void VisionCameraExposureUI::RenderSettingsEditor() {
       m_hasUnsavedChanges = false;
     }
   }
+
+  // Delete node button with confirmation
+  ImGui::Separator();
+  ImGui::Text("Node Management:");
+
+  // Static variable to track delete confirmation state
+  static bool showDeleteConfirmation = false;
+  static std::string nodeToDelete;
+
+  // Delete button
+  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+  ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.1f, 0.1f, 1.0f));
+
+  if (ImGui::Button("Delete Node Settings", ImVec2(-1, 25))) {
+    showDeleteConfirmation = true;
+    nodeToDelete = m_selectedNodeId;
+  }
+
+  ImGui::PopStyleColor(3);
+
+  // Delete confirmation popup
+  if (showDeleteConfirmation) {
+    ImGui::OpenPopup("Delete Confirmation");
+  }
+
+  // Center the popup
+  ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+  ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+  if (ImGui::BeginPopupModal("Delete Confirmation", nullptr,
+    ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Are you sure you want to delete settings for:");
+    ImGui::Separator();
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f));
+    ImGui::Text("%s", nodeToDelete.c_str());
+    ImGui::PopStyleColor();
+
+    ImGui::Separator();
+    ImGui::Text("This action cannot be undone!");
+
+    ImGui::Spacing();
+
+    // Confirmation buttons
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+    if (ImGui::Button("Yes, Delete", ImVec2(120, 0))) {
+      DeleteNodeSettings(nodeToDelete);
+      showDeleteConfirmation = false;
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::PopStyleColor(2);
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+      showDeleteConfirmation = false;
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+  }
 }
+
 
 void VisionCameraExposureUI::RenderQuickActions() {
   ImGui::Text("Quick Actions");
@@ -890,5 +959,42 @@ void VisionCameraExposureUI::RenderSaveStatus() {
 
   if (!m_lastError.empty()) {
     ImGui::TextColored(ImVec4(1, 0, 0, 1), "Error: %s", m_lastError.c_str());
+  }
+}
+
+// Add this method to VisionCameraExposureUI.cpp
+void VisionCameraExposureUI::DeleteNodeSettings(const std::string& nodeId) {
+  if (!m_exposureManager || nodeId.empty()) {
+    m_logger->LogWarning("Cannot delete node settings: invalid parameters");
+    return;
+  }
+
+  // Check if node exists
+  VisionCameraExposureManager::NodeExposureSettings settings;
+  if (!m_exposureManager->GetNodeSettings(nodeId, settings)) {
+    m_logger->LogWarning("Node settings not found: " + nodeId);
+    return;
+  }
+
+  // Remove from manager
+  if (m_exposureManager->RemoveNodeSettings(nodeId)) {
+    // Auto-save configuration to file
+    if (SaveConfiguration()) {
+      m_logger->LogInfo("Successfully deleted node settings: " + nodeId);
+
+      // Clear selection if we deleted the selected node
+      if (m_selectedNodeId == nodeId) {
+        m_selectedNodeId.clear();
+        m_currentSettings = VisionCameraExposureManager::NodeExposureSettings();
+        m_editingSettings = m_currentSettings;
+        m_hasUnsavedChanges = false;
+      }
+    }
+    else {
+      m_logger->LogError("Failed to save configuration after deleting node: " + nodeId);
+    }
+  }
+  else {
+    m_logger->LogError("Failed to delete node settings: " + nodeId);
   }
 }

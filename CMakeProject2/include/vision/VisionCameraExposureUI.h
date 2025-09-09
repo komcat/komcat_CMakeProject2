@@ -126,6 +126,7 @@ private:
   // Helper methods
   void AddNewNodeSettings(const std::string& nodeId);
   void CopyNodeSettings(const std::string& sourceNodeId, const std::string& targetNodeId);
+  void DeleteNodeSettings(const std::string& nodeId);
   bool SaveConfiguration();
   std::string GetCurrentTimestamp();
   void RenderSaveStatus();  // Optional: show save status in UI
