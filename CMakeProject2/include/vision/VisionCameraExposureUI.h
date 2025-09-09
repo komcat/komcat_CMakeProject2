@@ -117,6 +117,19 @@ private:
   VisionCameraExposureManager::NodeExposureSettings m_editingSettings;
   bool m_hasUnsavedChanges = false;
 
+
+  // Save status tracking
+  std::chrono::steady_clock::time_point m_lastSaveTime;
+  bool m_showSaveSuccess = false;
+  std::string m_lastError;
+
+  // Helper methods
+  void AddNewNodeSettings(const std::string& nodeId);
+  void CopyNodeSettings(const std::string& sourceNodeId, const std::string& targetNodeId);
+  bool SaveConfiguration();
+  std::string GetCurrentTimestamp();
+  void RenderSaveStatus();  // Optional: show save status in UI
+
   // UI Layout state
   enum class ViewMode {
     NODE_LIST,

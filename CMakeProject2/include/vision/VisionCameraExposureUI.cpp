@@ -1,4 +1,4 @@
-#include "VisionCameraExposureUI.h"
+﻿#include "VisionCameraExposureUI.h"
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
@@ -234,25 +234,42 @@ void VisionCameraExposureUI::RenderNodeListView() {
     return;
   }
 
+  // Get configured nodes from exposure manager
   auto configuredNodes = m_exposureManager->GetConfiguredNodes();
+
+  // Get nodes from graph (for now using configured nodes as fallback)
   auto graphNodes = GetNodesForGraph(m_selectedGraph);
 
+  // If no graph nodes available, use configured nodes
+  if (graphNodes.empty()) {
+    graphNodes = configuredNodes;
+  }
+
+  // Display node list with scroll region
+  ImGui::BeginChild("NodeList", ImVec2(0, ImGui::GetContentRegionAvail().y - 150), true,
+    ImGuiWindowFlags_HorizontalScrollbar);
+
   for (const auto& nodeId : graphNodes) {
+    // Check if this node has configured settings
     bool isConfigured = std::find(configuredNodes.begin(),
       configuredNodes.end(),
       nodeId) != configuredNodes.end();
 
     bool isSelected = (m_selectedNodeId == nodeId);
 
+    // Color configured nodes green
     if (isConfigured) {
       ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 1.0f, 0.5f, 1.0f));
     }
 
+    // Selectable node item
     if (ImGui::Selectable(nodeId.c_str(), isSelected)) {
       m_selectedNodeId = nodeId;
       LoadNodeSettings(nodeId);
 
+      // Move to node if MachineOperations is available
       if (m_machineOperations) {
+        m_logger->LogInfo("Moving to node: " + nodeId);
         m_machineOperations->MoveDeviceToNode("gantry-main",
           m_selectedGraph,
           nodeId,
@@ -263,17 +280,100 @@ void VisionCameraExposureUI::RenderNodeListView() {
 
     if (isConfigured) {
       ImGui::PopStyleColor();
+
+      // Show tooltip with current settings on hover
       if (ImGui::IsItemHovered()) {
         VisionCameraExposureManager::NodeExposureSettings settings;
         if (m_exposureManager->GetNodeSettings(nodeId, settings)) {
-          ImGui::SetTooltip("Exposure: %.1f us\nGain: %.1f",
+          ImGui::BeginTooltip();
+          ImGui::Text("Node: %s", nodeId.c_str());
+          ImGui::Separator();
+          ImGui::Text("Exposure: %.1f us %s",
             settings.exposure_time,
-            settings.gain);
+            settings.auto_exposure ? "(Auto)" : "(Manual)");
+          ImGui::Text("Gain: %.1f %s",
+            settings.gain,
+            settings.auto_gain ? "(Auto)" : "(Manual)");
+          if (!settings.description.empty()) {
+            ImGui::Separator();
+            ImGui::Text("%s", settings.description.c_str());
+          }
+          ImGui::EndTooltip();
         }
       }
     }
+    else {
+      // Show tooltip for unconfigured nodes
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("No exposure settings configured\nClick to select and configure");
+      }
+    }
   }
+
+  ImGui::EndChild();
+
+  // Add new node section
+  ImGui::Separator();
+  ImGui::Text("Add New Node:");
+
+  static char newNodeIdBuffer[256] = "";
+  ImGui::SetNextItemWidth(-1);
+  ImGui::InputText("##NewNodeId", newNodeIdBuffer, sizeof(newNodeIdBuffer));
+
+  // Add node with default settings button
+  if (ImGui::Button("Add with Defaults", ImVec2(-1, 25))) {
+    if (strlen(newNodeIdBuffer) > 0) {
+      AddNewNodeSettings(newNodeIdBuffer);
+      memset(newNodeIdBuffer, 0, sizeof(newNodeIdBuffer));
+    }
+    else {
+      ImGui::OpenPopup("Empty Node ID");
+    }
+  }
+
+  // Copy from selected node button (only enabled if a node is selected)
+  if (!m_selectedNodeId.empty()) {
+    if (ImGui::Button("Copy from Selected", ImVec2(-1, 25))) {
+      if (strlen(newNodeIdBuffer) > 0) {
+        CopyNodeSettings(m_selectedNodeId, newNodeIdBuffer);
+        memset(newNodeIdBuffer, 0, sizeof(newNodeIdBuffer));
+      }
+      else {
+        ImGui::OpenPopup("Empty Node ID");
+      }
+    }
+
+    // Show what node will be copied from
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
+      "Will copy from: %s", m_selectedNodeId.c_str());
+  }
+  else {
+    // Disabled button when no node is selected
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+    ImGui::Button("Copy from Selected", ImVec2(-1, 25));
+    ImGui::PopStyleColor(2);
+    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+      "Select a node first to copy");
+  }
+
+  // Error popup for empty node ID
+  if (ImGui::BeginPopupModal("Empty Node ID", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Please enter a node ID");
+    if (ImGui::Button("OK", ImVec2(120, 0))) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  // Show statistics
+  ImGui::Separator();
+  ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+    "Total nodes: %zu | Configured: %zu",
+    graphNodes.size(),
+    configuredNodes.size());
 }
+
 
 void VisionCameraExposureUI::RenderTestSequenceView() {
   ImGui::Text("Test Sequence Control");
@@ -495,18 +595,7 @@ void VisionCameraExposureUI::LoadNodeSettings(const std::string& nodeId) {
   }
 }
 
-void VisionCameraExposureUI::SaveNodeSettings() {
-  if (!m_exposureManager || m_selectedNodeId.empty()) return;
 
-  m_editingSettings.nodeId = m_selectedNodeId;
-  m_editingSettings.description = "Settings for " + m_selectedNodeId;
-
-  if (m_exposureManager->UpdateNodeSettings(m_selectedNodeId, m_editingSettings)) {
-    m_currentSettings = m_editingSettings;
-    m_hasUnsavedChanges = false;
-    m_logger->LogInfo("Saved exposure settings for node: " + m_selectedNodeId);
-  }
-}
 
 void VisionCameraExposureUI::ApplySettingsToCamera() {
   if (!m_cameraManager || !m_exposureManager) return;
@@ -588,4 +677,218 @@ std::vector<std::string> VisionCameraExposureUI::GetNodesForGraph(const std::str
   }
 
   return nodes;
+}
+
+// Add new node with default settings
+void VisionCameraExposureUI::AddNewNodeSettings(const std::string& nodeId) {
+  if (!m_exposureManager || nodeId.empty()) {
+    m_logger->LogWarning("Cannot add node settings: invalid parameters");
+    return;
+  }
+
+  // Check if node already exists
+  VisionCameraExposureManager::NodeExposureSettings existingSettings;
+  if (m_exposureManager->GetNodeSettings(nodeId, existingSettings)) {
+    m_logger->LogWarning("Node settings already exist for: " + nodeId);
+    // Could show a popup here asking if user wants to overwrite
+    return;
+  }
+
+  // Create new settings based on defaults
+  VisionCameraExposureManager::NodeExposureSettings newSettings;
+  newSettings = m_exposureManager->GetDefaultSettings();
+  newSettings.nodeId = nodeId;
+  newSettings.description = "Settings for " + nodeId + " (created " + GetCurrentTimestamp() + ")";
+
+  // You might want to copy current camera settings if camera is connected
+  if (m_cameraManager) {
+    auto* camera = m_cameraManager->GetCameraHardware(m_selectedCameraId);
+    if (camera && camera->IsConnected()) {
+      // Option to use current camera settings instead of defaults
+      VisionCameraExposureManager::NodeExposureSettings currentCameraSettings;
+      if (m_exposureManager->ReadCurrentCameraSettings(*camera, currentCameraSettings)) {
+        newSettings.exposure_time = currentCameraSettings.exposure_time;
+        newSettings.gain = currentCameraSettings.gain;
+        newSettings.auto_exposure = currentCameraSettings.auto_exposure;
+        newSettings.auto_gain = currentCameraSettings.auto_gain;
+        newSettings.description = "Settings for " + nodeId + " (from current camera)";
+      }
+    }
+  }
+
+  // Save to manager
+  if (m_exposureManager->UpdateNodeSettings(nodeId, newSettings)) {
+    // Auto-save configuration to file
+    if (SaveConfiguration()) {
+      m_logger->LogInfo("Successfully added new node settings: " + nodeId);
+
+      // Select the new node
+      m_selectedNodeId = nodeId;
+      LoadNodeSettings(nodeId);
+
+      // Optionally move to the new node if it exists in the graph
+      if (m_machineOperations) {
+        m_machineOperations->MoveDeviceToNode("gantry-main",
+          m_selectedGraph,
+          nodeId,
+          false,
+          "VisionExposureUI");
+      }
+    }
+    else {
+      m_logger->LogError("Failed to save configuration after adding node: " + nodeId);
+    }
+  }
+  else {
+    m_logger->LogError("Failed to add node settings: " + nodeId);
+  }
+}
+
+// Copy settings from source node to target node
+void VisionCameraExposureUI::CopyNodeSettings(const std::string& sourceNodeId,
+  const std::string& targetNodeId) {
+  if (!m_exposureManager || sourceNodeId.empty() || targetNodeId.empty()) {
+    m_logger->LogWarning("Cannot copy node settings: invalid parameters");
+    return;
+  }
+
+  if (sourceNodeId == targetNodeId) {
+    m_logger->LogWarning("Cannot copy node to itself");
+    return;
+  }
+
+  // Get source settings
+  VisionCameraExposureManager::NodeExposureSettings sourceSettings;
+  if (!m_exposureManager->GetNodeSettings(sourceNodeId, sourceSettings)) {
+    m_logger->LogError("Source node settings not found: " + sourceNodeId);
+    return;
+  }
+
+  // Check if target already exists
+  VisionCameraExposureManager::NodeExposureSettings existingSettings;
+  bool targetExists = m_exposureManager->GetNodeSettings(targetNodeId, existingSettings);
+
+  if (targetExists) {
+    // Could show a confirmation dialog here
+    m_logger->LogWarning("Overwriting existing settings for: " + targetNodeId);
+  }
+
+  // Copy settings but update the node ID and description
+  VisionCameraExposureManager::NodeExposureSettings targetSettings = sourceSettings;
+  targetSettings.nodeId = targetNodeId;
+  targetSettings.description = "Copied from " + sourceNodeId + " (" + GetCurrentTimestamp() + ")";
+
+  // Save to manager
+  if (m_exposureManager->UpdateNodeSettings(targetNodeId, targetSettings)) {
+    // Auto-save configuration to file
+    if (SaveConfiguration()) {
+      m_logger->LogInfo("Successfully copied settings from " + sourceNodeId + " to " + targetNodeId);
+
+      // Select the new node
+      m_selectedNodeId = targetNodeId;
+      LoadNodeSettings(targetNodeId);
+
+      // Optionally move to the new node
+      if (m_machineOperations) {
+        m_machineOperations->MoveDeviceToNode("gantry-main",
+          m_selectedGraph,
+          targetNodeId,
+          false,
+          "VisionExposureUI");
+      }
+    }
+    else {
+      m_logger->LogError("Failed to save configuration after copying node");
+    }
+  }
+  else {
+    m_logger->LogError("Failed to copy node settings");
+  }
+}
+
+// Save configuration to file
+bool VisionCameraExposureUI::SaveConfiguration() {
+  if (!m_exposureManager) {
+    m_logger->LogError("Cannot save configuration: exposure manager not available");
+    return false;
+  }
+
+  // Save to JSON file
+  if (m_exposureManager->SaveConfiguration()) {
+    m_logger->LogInfo("Configuration saved to camera_exposure_config.json");
+
+    // Show visual feedback in UI (optional)
+    m_lastSaveTime = std::chrono::steady_clock::now();
+    m_showSaveSuccess = true;
+
+    return true;
+  }
+  else {
+    m_logger->LogError("Failed to save configuration to file");
+    m_lastError = m_exposureManager->GetLastError();
+    return false;
+  }
+}
+
+// Helper function to get current timestamp
+std::string VisionCameraExposureUI::GetCurrentTimestamp() {
+  auto now = std::chrono::system_clock::now();
+  auto time = std::chrono::system_clock::to_time_t(now);
+  std::stringstream ss;
+
+  std::tm timeinfo;
+#ifdef _WIN32
+  localtime_s(&timeinfo, &time);
+#else
+  timeinfo = *localtime(&time);
+#endif
+
+  ss << std::put_time(&timeinfo, "%Y-%m-%d %H:%M:%S");
+  return ss.str();
+}
+
+// Update the SaveNodeSettings function to use the common save method
+void VisionCameraExposureUI::SaveNodeSettings() {
+  if (!m_exposureManager || m_selectedNodeId.empty()) {
+    m_logger->LogWarning("Cannot save node settings: no node selected");
+    return;
+  }
+
+  m_editingSettings.nodeId = m_selectedNodeId;
+  m_editingSettings.description = "Updated " + GetCurrentTimestamp();
+
+  if (m_exposureManager->UpdateNodeSettings(m_selectedNodeId, m_editingSettings)) {
+    m_currentSettings = m_editingSettings;
+    m_hasUnsavedChanges = false;
+
+    // Auto-save to JSON file
+    if (SaveConfiguration()) {
+      m_logger->LogInfo("Saved and persisted exposure settings for node: " + m_selectedNodeId);
+    }
+    else {
+      m_logger->LogWarning("Settings saved in memory but failed to persist to file");
+    }
+  }
+  else {
+    m_logger->LogError("Failed to save node settings");
+  }
+}
+
+// Optional: Show save status in UI
+void VisionCameraExposureUI::RenderSaveStatus() {
+  if (m_showSaveSuccess) {
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - m_lastSaveTime).count();
+
+    if (elapsed < 3) {  // Show for 3 seconds
+      ImGui::TextColored(ImVec4(0, 1, 0, 1), "✓ Configuration saved");
+    }
+    else {
+      m_showSaveSuccess = false;
+    }
+  }
+
+  if (!m_lastError.empty()) {
+    ImGui::TextColored(ImVec4(1, 0, 0, 1), "Error: %s", m_lastError.c_str());
+  }
 }
