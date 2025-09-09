@@ -185,6 +185,14 @@ public:
     bool useRobotZ = false
   );
 
+
+  /**
+   * @brief Move gantry-main to home position
+   * @return True if movement successful
+	 */
+	bool MoveToSafe();
+
+
   /**
    * @brief Move to specific node and perform vision detection
    * @param nodeName Target node identifier

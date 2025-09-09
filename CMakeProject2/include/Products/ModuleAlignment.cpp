@@ -201,6 +201,19 @@ ModuleAlignment::AlignmentResult ModuleAlignment::PerformThreePointAlignment(
   return m_alignmentResult;
 }
 
+bool ModuleAlignment::MoveToSafe() {
+  if (!m_machineOperations) {
+    SetError("MachineOperations not set");
+    return false;
+  }
+
+
+
+	m_machineOperations->MoveToPointName("gantry-main", "safe", false, "ModuleAlignment::MoveToHome");
+  return true;
+}
+
+
 bool ModuleAlignment::MoveToNodeAndDetect(const std::string& nodeName, AlignmentPoint& result, bool use) {
   m_logger->LogInfo("ModuleAlignment: Moving to node and detecting: " + nodeName);
 
@@ -212,7 +225,7 @@ bool ModuleAlignment::MoveToNodeAndDetect(const std::string& nodeName, Alignment
   // Step 1: Move gantry-main to the specified node
   if (!m_machineOperations->MoveDeviceToNode("gantry-main", "Process_Flow", nodeName, true)) {
     SetError("Failed to move gantry-main to node: " + nodeName);
-    return false;
+    MoveToSafe();
   }
 
   // Step 2: Get current machine position

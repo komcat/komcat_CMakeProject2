@@ -277,6 +277,10 @@ void MainUIManager::ConnectUIToServices() {
 			m_cameraPanelUI = std::make_unique<UICameraPanel>(*cameraManager);
 		}
 
+
+		if(m_moduleAlignmentUI)
+			m_moduleAlignmentUI->SetCameraManager(cameraManager);
+
 		// Setup vision panel connections
 		if (m_visionPanelUI) {
 			m_visionPanelUI->SetCameraManager(cameraManager);
@@ -325,14 +329,28 @@ void MainUIManager::ConnectUIToServices() {
 
 	// Connect RunPageUI using smart getter for MachineOperations
 	auto* machineOps = m_context ? m_context->GetMachineOperations() : m_machineOperations;
-	if (machineOps && !m_runPageUI) {
-		// RunPageUI constructor needs MachineOperations reference
-		m_runPageUI = std::make_unique<RunPageUI>(*machineOps);  // Pass as reference
-		m_runPageUI->SetUserPromptUI(m_promptUI.get());  // Connect UserPromptUI
-		m_runPageUI->SetCameraManager(GetCameraManagerSmart());  // Connect camera manager
+	if (machineOps) {
 
-		// No SetPromptUI method - RunPageUI probably handles prompts differently
-		// Check if RunPageUI has other methods for UserPromptUI or if it gets it from MachineOperations
+		if (m_runPageUI) {
+			// RunPageUI constructor needs MachineOperations reference
+			m_runPageUI = std::make_unique<RunPageUI>(*machineOps);  // Pass as reference
+			m_runPageUI->SetUserPromptUI(m_promptUI.get());  // Connect UserPromptUI
+			m_runPageUI->SetCameraManager(GetCameraManagerSmart());  // Connect camera manager
+		}
+
+		if (m_machineBlockUI) {
+			m_machineBlockUI->SetMachineOperations(machineOps);  // Connect MachineOperations
+		}
+
+		if (m_macroPanelUI) {
+			m_macroPanelUI->SetMachineBlockUI(m_machineBlockUI.get());  // Connect MachineBlockUI
+
+		}
+
+		if (m_moduleAlignmentUI) {
+			m_moduleAlignmentUI->SetMachineOperations(machineOps);  // Connect machine operations
+
+		}
 
 		logger->LogInfo("MainUIManager: Run Page UI connected");
 	}

@@ -41,7 +41,7 @@
 #include "include/scanning/PIScanMotionAdapter.h"
 #include "include/scanning/grid_scanner_manager.h"
 #include "include/scanning/grid_volume_scanner_manager.h"
-
+#include "include/vision/VisionCameraExposureUI.h"
 // Keep your debug function as-is
 bool g_deugMode = false; // Global debug mode flag
 
@@ -525,6 +525,9 @@ int main(int argc, char* argv[])
 
 
 
+
+
+
 	// Connect watchdog to UI manager (if available)
 	if (hardware.configWatchdog) {
 		uiManager.SetConfigWatchdog(hardware.configWatchdog.get());
@@ -630,6 +633,33 @@ int main(int argc, char* argv[])
 		menuManager->RegisterUI("volume_scanner", volumeScannerManager->GetUI(), "Scanners");
 	}
 
+
+
+	// After creating the VisionCameraExposureManager and UI
+	auto exposureManager = std::make_unique<VisionCameraExposureManager>();
+	exposureManager->SetLogger(logger);
+	exposureManager->Initialize("camera_exposure_config.json");
+
+	// Create the UI
+	auto visionExposureUI = std::make_unique<VisionCameraExposureUI>();
+	visionExposureUI->SetExposureManager(exposureManager.get());
+
+	auto* cameraManager = context.GetCameraManager();
+	visionExposureUI->SetCameraManager(cameraManager);
+	auto* machineOperations = context.GetMachineOperations();
+	visionExposureUI->SetMachineOperations(machineOperations);
+
+	// Try this registration format
+	if (menuManager && visionExposureUI) {
+		menuManager->RegisterUI("vision_exposure", visionExposureUI.get(), "Vision");
+		logger->LogInfo("Registered Vision Camera Exposure UI with menu system");
+	}
+
+
+
+
+
+
 	// ===========================================
 	// PHASE 4: MAIN RENDER LOOP
 	// ===========================================
@@ -711,6 +741,12 @@ int main(int argc, char* argv[])
 			// Always render UI
 			volumeScannerManager->Render();
 		}
+
+
+		if(visionExposureUI){
+			visionExposureUI->Render();
+		}
+
 
 #pragma region rayLibwindow
 		// Update raylib with current machine data

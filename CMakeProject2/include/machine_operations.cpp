@@ -337,7 +337,7 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
   }
 
   // RELOAD EXPOSURE CONFIG EVERY TIME TO GUARANTEE FRESH VALUES
-  if (m_cameraExposureManager) {
+  /*if (m_cameraExposureManager) {
     m_logger->LogInfo("MachineOperations: Reloading camera exposure configuration to ensure fresh values");
     if (m_cameraExposureManager->LoadConfiguration("camera_exposure_config.json")) {
       m_logger->LogInfo("MachineOperations: Camera exposure configuration reloaded successfully");
@@ -345,7 +345,7 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
     else {
       m_logger->LogWarning("MachineOperations: Failed to reload camera exposure configuration, using existing values");
     }
-  }
+  }*/
 
   // Get the current node for the device
   std::string currentNodeId;
@@ -389,11 +389,11 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
                 m_logger->LogInfo("MachineOperations: Device appears to be at target node based on position proximity");
 
                 // STILL APPLY CAMERA EXPOSURE EVEN IF ALREADY AT NODE
-                if (deviceName == "gantry-main" && m_autoExposureEnabled) {
+                /*if (deviceName == "gantry-main" && m_autoExposureEnabled) {
                   m_logger->LogInfo("MachineOperations: Device appears at " + targetNodeId +
                     ", applying camera exposure with fresh config");
                   ApplyCameraExposureForNode(targetNodeId);
-                }
+                }*/
 
                 // Store success result
                 if (m_resultsManager && !opId.empty()) {
@@ -426,11 +426,11 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
     m_logger->LogInfo("MachineOperations: Device " + deviceName + " is already at node " + targetNodeId);
 
     // STILL APPLY CAMERA EXPOSURE EVEN IF ALREADY AT NODE
-    if (deviceName == "gantry-main" && m_autoExposureEnabled) {
+    /*if (deviceName == "gantry-main" && m_autoExposureEnabled) {
       m_logger->LogInfo("MachineOperations: Device already at " + targetNodeId +
         ", but applying camera exposure with fresh config");
       ApplyCameraExposureForNode(targetNodeId);
-    }
+    }*/
 
     // Store success result
     if (m_resultsManager && !opId.empty()) {
@@ -455,11 +455,11 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
 
 
   // Apply camera exposure settings if the gantry moved successfully
-  if (success && deviceName == "gantry-main" && m_autoExposureEnabled) {
+  /*if (success && deviceName == "gantry-main" && m_autoExposureEnabled) {
     m_logger->LogInfo("MachineOperations: Gantry moved to " + targetNodeId +
       ", applying camera exposure with fresh config");
     ApplyCameraExposureForNode(targetNodeId);
-  }
+  }*/
 
   // Store final results -  FIXED: This section was missing/incomplete
   if (m_resultsManager && !opId.empty()) {
