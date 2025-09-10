@@ -27,6 +27,7 @@
 #include "include/data/DatabaseManager.h"
 #include "include/data/OperationResultsManager.h"
 #include "include/camera/CameraManager.h"
+#include "include/vision/VisionCameraExposureManager.h"
 // Add these includes at the top:
 
 #include <string>
@@ -323,7 +324,7 @@ public:
 	bool IsCameraInitialized() const;
 	bool IsCameraConnected() const;
 	bool IsCameraGrabbing() const;
-
+	bool HasCameraManager() const { return m_cameraManager != nullptr; }
 	// Camera capture methods
 	bool CaptureImageToFile(const std::string& filename = "");
 	bool UpdateCameraDisplay();
@@ -341,6 +342,16 @@ public:
 	// Scanner cleanup methods
 	bool CleanupAllScanners();
 	bool ResetScanState(const std::string& deviceName);
+
+
+	// Add setter methods
+	void SetVisionExposureManager(VisionCameraExposureManager* manager) {
+		m_visionExposureManager = manager;
+	}
+
+	void SetCameraManager(CameraManager* manager) {
+		m_cameraManager = manager;
+	}
 
 	// Camera exposure control methods
 	bool ApplyCameraExposureForNode(const std::string& nodeId);
@@ -551,6 +562,8 @@ private:
 	Keithley2400Operations* m_smuOps;  // Added SMU operations
 	PylonCameraTest* m_cameraTest;
 	CameraManager* m_cameraManager;  // Optional camera manager
+	// Add these member variables
+	VisionCameraExposureManager* m_visionExposureManager = nullptr;
 
 
 

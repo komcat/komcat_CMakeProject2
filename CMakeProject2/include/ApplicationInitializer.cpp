@@ -500,6 +500,15 @@ bool ApplicationInitializer::InitCameras(HardwareManagers& hw) {
         for (const auto& cameraId : enabledCameras) {
           logger->LogInfo("  - " + cameraId);
         }
+
+        // Add VisionCameraExposureManager
+        hw.visionExposureManager = std::make_unique<VisionCameraExposureManager>();
+        hw.visionExposureManager->Initialize("camera_exposure_config.json");
+        hw.visionExposureManager->SetLogger(logger);
+
+
+
+
         return true;
       }
     }
@@ -567,6 +576,9 @@ bool ApplicationInitializer::InitInstruments(HardwareManagers& hw) {
     }
   }
 
+  if (hw.visionExposureManager) {
+    context.RegisterExistingVisionExposureManager(hw.visionExposureManager.get());
+  }
 
   //Initialize SPDPowerSupply
   InitConfigSPDPowerSupply(hw);
@@ -637,6 +649,16 @@ bool ApplicationInitializer::CreateMachineOps(HardwareManagers& hw, Operations& 
     if (hw.keithleyOps) {
       ops.machine->SetSMUOperations(hw.keithleyOps.get());
       logger->LogInfo("SMU operations enabled");
+    }
+
+    // After creating MachineOperations, set the exposure manager
+    if (hw.visionExposureManager) {
+      ops.machine->SetVisionExposureManager(hw.visionExposureManager.get());
+    }
+
+    // If camera isn't set in constructor, set it here
+    if (hw.camera && !ops.machine->HasCameraManager()) {
+      ops.machine->SetCameraManager(hw.camera.get());
     }
 
     return true;

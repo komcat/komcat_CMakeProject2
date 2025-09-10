@@ -44,6 +44,10 @@ class IOperations;
 class DUTDataRecorder;
 class Logger;
 class SPDPowerSupplyManager;
+class VisionCameraExposureManager;
+
+
+
 namespace Keithley {
   class Keithley6482Manager;
 }
@@ -126,7 +130,8 @@ private:
   VisionOps* m_visionOpsPtr = nullptr;
   DUTDataRecorder* m_dutDataRecorderPtr = nullptr;
 	Keithley::Keithley6482Manager* m_keithley6482Ptr = nullptr;
-
+  // In AppContext.h, add:
+  VisionCameraExposureManager* visionExposureManager = nullptr;
 
 public:
   // === Singleton Access ===
@@ -288,6 +293,11 @@ public:
     m_visionOpsPtr = service;
   }
 
+  void RegisterExistingVisionExposureManager(VisionCameraExposureManager* manager) {
+    visionExposureManager = manager;
+  }
+
+
   // Register hardware managers
   void RegisterPIController(PIControllerManager* service) {
     piControllerManager = service;
@@ -419,6 +429,11 @@ public:
   // Vision services
   CameraManager* GetCameraManager() const {
     return cameraManager ? cameraManager : m_cameraManagerPtr;
+  }
+
+
+  VisionCameraExposureManager* GetVisionExposureManager() const {
+    return visionExposureManager;
   }
 
   CameraConfigManager* GetCameraConfig() const {

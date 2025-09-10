@@ -2628,61 +2628,76 @@ bool MachineOperations::GetDeviceCurrentPosition(const std::string& deviceName, 
 // ADD these new methods at the end of machine_operations.cpp:
 
 
-// 5. ADD these new methods to machine_operations.cpp:
+// MachineOperations.cpp
 bool MachineOperations::ApplyCameraExposureForNode(const std::string& nodeId) {
-  if (!m_cameraTest || !m_cameraExposureManager) {
+  if (!m_cameraManager || !m_visionExposureManager) {
     m_logger->LogWarning("MachineOperations: Camera or exposure manager not available");
-    return false;
-  }
-
-  if (!m_cameraTest->GetCamera().IsConnected()) {
-    m_logger->LogWarning("MachineOperations: Camera not connected, cannot apply exposure settings");
     return false;
   }
 
   m_logger->LogInfo("MachineOperations: Applying camera exposure settings for node " + nodeId);
 
-  // Small delay to ensure gantry has settled at the new position
+  // Small delay to ensure gantry has settled
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-  bool success = m_cameraExposureManager->ApplySettingsForNode(m_cameraTest->GetCamera(), nodeId);
+  // Get all camera IDs and apply settings
+  bool anySuccess = false;
+  auto cameraIds = m_cameraManager->GetCameraIds();
 
-  if (success) {
-    m_logger->LogInfo("MachineOperations: Successfully applied camera exposure for node " + nodeId);
-  }
-  else {
-    m_logger->LogWarning("MachineOperations: Failed to apply specific exposure for node " + nodeId + ", trying default");
-    success = ApplyDefaultCameraExposure();
+  for (const auto& cameraId : cameraIds) {
+    auto* camera = m_cameraManager->GetCameraHardware(cameraId);
+    if (camera && camera->IsConnected()) {
+      if (m_visionExposureManager->ApplySettingsForNode(*camera, nodeId)) {
+        anySuccess = true;
+        m_logger->LogInfo("Applied exposure for node " + nodeId + " to camera " + cameraId);
+      }
+      else {
+        m_logger->LogWarning("Failed to apply exposure for node " + nodeId + " to camera " + cameraId);
+      }
+    }
   }
 
-  return success;
+  if (!anySuccess) {
+    m_logger->LogWarning("Failed to apply exposure for any camera, trying default");
+    return ApplyDefaultCameraExposure();
+  }
+
+  return anySuccess;
 }
 
 bool MachineOperations::ApplyDefaultCameraExposure() {
-  if (!m_cameraTest || !m_cameraExposureManager) {
+  if (!m_cameraManager || !m_visionExposureManager) {
     m_logger->LogWarning("MachineOperations: Camera or exposure manager not available");
-    return false;
-  }
-
-  if (!m_cameraTest->GetCamera().IsConnected()) {
-    m_logger->LogWarning("MachineOperations: Camera not connected, cannot apply default exposure");
     return false;
   }
 
   m_logger->LogInfo("MachineOperations: Applying default camera exposure settings");
 
-  bool success = m_cameraExposureManager->ApplyDefaultSettings(m_cameraTest->GetCamera());
+  bool anySuccess = false;
+  auto cameraIds = m_cameraManager->GetCameraIds();
 
-  if (success) {
+  for (const auto& cameraId : cameraIds) {
+    auto* camera = m_cameraManager->GetCameraHardware(cameraId);
+    if (camera && camera->IsConnected()) {
+      if (m_visionExposureManager->ApplyDefaultSettings(*camera)) {
+        anySuccess = true;
+        m_logger->LogInfo("Applied default exposure to camera " + cameraId);
+      }
+      else {
+        m_logger->LogWarning("Failed to apply default exposure to camera " + cameraId);
+      }
+    }
+  }
+
+  if (anySuccess) {
     m_logger->LogInfo("MachineOperations: Successfully applied default camera exposure");
   }
   else {
     m_logger->LogError("MachineOperations: Failed to apply default camera exposure");
   }
 
-  return success;
+  return anySuccess;
 }
-
 // machine_operations.cpp - FIXED implementation for the new position storage methods
 // Add these methods to your existing machine_operations.cpp file
 // REMOVE the duplicate CalculateDistanceFromStored method around line 1100
