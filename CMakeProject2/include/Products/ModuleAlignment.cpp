@@ -7,7 +7,10 @@
 #include <cmath>
 #include <algorithm>
 #include <thread>
+#// Add these includes at the top if not already present
+#include <fstream>
 #include <filesystem>
+#include <iomanip>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -1048,6 +1051,23 @@ bool ModuleAlignment::SaveAlignmentData(const std::string& alignmentName) {
     m_alignmentResult.alignmentName = alignmentName;
     m_logger->LogInfo("ModuleAlignment: Successfully saved alignment '" + alignmentName + "'");
 
+    // After successful database save, before return true:
+    if (result == SQLITE_DONE) {
+      // Commit transaction
+      sqlite3_exec(m_alignmentDB, "COMMIT;", nullptr, nullptr, nullptr);
+
+      m_alignmentResult.alignmentName = alignmentName;
+      m_logger->LogInfo("ModuleAlignment: Successfully saved alignment '" + alignmentName + "'");
+
+      // Export to JSON file for review
+      if (!ExportAlignmentToJson(alignmentName)) {
+        m_logger->LogWarning("ModuleAlignment: Failed to export JSON (database save was successful)");
+      }
+
+      return true;
+    }
+
+
     return true;
 
   }
@@ -1056,6 +1076,8 @@ bool ModuleAlignment::SaveAlignmentData(const std::string& alignmentName) {
     SetError("Failed to save alignment data: " + std::string(e.what()));
     return false;
   }
+
+
 }
 
 bool ModuleAlignment::LoadAlignmentData(const std::string& alignmentName) {
@@ -1558,4 +1580,144 @@ bool ModuleAlignment::MoveToLocalCoordinateRelative(double deltaX, double deltaY
 
   // Move to the target position
   return MoveToLocalCoordinate(targetLocalPos, deviceName, waitForCompletion);
+}
+
+
+// Add new JSON export methods
+bool ModuleAlignment::ExportAlignmentToJson(const std::string& alignmentName) {
+  try {
+    // Create directory if it doesn't exist
+    std::filesystem::path jsonDir = "system_json";
+    if (!std::filesystem::exists(jsonDir)) {
+      std::filesystem::create_directories(jsonDir);
+      m_logger->LogInfo("ModuleAlignment: Created directory: " + jsonDir.string());
+    }
+
+    // Generate filename with timestamp
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    std::tm timeinfo;
+    localtime_s(&timeinfo, &time_t);
+
+    std::ostringstream filename;
+    filename << "system_json/alignment_" << alignmentName << "_"
+      << std::put_time(&timeinfo, "%Y%m%d_%H%M%S") << ".json";
+
+    // Serialize alignment data to JSON
+    nlohmann::json j = SerializeAlignmentToJson(alignmentName);
+
+    // Write to file with pretty printing
+    std::ofstream file(filename.str());
+    if (!file.is_open()) {
+      SetError("Failed to open JSON file for writing: " + filename.str());
+      return false;
+    }
+
+    file << std::setw(4) << j << std::endl;
+    file.close();
+
+    m_logger->LogInfo("ModuleAlignment: Exported alignment to: " + filename.str());
+    return true;
+
+  }
+  catch (const std::exception& e) {
+    SetError("Exception during JSON export: " + std::string(e.what()));
+    return false;
+  }
+}
+
+nlohmann::json ModuleAlignment::SerializeAlignmentToJson(const std::string& alignmentName) {
+  nlohmann::json j;
+
+  // Metadata
+  j["metadata"]["alignment_name"] = alignmentName;
+  j["metadata"]["timestamp"] = GetCurrentTimestamp();
+  j["metadata"]["success"] = m_alignmentResult.success;
+
+  // Node configuration
+  j["configuration"]["nodes"]["node1"] = m_alignmentResult.points[0].nodeName;
+  j["configuration"]["nodes"]["node2"] = m_alignmentResult.points[1].nodeName;
+  j["configuration"]["nodes"]["node3"] = m_alignmentResult.points[2].nodeName;
+
+  // Center position
+  j["results"]["center_position"]["x"] = m_alignmentResult.centerPosition.x;
+  j["results"]["center_position"]["y"] = m_alignmentResult.centerPosition.y;
+  j["results"]["center_position"]["z"] = m_alignmentResult.centerPosition.z;
+
+  // Axis directions
+  j["results"]["axes"]["x_axis"]["x"] = m_alignmentResult.xAxisDirection.x;
+  j["results"]["axes"]["x_axis"]["y"] = m_alignmentResult.xAxisDirection.y;
+  j["results"]["axes"]["x_axis"]["z"] = m_alignmentResult.xAxisDirection.z;
+  j["results"]["axes"]["x_axis"]["length"] = m_alignmentResult.xAxisLength;
+
+  j["results"]["axes"]["y_axis"]["x"] = m_alignmentResult.yAxisDirection.x;
+  j["results"]["axes"]["y_axis"]["y"] = m_alignmentResult.yAxisDirection.y;
+  j["results"]["axes"]["y_axis"]["z"] = m_alignmentResult.yAxisDirection.z;
+  j["results"]["axes"]["y_axis"]["length"] = m_alignmentResult.yAxisLength;
+
+  j["results"]["axes"]["z_axis"]["x"] = m_alignmentResult.zAxisDirection.x;
+  j["results"]["axes"]["z_axis"]["y"] = m_alignmentResult.zAxisDirection.y;
+  j["results"]["axes"]["z_axis"]["z"] = m_alignmentResult.zAxisDirection.z;
+
+  j["results"]["axes"]["angle_to_global_x"] = m_alignmentResult.axisAngle;
+
+  // Alignment points details
+  for (size_t i = 0; i < m_alignmentResult.points.size(); i++) {
+    const auto& point = m_alignmentResult.points[i];
+    nlohmann::json pointJson;
+
+    pointJson["node_name"] = point.nodeName;
+    pointJson["index"] = i;
+
+    // Machine position
+    pointJson["machine_position"]["x"] = point.machinePosition.x;
+    pointJson["machine_position"]["y"] = point.machinePosition.y;
+    pointJson["machine_position"]["z"] = point.machinePosition.z;
+
+    // Detected position
+    pointJson["detected_position"]["x"] = point.detectedPosition.x;
+    pointJson["detected_position"]["y"] = point.detectedPosition.y;
+    pointJson["detected_position"]["z"] = point.detectedPosition.z;
+
+    // Detection quality
+    pointJson["detection"]["confidence"] = point.confidence;
+    pointJson["detection"]["is_valid"] = point.isValid;
+
+    j["alignment_points"].push_back(pointJson);
+  }
+
+  // Transformation matrices
+  j["transformation"]["matrix_to_machine"] = nlohmann::json::array();
+  j["transformation"]["matrix_to_alignment"] = nlohmann::json::array();
+
+  for (int i = 0; i < 4; i++) {
+    nlohmann::json rowMachine = nlohmann::json::array();
+    nlohmann::json rowAlignment = nlohmann::json::array();
+
+    for (int j = 0; j < 4; j++) {
+      rowMachine.push_back(m_transformationMatrix[i][j]);
+      rowAlignment.push_back(m_inverseTransformationMatrix[i][j]);
+    }
+
+    j["transformation"]["matrix_to_machine"].push_back(rowMachine);
+    j["transformation"]["matrix_to_alignment"].push_back(rowAlignment);
+  }
+
+  // Validation metrics
+  if (m_alignmentResult.points.size() >= 3) {
+    // Calculate angle between X and Y axes
+    double axisAngleBetween = CalculateAngleBetweenVectors(
+      m_alignmentResult.xAxisDirection,
+      m_alignmentResult.yAxisDirection
+    );
+    j["validation"]["axis_angle_between_xy"] = axisAngleBetween;
+    j["validation"]["axis_orthogonality_error"] = std::abs(90.0 - axisAngleBetween);
+  }
+
+  // System configuration (for debugging)
+  j["system"]["has_camera_manager"] = (m_cameraManager != nullptr);
+  j["system"]["has_machine_operations"] = (m_machineOperations != nullptr);
+  j["system"]["database_path"] = m_dbPath;
+
+  return j;
 }

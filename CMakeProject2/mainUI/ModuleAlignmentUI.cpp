@@ -5,6 +5,9 @@
 #include <sstream>
 #include <algorithm>
 #include <filesystem>
+// Add these includes at the top if not already present
+#include <fstream>
+
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -1126,10 +1129,16 @@ void ModuleAlignmentUI::RenderPointsNavigationSection() {
         ImGui::BeginDisabled();
       }
 
+      // In RenderSaveDialog(), modify the save button handler:
       if (ImGui::Button("Save", ImVec2(120, 0))) {
         if (m_moduleAlignment && m_moduleAlignment->SaveAlignmentData(m_saveAlignmentName)) {
           RefreshSavedAlignments();
           m_showSaveDialog = false;
+
+          // Show success notification
+          std::string jsonPath = "system_json/alignment_" +
+            std::string(m_saveAlignmentName) + "_*.json";
+          m_statusMessage = "Saved to database and exported to " + jsonPath;
         }
       }
 

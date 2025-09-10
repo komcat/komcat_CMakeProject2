@@ -210,4 +210,5 @@ private:
   void NavigateToPoint(const std::string& productName, const std::string& pointName);
   void NavigateToAlignmentCoordinate(double x, double y, double z);
   std::string GetActionTypeString(const std::string& actionType);
+
 };

@@ -300,10 +300,12 @@ void RunPageUI::RenderColumn2() {
 
 
 
-// NEW: Render completed steps list with success/failure indication
 void RunPageUI::RenderCompletedSteps() {
   ImGui::Text("Completed Steps");
   ImGui::Separator();
+
+  // Lock mutex before accessing m_completedSteps
+  std::lock_guard<std::mutex> lock(m_mutex);
 
   // Show count with success/failure breakdown
   size_t successCount = 0;
@@ -315,24 +317,36 @@ void RunPageUI::RenderCompletedSteps() {
 
   ImGui::Text("Total: %zu (Success: %zu, Failed: %zu)", m_completedSteps.size(), successCount, failureCount);
 
-  // Clear button
+  // Clear button - unlock before calling ClearCompletedSteps to avoid deadlock
+  bool shouldClear = false;
   if (ImGui::Button("Clear History", ImVec2(-1, 25))) {
+    shouldClear = true;
+  }
+
+  // Create local copy for display to avoid holding lock during rendering
+  std::vector<CompletedProcess> stepsCopy = m_completedSteps;
+
+  // Release lock by exiting scope
+  lock.~lock_guard();
+
+  // Now clear if needed (this will acquire its own lock)
+  if (shouldClear) {
     ClearCompletedSteps();
   }
 
   ImGui::Spacing();
 
-  // Scrollable list of completed steps
+  // Scrollable list using the copy
   float remainingHeight = ImGui::GetContentRegionAvail().y;
   ImGui::BeginChild("CompletedStepsList", ImVec2(0, remainingHeight), true);
 
-  if (m_completedSteps.empty()) {
+  if (stepsCopy.empty()) {
     ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No processes completed yet");
   }
   else {
     // Show most recent first
-    for (int i = static_cast<int>(m_completedSteps.size()) - 1; i >= 0; i--) {
-      const auto& completed = m_completedSteps[i];
+    for (int i = static_cast<int>(stepsCopy.size()) - 1; i >= 0; i--) {
+      const auto& completed = stepsCopy[i];
 
       // Different colors for success vs failure
       if (completed.isSuccess) {
@@ -343,9 +357,10 @@ void RunPageUI::RenderCompletedSteps() {
       }
 
       ImGui::Indent();
-      ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "%s (%s)", completed.dateTime.c_str(), completed.duration.c_str());
+      ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "%s (%s)",
+        completed.dateTime.c_str(), completed.duration.c_str());
 
-      // Show idle time if not the first process (00:00.000 means no previous process)
+      // Show idle time if not the first process
       if (completed.idleTime != "00:00.000") {
         ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Idle: %s", completed.idleTime.c_str());
       }
@@ -356,7 +371,7 @@ void RunPageUI::RenderCompletedSteps() {
   }
 
   ImGui::EndChild();
-}// NEW: Add completed step with date/time/duration
+}
 
 
 // NEW: Add completed/failed step with date/time/duration/idle time/success status

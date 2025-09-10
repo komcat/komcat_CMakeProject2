@@ -412,4 +412,9 @@ private:
     std::array<std::array<double, 4>, 4>& result) const;
   bool InvertMatrix4x4(const std::array<std::array<double, 4>, 4>& matrix,
     std::array<std::array<double, 4>, 4>& inverse) const;
+
+
+  // JSON export
+  bool ExportAlignmentToJson(const std::string& alignmentName);
+  nlohmann::json SerializeAlignmentToJson(const std::string& alignmentName);
 };
