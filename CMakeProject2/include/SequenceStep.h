@@ -2,6 +2,9 @@
 //#include "AppContext.h"
 #include "ProcessStep.h"
 #include "include/SMU/keithley2400_operations.h"
+// In SequenceStep.h, add these includes at the top:
+#include "include/CoordinateSystem/CoordinateSystem.h"
+#include "MachineOperationsExtended.h"
 #include "AppContext.h"
 
 #include <vector>
@@ -4832,3 +4835,315 @@ sequence->AddOperation(std::make_shared<StartChannelRecordingOperation>(
 
 sequence->AddOperation(std::make_shared<StopChannelRecordingOperation>());
 */
+
+
+
+// ============================================================================
+// COORDINATE SYSTEM OPERATIONS
+// Operations for working with local coordinate systems and transformations
+// ============================================================================
+
+/// <summary>
+/// Load a coordinate system from JSON file
+/// </summary>
+class LoadCoordinateSystemOperation : public SequenceOperation {
+public:
+  LoadCoordinateSystemOperation(const std::string& systemName, const std::string& jsonPath)
+    : m_systemName(systemName), m_jsonPath(jsonPath) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Load the system
+    auto& system = GetSystemStorage()[m_systemName];
+    system = std::make_unique<CoordinateSystem>();
+
+    if (!system->LoadFromJsonFile(m_jsonPath)) {
+      ops.LogError("Failed to load coordinate system from " + m_jsonPath);
+      GetSystemStorage().erase(m_systemName);
+      return false;
+    }
+
+    ops.LogInfo("Loaded coordinate system '" + m_systemName + "' from " + m_jsonPath);
+    ops.LogInfo("System origin: (" +
+      std::to_string(system->GetOrigin().x) + ", " +
+      std::to_string(system->GetOrigin().y) + ", " +
+      std::to_string(system->GetOrigin().z) + ")");
+    return true;
+  }
+
+  std::string GetDescription() const override {
+    return "Load coordinate system '" + m_systemName + "' from " + m_jsonPath;
+  }
+
+  // Static storage for coordinate systems
+  static std::map<std::string, std::unique_ptr<CoordinateSystem>>& GetSystemStorage() {
+    static std::map<std::string, std::unique_ptr<CoordinateSystem>> systems;
+    return systems;
+  }
+
+private:
+  std::string m_systemName;
+  std::string m_jsonPath;
+};
+
+/// <summary>
+/// Move to position in coordinate system
+/// </summary>
+class MoveToSystemPositionOperation : public SequenceOperation {
+public:
+  MoveToSystemPositionOperation(const std::string& deviceName,
+    double x, double y, double z,
+    const std::string& systemName,
+    bool waitForCompletion = true)
+    : m_deviceName(deviceName), m_x(x), m_y(y), m_z(z),
+    m_systemName(systemName), m_waitForCompletion(waitForCompletion) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Get the coordinate system
+    auto& systems = LoadCoordinateSystemOperation::GetSystemStorage();
+    auto it = systems.find(m_systemName);
+
+    if (it == systems.end() || !it->second || !it->second->IsValid()) {
+      ops.LogError("Coordinate system '" + m_systemName + "' not found or invalid");
+      return false;
+    }
+
+    // Always do manual transformation since we can't reliably check the type
+    PositionStruct localPos = { m_x, m_y, m_z, 0, 0, 0 };
+    PositionStruct machinePos = it->second->TransformToMachine(localPos);
+
+    ops.LogInfo("System '" + m_systemName + "' position (" +
+      std::to_string(m_x) + ", " +
+      std::to_string(m_y) + ", " +
+      std::to_string(m_z) + ") -> Machine (" +
+      std::to_string(machinePos.x) + ", " +
+      std::to_string(machinePos.y) + ", " +
+      std::to_string(machinePos.z) + ")");
+
+    // Generate caller context
+    std::string callerContext = "MoveToSystemPosition_" + m_deviceName +
+      "_" + m_systemName;
+
+    return ops.MoveDeviceToPosition(m_deviceName, machinePos, m_waitForCompletion);
+  }
+
+  std::string GetDescription() const override {
+    return "Move " + m_deviceName + " to system '" + m_systemName +
+      "' position (" + std::to_string(m_x) + ", " +
+      std::to_string(m_y) + ", " + std::to_string(m_z) + ")";
+  }
+
+private:
+  std::string m_deviceName;
+  double m_x, m_y, m_z;
+  std::string m_systemName;
+  bool m_waitForCompletion;
+};
+
+
+/// <summary>
+/// Move relative along system axis
+/// </summary>
+class MoveRelativeOnSystemOperation : public SequenceOperation {
+public:
+  MoveRelativeOnSystemOperation(const std::string& deviceName,
+    double distance,
+    char axis,
+    const std::string& systemName,
+    bool waitForCompletion = true)
+    : m_deviceName(deviceName), m_distance(distance), m_axis(axis),
+    m_systemName(systemName), m_waitForCompletion(waitForCompletion) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Get the coordinate system
+    auto& systems = LoadCoordinateSystemOperation::GetSystemStorage();
+    auto it = systems.find(m_systemName);
+
+    if (it == systems.end() || !it->second || !it->second->IsValid()) {
+      ops.LogError("Coordinate system '" + m_systemName + "' not found or invalid");
+      return false;
+    }
+
+    // Get current machine position
+    PositionStruct currentMachinePos;
+    if (!ops.GetDeviceCurrentPosition(m_deviceName, currentMachinePos)) {
+      ops.LogError("Failed to get current position for " + m_deviceName);
+      return false;
+    }
+
+    // Transform current position to system coordinates
+    PositionStruct currentLocalPos = it->second->TransformToLocal(currentMachinePos);
+
+    // Apply the relative movement in system coordinates
+    PositionStruct targetLocalPos = currentLocalPos;
+    switch (m_axis) {
+    case 'X': case 'x':
+      targetLocalPos.x += m_distance;
+      break;
+    case 'Y': case 'y':
+      targetLocalPos.y += m_distance;
+      break;
+    case 'Z': case 'z':
+      targetLocalPos.z += m_distance;
+      break;
+    default:
+      ops.LogError("Invalid axis: " + std::string(1, m_axis));
+      return false;
+    }
+
+    // Transform target position back to machine coordinates
+    PositionStruct targetMachinePos = it->second->TransformToMachine(targetLocalPos);
+
+    ops.LogInfo("Moving " + std::to_string(m_distance) + "mm along system '" +
+      m_systemName + "' " + m_axis + "-axis");
+    ops.LogInfo("Current local: (" + std::to_string(currentLocalPos.x) + ", " +
+      std::to_string(currentLocalPos.y) + ", " +
+      std::to_string(currentLocalPos.z) + ")");
+    ops.LogInfo("Target local: (" + std::to_string(targetLocalPos.x) + ", " +
+      std::to_string(targetLocalPos.y) + ", " +
+      std::to_string(targetLocalPos.z) + ")");
+    ops.LogInfo("Target machine: (" + std::to_string(targetMachinePos.x) + ", " +
+      std::to_string(targetMachinePos.y) + ", " +
+      std::to_string(targetMachinePos.z) + ")");
+
+    // Generate caller context
+    std::string callerContext = "MoveRelativeOnSystem_" + m_deviceName +
+      "_" + m_axis + "_" + std::to_string(m_distance) +
+      "_" + m_systemName;
+
+    // Move to the calculated machine position
+    return ops.MoveDeviceToPosition(m_deviceName, targetMachinePos, m_waitForCompletion);
+  }
+
+  std::string GetDescription() const override {
+    return "Move " + m_deviceName + " " + std::to_string(m_distance) +
+      "mm along system '" + m_systemName + "' " + m_axis + "-axis";
+  }
+
+private:
+  std::string m_deviceName;
+  double m_distance;
+  char m_axis;
+  std::string m_systemName;
+  bool m_waitForCompletion;
+};
+
+
+/// <summary>
+/// Move to system origin (0,0,0)
+/// </summary>
+class MoveToSystemOriginOperation : public SequenceOperation {
+public:
+  MoveToSystemOriginOperation(const std::string& deviceName,
+    const std::string& systemName,
+    bool waitForCompletion = true)
+    : m_deviceName(deviceName), m_systemName(systemName),
+    m_waitForCompletion(waitForCompletion) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // This is just a convenience - move to (0,0,0)
+    MoveToSystemPositionOperation moveOp(m_deviceName, 0, 0, 0,
+      m_systemName, m_waitForCompletion);
+    return moveOp.Execute(ops);
+  }
+
+  std::string GetDescription() const override {
+    return "Move " + m_deviceName + " to origin of system '" + m_systemName + "'";
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_systemName;
+  bool m_waitForCompletion;
+};
+
+/// <summary>
+/// Load coordinate system from current alignment
+/// </summary>
+class LoadSystemFromAlignmentOperation : public SequenceOperation {
+public:
+  LoadSystemFromAlignmentOperation(const std::string& systemName,
+    ModuleAlignment* moduleAlignment)
+    : m_systemName(systemName), m_moduleAlignment(moduleAlignment) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    if (!m_moduleAlignment || !m_moduleAlignment->HasValidAlignment()) {
+      ops.LogError("No valid alignment available to create coordinate system");
+      return false;
+    }
+
+    auto& system = LoadCoordinateSystemOperation::GetSystemStorage()[m_systemName];
+    system = std::make_unique<CoordinateSystem>();
+
+    if (!system->LoadFromAlignment(m_moduleAlignment->GetAlignmentResult())) {
+      ops.LogError("Failed to create coordinate system from alignment");
+      LoadCoordinateSystemOperation::GetSystemStorage().erase(m_systemName);
+      return false;
+    }
+
+    ops.LogInfo("Created coordinate system '" + m_systemName + "' from current alignment");
+    return true;
+  }
+
+  std::string GetDescription() const override {
+    return "Create coordinate system '" + m_systemName + "' from current alignment";
+  }
+
+private:
+  std::string m_systemName;
+  ModuleAlignment* m_moduleAlignment;
+};
+
+/// <summary>
+/// Get current position in system coordinates
+/// </summary>
+class GetPositionInSystemOperation : public SequenceOperation {
+public:
+  GetPositionInSystemOperation(const std::string& deviceName,
+    const std::string& systemName)
+    : m_deviceName(deviceName), m_systemName(systemName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    // Get current machine position
+    PositionStruct machinePos;
+    if (!ops.GetDeviceCurrentPosition(m_deviceName, machinePos)) {
+      ops.LogError("Failed to get current position for " + m_deviceName);
+      return false;
+    }
+
+    // Get the coordinate system
+    auto& systems = LoadCoordinateSystemOperation::GetSystemStorage();
+    auto it = systems.find(m_systemName);
+
+    if (it == systems.end() || !it->second || !it->second->IsValid()) {
+      ops.LogError("Coordinate system '" + m_systemName + "' not found or invalid");
+      return false;
+    }
+
+    // Transform to system coordinates
+    m_systemPos = it->second->TransformToLocal(machinePos);
+
+    ops.LogInfo(m_deviceName + " position in system '" + m_systemName + "': (" +
+      std::to_string(m_systemPos.x) + ", " +
+      std::to_string(m_systemPos.y) + ", " +
+      std::to_string(m_systemPos.z) + ")");
+
+    return true;
+  }
+
+  std::string GetDescription() const override {
+    return "Get " + m_deviceName + " position in system '" + m_systemName + "'";
+  }
+
+  const PositionStruct& GetSystemPosition() const { return m_systemPos; }
+
+private:
+  std::string m_deviceName;
+  std::string m_systemName;
+  PositionStruct m_systemPos;
+};

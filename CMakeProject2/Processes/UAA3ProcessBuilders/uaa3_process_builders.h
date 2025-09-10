@@ -120,6 +120,15 @@ namespace UAA3ProcessBuilders {
   std::unique_ptr<UserPromptOperation> CreateCompletionPrompt(
     const std::string& sequenceName, const std::string& results, UserPromptUI& promptUI);
 
+
+  // System test sequences
+  std::unique_ptr<SequenceStep> BuildSystemTestSequence(
+    MachineOperations& machineOps, UserPromptUI& promptUI);
+
+  std::unique_ptr<SequenceStep> BuildExtendedSystemTestSequence(
+    MachineOperations& machineOps, UserPromptUI& promptUI);
+
+
   /// <summary>
   /// Debug method to print a modern sequence without executing it
   /// </summary>

@@ -715,7 +715,7 @@ add_executable(uaa3App
   "include/scanning/PIScanMotionAdapter.h"
    "include/scanning/grid_scanner_manager.h"
    "include/scanning/grid_volume_scanner.h"
-    "include/scanning/grid_volume_scanner.cpp" "include/scanning/grid_volume_scanner_ui.h" "include/scanning/grid_volume_scanner_ui.cpp" "include/scanning/grid_volume_scanner_manager.h"  "include/vision/VisionCameraExposureManager.h" "include/vision/VisionCameraExposureManager.cpp" "include/vision/VisionCameraExposureUI.h" "include/vision/VisionCameraExposureUI.cpp" "include/data/DUTDatabaseViewerUI.h" "include/data/DUTDatabaseViewerUI.cpp")
+    "include/scanning/grid_volume_scanner.cpp" "include/scanning/grid_volume_scanner_ui.h" "include/scanning/grid_volume_scanner_ui.cpp" "include/scanning/grid_volume_scanner_manager.h"  "include/vision/VisionCameraExposureManager.h" "include/vision/VisionCameraExposureManager.cpp" "include/vision/VisionCameraExposureUI.h" "include/vision/VisionCameraExposureUI.cpp" "include/data/DUTDatabaseViewerUI.h" "include/data/DUTDatabaseViewerUI.cpp" "include/CoordinateSystem/CoordinateSystem.h" "include/CoordinateSystem/CoordinateSystem.cpp" "include/MachineOperationsExtended.h" "include/MachineOperationsExtended.cpp")
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")

@@ -304,39 +304,38 @@ void RunPageUI::RenderCompletedSteps() {
   ImGui::Text("Completed Steps");
   ImGui::Separator();
 
-  // Lock mutex before accessing m_completedSteps
-  std::lock_guard<std::mutex> lock(m_mutex);
-
-  // Show count with success/failure breakdown
+  // Variables to hold data after mutex is released
   size_t successCount = 0;
   size_t failureCount = 0;
-  for (const auto& step : m_completedSteps) {
-    if (step.isSuccess) successCount++;
-    else failureCount++;
-  }
-
-  ImGui::Text("Total: %zu (Success: %zu, Failed: %zu)", m_completedSteps.size(), successCount, failureCount);
-
-  // Clear button - unlock before calling ClearCompletedSteps to avoid deadlock
+  std::vector<CompletedProcess> stepsCopy;
   bool shouldClear = false;
+
+  // Scope block for mutex lock
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    // Count successes/failures
+    for (const auto& step : m_completedSteps) {
+      if (step.isSuccess) successCount++;
+      else failureCount++;
+    }
+
+    // Make a copy for rendering
+    stepsCopy = m_completedSteps;
+  } // lock automatically released here when it goes out of scope
+
+  // Now we can safely render without holding the lock
+  ImGui::Text("Total: %zu (Success: %zu, Failed: %zu)",
+    stepsCopy.size(), successCount, failureCount);
+
+  // Clear button
   if (ImGui::Button("Clear History", ImVec2(-1, 25))) {
-    shouldClear = true;
-  }
-
-  // Create local copy for display to avoid holding lock during rendering
-  std::vector<CompletedProcess> stepsCopy = m_completedSteps;
-
-  // Release lock by exiting scope
-  lock.~lock_guard();
-
-  // Now clear if needed (this will acquire its own lock)
-  if (shouldClear) {
-    ClearCompletedSteps();
+    ClearCompletedSteps(); // This will acquire its own lock
   }
 
   ImGui::Spacing();
 
-  // Scrollable list using the copy
+  // Render the list using our copy
   float remainingHeight = ImGui::GetContentRegionAvail().y;
   ImGui::BeginChild("CompletedStepsList", ImVec2(0, remainingHeight), true);
 
@@ -348,21 +347,22 @@ void RunPageUI::RenderCompletedSteps() {
     for (int i = static_cast<int>(stepsCopy.size()) - 1; i >= 0; i--) {
       const auto& completed = stepsCopy[i];
 
-      // Different colors for success vs failure
       if (completed.isSuccess) {
-        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Complete %s", completed.processName.c_str());
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Complete %s",
+          completed.processName.c_str());
       }
       else {
-        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "✗ Failed %s", completed.processName.c_str());
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "✗ Failed %s",
+          completed.processName.c_str());
       }
 
       ImGui::Indent();
       ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "%s (%s)",
         completed.dateTime.c_str(), completed.duration.c_str());
 
-      // Show idle time if not the first process
       if (completed.idleTime != "00:00.000") {
-        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Idle: %s", completed.idleTime.c_str());
+        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Idle: %s",
+          completed.idleTime.c_str());
       }
 
       ImGui::Unindent();
@@ -372,7 +372,6 @@ void RunPageUI::RenderCompletedSteps() {
 
   ImGui::EndChild();
 }
-
 
 // NEW: Add completed/failed step with date/time/duration/idle time/success status
 void RunPageUI::AddCompletedStep(const std::string& stepName, const std::string& duration, const std::string& idleTime, bool isSuccess) {

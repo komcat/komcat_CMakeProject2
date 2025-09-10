@@ -118,6 +118,22 @@ namespace UAA3ProcessRegistration {
             UAA3ProcessBuilders::BuildDispenseEpoxy2Sequence_uaa3
         );
 
+        registry.RegisterProcess(
+            "Siphog_CoordinateTest",
+            "Utility",
+            "System test sequence for coordinate system verification",
+            true,
+            UAA3ProcessBuilders::BuildSystemTestSequence
+				);
+
+        registry.RegisterProcess(
+            "Siphog_CoordinateTestExtended",
+            "Utility",
+            "Extended system test sequence with advanced movements",
+            true,
+            UAA3ProcessBuilders::BuildExtendedSystemTestSequence
+				);
+
         // Print registration summary
         printf("UAA3 Process Registration: Successfully registered %zu processes\n",
             registry.GetProcessCount());
