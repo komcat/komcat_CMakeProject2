@@ -42,6 +42,9 @@
 #include "include/scanning/grid_scanner_manager.h"
 #include "include/scanning/grid_volume_scanner_manager.h"
 #include "include/vision/VisionCameraExposureUI.h"
+#include "DUTDatabaseViewerUI.h"
+
+
 // Keep your debug function as-is
 bool g_deugMode = false; // Global debug mode flag
 
@@ -655,7 +658,18 @@ int main(int argc, char* argv[])
 		logger->LogInfo("Registered Vision Camera Exposure UI with menu system");
 	}
 
+	// Create the viewer UI
+	auto dutViewerUI = std::make_unique<DUTDatabaseViewerUI>();
 
+	// Configure it
+	dutViewerUI->SetLogger(logger);
+	dutViewerUI->SetDatabasePath("db/dut_db.db");  // Uses your default path
+
+	// Register with menu manager
+	if (menuManager && dutViewerUI) {
+		menuManager->RegisterUI("dut_viewer", dutViewerUI.get(), "Data");
+		logger->LogInfo("Registered DUT Database Viewer UI with menu system");
+	}
 
 
 
@@ -745,6 +759,10 @@ int main(int argc, char* argv[])
 
 		if(visionExposureUI){
 			visionExposureUI->Render();
+		}
+
+		if(dutViewerUI){
+			dutViewerUI->Render();
 		}
 
 

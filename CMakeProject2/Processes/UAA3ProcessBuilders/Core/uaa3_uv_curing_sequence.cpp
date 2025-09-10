@@ -137,6 +137,7 @@ namespace UAA3ProcessBuilders {
 
     sequence->AddOperation(std::make_shared<WaitOperation>(300));
     sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("GPIB-Current", "after unload @150mA"));
+    sequence->AddOperation(std::make_shared<WaitOperation>(1500));
     //CRITICAL END DUT RECORDING AND EXPORT DATA
     sequence->AddOperation(std::make_shared<DUTEndRecordingOperation>(true, true));
     // Clear the stored input at the end
