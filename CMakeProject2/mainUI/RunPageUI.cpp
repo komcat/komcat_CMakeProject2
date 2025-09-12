@@ -136,15 +136,19 @@ void RunPageUI::RenderProgressBar() {
 
 
 
-// Update the tree view selection handler to extract operations:
 void RunPageUI::RenderProcessTreeView() {
   ImGui::Text("Process Steps");
   ImGui::Separator();
 
+  // Create a scrollable region
   ImGui::BeginChild("ProcessTree", ImVec2(0, 0), true,
     ImGuiWindowFlags_HorizontalScrollbar);
 
   auto sortedList = GetSortedProcessList();
+
+  // Make items taller
+  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 10));    // More space between items
+  ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f)); // Center text vertically
 
   for (const auto& process : sortedList) {
     std::string displayName = process;
@@ -161,52 +165,33 @@ void RunPageUI::RenderProcessTreeView() {
     if (isRunning) {
       ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
     }
-    else if (isSelected) {
-      ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
-    }
 
-    bool nodeClicked = ImGui::TreeNodeEx(displayName.c_str(),
-      ImGuiTreeNodeFlags_Leaf |
-      ImGuiTreeNodeFlags_NoTreePushOnOpen |
-      ImGuiTreeNodeFlags_SpanAvailWidth |
-      (isSelected ? ImGuiTreeNodeFlags_Selected : 0));
-
-    if (ImGui::IsItemClicked()) {
+    // Use Selectable with custom height
+    if (ImGui::Selectable(displayName.c_str(), isSelected, 0, ImVec2(0, 35))) { // 35 pixels tall
       m_selectedProcess = process;
       UpdateStatus("Selected: " + process);
-
-      // NEW: Extract operations when process is selected
       ExtractSelectedProcessOperations();
 
-      // Auto-start if checkbox is checked and not already running
       if (m_autoStartOnSelect && !m_processRunning) {
         StartProcess(process);
       }
     }
 
     if (ImGui::IsItemHovered()) {
-      // Enhanced tooltip showing operation count
-      if (m_selectedProcess == process && !m_selectedProcessOperations.empty()) {
-        ImGui::SetTooltip("%s\n%zu operations\n%s",
-          process.c_str(),
-          m_selectedProcessOperations.size(),
-          m_autoStartOnSelect ? "Will auto-start" : "Use START button to run");
-      }
-      else {
-        ImGui::SetTooltip("Click to select: %s\n%s",
-          process.c_str(),
-          m_autoStartOnSelect ? "Will auto-start" : "Use START button to run");
-      }
+      ImGui::SetTooltip("Click to select: %s\n%s",
+        process.c_str(),
+        m_autoStartOnSelect ? "Will auto-start" : "Use START button to run");
     }
 
-    if (isRunning || isSelected) {
+    if (isRunning) {
       ImGui::PopStyleColor();
     }
   }
 
+  ImGui::PopStyleVar(2);
+
   ImGui::EndChild();
 }
-
 
 
 // NEW: Render single-line running status with progress bar
