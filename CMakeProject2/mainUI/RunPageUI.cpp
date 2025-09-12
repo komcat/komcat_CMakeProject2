@@ -213,91 +213,193 @@ void RunPageUI::StartProcess(const std::string& processName) {
 }
 
 
-// UPDATED: RenderColumn2 to include button ordering controls
 void RunPageUI::RenderColumn2() {
-    ImGui::Text("Process Filters & Order");
-    ImGui::Separator();
+  ImGui::Text(reinterpret_cast<const char*>(u8"📊 Status & Controls"));
+  ImGui::Separator();
 
-    // Current preset info
-    auto currentPresets = m_filterManager->GetAvailablePresetFiles();
-    ImGui::Text("Available Presets: %zu", currentPresets.size());
+  // Add tab bar for the second column
+  if (ImGui::BeginTabBar("Column2Tabs")) {
 
-    // Quick filter controls
-    if (ImGui::Button("Configure Filters", ImVec2(-1, 30))) {
-        ShowFilterConfiguration();
+    // Tab 1: Process Config (the original controls)
+    if (ImGui::BeginTabItem("Process Config")) {
+      RenderProcessConfigTab();
+      ImGui::EndTabItem();
     }
 
-    ImGui::Separator();
-
-    // Show current filter info
-    auto currentList = GetCurrentProcessList();
-    auto sortedList = GetSortedProcessList();
-    auto totalList = m_filterManager->GetAllAvailableProcesses();
-
-    ImGui::Text("Visible processes: %zu / %zu", currentList.size(), totalList.size());
-
-    // NEW: Show sort info
-    if (m_filterManager) {
-        int numberedCount = 0;
-        for (const auto& process : sortedList) {
-            if (m_filterManager->GetProcessSortNumber(process) > 0) {
-                numberedCount++;
-            }
-        }
-        ImGui::Text("Numbered buttons: %d / %zu", numberedCount, sortedList.size());
+    // Tab 2: Status & History 
+    if (ImGui::BeginTabItem("Status")) {
+      RenderStatusTabCol2();
+      ImGui::EndTabItem();
     }
 
-    if (currentList.empty()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "All processes hidden");
-        ImGui::TextWrapped("Load a preset or configure filters to show processes");
+    // Tab 3: Global Jog (new placeholder)
+    if (ImGui::BeginTabItem("Jog Control")) {
+      RenderJogControlTab();
+      ImGui::EndTabItem();
     }
 
-    ImGui::Separator();
-
-    // NEW: Quick button ordering controls
-    if (m_filterManager && !sortedList.empty()) {
-        ImGui::TextColored(ImVec4(0.8f, 1.0f, 0.8f, 1.0f), "Quick Button Ordering:");
-
-        if (ImGui::Button("Number 1,2,3...", ImVec2(-1, 25))) {
-            m_filterManager->AssignSequentialNumbers();
-        }
-
-        if (ImGui::Button("Number 10,20,30...", ImVec2(-1, 25))) {
-            m_filterManager->AssignSpacedNumbers();
-        }
-
-        if (ImGui::Button("Clear All Numbers", ImVec2(-1, 25))) {
-            m_filterManager->ClearAllSortNumbers();
-        }
-
-        ImGui::Separator();
-    }
-
-    // Auto-confirm checkbox (existing code)
-    bool autoConfirmValue = m_autoConfirm;
-    if (ImGui::Checkbox("Auto-confirm Interactions", &autoConfirmValue)) {
-        m_autoConfirm = autoConfirmValue;
-
-        if (m_promptUI) {
-            m_promptUI->SetAutoConfirm(autoConfirmValue);
-            UpdateStatus("Auto-confirm " + std::string(autoConfirmValue ? "enabled" : "disabled") +
-                " for UAA3 sequences");
-        }
-
-        if (m_uiManager) {
-            m_uiManager->SetAutoConfirm(autoConfirmValue);
-        }
-
-        std::string status = autoConfirmValue ? "Auto-confirm enabled" : "Auto-confirm disabled";
-        UpdateStatus(status);
-    }
-
-    ImGui::Separator();
-
-    // Completed Steps Section (existing code)
-    RenderCompletedSteps();
+    ImGui::EndTabBar();
+  }
 }
 
+// Move existing Column2 content to this new function
+void RunPageUI::RenderStatusTabCol2() {
+  // Status display section
+  ImGui::Text("Current Status:");
+  ImGui::Separator();
+
+  // Show current status message
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    ImGui::TextWrapped("%s", m_statusMessage.c_str());
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  // Completed processes section with clear button
+  float clearButtonWidth = 80.0f;
+  ImGui::Text("Completed Processes:");
+  ImGui::SameLine(ImGui::GetWindowWidth() - clearButtonWidth - 15);
+  if (ImGui::SmallButton("Clear")) {
+    ClearCompletedSteps();
+  }
+
+  ImGui::Separator();
+
+  // Scrollable completed processes list
+  ImGui::BeginChild("CompletedList", ImVec2(0, 0), true,
+    ImGuiWindowFlags_HorizontalScrollbar);
+
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    for (const auto& completed : m_completedSteps) {
+      // Color based on success/failure
+      if (completed.isSuccess) {
+        ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "[OK]");
+      }
+      else {
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "[FAIL]");
+      }
+
+      ImGui::SameLine();
+      ImGui::Text("%s", completed.processName.c_str());
+
+      ImGui::Indent();
+      ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
+        "Time: %s", completed.dateTime.c_str());
+      ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+        "Duration: %s", completed.duration.c_str());
+
+      if (!completed.idleTime.empty() && completed.idleTime != "N/A") {
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.0f, 1.0f),
+          "Idle: %s", completed.idleTime.c_str());
+      }
+
+      ImGui::Unindent();
+      ImGui::Spacing();
+    }
+  }
+
+  ImGui::EndChild();
+}
+
+// NEW: Move all the original control functionality here
+void RunPageUI::RenderProcessConfigTab() {
+  // Current preset info
+  auto currentPresets = m_filterManager->GetAvailablePresetFiles();
+  ImGui::Text("Available Presets: %zu", currentPresets.size());
+
+  // Quick filter controls
+  if (ImGui::Button("Configure Filters", ImVec2(-1, 30))) {
+    ShowFilterConfiguration();
+  }
+
+  ImGui::Separator();
+
+  // Show current filter info
+  auto currentList = GetCurrentProcessList();
+  auto sortedList = GetSortedProcessList();
+  auto totalList = m_filterManager->GetAllAvailableProcesses();
+
+  ImGui::Text("Visible processes: %zu / %zu", currentList.size(), totalList.size());
+
+  // Show sort info
+  if (m_filterManager) {
+    int numberedCount = 0;
+    for (const auto& process : sortedList) {
+      if (m_filterManager->GetProcessSortNumber(process) > 0) {
+        numberedCount++;
+      }
+    }
+    ImGui::Text("Numbered buttons: %d / %zu", numberedCount, sortedList.size());
+  }
+
+  if (currentList.empty()) {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "All processes hidden");
+    ImGui::TextWrapped("Load a preset or configure filters to show processes");
+  }
+
+  ImGui::Separator();
+
+  // Quick button ordering controls
+  if (m_filterManager && !sortedList.empty()) {
+    ImGui::TextColored(ImVec4(0.8f, 1.0f, 0.8f, 1.0f), "Quick Button Ordering:");
+
+    if (ImGui::Button("Number 1,2,3...", ImVec2(-1, 25))) {
+      m_filterManager->AssignSequentialNumbers();
+    }
+
+    if (ImGui::Button("Number 10,20,30...", ImVec2(-1, 25))) {
+      m_filterManager->AssignSpacedNumbers();
+    }
+
+    if (ImGui::Button("Clear All Numbers", ImVec2(-1, 25))) {
+      m_filterManager->ClearAllSortNumbers();
+    }
+
+    ImGui::Separator();
+  }
+
+  // Auto-confirm checkbox
+  bool autoConfirmValue = m_autoConfirm;
+  if (ImGui::Checkbox("Auto-confirm Interactions", &autoConfirmValue)) {
+    m_autoConfirm = autoConfirmValue;
+
+    if (m_promptUI) {
+      m_promptUI->SetAutoConfirm(autoConfirmValue);
+      UpdateStatus("Auto-confirm " + std::string(autoConfirmValue ? "enabled" : "disabled") +
+        " for UAA3 sequences");
+    }
+
+    if (m_uiManager) {
+      m_uiManager->SetAutoConfirm(autoConfirmValue);
+    }
+
+    std::string status = autoConfirmValue ?
+      "Auto-confirm enabled - Interactions will auto-proceed" :
+      "Auto-confirm disabled - Manual confirmation required";
+    UpdateStatus(status);
+  }
+
+  ImGui::Spacing();
+
+  // If auto-confirm is enabled, show delay slider
+  if (m_autoConfirm && m_promptUI) {
+    int delaySeconds = m_promptUI->GetAutoConfirmDelay();
+    if (ImGui::SliderInt("Auto-confirm delay", &delaySeconds, 1, 10, "%d sec")) {
+      m_promptUI->SetAutoConfirmDelay(delaySeconds);
+      UpdateStatus("Auto-confirm delay set to " + std::to_string(delaySeconds) + " seconds");
+    }
+  }
+}
+
+// New placeholder function for jog control
+void RunPageUI::RenderJogControlTab() {
+  ImGui::Text("Global Jog Controls place holder");
+  
+}
 
 
 void RunPageUI::RenderCompletedSteps() {

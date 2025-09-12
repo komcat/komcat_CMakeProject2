@@ -166,4 +166,14 @@ private:
   void RenderDataValueOverlay(const ImVec2& canvasPos, const ImVec2& canvasSize);
   void FormatDataValueWithUnit(const std::string& channel, float value, char* buffer, size_t bufferSize);
   bool HasDataValueChanged(const std::string& channel, float currentValue);
+
+
+  // New members for jog control
+  int m_selectedJogAxis = 0;  // 0=X, 1=Y, 2=Z, 3=R
+  int m_jogStepSize = 1;      // 0=0.01mm, 1=0.1mm, 2=1mm, 3=10mm
+
+  // New methods
+  void RenderStatusTabCol2();
+  void RenderProcessConfigTab();
+  void RenderJogControlTab();
 };
