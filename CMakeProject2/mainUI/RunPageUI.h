@@ -183,4 +183,18 @@ private:
   std::string m_selectedTreeNode = "";  // Currently selected node in tree
 
 
+
+  // Store the operations of the selected process
+  std::vector<std::string> m_selectedProcessOperations;
+  // Track current operation during execution
+  size_t m_currentOperationIndex = 0;
+  size_t m_lastCompletedIndex = 0;  // ADD THIS
+  bool m_operationInProgress = false;
+  std::mutex m_operationMutex;  // For thread-safe operation tracking
+
+  // Add method declarations
+  void ExtractSelectedProcessOperations();
+  void RenderSequenceBreakdownTab();
+
+
 };

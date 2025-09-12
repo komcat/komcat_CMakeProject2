@@ -26,16 +26,26 @@ bool SequenceStep::Execute() {
   for (size_t i = 0; i < m_operations.size(); ++i) {
     auto& operation = m_operations[i];
 
+    // NEW: Notify callback that operation is starting
+    if (m_operationCallback) {
+      m_operationCallback(i, operation->GetDescription(), true);
+    }
+
     LogInfo("EXECUTING " + std::to_string(i + 1) + "/" +
       std::to_string(m_operations.size()) + ": " + operation->GetDescription());
 
     if (!operation->Execute(m_machineOps)) {
       LogError("Operation FAILED: " + operation->GetDescription());
 
-      // CHECK FOR FALLBACK - THIS PART IS MISSING!
+      // CHECK FOR FALLBACK
       auto it = m_fallbacks.find(operation);
       if (it != m_fallbacks.end()) {
         LogInfo("Attempting FALLBACK operation: " + it->second->GetDescription());
+
+        // NEW: Notify callback about fallback
+        if (m_operationCallback) {
+          m_operationCallback(i, "FALLBACK: " + it->second->GetDescription(), true);
+        }
 
         if (it->second->Execute(m_machineOps)) {
           LogInfo("FALLBACK SUCCEEDED: " + it->second->GetDescription());
@@ -56,6 +66,7 @@ bool SequenceStep::Execute() {
 
     LogInfo("Operation COMPLETED SUCCESSFULLY: " + operation->GetDescription());
   }
+
   if (success) {
     LogInfo("Sequence completed successfully");
   }
@@ -68,7 +79,6 @@ bool SequenceStep::Execute() {
 
   return success;
 }
-
 
 
 // In SequenceStep.cpp

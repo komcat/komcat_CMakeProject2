@@ -99,7 +99,7 @@ void RunPageUI::RenderColumn1() {
   ImGui::Separator();
 
   // Progress bar
-  RenderProgressBar();
+  //RenderProgressBar();
 
   ImGui::Spacing();
   ImGui::Separator();
@@ -135,21 +135,18 @@ void RunPageUI::RenderProgressBar() {
 }
 
 
-// NEW: Implement the simple tree view rendering
+
+// Update the tree view selection handler to extract operations:
 void RunPageUI::RenderProcessTreeView() {
   ImGui::Text("Process Steps");
   ImGui::Separator();
 
-  // Create a scrollable region for the tree
   ImGui::BeginChild("ProcessTree", ImVec2(0, 0), true,
     ImGuiWindowFlags_HorizontalScrollbar);
 
-  // Get sorted process list
   auto sortedList = GetSortedProcessList();
 
-  // Render each process as a tree node
   for (const auto& process : sortedList) {
-    // Get sort number if exists
     std::string displayName = process;
     if (m_filterManager) {
       int sortNum = m_filterManager->GetProcessSortNumber(process);
@@ -158,7 +155,6 @@ void RunPageUI::RenderProcessTreeView() {
       }
     }
 
-    // Color based on selection and running state
     bool isSelected = (m_selectedProcess == process);
     bool isRunning = (m_processRunning && m_selectedProcess == process);
 
@@ -169,17 +165,18 @@ void RunPageUI::RenderProcessTreeView() {
       ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
     }
 
-    // Make it a selectable tree node
     bool nodeClicked = ImGui::TreeNodeEx(displayName.c_str(),
       ImGuiTreeNodeFlags_Leaf |
       ImGuiTreeNodeFlags_NoTreePushOnOpen |
       ImGuiTreeNodeFlags_SpanAvailWidth |
       (isSelected ? ImGuiTreeNodeFlags_Selected : 0));
 
-    // Handle selection
     if (ImGui::IsItemClicked()) {
       m_selectedProcess = process;
       UpdateStatus("Selected: " + process);
+
+      // NEW: Extract operations when process is selected
+      ExtractSelectedProcessOperations();
 
       // Auto-start if checkbox is checked and not already running
       if (m_autoStartOnSelect && !m_processRunning) {
@@ -187,11 +184,19 @@ void RunPageUI::RenderProcessTreeView() {
       }
     }
 
-    // Tooltip on hover
     if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Click to select: %s\n%s",
-        process.c_str(),
-        m_autoStartOnSelect ? "Will auto-start" : "Use START button to run");
+      // Enhanced tooltip showing operation count
+      if (m_selectedProcess == process && !m_selectedProcessOperations.empty()) {
+        ImGui::SetTooltip("%s\n%zu operations\n%s",
+          process.c_str(),
+          m_selectedProcessOperations.size(),
+          m_autoStartOnSelect ? "Will auto-start" : "Use START button to run");
+      }
+      else {
+        ImGui::SetTooltip("Click to select: %s\n%s",
+          process.c_str(),
+          m_autoStartOnSelect ? "Will auto-start" : "Use START button to run");
+      }
     }
 
     if (isRunning || isSelected) {
@@ -201,6 +206,8 @@ void RunPageUI::RenderProcessTreeView() {
 
   ImGui::EndChild();
 }
+
+
 
 // NEW: Render single-line running status with progress bar
 void RunPageUI::RenderRunningStatus() {
@@ -310,6 +317,8 @@ void RunPageUI::StartProcess(const std::string& processName) {
 }
 
 
+
+// In RunPageUI.cpp, update RenderColumn2:
 void RunPageUI::RenderColumn2() {
   ImGui::Text(reinterpret_cast<const char*>(u8"📊 Status & Controls"));
   ImGui::Separator();
@@ -317,20 +326,26 @@ void RunPageUI::RenderColumn2() {
   // Add tab bar for the second column
   if (ImGui::BeginTabBar("Column2Tabs")) {
 
-    // Tab 1: Process Config (the original controls)
-    if (ImGui::BeginTabItem("Process Config")) {
+    // Tab 1: Sequence Breakdown (NEW - show first)
+    if (ImGui::BeginTabItem("Sequence")) {
+      RenderSequenceBreakdownTab();
+      ImGui::EndTabItem();
+    }
+
+    // Tab 2: Process Config 
+    if (ImGui::BeginTabItem("Config")) {
       RenderProcessConfigTab();
       ImGui::EndTabItem();
     }
 
-    // Tab 2: Status & History 
+    // Tab 3: Status & History 
     if (ImGui::BeginTabItem("Status")) {
       RenderStatusTabCol2();
       ImGui::EndTabItem();
     }
 
-    // Tab 3: Global Jog (new placeholder)
-    if (ImGui::BeginTabItem("Jog Control")) {
+    // Tab 4: Global Jog
+    if (ImGui::BeginTabItem("Jog")) {
       RenderJogControlTab();
       ImGui::EndTabItem();
     }
@@ -338,6 +353,143 @@ void RunPageUI::RenderColumn2() {
     ImGui::EndTabBar();
   }
 }
+
+// Update RenderSequenceBreakdownTab() in RunPageUI.cpp:
+void RunPageUI::RenderSequenceBreakdownTab() {
+  ImGui::Text("Sequence Operations");
+  ImGui::Separator();
+
+  if (m_selectedProcess.empty()) {
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
+      "Select a process to view its operations");
+    return;
+  }
+
+  // Show selected process name with better formatting
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 1.0f, 0.8f, 1.0f));
+  ImGui::Text("Process:");
+  ImGui::PopStyleColor();
+  ImGui::SameLine();
+  ImGui::TextWrapped("%s", m_selectedProcess.c_str());
+  ImGui::Separator();
+
+  // Show operation count
+  ImGui::Text("Total Operations: %zu", m_selectedProcessOperations.size());
+  ImGui::Spacing();
+
+  // Get current operation index safely
+  size_t currentOpIndex = 0;
+  bool isExecuting = false;
+  {
+    std::lock_guard<std::mutex> lock(m_operationMutex);
+    currentOpIndex = m_currentOperationIndex;
+    isExecuting = m_operationInProgress && m_processRunning;
+  }
+
+  // Create scrollable region with horizontal scrollbar
+  ImGui::BeginChild("OperationsList", ImVec2(0, 0), true,
+    ImGuiWindowFlags_HorizontalScrollbar);
+
+  // Use a table for better alignment
+  if (ImGui::BeginTable("OperationsTable", 2,
+    ImGuiTableFlags_ScrollX |
+    ImGuiTableFlags_RowBg |
+    ImGuiTableFlags_BordersInnerV)) {
+
+    // Setup columns
+    ImGui::TableSetupColumn("Step", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+    ImGui::TableSetupColumn("Operation", ImGuiTableColumnFlags_WidthStretch);
+
+    // Render each operation
+    for (size_t i = 0; i < m_selectedProcessOperations.size(); ++i) {
+      ImGui::TableNextRow();
+
+      bool isCurrentOperation = (isExecuting && currentOpIndex == i);
+      bool isCompleted = (isExecuting && i < currentOpIndex) ||
+        (!m_processRunning && m_lastCompletedIndex >= i);
+
+      // First column: Step number with status
+      ImGui::TableSetColumnIndex(0);
+
+      // In the table version, update the emoji parts:
+      if (isCurrentOperation) {
+        // Currently running - yellow
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "%zu. %s", i + 1,
+          reinterpret_cast<const char*>(u8"►"));
+      }
+      else if (isCompleted) {
+        // Completed - green
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%zu. %s", i + 1,
+          reinterpret_cast<const char*>(u8"✓"));
+      }
+      else {
+        // Not yet run - normal
+        ImGui::Text("%zu.", i + 1);
+      }
+
+      // Second column: Operation description
+      ImGui::TableSetColumnIndex(1);
+
+      if (isCurrentOperation) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f));
+      }
+      else if (isCompleted) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.8f, 0.0f, 1.0f));
+      }
+
+      // Wrap text to prevent cutoff
+      ImGui::TextWrapped("%s", m_selectedProcessOperations[i].c_str());
+
+      // Add status tag if running
+      if (isCurrentOperation) {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), " [RUNNING]");
+        ImGui::PopStyleColor();
+      }
+      else if (isCompleted) {
+        ImGui::PopStyleColor();
+      }
+
+      // Tooltip for long descriptions
+      if (ImGui::IsItemHovered() && m_selectedProcessOperations[i].length() > 50) {
+        ImGui::SetTooltip("%s", m_selectedProcessOperations[i].c_str());
+      }
+    }
+
+    ImGui::EndTable();
+  }
+
+  ImGui::EndChild();
+}
+
+
+// NEW: Extract operations from selected process
+void RunPageUI::ExtractSelectedProcessOperations() {
+  m_selectedProcessOperations.clear();
+
+  if (m_selectedProcess.empty()) {
+    return;
+  }
+
+  // Build the process to get its sequence
+  auto sequence = BuildSelectedProcess();
+  if (sequence) {
+    // Get operations from the sequence
+    const auto& operations = sequence->GetOperations();
+
+    // Extract descriptions
+    for (const auto& op : operations) {
+      if (op) {
+        m_selectedProcessOperations.push_back(op->GetDescription());
+      }
+    }
+
+    m_logger->LogInfo("Extracted " + std::to_string(m_selectedProcessOperations.size()) +
+      " operations from process: " + m_selectedProcess);
+  }
+}
+
+
 
 // Move existing Column2 content to this new function
 void RunPageUI::RenderStatusTabCol2() {
@@ -652,7 +804,6 @@ std::vector<std::string> RunPageUI::GetSortedProcessList() const {
 void RunPageUI::ProcessThreadFunc(const std::string& processName) {
   // Record start time and calculate idle time
   m_processStartTime = std::chrono::steady_clock::now();
-
   std::string idleTimeStr = "00:00.000";
   if (m_hasLastProcessEndTime) {
     auto idleDuration = std::chrono::duration_cast<std::chrono::milliseconds>(m_processStartTime - m_lastProcessEndTime);
@@ -660,11 +811,17 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
     auto minutes = totalMs / 60000;
     auto seconds = (totalMs % 60000) / 1000;
     auto ms = totalMs % 1000;
-
     char idleStr[32];
     sprintf_s(idleStr, sizeof(idleStr), "%02d:%02d.%03d",
       static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
     idleTimeStr = std::string(idleStr);
+  }
+
+  // NEW: Reset operation tracking
+  {
+    std::lock_guard<std::mutex> lock(m_operationMutex);
+    m_currentOperationIndex = 0;
+    m_operationInProgress = false;
   }
 
   try {
@@ -675,30 +832,58 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
       return;
     }
 
-    UpdateStatus("Starting process: " + processName);
+    // NEW: Set up operation tracking callback
+    sequence->SetOperationCallback([this](size_t index, const std::string& description, bool starting) {
+      std::lock_guard<std::mutex> lock(m_operationMutex);
+      if (starting) {
+        m_currentOperationIndex = index;
+        m_operationInProgress = true;
 
+        // Update progress based on operation index
+        if (!m_selectedProcessOperations.empty()) {
+          m_progress = static_cast<float>(index) / static_cast<float>(m_selectedProcessOperations.size());
+        }
+      }
+    });
+
+    UpdateStatus("Starting process: " + processName);
     // Call the sequence's Execute method - it handles fallbacks internally
     bool processSuccess = sequence->Execute();
+
+
+    //// Reset operation tracking after completion - IMPORTANT FIX
+    //{
+    //  std::lock_guard<std::mutex> lock(m_operationMutex);
+    //  m_operationInProgress = false;
+    //  // Don't leave m_currentOperationIndex at 0 when done
+    //  if (processSuccess) {
+    //    m_currentOperationIndex = m_selectedProcessOperations.size(); // Set to end
+    //  }
+    //}
+
+    // NEW: Reset operation tracking after completion
+    {
+      std::lock_guard<std::mutex> lock(m_operationMutex);
+      m_operationInProgress = false;
+    }
 
     // Calculate final duration
     auto endTime = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - m_processStartTime);
-
     // Format duration as mm:ss.xxx
     auto totalMs = duration.count();
     auto minutes = totalMs / 60000;
     auto seconds = (totalMs % 60000) / 1000;
     auto ms = totalMs % 1000;
-
     char durationStr[32];
     sprintf_s(durationStr, sizeof(durationStr), "%02d:%02d.%03d",
       static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
-
     if (m_stopRequested) {
       UpdateStatus("Process stopped by user");
       AddCompletedStep(processName, std::string(durationStr), idleTimeStr, false);
     }
     else if (processSuccess) {
+      m_progress = 1.0f;  // NEW: Set to 100% on success
       UpdateStatus("Process completed successfully");
       AddCompletedStep(processName, std::string(durationStr), idleTimeStr, true);
     }
@@ -706,15 +891,19 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
       UpdateStatus("Process failed", true);
       AddCompletedStep(processName, std::string(durationStr), idleTimeStr, false);
     }
-
     // Always record end time for next idle calculation
     m_lastProcessEndTime = endTime;
     m_hasLastProcessEndTime = true;
-
   }
   catch (const std::exception& e) {
-    UpdateStatus("Process error: " + std::string(e.what()), true);
+    // Reset operation tracking on exception
+    {
+      std::lock_guard<std::mutex> lock(m_operationMutex);
+      m_operationInProgress = false;
+      m_currentOperationIndex = 0; // Reset on error
+    }
 
+    UpdateStatus("Process error: " + std::string(e.what()), true);
     // Track exception as failed process
     auto endTime = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - m_processStartTime);
@@ -722,22 +911,17 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
     auto minutes = totalMs / 60000;
     auto seconds = (totalMs % 60000) / 1000;
     auto ms = totalMs % 1000;
-
     char durationStr[32];
     sprintf_s(durationStr, sizeof(durationStr), "%02d:%02d.%03d",
       static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
-
     AddCompletedStep(processName, std::string(durationStr), idleTimeStr, false);
-
     m_lastProcessEndTime = endTime;
     m_hasLastProcessEndTime = true;
   }
-
   m_processRunning = false;
   m_processPaused = false;
   m_progress = 0.0f;
 }
-
 
 
 // UPDATED: OnFilterChanged to handle sorted list changes

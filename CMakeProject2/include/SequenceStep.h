@@ -6,7 +6,7 @@
 #include "include/CoordinateSystem/CoordinateSystem.h"
 #include "MachineOperationsExtended.h"
 #include "AppContext.h"
-
+#include <functional>
 #include <vector>
 #include <string>
 #include <functional>
@@ -168,32 +168,39 @@ private:
 };
 
 
+// In SequenceStep.h, add these to the class definition:
+
 class SequenceStep : public ProcessStep {
 public:
   SequenceStep(const std::string& name, MachineOperations& machineOps);
 
-  // Existing method - declaration only
+  // Existing methods
   void AddOperation(std::shared_ptr<SequenceOperation> operation);
-
-  // NEW method declaration for fallback
   void AddOperationWithFallback(
     std::shared_ptr<SequenceOperation> primary,
     std::shared_ptr<SequenceOperation> fallback);
-
   bool Execute() override;
-
   const std::vector<std::shared_ptr<SequenceOperation>>& GetOperations() const {
     return m_operations;
   }
-
   void PrintSequencePlan() const;
+
+  // NEW: Callback type for operation progress
+  using OperationCallback = std::function<void(size_t index, const std::string& description, bool starting)>;
+
+  // NEW: Set callback for operation progress
+  void SetOperationCallback(OperationCallback callback) {
+    m_operationCallback = callback;
+  }
 
 private:
   std::vector<std::shared_ptr<SequenceOperation>> m_operations;
   std::map<std::shared_ptr<SequenceOperation>,
-    std::shared_ptr<SequenceOperation>> m_fallbacks;  // ADD THIS
-};
+    std::shared_ptr<SequenceOperation>> m_fallbacks;
 
+  // NEW: Operation progress callback
+  OperationCallback m_operationCallback;
+};
 
 // Wait operation
 class WaitOperation : public SequenceOperation {
