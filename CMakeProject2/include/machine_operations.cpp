@@ -487,6 +487,178 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
 }
 
 
+// machine_operations.cpp - Add this implementation
+bool MachineOperations::MoveToNearestNode(
+  const std::string& deviceName,
+  const std::string& graphName,
+  double maxDistance,
+  bool waitForCompletion,
+  const std::string& callerContext) {
+
+  // Generate operation ID for tracking
+  std::string opId;
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+      {"device_name", deviceName},
+      {"graph_name", graphName},
+      {"max_distance", std::to_string(maxDistance)},
+      {"wait_for_completion", waitForCompletion ? "true" : "false"}
+    };
+
+    std::string context = callerContext.empty() ?
+      "MoveToNearestNode_" + deviceName : callerContext;
+
+    opId = m_resultsManager->StartOperation("MoveToNearestNode",
+      deviceName, context, "", parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Finding nearest node for " +
+    deviceName + " in graph " + graphName);
+
+  // Get current position
+  PositionStruct currentPos;
+  if (!GetDeviceCurrentPosition(deviceName, currentPos)) {
+    m_logger->LogError("MachineOperations: Failed to get current position for " + deviceName);
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", "Could not get current position");
+    }
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: Current position: X=" + std::to_string(currentPos.x) +
+    ", Y=" + std::to_string(currentPos.y) +
+    ", Z=" + std::to_string(currentPos.z));
+
+  // Get graph from motion config manager
+  auto graphOpt = m_motionLayer.GetMotionConfigManager().GetGraph(graphName);
+
+  if (!graphOpt.has_value()) {
+    m_logger->LogError("MachineOperations: Graph not found: " + graphName);
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", "Graph not found");
+    }
+    return false;
+  }
+
+  const auto& graph = graphOpt.value().get();
+
+  double minDistance = (std::numeric_limits<double>::max)();
+  std::string nearestNodeId;
+  PositionStruct nearestNodePos;
+
+  // Check if device is hex (2D movement) or gantry (3D movement)
+  bool isHexDevice = (deviceName.find("hex") != std::string::npos);
+
+  // Iterate through all nodes to find nearest
+  for (const auto& node : graph.Nodes) {
+    // Only consider nodes for this device
+    if (node.Device != deviceName) {
+      continue;
+    }
+
+    // Skip nodes without a position defined
+    if (node.Position.empty()) {
+      m_logger->LogDebug("MachineOperations: Skipping node without position: " + node.Id);
+      continue;
+    }
+
+    // Get the actual position coordinates for this node
+    auto posOpt = m_motionLayer.GetMotionConfigManager().GetNamedPosition(deviceName, node.Position);
+    if (!posOpt.has_value()) {
+      m_logger->LogWarning("MachineOperations: Could not get position '" +
+        node.Position + "' for node: " + node.Id);
+      continue;
+    }
+
+    const PositionStruct& nodePos = posOpt.value().get();
+
+    // Calculate distance based on device type
+    double distance;
+    if (isHexDevice) {
+      // For hex devices, only consider X-Y distance (2D)
+      double dx = nodePos.x - currentPos.x;
+      double dy = nodePos.y - currentPos.y;
+      distance = std::sqrt(dx * dx + dy * dy);
+    }
+    else {
+      // For gantry and other devices, consider full 3D distance
+      double dx = nodePos.x - currentPos.x;
+      double dy = nodePos.y - currentPos.y;
+      double dz = nodePos.z - currentPos.z;
+      distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    m_logger->LogDebug("MachineOperations: Node " + node.Id +
+      " at position '" + node.Position +
+      "' distance: " + std::to_string(distance) + "mm");
+
+    // Check if this is the nearest node so far
+    if (distance < minDistance && distance <= maxDistance) {
+      minDistance = distance;
+      nearestNodeId = node.Id;
+      nearestNodePos = nodePos;
+    }
+  }
+
+  if (nearestNodeId.empty()) {
+    m_logger->LogError("MachineOperations: No reachable node found within " +
+      std::to_string(maxDistance) + "mm");
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed",
+        "No reachable node within " + std::to_string(maxDistance) + "mm");
+    }
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: Nearest node found: " + nearestNodeId +
+    " at distance: " + std::to_string(minDistance) + "mm");
+  m_logger->LogInfo("MachineOperations: Target position: X=" + std::to_string(nearestNodePos.x) +
+    ", Y=" + std::to_string(nearestNodePos.y) +
+    ", Z=" + std::to_string(nearestNodePos.z));
+
+  // Store results
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->StoreResult(opId, "nearest_node", nearestNodeId);
+    m_resultsManager->StoreResult(opId, "distance_to_nearest", std::to_string(minDistance));
+    StorePositionResult(opId, "start", currentPos);
+    StorePositionResult(opId, "target", nearestNodePos);
+  }
+
+  // Move to nearest node
+  std::string moveContext = callerContext.empty() ?
+    "MoveToNearestNode_" + deviceName + "_to_" + nearestNodeId :
+    callerContext + "_to_" + nearestNodeId;
+
+  bool success = MoveDeviceToNode(deviceName, graphName, nearestNodeId,
+    waitForCompletion, moveContext);
+
+  // Complete tracking
+  if (m_resultsManager && !opId.empty()) {
+    if (success) {
+      PositionStruct finalPos;
+      if (GetDeviceCurrentPosition(deviceName, finalPos)) {
+        StorePositionResult(opId, "final", finalPos);
+        double movedDistance = GetDistanceBetweenPositions(currentPos, finalPos);
+        m_resultsManager->StoreResult(opId, "actual_distance_moved", std::to_string(movedDistance));
+      }
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_resultsManager->EndOperation(opId, "failed", "Movement to nearest node failed");
+    }
+  }
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully moved to nearest node: " + nearestNodeId);
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to move to nearest node: " + nearestNodeId);
+  }
+
+  return success;
+}
+
+
 // 3. UPDATE MovePathFromTo method with database tracking:
 bool MachineOperations::MovePathFromTo(const std::string& deviceName,
   const std::string& graphName,

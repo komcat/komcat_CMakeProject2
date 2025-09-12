@@ -544,8 +544,25 @@ public:
 		const std::string& recordingId);
 	bool StopChannelRecording(const std::string& recordingId, size_t& recordedPoints);
 
+	MotionControlLayer& GetMotionLayer() const { return m_motionLayer; }
 
-private:
+	/**
+	 * @brief Find and move to the nearest reachable node in a graph
+	 * @param deviceName Device to move (e.g., "hex-left", "hex-right", "gantry-main")
+	 * @param graphName Graph containing the nodes
+	 * @param maxDistance Maximum distance to consider (mm) - optional safety limit
+	 * @param waitForCompletion Wait for movement to complete
+	 * @param callerContext Context string for tracking
+	 * @return True if successfully moved to nearest node
+	 */
+	bool MoveToNearestNode(
+		const std::string& deviceName,
+		const std::string& graphName,
+		double maxDistance = 100.0,
+		bool waitForCompletion = true,
+		const std::string& callerContext = ""
+	);
+protected:
 	
 	bool m_enableDebug = false;
 	

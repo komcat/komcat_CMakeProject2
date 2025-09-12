@@ -5147,3 +5147,91 @@ private:
   std::string m_systemName;
   PositionStruct m_systemPos;
 };
+
+
+// In SequenceStep.h, add these classes after the other operation classes:
+
+/**
+ * @brief Operation to move device to nearest reachable node in graph
+ * Useful for recovering from manual adjustments or unknown positions
+ */
+class MoveToNearestNodeOperation : public SequenceOperation {
+public:
+  MoveToNearestNodeOperation(const std::string& deviceName,
+    const std::string& graphName,
+    double maxDistance = 100.0)
+    : m_deviceName(deviceName),
+    m_graphName(graphName),
+    m_maxDistance(maxDistance) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    std::string callerContext = "MoveToNearestNodeOperation_" + m_deviceName;
+    return ops.MoveToNearestNode(m_deviceName, m_graphName,
+      m_maxDistance, true, callerContext);
+  }
+
+  std::string GetDescription() const override {
+    return "Move " + m_deviceName + " to nearest node in " + m_graphName +
+      " (max " + std::to_string(m_maxDistance) + "mm)";
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_graphName;
+  double m_maxDistance;
+};
+
+/**
+ * @brief Helper operation that recovers to nearest node and retries movement
+ * Combines recovery to nearest node with retry of original movement
+ */
+class RecoverAndRetryOperation : public SequenceOperation {
+public:
+  RecoverAndRetryOperation(const std::string& device,
+    const std::string& graph,
+    const std::string& targetNode,
+    double maxRecoveryDistance = 3.0)
+    : m_device(device),
+    m_graph(graph),
+    m_targetNode(targetNode),
+    m_maxDistance(maxRecoveryDistance) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    ops.LogInfo("Attempting recovery for " + m_device + " to reach " + m_targetNode);
+
+    // First try to move to nearest node
+    std::string recoverContext = "RecoverToNearest_" + m_device;
+    if (!ops.MoveToNearestNode(m_device, m_graph, m_maxDistance, true, recoverContext)) {
+      ops.LogError("Failed to recover to nearest node");
+      return false;
+    }
+
+    // Wait briefly for settling
+    ops.Wait(500);
+
+    // Retry original movement
+    std::string retryContext = "RetryAfterRecovery_" + m_device + "_to_" + m_targetNode;
+    bool success = ops.MoveDeviceToNode(m_device, m_graph, m_targetNode, true, retryContext);
+
+    if (success) {
+      ops.LogInfo("Successfully reached target after recovery");
+    }
+    else {
+      ops.LogError("Still unable to reach target after recovery");
+    }
+
+    return success;
+  }
+
+  std::string GetDescription() const override {
+    return "Recover to nearest node and retry move to " + m_targetNode;
+  }
+
+private:
+  std::string m_device;
+  std::string m_graph;
+  std::string m_targetNode;
+  double m_maxDistance;
+};

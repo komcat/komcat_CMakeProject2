@@ -17,8 +17,18 @@ namespace UAA3ProcessBuilders {
       "gantry-main", "Process_Flow", "node_4027")); // Safe position
 
     // 3. Move hex-left to reject lens position
-    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-      "hex-left", "Process_Flow", "node_5531")); // Reject lens position
+    //sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+    //  "hex-left", "Process_Flow", "node_5531")); // Reject lens position
+
+    // 3. Move hex-right to reject position WITH FALLBACK
+    auto moveToReject = std::make_shared<MoveToNodeOperation>(
+      "hex-right", "Process_Flow", "node_5190");
+
+    auto fallbackToReject = std::make_shared<RecoverAndRetryOperation>(
+      "hex-right", "Process_Flow", "node_5190", 2.0); //max 5mm distance
+
+    sequence->AddOperationWithFallback(moveToReject, fallbackToReject);
+
 
     // 4. Release left gripper (pin 0)
     sequence->AddOperation(std::make_shared<SetOutputOperation>(
@@ -48,8 +58,16 @@ namespace UAA3ProcessBuilders {
       "gantry-main", "Process_Flow", "node_4027")); // Safe position
 
     // 3. Move hex-right to reject lens position
-    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
-      "hex-right", "Process_Flow", "node_5190")); // Reject lens position
+    //sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+    //  "hex-right", "Process_Flow", "node_5190")); // Reject lens position
+
+    // 3. Move hex-right to reject position WITH FALLBACK
+    auto moveToReject = std::make_shared<MoveToNodeOperation>(
+      "hex-right", "Process_Flow", "node_5190");
+
+    auto fallbackToReject = std::make_shared<RecoverAndRetryOperation>(
+      "hex-right", "Process_Flow", "node_5190", 2.0); // max 2distance recovery
+
 
     // 4. Release right gripper (pin 2)
     sequence->AddOperation(std::make_shared<SetOutputOperation>(
