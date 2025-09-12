@@ -22,10 +22,10 @@ namespace UAA3ProcessBuilders {
 
     // 3. Move hex-right to reject position WITH FALLBACK
     auto moveToReject = std::make_shared<MoveToNodeOperation>(
-      "hex-right", "Process_Flow", "node_5190");
+      "hex-left", "Process_Flow", "node_5531");
 
     auto fallbackToReject = std::make_shared<RecoverAndRetryOperation>(
-      "hex-right", "Process_Flow", "node_5190", 2.0); //max 5mm distance
+      "hex-left", "Process_Flow", "node_5531", 2.0); //max 5mm distance
 
     sequence->AddOperationWithFallback(moveToReject, fallbackToReject);
 
