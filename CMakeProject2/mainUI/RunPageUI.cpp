@@ -80,10 +80,9 @@ void RunPageUI::RenderUI() {
   ManualAdjustmentRegistry::GetInstance().RenderAll();
 }
 
+
+// In RunPageUI.cpp, update RenderColumn1:
 void RunPageUI::RenderColumn1() {
-
-
-
   ImGui::Text(reinterpret_cast<const char*>(u8"🔧 Process Control"));
   ImGui::Separator();
 
@@ -93,16 +92,114 @@ void RunPageUI::RenderColumn1() {
   ImGui::Spacing();
   ImGui::Separator();
 
-  // NEW: Single-line running status with large font and dark green background
+  // Single-line running status with large font and dark green background
   RenderRunningStatus();
 
   ImGui::Spacing();
   ImGui::Separator();
 
-  // Render process step buttons (now takes more space)
-  RenderProcessButtons();
+  // Progress bar
+  RenderProgressBar();
+
+  ImGui::Spacing();
+  ImGui::Separator();
+
+  // NEW: Auto-start checkbox
+  ImGui::Checkbox("Automatic Start", &m_autoStartOnSelect);
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("When checked, selecting a process will automatically start it");
+  }
+
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  // NEW: Render process tree view instead of buttons
+  RenderProcessTreeView();
+}
 
 
+// Add this method to RunPageUI.cpp
+void RunPageUI::RenderProgressBar() {
+  // Get available width
+  float availableWidth = ImGui::GetContentRegionAvail().x;
+
+  // Calculate progress value
+  float progressValue = m_processRunning ? m_progress : 0.0f;
+
+  // Create progress text with percentage
+  char progressText[32];
+  snprintf(progressText, sizeof(progressText), "%.1f%%", progressValue * 100.0f);
+
+  // Render the progress bar
+  ImGui::ProgressBar(progressValue, ImVec2(availableWidth, 25.0f), progressText);
+}
+
+
+// NEW: Implement the simple tree view rendering
+void RunPageUI::RenderProcessTreeView() {
+  ImGui::Text("Process Steps");
+  ImGui::Separator();
+
+  // Create a scrollable region for the tree
+  ImGui::BeginChild("ProcessTree", ImVec2(0, 0), true,
+    ImGuiWindowFlags_HorizontalScrollbar);
+
+  // Get sorted process list
+  auto sortedList = GetSortedProcessList();
+
+  // Render each process as a tree node
+  for (const auto& process : sortedList) {
+    // Get sort number if exists
+    std::string displayName = process;
+    if (m_filterManager) {
+      int sortNum = m_filterManager->GetProcessSortNumber(process);
+      if (sortNum > 0) {
+        displayName = std::to_string(sortNum) + ". " + process;
+      }
+    }
+
+    // Color based on selection and running state
+    bool isSelected = (m_selectedProcess == process);
+    bool isRunning = (m_processRunning && m_selectedProcess == process);
+
+    if (isRunning) {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+    }
+    else if (isSelected) {
+      ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
+    }
+
+    // Make it a selectable tree node
+    bool nodeClicked = ImGui::TreeNodeEx(displayName.c_str(),
+      ImGuiTreeNodeFlags_Leaf |
+      ImGuiTreeNodeFlags_NoTreePushOnOpen |
+      ImGuiTreeNodeFlags_SpanAvailWidth |
+      (isSelected ? ImGuiTreeNodeFlags_Selected : 0));
+
+    // Handle selection
+    if (ImGui::IsItemClicked()) {
+      m_selectedProcess = process;
+      UpdateStatus("Selected: " + process);
+
+      // Auto-start if checkbox is checked and not already running
+      if (m_autoStartOnSelect && !m_processRunning) {
+        StartProcess(process);
+      }
+    }
+
+    // Tooltip on hover
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Click to select: %s\n%s",
+        process.c_str(),
+        m_autoStartOnSelect ? "Will auto-start" : "Use START button to run");
+    }
+
+    if (isRunning || isSelected) {
+      ImGui::PopStyleColor();
+    }
+  }
+
+  ImGui::EndChild();
 }
 
 // NEW: Render single-line running status with progress bar

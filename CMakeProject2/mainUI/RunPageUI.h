@@ -176,4 +176,11 @@ private:
   void RenderStatusTabCol2();
   void RenderProcessConfigTab();
   void RenderJogControlTab();
+  void RenderProcessTreeView();
+  void RenderProgressBar();
+
+  bool m_autoStartOnSelect = false;  // Checkbox state for automatic start
+  std::string m_selectedTreeNode = "";  // Currently selected node in tree
+
+
 };
