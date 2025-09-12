@@ -10,6 +10,7 @@
 #include "include/ui/OperationsDisplayUI.h"
 #include "include/camera/ICameraHardware.h"  // NEW: Add for camera hardware interface
 #include "logger.h"
+#include "CameraViewport.h"
 #include "LiveVideoSubscriber.h"  // NEW: Add camera support
 #include <string>
 #include <vector>
@@ -197,4 +198,16 @@ private:
   void RenderSequenceBreakdownTab();
 
 
+
+  // Camera viewport for embedded display
+  std::unique_ptr<CameraViewport> m_cameraViewport;
+  void InitializeCameraViewport();
+
+  // Add to private members in RunPageUI.h:
+  std::shared_ptr<LiveVideoSubscriber> m_embeddedCameraSubscriber;
+
+  // Add to private methods in RunPageUI.h:
+  void InitializeEmbeddedCameraFeed();
+  void ClearEmbeddedCameraFeed();
+  void RenderEmbeddedCameraFeed(const ImVec2& canvasSize);
 };

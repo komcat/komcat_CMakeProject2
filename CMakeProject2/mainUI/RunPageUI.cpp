@@ -36,11 +36,11 @@ RunPageUI::RunPageUI(MachineOperations& machineOps)
   m_logger->LogInfo("RunPageUI: Initialized with process filtering and operations display support");
 }
 
-// NEW: Add to destructor
 RunPageUI::~RunPageUI() {
   StopProcess();
-  CleanupCameraTexture();  // NEW: Clean up OpenGL texture
-  ClearCameraFeed();  // NEW: Clear camera feed
+  CleanupCameraTexture();
+  ClearCameraFeed();
+  ClearEmbeddedCameraFeed(); // NEW: Clear embedded feed
   m_logger->LogInfo("RunPageUI: Destroyed");
 }
 
@@ -928,35 +928,138 @@ void RunPageUI::OnFilterChanged() {
 
 
 
-
-// UPDATED: RenderColumn3 to include Live View tab
+// UPDATED: RenderColumn3 with 3-column layout - camera view left, 2 placeholders right
 void RunPageUI::RenderColumn3() {
-  // Create tab bar for Column3
-  if (ImGui::BeginTabBar("Column3Tabs", ImGuiTabBarFlags_None)) {
+  // Calculate column widths for 3-column layout
+  ImVec2 availableRegion = ImGui::GetContentRegionAvail();
+  float columnWidth = (availableRegion.x - 20.0f) / 3.0f; // 10px spacing between columns
+  float columnHeight = 250.0f;
 
+  // Column 1: Camera View (left)
+  ImGui::BeginChild("CameraColumn", ImVec2(columnWidth, columnHeight), true);
+  {
+    ImGui::Text("Camera View");
+
+    if (m_cameraManager && !m_cameraManager->GetCameraIds().empty()) {
+      // Initialize embedded camera if not done
+      if (!m_embeddedCameraSubscriber && m_cameraSystemInitialized) {
+        InitializeEmbeddedCameraFeed();
+      }
+
+      // Status display
+      if (m_embeddedCameraSubscriber) {
+        ImGui::TextColored(
+          m_embeddedCameraSubscriber->IsCameraConnected() ? ImVec4(0, 1, 0, 1) : ImVec4(1, 0, 0, 1),
+          "%s | %s",
+          m_embeddedCameraSubscriber->IsCameraConnected() ? "Connected" : "Disconnected",
+          m_embeddedCameraSubscriber->IsCameraGrabbing() ? "Grabbing" : "Idle"
+        );
+      }
+    }
+    else {
+      ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "No cameras available");
+    }
+
+    ImGui::Separator();
+
+    // Camera feed display
+    ImVec2 cameraCanvasSize = ImGui::GetContentRegionAvail();
+    if (m_embeddedCameraSubscriber && m_cameraSystemInitialized) {
+      RenderEmbeddedCameraFeed(cameraCanvasSize);
+    }
+    else {
+      RenderCameraPlaceholder(cameraCanvasSize,
+        m_cameraManager ? "Connecting to camera..." : "Camera system not available");
+    }
+  }
+  ImGui::EndChild();
+
+  // Spacing between columns
+  ImGui::SameLine();
+  ImGui::Dummy(ImVec2(10.0f, 0));
+  ImGui::SameLine();
+
+  // Column 2: Placeholder 1 (middle)
+  ImGui::BeginChild("Placeholder1", ImVec2(columnWidth, columnHeight), true);
+  {
+    ImGui::Text("Panel 1");
+    ImGui::Separator();
+
+    // Center placeholder text
+    ImVec2 availableSpace = ImGui::GetContentRegionAvail();
+    ImVec2 textSize = ImGui::CalcTextSize("Available for\nfuture content");
+    ImGui::SetCursorPos(ImVec2(
+      (availableSpace.x - textSize.x) * 0.5f,
+      (availableSpace.y - textSize.y) * 0.5f
+    ));
+    ImGui::TextDisabled("Available for\nfuture content");
+  }
+  ImGui::EndChild();
+
+  // Spacing between columns
+  ImGui::SameLine();
+  ImGui::Dummy(ImVec2(10.0f, 0));
+  ImGui::SameLine();
+
+  // Column 3: Placeholder 2 (right)
+  ImGui::BeginChild("Placeholder2", ImVec2(columnWidth, columnHeight), true);
+  {
+    ImGui::Text("Panel 2");
+    ImGui::Separator();
+
+    // Center placeholder text
+    ImVec2 availableSpace = ImGui::GetContentRegionAvail();
+    ImVec2 textSize = ImGui::CalcTextSize("Available for\nfuture content");
+    ImGui::SetCursorPos(ImVec2(
+      (availableSpace.x - textSize.x) * 0.5f,
+      (availableSpace.y - textSize.y) * 0.5f
+    ));
+    ImGui::TextDisabled("Available for\nfuture content");
+  }
+  ImGui::EndChild();
+
+  ImGui::Spacing();
+
+  // Tab bar below the 3-column layout (existing code)
+  if (ImGui::BeginTabBar("Column3Tabs", ImGuiTabBarFlags_None)) {
     // Status tab (existing content)
     if (ImGui::BeginTabItem("Status")) {
       RenderStatusTab();
       ImGui::EndTabItem();
     }
-
     // Detail Results tab (existing content)
     if (ImGui::BeginTabItem("Detail Results")) {
       RenderDetailResultsTab();
       ImGui::EndTabItem();
     }
-
-    // NEW: Live View tab
+    // Live View tab
     if (ImGui::BeginTabItem("Live View")) {
       RenderLiveViewTab();
       ImGui::EndTabItem();
     }
-
     ImGui::EndTabBar();
   }
 }
 
+// In RunPageUI constructor or initialization method
+void RunPageUI::InitializeCameraViewport() {
+  if (!m_cameraViewport) {
+    CameraViewport::ViewportConfig config;
+    config.defaultSize = ImVec2(640, 250);
+    config.showControls = false; // Hide controls since it's embedded
+    config.showStatus = true;    // Keep status visible
+    config.retryIntervalMs = 2000;
 
+    m_cameraViewport = std::make_unique<CameraViewport>("Column3_Camera", config);
+
+    // Set up for main_camera
+    if (m_cameraManager) {
+      m_cameraViewport->SetCameraManager(m_cameraManager);
+      m_cameraViewport->SetCameraId("main_camera");
+      m_cameraViewport->StartFeed();
+    }
+  }
+}
 
 // REPLACE the RenderLiveViewTab() method in RunPageUI.cpp with this UIConfigVisualizer-style implementation
 
@@ -1669,19 +1772,40 @@ void RunPageUI::RenderCrosshairOverlay(const ImVec2& canvasPos, const ImVec2& ca
 void RunPageUI::SetCameraManager(CameraManager* cameraManager) {
   m_cameraManager = cameraManager;
 
+
+
+  // Clear existing embedded feed
+  ClearEmbeddedCameraFeed();
+
+
+
   if (m_cameraManager) {
     auto cameraIds = m_cameraManager->GetCameraIds();
     if (!cameraIds.empty()) {
       m_selectedCameraId = cameraIds[0];
       // Don't initialize feed immediately - let user select camera first
       m_cameraSystemInitialized = true;
+
+
+
     }
     m_logger->LogInfo("RunPageUI: Camera manager set with " +
       std::to_string(cameraIds.size()) + " cameras");
+
+
+
+
   }
   else {
     m_logger->LogInfo("RunPageUI: Camera manager cleared");
     m_cameraSystemInitialized = false;
+  }
+
+
+
+// Initialize embedded camera feed if cameras are available
+  if (m_cameraManager && !m_cameraManager->GetCameraIds().empty()) {
+    InitializeEmbeddedCameraFeed();
   }
 }
 
@@ -2760,4 +2884,81 @@ void RunPageUI::ClearCameraFeed() {
   }
   CleanupCameraTexture();
   m_cameraSystemInitialized = false;
+}
+
+// NEW: Initialize embedded camera feed (same logic as Live View)
+void RunPageUI::InitializeEmbeddedCameraFeed() {
+  if (!m_cameraManager || !m_cameraSystemInitialized) {
+    return;
+  }
+
+  auto cameraIds = m_cameraManager->GetCameraIds();
+  if (cameraIds.empty()) {
+
+		m_logger->LogWarning("RunPageUI: No cameras available for embedded feed");
+    return;
+  }
+
+  // Use the first available camera (or m_selectedCameraId if you want to sync)
+  std::string embeddedCameraId = cameraIds[0]; // or m_selectedCameraId
+
+  // Clear existing subscription
+  ClearEmbeddedCameraFeed();
+
+  // Create new subscriber (same as Live View)
+  m_embeddedCameraSubscriber = std::make_shared<LiveVideoSubscriber>(embeddedCameraId);
+
+  // Subscribe to the broadcasting system (same as Live View)
+  m_cameraManager->SubscribeToFrames(m_embeddedCameraSubscriber);
+
+  // Start broadcast system if not already active (same as Live View)
+  m_cameraManager->StartBroadcastSystem();
+
+  m_logger->LogInfo("RunPageUI: Embedded camera feed initialized for: " + embeddedCameraId);
+}
+
+// NEW: Clear embedded camera feed
+void RunPageUI::ClearEmbeddedCameraFeed() {
+  if (m_embeddedCameraSubscriber && m_cameraManager) {
+    m_cameraManager->UnsubscribeFromFrames(m_embeddedCameraSubscriber->GetSubscriberId());
+  }
+  m_embeddedCameraSubscriber.reset();
+}
+
+// NEW: Render embedded camera feed (same logic as Live View)
+void RunPageUI::RenderEmbeddedCameraFeed(const ImVec2& canvasSize) {
+  // Use the same texture update system as Live View
+  UpdateCameraTexture();
+
+  if (m_textureInitialized && m_textureWidth > 0 && m_textureHeight > 0) {
+    // Calculate display size maintaining aspect ratio (same as Live View)
+    float aspectRatio = (float)m_textureWidth / (float)m_textureHeight;
+
+    float displayWidth = canvasSize.x;
+    float displayHeight = displayWidth / aspectRatio;
+
+    if (displayHeight > canvasSize.y) {
+      displayHeight = canvasSize.y;
+      displayWidth = displayHeight * aspectRatio;
+    }
+
+    // Center the image (same as Live View)
+    float offsetX = (canvasSize.x - displayWidth) * 0.5f;
+    float offsetY = (canvasSize.y - displayHeight) * 0.5f;
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offsetY);
+
+    // Display the image (same as Live View)
+    ImGui::Image((ImTextureID)(intptr_t)m_cameraTextureID,
+      ImVec2(displayWidth, displayHeight));
+  }
+  else {
+    // Show placeholder (same as Live View)
+    std::string message = "Waiting for video frames...";
+    if (m_embeddedCameraSubscriber) {
+      message += "\nFrames: " + std::to_string(m_embeddedCameraSubscriber->GetTotalFramesReceived());
+    }
+    RenderCameraPlaceholder(canvasSize, message);
+  }
 }

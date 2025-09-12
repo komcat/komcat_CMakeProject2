@@ -581,7 +581,7 @@ bool ApplicationInitializer::InitInstruments(HardwareManagers& hw) {
   }
 
   //Initialize SPDPowerSupply
-  InitConfigSPDPowerSupply(hw);
+  //InitConfigSPDPowerSupply(hw);
 
 
 

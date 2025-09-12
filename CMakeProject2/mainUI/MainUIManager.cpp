@@ -289,6 +289,7 @@ void MainUIManager::ConnectUIToServices() {
 			m_cameraPanelUI = std::make_unique<UICameraPanel>(*cameraManager);
 		}
 
+	
 
 		if(m_moduleAlignmentUI)
 			m_moduleAlignmentUI->SetCameraManager(cameraManager);
@@ -348,6 +349,7 @@ void MainUIManager::ConnectUIToServices() {
 			m_runPageUI = std::make_unique<RunPageUI>(*machineOps);  // Pass as reference
 			m_runPageUI->SetUserPromptUI(m_promptUI.get());  // Connect UserPromptUI
 			m_runPageUI->SetCameraManager(GetCameraManagerSmart());  // Connect camera manager
+
 		}
 
 		if (m_machineBlockUI) {
