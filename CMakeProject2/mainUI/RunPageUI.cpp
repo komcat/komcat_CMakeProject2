@@ -46,7 +46,8 @@ RunPageUI::~RunPageUI() {
 
 
 void RunPageUI::RenderUI() {
-
+  // Add this line at the beginning of RenderUI to monitor frame flow
+  DebugCameraFrameFlow();
 
   // Get available content region
   ImVec2 contentRegion = ImGui::GetContentRegionAvail();
@@ -1071,6 +1072,56 @@ void RunPageUI::RenderLiveViewTab() {
   ImGui::Text("Live Camera Feed");
   ImGui::Separator();
 
+  // Add this "Fix Broadcast" button to your UI
+  if (ImGui::Button("Fix Broadcast", ImVec2(120, 25))) {
+    m_logger->LogInfo("RunPageUI: Restarting broadcast system...");
+
+    // Stop and restart the entire broadcast system
+    m_cameraManager->StopBroadcastSystem();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    m_cameraManager->StartBroadcastSystem();
+
+    // Re-subscribe
+    m_cameraManager->SubscribeToFrames(m_cameraSubscriber);
+
+    UpdateStatus("Broadcast system restarted");
+  }
+  // Add frame flow monitoring display
+  if (m_cameraSubscriber) {
+    static uint64_t lastDisplayFrameCount = 0;
+    static auto lastDisplayTime = std::chrono::steady_clock::now();
+    static bool frameFlowActive = false;
+
+    uint64_t currentFrames = m_cameraSubscriber->GetTotalFramesReceived();
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDisplayTime).count();
+
+    if (elapsed >= 1000) { // Check every second
+      frameFlowActive = (currentFrames > lastDisplayFrameCount);
+      lastDisplayFrameCount = currentFrames;
+      lastDisplayTime = now;
+    }
+
+    // Display frame flow status
+    ImGui::Text("Frame Flow: ");
+    ImGui::SameLine();
+    if (frameFlowActive) {
+      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "ACTIVE");
+    }
+    else if (currentFrames > 0) {
+      ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "STOPPED");
+    }
+    else {
+      ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "NO FRAMES");
+    }
+
+    ImGui::SameLine();
+    ImGui::Text("Total: %llu", currentFrames);
+  }
+
+  ImGui::Separator();
+
+
   if (!m_cameraManager) {
     ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Camera system not available");
     ImGui::TextWrapped("Camera manager not initialized. Enable camera support in the main application.");
@@ -1768,71 +1819,165 @@ void RunPageUI::RenderCrosshairOverlay(const ImVec2& canvasPos, const ImVec2& ca
 
 
 
-// ALSO ADD: Update the SetCameraManager method to ensure proper initialization
+// ENHANCED SetCameraManager with debugging and forced grabbing start
 void RunPageUI::SetCameraManager(CameraManager* cameraManager) {
   m_cameraManager = cameraManager;
 
-
-
-  // Clear existing embedded feed
+  // Clear existing feeds first
+  ClearCameraFeed();
   ClearEmbeddedCameraFeed();
-
-
 
   if (m_cameraManager) {
     auto cameraIds = m_cameraManager->GetCameraIds();
+    m_logger->LogInfo("RunPageUI: Camera manager set with " + std::to_string(cameraIds.size()) + " cameras");
+
     if (!cameraIds.empty()) {
-      m_selectedCameraId = cameraIds[0];
-      // Don't initialize feed immediately - let user select camera first
+      // Debug: Print all available cameras
+      for (const auto& id : cameraIds) {
+        m_logger->LogInfo("RunPageUI: Available camera: " + id);
+      }
+
+      // Always prefer main_camera if available
+      bool hasMainCamera = std::find(cameraIds.begin(), cameraIds.end(), "main_camera") != cameraIds.end();
+
+      if (hasMainCamera) {
+        m_selectedCameraId = "main_camera";
+        m_logger->LogInfo("RunPageUI: Selected main_camera");
+      }
+      else {
+        m_selectedCameraId = cameraIds[0];
+        m_logger->LogInfo("RunPageUI: main_camera not found, using: " + m_selectedCameraId);
+      }
+
+      // Debug: Check camera status before initialization
+      auto status = m_cameraManager->GetCameraStatus(m_selectedCameraId);
+      std::string statusMsg = "RunPageUI: Camera " + m_selectedCameraId + " - Connected: " +
+        (status.connected ? std::string("true") : std::string("false")) +
+        ", Grabbing: " + (status.grabbing ? std::string("true") : std::string("false"));
+      m_logger->LogInfo(statusMsg);
+
+      // Force connect and start grabbing if not already
+      if (!status.connected) {
+        m_logger->LogInfo("RunPageUI: Connecting camera: " + m_selectedCameraId);
+        bool connected = m_cameraManager->ConnectCamera(m_selectedCameraId);
+        std::string connectMsg = "RunPageUI: Camera connection result: " +
+          (connected ? std::string("success") : std::string("failed"));
+        m_logger->LogInfo(connectMsg);
+
+        if (connected) {
+          status = m_cameraManager->GetCameraStatus(m_selectedCameraId);
+          std::string postConnectMsg = "RunPageUI: Post-connect status - Connected: " +
+            (status.connected ? std::string("true") : std::string("false"));
+          m_logger->LogInfo(postConnectMsg);
+        }
+      }
+
+      if (status.connected && !status.grabbing) {
+        m_logger->LogInfo("RunPageUI: Starting grabbing for: " + m_selectedCameraId);
+
+        // Try StartGrabbingWithBroadcast first, then fall back to StartGrabbing
+        bool grabbingStarted = false;
+        try {
+          grabbingStarted = m_cameraManager->StartGrabbingWithBroadcast(m_selectedCameraId);
+          std::string grabMsg = "RunPageUI: StartGrabbingWithBroadcast result: " +
+            (grabbingStarted ? std::string("success") : std::string("failed"));
+          m_logger->LogInfo(grabMsg);
+        }
+        catch (...) {
+          m_logger->LogInfo("RunPageUI: StartGrabbingWithBroadcast not available, trying StartGrabbing");
+          grabbingStarted = m_cameraManager->StartGrabbing(m_selectedCameraId);
+          std::string grabMsg = "RunPageUI: StartGrabbing result: " +
+            (grabbingStarted ? std::string("success") : std::string("failed"));
+          m_logger->LogInfo(grabMsg);
+        }
+
+        if (grabbingStarted) {
+          status = m_cameraManager->GetCameraStatus(m_selectedCameraId);
+          std::string postGrabMsg = "RunPageUI: Post-grabbing status - Grabbing: " +
+            (status.grabbing ? std::string("true") : std::string("false"));
+          m_logger->LogInfo(postGrabMsg);
+        }
+      }
+
+      // Initialize camera feeds
+      m_logger->LogInfo("RunPageUI: Initializing camera feeds...");
+      InitializeCameraFeed();
+      InitializeEmbeddedCameraFeed();
+
       m_cameraSystemInitialized = true;
+      m_logger->LogInfo("RunPageUI: Camera system initialization complete");
 
-
+      // Final status check
+      status = m_cameraManager->GetCameraStatus(m_selectedCameraId);
+      std::string finalMsg = "RunPageUI: Final camera status - Connected: " +
+        (status.connected ? std::string("true") : std::string("false")) +
+        ", Grabbing: " + (status.grabbing ? std::string("true") : std::string("false"));
+      m_logger->LogInfo(finalMsg);
 
     }
-    m_logger->LogInfo("RunPageUI: Camera manager set with " +
-      std::to_string(cameraIds.size()) + " cameras");
-
-
-
-
+    else {
+      m_logger->LogWarning("RunPageUI: No cameras available");
+      m_cameraSystemInitialized = false;
+    }
   }
   else {
     m_logger->LogInfo("RunPageUI: Camera manager cleared");
     m_cameraSystemInitialized = false;
   }
-
-
-
-// Initialize embedded camera feed if cameras are available
-  if (m_cameraManager && !m_cameraManager->GetCameraIds().empty()) {
-    InitializeEmbeddedCameraFeed();
-  }
 }
 
-// ALSO UPDATE: InitializeCameraFeed method to be more robust
+// SIMPLE FIX: InitializeCameraFeed with manual status update
 void RunPageUI::InitializeCameraFeed() {
   if (m_selectedCameraId.empty() || !m_cameraManager) {
     m_cameraSystemInitialized = false;
     UpdateStatus("Cannot initialize camera feed: no camera selected or manager unavailable");
+    m_logger->LogError("RunPageUI: InitializeCameraFeed failed - no camera or manager");
     return;
   }
-  
+
+  m_logger->LogInfo("RunPageUI: InitializeCameraFeed starting for: " + m_selectedCameraId);
+
   // Clear existing subscription
   ClearCameraFeed();
 
+  // Add delay after camera starts grabbing
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
   // Create new subscriber
   m_cameraSubscriber = std::make_shared<LiveVideoSubscriber>(m_selectedCameraId);
+  m_logger->LogInfo("RunPageUI: Created LiveVideoSubscriber with ID: " + m_cameraSubscriber->GetSubscriberId());
 
   // Subscribe to the broadcasting system
   m_cameraManager->SubscribeToFrames(m_cameraSubscriber);
+  m_logger->LogInfo("RunPageUI: SubscribeToFrames called");
 
   // Start broadcast system if not already active
   m_cameraManager->StartBroadcastSystem();
+  m_logger->LogInfo("RunPageUI: StartBroadcastSystem called");
+
+  // REPLACE with this single line:
+  m_cameraSubscriber->InitializeStatusFromManager(m_cameraManager);
+
+  // Give subscriber a moment to process the status update
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
   m_cameraSystemInitialized = true;
   m_logger->LogInfo("RunPageUI: Camera feed initialized for: " + m_selectedCameraId);
   UpdateStatus("Camera feed initialized for: " + m_selectedCameraId);
+
+  // Debug: Check subscriber status after manual update
+  std::string subscriberConnectedMsg = "RunPageUI: Subscriber camera connected: " +
+    (m_cameraSubscriber->IsCameraConnected() ? std::string("true") : std::string("false"));
+  m_logger->LogInfo(subscriberConnectedMsg);
+
+  std::string subscriberGrabbingMsg = "RunPageUI: Subscriber camera grabbing: " +
+    (m_cameraSubscriber->IsCameraGrabbing() ? std::string("true") : std::string("false"));
+  m_logger->LogInfo(subscriberGrabbingMsg);
+
+
+
 }
+
 
 
 // NEW: Camera feed rendering using subscriber
@@ -2886,35 +3031,14 @@ void RunPageUI::ClearCameraFeed() {
   m_cameraSystemInitialized = false;
 }
 
-// NEW: Initialize embedded camera feed (same logic as Live View)
 void RunPageUI::InitializeEmbeddedCameraFeed() {
   if (!m_cameraManager || !m_cameraSystemInitialized) {
     return;
   }
 
-  auto cameraIds = m_cameraManager->GetCameraIds();
-  if (cameraIds.empty()) {
-
-		m_logger->LogWarning("RunPageUI: No cameras available for embedded feed");
-    return;
-  }
-
-  // Use the first available camera (or m_selectedCameraId if you want to sync)
-  std::string embeddedCameraId = cameraIds[0]; // or m_selectedCameraId
-
-  // Clear existing subscription
-  ClearEmbeddedCameraFeed();
-
-  // Create new subscriber (same as Live View)
-  m_embeddedCameraSubscriber = std::make_shared<LiveVideoSubscriber>(embeddedCameraId);
-
-  // Subscribe to the broadcasting system (same as Live View)
-  m_cameraManager->SubscribeToFrames(m_embeddedCameraSubscriber);
-
-  // Start broadcast system if not already active (same as Live View)
-  m_cameraManager->StartBroadcastSystem();
-
-  m_logger->LogInfo("RunPageUI: Embedded camera feed initialized for: " + embeddedCameraId);
+  // Simply reuse the main subscriber instead of creating a new one
+  m_embeddedCameraSubscriber = m_cameraSubscriber;
+  m_logger->LogInfo("RunPageUI: Embedded camera feed sharing main subscriber");
 }
 
 // NEW: Clear embedded camera feed
@@ -2960,5 +3084,61 @@ void RunPageUI::RenderEmbeddedCameraFeed(const ImVec2& canvasSize) {
       message += "\nFrames: " + std::to_string(m_embeddedCameraSubscriber->GetTotalFramesReceived());
     }
     RenderCameraPlaceholder(canvasSize, message);
+  }
+}
+// Add this auto-recovery logic to your DebugCameraFrameFlow() method
+void RunPageUI::DebugCameraFrameFlow() {
+  if (!m_cameraSubscriber || !m_cameraManager) {
+    return;
+  }
+
+  static uint64_t lastFrameCount = 0;
+  static auto lastCheckTime = std::chrono::steady_clock::now();
+  static int noFrameWarningCount = 0;
+
+  auto now = std::chrono::steady_clock::now();
+  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastCheckTime).count();
+
+  // Check every 2 seconds
+  if (elapsed >= 2000) {
+    uint64_t currentFrameCount = m_cameraSubscriber->GetTotalFramesReceived();
+
+    // ADD THIS DEBUG LINE:
+    std::cout << "[DEBUG FLOW CHECK] Subscriber frame count: " << currentFrameCount
+      << " (last was: " << lastFrameCount << ")" << std::endl;
+
+    // Check if frames are still flowing
+    if (currentFrameCount == lastFrameCount && currentFrameCount > 0) {
+      noFrameWarningCount++;
+      m_logger->LogWarning("RunPageUI: Frame flow stopped - stuck at " +
+        std::to_string(currentFrameCount) + " frames (warning #" +
+        std::to_string(noFrameWarningCount) + ")");
+
+      // AUTO-RECOVERY: Restart broadcast system after 3 warnings (6 seconds)
+      if (noFrameWarningCount >= 3) {
+        m_logger->LogInfo("RunPageUI: Auto-recovering broadcast system...");
+
+        // Restart broadcast system
+        m_cameraManager->StopBroadcastSystem();
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        m_cameraManager->StartBroadcastSystem();
+        m_cameraManager->SubscribeToFrames(m_cameraSubscriber);
+
+        noFrameWarningCount = 0; // Reset counter
+        UpdateStatus("Auto-recovered camera broadcast system");
+      }
+
+    }
+    else if (currentFrameCount > lastFrameCount) {
+      // Frames are flowing normally
+      if (noFrameWarningCount > 0) {
+        m_logger->LogInfo("RunPageUI: Frame flow resumed - now at " +
+          std::to_string(currentFrameCount) + " frames");
+        noFrameWarningCount = 0;
+      }
+    }
+
+    lastFrameCount = currentFrameCount;
+    lastCheckTime = now;
   }
 }

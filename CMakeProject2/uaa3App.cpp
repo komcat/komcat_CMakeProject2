@@ -42,7 +42,7 @@
 #include "include/scanning/grid_scanner_manager.h"
 #include "include/scanning/grid_volume_scanner_manager.h"
 #include "include/vision/VisionCameraExposureUI.h"
-#include "DUTDatabaseViewerUI.h"
+#include "include/data/DUTDatabaseViewerUI.h"
 
 
 // Keep your debug function as-is
@@ -554,7 +554,7 @@ int main(int argc, char* argv[])
 	// Configure initialization options
 	RaylibCameraManager::InitializationOptions raylibOptions;
 	raylibOptions.enableRaylib3D = true;           // Set to false to disable raylib
-	raylibOptions.autoConnectCamera = true;        // Auto-connect first available camera
+	raylibOptions.autoConnectCamera = false;        // Auto-connect first available camera
 	raylibOptions.enableDebugWindow = true;        // Enable debug UI
 	raylibOptions.cameraConnectionTimeout = 500;   // Connection timeout in ms
 

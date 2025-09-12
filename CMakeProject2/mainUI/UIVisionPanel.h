@@ -15,7 +15,7 @@
 #include "include/halcon/VisionCircleDetection.h"
 #include "include/vision/VisionPresetManager.h"
 #include "VisionCoordinateCalculator.h"
-#include "IGantryManager.h"  // Add this include for the gantry interface
+#include "include/motions/IGantryManager.h"  // Add this include for the gantry interface
 
 #include "imgui.h"
 #include <memory>

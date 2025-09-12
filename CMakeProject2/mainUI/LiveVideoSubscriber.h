@@ -100,6 +100,13 @@ public:
    */
   uint64_t GetLastFrameTimestamp() const;
 
+  // NEW: Initialize status from camera manager (call after subscription)
+/**
+ * @brief Initialize camera status from camera manager when camera is already running
+ * @param cameraManager Pointer to camera manager to query current status
+ */
+  void InitializeStatusFromManager(CameraManager* cameraManager);
+
 private:
   // Identification
   std::string m_subscriberId;

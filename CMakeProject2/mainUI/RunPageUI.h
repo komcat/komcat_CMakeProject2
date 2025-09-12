@@ -210,4 +210,6 @@ private:
   void InitializeEmbeddedCameraFeed();
   void ClearEmbeddedCameraFeed();
   void RenderEmbeddedCameraFeed(const ImVec2& canvasSize);
+
+  void DebugCameraFrameFlow();
 };

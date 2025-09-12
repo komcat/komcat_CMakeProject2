@@ -232,7 +232,7 @@ bool RaylibCameraManager::SetupDebugWindow() {
 }
 
 bool RaylibCameraManager::AutoConnectCamera() {
-  LogInfo("=== AUTO-CONNECTING FIRST CAMERA ===");
+  LogInfo("=== AUTO-CONNECTING TO EXISTING CAMERA BROADCAST ===");
 
   auto* cameraManager = m_context.GetCameraManager();
   if (!cameraManager || cameraManager->GetCameraCount() == 0) {
@@ -241,67 +241,51 @@ bool RaylibCameraManager::AutoConnectCamera() {
   }
 
   auto cameraIds = cameraManager->GetCameraIds();
-  bool connectedSuccessfully = false;
+  std::string selectedCameraId;
 
-  // Try each camera until one connects successfully
+  // FIND AN ALREADY ACTIVE CAMERA instead of trying to control one
   for (const auto& cameraId : cameraIds) {
-    LogInfo("Attempting to auto-connect camera: " + cameraId);
-
-    // Try to connect the camera
-    if (cameraManager->ConnectCamera(cameraId)) {
-      LogInfo("Successfully connected camera: " + cameraId);
-
-      // Wait a moment for connection to stabilize
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-      // Try to start grabbing (which enables broadcasting)
-      if (cameraManager->StartGrabbing(cameraId)) {
-        LogInfo("Successfully started grabbing for camera: " + cameraId);
-        m_connectedCameraId = cameraId;
-        connectedSuccessfully = true;
-        break; // Success! Stop trying other cameras
-      }
-      else {
-        LogInfo("Failed to start grabbing for camera: " + cameraId);
-        // Try to disconnect cleanly before trying next camera
-        cameraManager->DisconnectCamera(cameraId);
-      }
-    }
-    else {
-      LogInfo("Failed to connect camera: " + cameraId);
+    auto status = cameraManager->GetCameraStatus(cameraId);
+    if (status.connected && status.grabbing) {
+      selectedCameraId = cameraId;
+      LogInfo("Found active camera for subscription: " + cameraId);
+      break;
     }
   }
 
-  if (connectedSuccessfully) {
-    LogInfo("=== AUTO-CONNECTION SUCCESS ===");
-    LogInfo("Connected camera: " + m_connectedCameraId);
+  // If no active camera, just pick the first one (don't try to control it)
+  if (selectedCameraId.empty() && !cameraIds.empty()) {
+    selectedCameraId = cameraIds[0];
+    LogInfo("No active cameras found, will subscribe to: " + selectedCameraId + " (when it becomes active)");
+  }
 
-    // Start the broadcasting system
-    cameraManager->StartBroadcastSystem();
-    LogInfo("Broadcasting system started");
+  if (!selectedCameraId.empty()) {
+    LogInfo("=== SUBSCRIBING TO CAMERA BROADCAST ===");
 
-    // Set the raylib debug window to this camera
+    m_connectedCameraId = selectedCameraId;
+
+    // ONLY SUBSCRIBE - DON'T CONTROL THE CAMERA
     if (m_raylibDebugWindow) {
-      m_raylibDebugWindow->SelectCamera(m_connectedCameraId);
-      LogInfo("Raylib debug window set to camera: " + m_connectedCameraId);
+      m_raylibDebugWindow->SelectCamera(selectedCameraId);
+      LogInfo("Raylib debug window set to camera: " + selectedCameraId);
     }
 
-    // Set the main camera feed
     if (m_raylibCameraFeed) {
-      m_raylibCameraFeed->SetTargetCamera(m_connectedCameraId);
-      LogInfo("Raylib camera feed set to camera: " + m_connectedCameraId);
+      m_raylibCameraFeed->SetTargetCamera(selectedCameraId);
+      LogInfo("Raylib camera feed set to camera: " + selectedCameraId);
     }
 
-    LogInfo("=== AUTO-CONNECTION COMPLETE ===");
+    LogInfo("=== SUBSCRIPTION COMPLETE ===");
+    LogInfo("RaylibCameraManager is now subscribing to: " + selectedCameraId);
+    LogInfo("Camera control remains with the primary system (RunPageUI)");
     return true;
   }
-  else {
-    LogInfo("=== AUTO-CONNECTION FAILED ===");
-    LogInfo("Could not connect to any cameras automatically");
-    LogInfo("You will need to connect manually in the debug window");
-    return false;
-  }
+
+  LogInfo("=== NO CAMERAS AVAILABLE FOR SUBSCRIPTION ===");
+  return false;
 }
+
+
 
 void RaylibCameraManager::UpdateMachineData(const MachineData& data) {
   if (m_raylibWindow && m_raylibWindow->IsRunning()) {
