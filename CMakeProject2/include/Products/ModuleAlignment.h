@@ -87,7 +87,13 @@ public:
       }
       return Vector3D(1.0, 0.0, 0.0); // Default to X-axis if zero vector
     }
-
+    // In ModuleAlignment.h, add to Vector3D struct:
+    Vector3D operator/(double scalar) const {
+      if (std::abs(scalar) < 1e-10) {
+        return Vector3D(0, 0, 0);  // Avoid division by zero
+      }
+      return Vector3D(x / scalar, y / scalar, z / scalar);
+    }
     // Cross product
     Vector3D cross(const Vector3D& other) const {
       return Vector3D(

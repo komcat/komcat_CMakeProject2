@@ -1,6 +1,9 @@
 // Core/uaa3_pick_place_sequences.cpp
 #include "../uaa3_process_builders.h"
 #include "UserInputOperations.h"
+#include "ManualAdjustmentOperation.h"
+
+
 namespace UAA3ProcessBuilders {
 
   std::unique_ptr<SequenceStep> BuildPickPlaceLeftLensSequence_uaa3(
@@ -50,6 +53,19 @@ namespace UAA3ProcessBuilders {
     sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
       "hex-left", "Process_Flow", "node_5662"));
 
+
+		//// 11. Manual gripper adjustment
+  //  auto gripperAdjustment = std::make_shared<ManualAdjustmentOperation>(
+  //    "hex-left",
+  //    "Gripper Position Adjustment",
+  //    "Use the jog controls to adjust the lens to have first light value >1uA.\n"
+  //    "Be careful not to hit something.",
+  //    promptUI,
+  //    true, true, true  // Only Z axis enabled
+  //  );
+  //  gripperAdjustment->WithStepSize(0.01)
+  //    .WithShowPosition(true);
+  //  sequence->AddOperation(gripperAdjustment);
 
 
     return sequence;
@@ -103,6 +119,21 @@ namespace UAA3ProcessBuilders {
     // Move to RIGHT lens placement position
     sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
       "hex-right", "Process_Flow", "node_5263"));  // Verify this is correct for RIGHT placement
+
+    //// 11. Manual gripper adjustment
+    //auto gripperAdjustment = std::make_shared<ManualAdjustmentOperation>(
+    //  "hex-right",
+    //  "Gripper Position Adjustment",
+    //  "Use the jog controls to adjust the lens to have norminal position.\n Value should be >80uA"
+    //  "Be careful not to hit something.",
+    //  promptUI,
+    //  true, true, true  // X Y Z axis enabled
+    //);
+    //gripperAdjustment->WithStepSize(0.01)
+    //  .WithShowPosition(true);
+    //sequence->AddOperation(gripperAdjustment);
+
+
 
     return sequence;
   }

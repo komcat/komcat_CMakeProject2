@@ -15,6 +15,8 @@
 #include "include/halcon/VisionCircleDetection.h"
 #include "include/vision/VisionPresetManager.h"
 #include "VisionCoordinateCalculator.h"
+#include "IGantryManager.h"  // Add this include for the gantry interface
+
 #include "imgui.h"
 #include <memory>
 #include <string>
@@ -50,7 +52,20 @@ public:
     bool autoGain = false;
   };
 
+
+  // Add setter for gantry manager
+  void SetGantryManager(IGantryManager* manager) {
+    m_gantryManager = manager;
+  }
+
+  // Optional: getter to check if gantry is set
+  bool HasGantryManager() const {
+    return m_gantryManager != nullptr;
+  }
 private:
+
+
+
   // ============================================================================
   // MEMBER VARIABLES
   // ============================================================================
@@ -138,6 +153,16 @@ private:
   std::map<std::string, int> m_nodeToPresetMap;  // Quick lookup
   bool m_showNodePresetDialog = false;
   std::string m_selectedNodeForPreset = "";
+
+  // Add gantry manager for robot control
+  IGantryManager* m_gantryManager = nullptr;
+
+  // Robot Z position parameter (add to existing parameters)
+  float m_robotZPosition = 10.0f;  // Default Z position for robot movements
+
+  // These variables from the implementation that might be missing:
+  double m_centerX = 0.0;  // Last detected center X
+  double m_centerY = 0.0;  // Last detected center Y
 
   // ============================================================================
   // INITIALIZATION METHODS
@@ -272,5 +297,7 @@ private:
 
   // Coordinate calculation helper (ADD to new section)
   bool GetCurrentRobotPosition(double& x, double& y, double& z) const;
+
+
 
 };

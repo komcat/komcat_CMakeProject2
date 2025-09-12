@@ -7,6 +7,7 @@
 #include "include/motions/pi_controller_manager.h"
 #include "include/motions/acs_controller_manager.h"
 #include "include/cld101x/cld101x_manager.h"
+#include "include/motions/ACSGantryAdapter.h"
 #include "CLD101xEquipmentUI.h"
 // Add this include at the top:
 #include "PIPanelUI.h"
@@ -240,6 +241,17 @@ void MainUIManager::ConnectUIToServices() {
 			m_uiJogWindow->SetACSControllerManager(acs);
 		}
 
+		if (m_visionPanelUI)
+		{
+			// Create adapter for your specific device (e.g., "gantry-main")
+			auto gantryAdapter = std::make_unique<ACSGantryAdapter>(acs, "gantry-main");
+
+			// Set the adapter in CircleDetectionUI
+			m_visionPanelUI->SetGantryManager(gantryAdapter.get());
+
+		}
+
+
 		logger->LogInfo("MainUIManager: ACS Controller UI connected");
 	}
 
@@ -361,6 +373,7 @@ void MainUIManager::ConnectUIToServices() {
 
 	if (machineOps)	{
 		uiConfigVisualizer->SetMachineOperations(machineOps);
+		m_visionPanelUI->SetMachineOperations(machineOps);
 	}
 
 	// FIXED code:

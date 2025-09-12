@@ -1,5 +1,6 @@
 ﻿// UIVisionPanel_EnhancedResults.cpp - Enhanced Results Display Methods
 #include "UIVisionPanel.h"
+#include "include/machine_operations.h"
 #include "VisionCoordinateCalculator.h"
 #include "imgui.h"
 #include <iostream>
@@ -341,20 +342,82 @@ void UIVisionPanel::RenderCoordinateActions() {
     m_lastResult.centerX, m_lastResult.centerY, m_lastResult.radius,
     m_imageWidth, m_imageHeight);
 
-  // Action buttons
-  if (ImGui::Button("Send to Robot", ImVec2(120, 30))) {
-    if (coords.hasRobotPosition) {
-      std::cout << "[UIVisionPanel] Sending target coordinates to robot: ("
-        << coords.targetX << ", " << coords.targetY << ", " << coords.targetZ << ")" << std::endl;
+  // Static variables to track move status across frames
+  static bool showMoveSuccess = false;
+  static bool showMoveError = false;
+  static VisionCoordinateCalculator::CoordinateSet lastMoveCoords;
+  static double lastUsedZ = 0.0;
 
-      // TODO: Implement actual robot movement
-      // Example: m_machineOperations->MoveTo("gantry-main", coords.targetX, coords.targetY, coords.targetZ);
-    }
-    else {
-      std::cout << "[UIVisionPanel] Cannot send to robot: Robot position not available" << std::endl;
+  // Action button with conditional enabling
+  ImGui::BeginDisabled(!m_machineOperations);
+
+  if (ImGui::Button("Send to Robot", ImVec2(120, 25))) {
+    if (m_machineOperations) {
+      // Debug: Log all the coordinate values
+      std::cout << "[UIVisionPanel] Debug Coordinates:" << std::endl;
+      std::cout << "  Detection pixel: (" << m_lastResult.centerX << ", " << m_lastResult.centerY << ")" << std::endl;
+      std::cout << "  Image center: (" << coords.imageCenterX << ", " << coords.imageCenterY << ")" << std::endl;
+      std::cout << "  Pixel offset: (" << coords.offsetPixelX << ", " << coords.offsetPixelY << ")" << std::endl;
+      std::cout << "  MM offset: (" << coords.offsetMmX << ", " << coords.offsetMmY << ")" << std::endl;
+
+      if (coords.hasRobotPosition) {
+        std::cout << "  Current robot: (" << coords.robotX << ", " << coords.robotY << ", " << coords.robotZ << ")" << std::endl;
+      }
+
+      std::cout << "  Target position: (" << coords.targetX << ", " << coords.targetY << ", " << coords.targetZ << ")" << std::endl;
+
+      // The target should be: current_position + offset
+      // If coords.targetX/Y are wrong, calculate them here:
+      double correctedTargetX = coords.hasRobotPosition ? (coords.robotX + coords.offsetMmX) : coords.offsetMmX;
+      double correctedTargetY = coords.hasRobotPosition ? (coords.robotY + coords.offsetMmY) : coords.offsetMmY;
+      double targetZ = coords.hasRobotPosition ? coords.robotZ : coords.targetZ;
+
+      std::cout << "[UIVisionPanel] Corrected target: ("
+        << correctedTargetX << ", " << correctedTargetY << ", " << targetZ << ")" << std::endl;
+
+      // Create PositionStruct for the move
+      PositionStruct targetPosition;
+      targetPosition.x = correctedTargetX;  // Use corrected values
+      targetPosition.y = correctedTargetY;
+      targetPosition.z = targetZ;
+
+      // Move to new position
+      bool moveSuccess = m_machineOperations->MoveDeviceToPosition(
+        "gantry-main",
+        targetPosition,
+        true,
+        "VisionCorrection"
+      );
+
+      if (moveSuccess) {
+        std::cout << "[UIVisionPanel] Robot movement command sent successfully" << std::endl;
+        showMoveSuccess = true;
+        showMoveError = false;
+        lastMoveCoords = coords;
+        lastUsedZ = targetZ;
+      }
+      else {
+        std::cout << "[UIVisionPanel] Failed to send robot movement command" << std::endl;
+        showMoveSuccess = false;
+        showMoveError = true;
+      }
     }
   }
 
+  ImGui::EndDisabled();
+
+  // Show informative text if machine operations not set
+  if (!m_machineOperations) {
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+      "Machine operations not configured!");
+
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("SetMachineOperations() needs to be called during initialization");
+    }
+  }
+
+  // Copy coordinates button
   ImGui::SameLine();
   if (ImGui::Button("Copy Coordinates", ImVec2(120, 30))) {
     std::string coordText = VisionCoordinateCalculator::FormatCoordinateSet(coords);
@@ -362,36 +425,92 @@ void UIVisionPanel::RenderCoordinateActions() {
     std::cout << "[UIVisionPanel] Coordinates copied to clipboard: " << coordText << std::endl;
   }
 
+  // Show details button
   ImGui::SameLine();
   if (ImGui::Button("Show Details", ImVec2(100, 30))) {
     ImGui::OpenPopup("CoordinateDetails");
   }
 
-  // Coordinate details popup
+  // Handle popups - open them after button checks
+  if (showMoveSuccess) {
+    ImGui::OpenPopup("RobotMoveSuccess");
+    showMoveSuccess = false;
+  }
+
+  if (showMoveError) {
+    ImGui::OpenPopup("RobotMoveError");
+    showMoveError = false;
+  }
+
+  // Success popup
+  if (ImGui::BeginPopupModal("RobotMoveSuccess", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f),
+      "✓ Command sent to robot");
+    ImGui::Text("Target: (%.3f, %.3f, %.3f)",
+      lastMoveCoords.targetX, lastMoveCoords.targetY, lastUsedZ);
+    ImGui::Text("Move type: Vision-guided correction");
+    ImGui::Text("Context: VisionCorrection");
+
+    ImGui::Spacing();
+    if (ImGui::Button("OK", ImVec2(120, 0))) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  // Error popup
+  if (ImGui::BeginPopupModal("RobotMoveError", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+      "✗ Failed to send command");
+    ImGui::Text("Please check:");
+    ImGui::BulletText("Robot connection status");
+    ImGui::BulletText("Device 'gantry-main' is available");
+    ImGui::BulletText("Target position is within limits");
+
+    ImGui::Spacing();
+    if (ImGui::Button("OK", ImVec2(120, 0))) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  // Coordinate details popup (non-modal)
   if (ImGui::BeginPopup("CoordinateDetails")) {
     ImGui::Text("Detailed Coordinate Information");
     ImGui::Separator();
 
     ImGui::Text("Image Center: (%.1f, %.1f)", coords.imageCenterX, coords.imageCenterY);
+    ImGui::Text("Detection: (%.1f, %.1f) pixels", coords.pixelX, coords.pixelY);
     ImGui::Text("Detection Offset: (%.1f, %.1f) pixels", coords.offsetPixelX, coords.offsetPixelY);
     ImGui::Text("Offset in MM: (%.3f, %.3f)", coords.offsetMmX, coords.offsetMmY);
 
+    ImGui::Separator();
     if (coords.hasRobotPosition) {
-      ImGui::Text("Robot Position: (%.3f, %.3f, %.3f)", coords.robotX, coords.robotY, coords.robotZ);
+      ImGui::TextColored(ImVec4(0.8f, 1.0f, 0.8f, 1.0f), "Robot Position Available");
+      ImGui::Text("Current Robot: (%.3f, %.3f, %.3f) mm", coords.robotX, coords.robotY, coords.robotZ);
+      ImGui::Text("Target Position: (%.3f, %.3f, %.3f) mm", coords.targetX, coords.targetY, coords.robotZ);
       ImGui::Text("Move Distance: %.3f mm",
-        VisionCoordinateCalculator::CalculateDistance2D(0, 0, coords.offsetMmX, coords.offsetMmY));
+        VisionCoordinateCalculator::CalculateDistance2D(
+          coords.robotX, coords.robotY, coords.targetX, coords.targetY));
+    }
+    else {
+      ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Robot Position Not Available");
+      ImGui::Text("Using offset from image center");
+      ImGui::Text("Target Offset: (%.3f, %.3f) mm", coords.targetX, coords.targetY);
     }
 
     ImGui::Separator();
-    ImGui::Text("Calibration Status: %s", coords.hasCalibration ? "Loaded" : "Default");
+    ImGui::Text("Calibration: %s", coords.hasCalibration ? "Custom Loaded" : "Default Values");
+    ImGui::Text("Scale Factor X: %.6f mm/pixel", coords.pixelToMmFactorX);
+    ImGui::Text("Scale Factor Y: %.6f mm/pixel", coords.pixelToMmFactorY);
 
-    if (ImGui::Button("Close")) {
+    ImGui::Spacing();
+    if (ImGui::Button("Close", ImVec2(80, 0))) {
       ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();
   }
 }
-
 void UIVisionPanel::RenderCoordinateSystemInfo() {
   if (!m_coordinateCalculator) {
     return;

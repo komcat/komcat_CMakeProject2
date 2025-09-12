@@ -414,70 +414,74 @@ bool ModuleAlignment::CalculateCoordinateSystem() {
     }
   }
 
-  // Step 4: Calculate center of the triangle (center of rectangle/module)
+  // Step 4: Calculate center based on configuration type
   Vector3D pos1 = realWorldPositions[0];  // Node 1
   Vector3D pos2 = realWorldPositions[1];  // Node 2  
   Vector3D pos3 = realWorldPositions[2];  // Node 3
 
-  // Calculate center position: ctr = (pos1 + pos2 + pos3) / 3
-  Vector3D pos4 = pos2 + pos3 - pos1;  // Calculate 4th corner
-  Vector3D center = (pos1 + pos4) * 0.5;  // Rectangle center
+  Vector3D center;
 
+  // Check if points form a right angle (3 corners of rectangle)
+  // by checking if vectors are perpendicular
+  Vector3D v12 = pos2 - pos1;  // Vector from node1 to node2
+  Vector3D v13 = pos3 - pos1;  // Vector from node1 to node3
+
+  double dotProduct = v12.dot(v13);
+  double angle = std::acos(dotProduct / (v12.magnitude() * v13.magnitude())) * 180.0 / M_PI;
+
+  // If angle is close to 90 degrees (±5 degrees tolerance), treat as rectangle
+  if (std::abs(angle - 90.0) < 5.0) {
+    // Rectangle case - calculate 4th corner and use rectangle center
+    Vector3D pos4 = pos2 + pos3 - pos1;
+    center = (pos1 + pos4) * 0.5;
+
+    if (m_logger) {
+      m_logger->LogInfo("ModuleAlignment: Detected rectangular configuration (angle: " +
+        std::to_string(angle) + "°)");
+      m_logger->LogInfo("ModuleAlignment: Using rectangle center calculation");
+    }
+  }
+  else {
+    // General triangle case - use centroid (average of 3 points)
+    center = (pos1 + pos2 + pos3) / 3.0;
+
+    if (m_logger) {
+      m_logger->LogInfo("ModuleAlignment: Detected triangular configuration (angle: " +
+        std::to_string(angle) + "°)");
+      m_logger->LogInfo("ModuleAlignment: Using triangle centroid calculation");
+    }
+  }
 
   m_alignmentResult.centerPosition.x = center.x;
   m_alignmentResult.centerPosition.y = center.y;
   m_alignmentResult.centerPosition.z = center.z;
 
-  if (m_logger) {
-    m_logger->LogInfo("ModuleAlignment: Triangle center (module center): (" +
-      std::to_string(center.x) + ", " + std::to_string(center.y) +
-      ", " + std::to_string(center.z) + ")");
-  }
-
   // Step 5: Calculate local module alignment axes
-  // X-axis direction: pos1 → pos2 (Node1 to Node2)
+  // For non-rectangular configurations, we need a different approach
+
+  // X-axis: Always use pos1 → pos2
   Vector3D xAxisVector = pos2 - pos1;
   m_alignmentResult.xAxisLength = xAxisVector.magnitude();
   Vector3D xAxis = xAxisVector.normalize();
   m_alignmentResult.xAxisDirection = xAxis;
 
-  // Y-axis direction: pos1 → pos3 (Node1 to Node3)  
+  // Y-axis: Project pos3 onto plane perpendicular to X-axis
   Vector3D yAxisVector = pos3 - pos1;
   m_alignmentResult.yAxisLength = yAxisVector.magnitude();
 
-  // Orthogonalize Y-axis (Gram-Schmidt process to ensure 90 degrees)
-  // y_orthogonal = y_raw - (y_raw · x_unit) * x_unit
+  // Gram-Schmidt orthogonalization to ensure perpendicular axes
   Vector3D yAxis = (yAxisVector - xAxis * yAxisVector.dot(xAxis)).normalize();
   m_alignmentResult.yAxisDirection = yAxis;
 
-  // Z-axis direction: cross product of X and Y (right-hand rule)
+  // Z-axis: Cross product (right-hand rule)
   Vector3D zAxis = xAxis.cross(yAxis).normalize();
   m_alignmentResult.zAxisDirection = zAxis;
 
-  // Step 6: Calculate angle between local X-axis (X') and global X-axis
-  // Global X-axis is (1, 0, 0)
-  Vector3D globalXAxis(1.0, 0.0, 0.0);
-  double cosAngle = xAxis.dot(globalXAxis);
-  cosAngle = (std::max)(-1.0, (std::min)(1.0, cosAngle)); // Clamp to [-1, 1]
-  double angleToGlobalX = std::acos(cosAngle) * 180.0 / M_PI;
-
-  // Determine sign of angle using cross product
-  Vector3D crossProduct = globalXAxis.cross(xAxis);
-  if (crossProduct.z < 0) {
-    angleToGlobalX = -angleToGlobalX;
-  }
-
-  m_alignmentResult.axisAngle = angleToGlobalX;
-
+  // Log actual angle between defined axes
+  double actualAngle = std::acos(xAxis.dot(yAxis)) * 180.0 / M_PI;
   if (m_logger) {
-    m_logger->LogInfo("ModuleAlignment: X-axis length: " + std::to_string(m_alignmentResult.xAxisLength) + " mm");
-    m_logger->LogInfo("ModuleAlignment: Y-axis length: " + std::to_string(m_alignmentResult.yAxisLength) + " mm");
-    m_logger->LogInfo("ModuleAlignment: Local X-axis direction: (" +
-      std::to_string(xAxis.x) + ", " + std::to_string(xAxis.y) + ", " + std::to_string(xAxis.z) + ")");
-    m_logger->LogInfo("ModuleAlignment: Local Y-axis direction: (" +
-      std::to_string(yAxis.x) + ", " + std::to_string(yAxis.y) + ", " + std::to_string(yAxis.z) + ")");
-    m_logger->LogInfo("ModuleAlignment: Angle of local X-axis to global X-axis: " +
-      std::to_string(angleToGlobalX) + " degrees");
+    m_logger->LogInfo("ModuleAlignment: Actual angle between X and Y axes after orthogonalization: " +
+      std::to_string(actualAngle) + "° (should be 90°)");
   }
 
   // Create transformation matrices
