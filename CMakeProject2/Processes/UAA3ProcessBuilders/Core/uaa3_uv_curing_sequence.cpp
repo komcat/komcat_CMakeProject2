@@ -35,10 +35,10 @@ namespace UAA3ProcessBuilders {
     sequence->AddOperation(std::make_shared<DUTRecordDataOperation>("GPIB-Current", "before fine correction @150mA"));
 
     // 4. Wait for user to do fine alignment
-    sequence->AddOperation(UserPromptOperation::CreateBasic(
-      "Fine Alignment",
-      "Confirm to fine align lens again (um steps =0.5, 0.2, 0.1)",
-      promptUI));
+    //sequence->AddOperation(UserPromptOperation::CreateBasic(
+    //  "Fine Alignment",
+    //  "Confirm to fine align lens again (um steps =0.5, 0.2, 0.1)",
+    //  promptUI));
 
     // 2. Perform scan (will automatically move to peak)
     sequence->AddOperation(std::make_shared<RunScanOperation>(
@@ -67,10 +67,10 @@ namespace UAA3ProcessBuilders {
 
 
     // 4. Wait for user confirmation that grip is successful
-    sequence->AddOperation(UserPromptOperation::CreateBasic(
-      "UV Curing Start",
-      "Confirm start UV curing (take 210 seconds)",
-      promptUI));
+    //sequence->AddOperation(UserPromptOperation::CreateBasic(
+    //  "UV Curing Start",
+    //  "Confirm start UV curing (take 210 seconds)",
+    //  promptUI));
 
     // 3. Toggle UV_PLC1 (pin 14) - Clear output
     sequence->AddOperation(std::make_shared<SetOutputOperation>(

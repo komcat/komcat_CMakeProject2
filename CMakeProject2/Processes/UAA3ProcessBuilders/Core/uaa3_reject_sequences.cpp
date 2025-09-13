@@ -20,22 +20,29 @@ namespace UAA3ProcessBuilders {
     //sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
     //  "hex-left", "Process_Flow", "node_5531")); // Reject lens position
 
+    sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
+			"hex-left", "approachlensplace")); // Reject lens position
+
     // 3. Move hex-right to reject position WITH FALLBACK
-    auto moveToReject = std::make_shared<MoveToNodeOperation>(
-      "hex-right", "Process_Flow", "node_5190");
+    //auto moveToReject = std::make_shared<MoveToNodeOperation>(
+    //  "hex-left", "Process_Flow", "node_5531");
 
-    auto fallbackToReject = std::make_shared<RecoverAndRetryOperation>(
-      "hex-right", "Process_Flow", "node_5190", 2.0); //max 5mm distance
+    //auto fallbackToReject = std::make_shared<RecoverAndRetryOperation>(
+    //  "hex-left", "Process_Flow", "node_5531", 2.0); //max 5mm distance
 
-    sequence->AddOperationWithFallback(moveToReject, fallbackToReject);
+    //sequence->AddOperationWithFallback(moveToReject, fallbackToReject);
 
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "hex-left", "Process_Flow", "node_5531")); // Safe position
+
+    sequence->AddOperation(std::make_shared<WaitOperation>(1000)); // 3 seconds
 
     // 4. Release left gripper (pin 0)
     sequence->AddOperation(std::make_shared<SetOutputOperation>(
       "IOBottom", 0, false)); // Clear output L_Gripper (pin 0)
 
     // 5. Wait for 3 seconds to ensure lens is dropped
-    sequence->AddOperation(std::make_shared<WaitOperation>(3000)); // 3 seconds
+    sequence->AddOperation(std::make_shared<WaitOperation>(1000)); // 3 seconds
 
     // 6. Move hex-left back to home position
     sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
@@ -61,20 +68,29 @@ namespace UAA3ProcessBuilders {
     //sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
     //  "hex-right", "Process_Flow", "node_5190")); // Reject lens position
 
+
+    sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
+      "hex-right", "approachlensplace")); // Reject lens position
+
+
     // 3. Move hex-right to reject position WITH FALLBACK
-    auto moveToReject = std::make_shared<MoveToNodeOperation>(
-      "hex-right", "Process_Flow", "node_5190");
+    //auto moveToReject = std::make_shared<MoveToNodeOperation>(
+    //  "hex-right", "Process_Flow", "node_5190");
 
-    auto fallbackToReject = std::make_shared<RecoverAndRetryOperation>(
-      "hex-right", "Process_Flow", "node_5190", 2.0); // max 2distance recovery
+    //auto fallbackToReject = std::make_shared<RecoverAndRetryOperation>(
+    //  "hex-right", "Process_Flow", "node_5190", 2.0); // max 2distance recovery
 
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "hex-right", "Process_Flow", "node_5190")); // reject lens
+
+    sequence->AddOperation(std::make_shared<WaitOperation>(1000)); // 3 seconds
 
     // 4. Release right gripper (pin 2)
     sequence->AddOperation(std::make_shared<SetOutputOperation>(
       "IOBottom", 2, false)); // Clear output R_Gripper (pin 2)
 
     // 5. Wait for 3 seconds to ensure lens is dropped
-    sequence->AddOperation(std::make_shared<WaitOperation>(3000)); // 3 seconds
+    sequence->AddOperation(std::make_shared<WaitOperation>(1000)); // 3 seconds
 
     // 6. Move hex-right back to home position
     sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
