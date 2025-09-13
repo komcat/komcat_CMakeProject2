@@ -929,111 +929,113 @@ void RunPageUI::OnFilterChanged() {
 
 
 
-// UPDATED: RenderColumn3 with 3-column layout - camera view left, 2 placeholders right
 void RunPageUI::RenderColumn3() {
-  // Calculate column widths for 3-column layout
+  // Get available space
   ImVec2 availableRegion = ImGui::GetContentRegionAvail();
-  float columnWidth = (availableRegion.x - 20.0f) / 3.0f; // 10px spacing between columns
-  float columnHeight = 250.0f;
 
-  // Column 1: Camera View (left)
-  ImGui::BeginChild("CameraColumn", ImVec2(columnWidth, columnHeight), true);
+  // === TOP SECTION: 3 PANELS ===
+  float panelWidth = (availableRegion.x - 20.0f) / 3.0f; // 10px spacing between
+  float panelHeight = 250.0f;
+
+  // Panel 1: Live Camera
+  ImGui::BeginChild("Panel1_Camera", ImVec2(panelWidth, panelHeight), true);
   {
-    ImGui::Text("Camera View");
-
-    if (m_cameraManager && !m_cameraManager->GetCameraIds().empty()) {
-      // Initialize embedded camera if not done
-      if (!m_embeddedCameraSubscriber && m_cameraSystemInitialized) {
-        InitializeEmbeddedCameraFeed();
-      }
-
-      // Status display
-      if (m_embeddedCameraSubscriber) {
-        ImGui::TextColored(
-          m_embeddedCameraSubscriber->IsCameraConnected() ? ImVec4(0, 1, 0, 1) : ImVec4(1, 0, 0, 1),
-          "%s | %s",
-          m_embeddedCameraSubscriber->IsCameraConnected() ? "Connected" : "Disconnected",
-          m_embeddedCameraSubscriber->IsCameraGrabbing() ? "Grabbing" : "Idle"
-        );
-      }
-    }
-    else {
-      ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "No cameras available");
-    }
-
+    ImGui::Text("Live Camera");
     ImGui::Separator();
 
-    // Camera feed display
-    ImVec2 cameraCanvasSize = ImGui::GetContentRegionAvail();
+    // Your existing camera code here
+    ImVec2 cameraSize = ImGui::GetContentRegionAvail();
     if (m_embeddedCameraSubscriber && m_cameraSystemInitialized) {
-      RenderEmbeddedCameraFeed(cameraCanvasSize);
+      RenderEmbeddedCameraFeed(cameraSize);
     }
     else {
-      RenderCameraPlaceholder(cameraCanvasSize,
-        m_cameraManager ? "Connecting to camera..." : "Camera system not available");
+      RenderCameraPlaceholder(cameraSize, "Camera not available");
     }
   }
   ImGui::EndChild();
 
-  // Spacing between columns
-  ImGui::SameLine();
-  ImGui::Dummy(ImVec2(10.0f, 0));
   ImGui::SameLine();
 
-  // Column 2: Placeholder 1 (middle)
-  ImGui::BeginChild("Placeholder1", ImVec2(columnWidth, columnHeight), true);
-  {
-    ImGui::Text("Panel 1");
-    ImGui::Separator();
-
-    // Center placeholder text
-    ImVec2 availableSpace = ImGui::GetContentRegionAvail();
-    ImVec2 textSize = ImGui::CalcTextSize("Available for\nfuture content");
-    ImGui::SetCursorPos(ImVec2(
-      (availableSpace.x - textSize.x) * 0.5f,
-      (availableSpace.y - textSize.y) * 0.5f
-    ));
-    ImGui::TextDisabled("Available for\nfuture content");
-  }
-  ImGui::EndChild();
-
-  // Spacing between columns
-  ImGui::SameLine();
-  ImGui::Dummy(ImVec2(10.0f, 0));
-  ImGui::SameLine();
-
-  // Column 3: Placeholder 2 (right)
-  ImGui::BeginChild("Placeholder2", ImVec2(columnWidth, columnHeight), true);
+  // Panel 2: Blank
+  ImGui::BeginChild("Panel2_Blank", ImVec2(panelWidth, panelHeight), true);
   {
     ImGui::Text("Panel 2");
     ImGui::Separator();
-
-    // Center placeholder text
-    ImVec2 availableSpace = ImGui::GetContentRegionAvail();
-    ImVec2 textSize = ImGui::CalcTextSize("Available for\nfuture content");
-    ImGui::SetCursorPos(ImVec2(
-      (availableSpace.x - textSize.x) * 0.5f,
-      (availableSpace.y - textSize.y) * 0.5f
-    ));
     ImGui::TextDisabled("Available for\nfuture content");
   }
   ImGui::EndChild();
 
+  ImGui::SameLine();
+
+  // Panel 3: Blank  
+  ImGui::BeginChild("Panel3_Blank", ImVec2(panelWidth, panelHeight), true);
+  {
+    ImGui::Text("Panel 3");
+    ImGui::Separator();
+    ImGui::TextDisabled("Available for\nfuture content");
+  }
+  ImGui::EndChild();
+
+  // === SPACING ===
+  ImGui::Spacing();
   ImGui::Spacing();
 
-  // Tab bar below the 3-column layout (existing code)
+  // === LIVE DATA PLOT ROW ===
+  float plotHeight = 200.0f;
+  ImGui::BeginChild("LiveDataPlotRow", ImVec2(-1, plotHeight), true);
+  {
+    ImGui::Text("Live Data Plot");
+    ImGui::Separator();
+
+    // Initialize plot if needed
+    if (!m_liveDataPlot) {
+      // Use the LiveDataPlotManager instead of direct construction
+      auto* plotManager = LiveDataPlotManager::GetInstance();
+      auto* plot = plotManager->GetPlot("column3_main_plot");
+
+      // Configure the plot
+      LiveDataPlot::Config config;
+      config.channelName = "GPIB-Current";         // Fixed channel
+      config.timeWindow = 30.0f;                  // 30 second window
+      config.historySize = 1000;                  // Keep 1000 points
+      config.autoScale = true;                    // Auto-scale Y axis
+      config.showCurrentValue = true;             // Show current value display
+      config.enableChannelSelector = true;        // Enable channel switching
+      config.showGrid = true;                     // Show grid lines
+      config.showLegend = true;                   // Show legend
+      config.lineColor = ImVec4(0.0f, 1.0f, 0.2f, 1.0f); // Green line
+      config.lineThickness = 2.0f;                // Line thickness
+      config.yAxisLabel = "";                     // Auto-detect from channel name
+
+      plot->Initialize(config);
+      m_liveDataPlot = plot; // Store the pointer (don't own it)
+      m_plotInitialized = true;
+
+      // Log what channel was selected
+      m_logger->LogInfo("LiveDataPlot initialized with channel: GPIB-Current");
+    }
+
+    // Render the plot
+    if (m_liveDataPlot && m_plotInitialized) {
+      ImVec2 plotSize = ImGui::GetContentRegionAvail();
+      m_liveDataPlot->Render(plotSize);
+    }
+    else {
+      ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Initializing plot...");
+    }
+  }
+  ImGui::EndChild();
+  ImGui::Spacing();
+
   if (ImGui::BeginTabBar("Column3Tabs", ImGuiTabBarFlags_None)) {
-    // Status tab (existing content)
     if (ImGui::BeginTabItem("Status")) {
       RenderStatusTab();
       ImGui::EndTabItem();
     }
-    // Detail Results tab (existing content)
     if (ImGui::BeginTabItem("Detail Results")) {
       RenderDetailResultsTab();
       ImGui::EndTabItem();
     }
-    // Live View tab
     if (ImGui::BeginTabItem("Live View")) {
       RenderLiveViewTab();
       ImGui::EndTabItem();
@@ -1041,6 +1043,8 @@ void RunPageUI::RenderColumn3() {
     ImGui::EndTabBar();
   }
 }
+
+
 
 // In RunPageUI constructor or initialization method
 void RunPageUI::InitializeCameraViewport() {

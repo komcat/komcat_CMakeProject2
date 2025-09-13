@@ -9,6 +9,7 @@
 #include "ProcessFilterManager.h"
 #include "include/ui/OperationsDisplayUI.h"
 #include "include/camera/ICameraHardware.h"  // NEW: Add for camera hardware interface
+#include "include/data/LiveDataPlot.h"
 #include "logger.h"
 #include "CameraViewport.h"
 #include "LiveVideoSubscriber.h"  // NEW: Add camera support
@@ -212,4 +213,10 @@ private:
   void RenderEmbeddedCameraFeed(const ImVec2& canvasSize);
 
   void DebugCameraFrameFlow();
+
+  // In the private section
+  LiveDataPlot* m_liveDataPlot = nullptr;
+  bool m_plotInitialized = false;
+  // Method to check if plot is initialized
+  bool IsPlotInitialized() const { return m_liveDataPlot != nullptr; }
 };

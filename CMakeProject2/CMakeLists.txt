@@ -733,7 +733,7 @@ add_executable(uaa3App
     "include/motions/IGantryManager.h" 
     "include/motions/ACSGantryAdapter.h" 
 
-     "include/camera/CameraViewport.h" "include/camera/CameraViewport.cpp")
+     "include/camera/CameraViewport.h" "include/camera/CameraViewport.cpp" "include/data/LiveDataPlot.h" "include/data/LiveDataPlot.cpp")
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
