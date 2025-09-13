@@ -413,13 +413,14 @@ void LiveDataPlot::UpdateData() {
   // Get current value
   float value = store->GetValue(m_config.channelName);
 
-  // Calculate timestamp
+  // Calculate timestamp (always advancing)
   double timestamp = std::chrono::duration<double>(now - m_startTime).count();
 
-  // Add to history
+  // Add to history with current timestamp and current value
   {
     std::lock_guard<std::mutex> lock(m_dataMutex);
 
+    // Always update current value and add data point
     m_currentValue = value;
     m_dataHistory.push_back(DataPoint(value, timestamp));
 
@@ -428,13 +429,14 @@ void LiveDataPlot::UpdateData() {
       m_dataHistory.pop_front();
     }
 
-    // Remove old data outside time window
+    // Remove old data outside time window (this creates the scrolling effect)
     double cutoffTime = timestamp - m_config.timeWindow * 1.5; // Keep a bit extra
     while (!m_dataHistory.empty() && m_dataHistory.front().timestamp < cutoffTime) {
       m_dataHistory.pop_front();
     }
   }
 }
+
 
 // Format value with units
 std::string LiveDataPlot::FormatValue(float value) const {

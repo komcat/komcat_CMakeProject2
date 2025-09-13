@@ -996,7 +996,7 @@ void RunPageUI::RenderColumn3() {
       // Configure the plot
       LiveDataPlot::Config config;
       config.channelName = "GPIB-Current";         // Fixed channel
-      config.timeWindow = 30.0f;                  // 30 second window
+      config.timeWindow = 10.0f;                  // 30 second window
       config.historySize = 1000;                  // Keep 1000 points
       config.autoScale = true;                    // Auto-scale Y axis
       config.showCurrentValue = true;             // Show current value display
