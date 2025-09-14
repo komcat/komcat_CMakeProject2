@@ -43,12 +43,12 @@ void LiveVideoSubscriber::OnNewFrame(const CameraFrameData& frameData) {
   m_lastFrameTimestamp.store(frameData.timestamp);
 
   // Enhanced debugging for first few frames and then periodically
-  if (frameNumber <= 10 || frameNumber % 50 == 0) {
-    std::cout << "[FRAME DEBUG] " << m_subscriberId << " received frame #" << frameNumber
-      << " from " << frameData.cameraId
-      << " (" << frameData.width << "x" << frameData.height << ")"
-      << " timestamp: " << frameData.timestamp << std::endl;
-  }
+  //if (frameNumber <= 10 || frameNumber % 50 == 0) {
+  //  std::cout << "[FRAME DEBUG] " << m_subscriberId << " received frame #" << frameNumber
+  //    << " from " << frameData.cameraId
+  //    << " (" << frameData.width << "x" << frameData.height << ")"
+  //    << " timestamp: " << frameData.timestamp << std::endl;
+  //}
 
   // Special logging for the critical first few frames
   if (frameNumber == 1) {

@@ -111,13 +111,14 @@ PylonCameraTest::~PylonCameraTest() {
 
 
 
-// NEW: Add this method
+// NEW METHOD - Send frame through CameraFeedDisplay instead
 void PylonCameraTest::SendFrameToRaylib() {
-  if (!m_raylibWindow || !m_formatConverterOutput.IsValid()) {
+  // Check if we have CameraFeedDisplay instead of RaylibWindow
+  if ( !m_formatConverterOutput.IsValid()) {
     return;
   }
 
-  // Rate limit updates to avoid overwhelming raylib
+  // Rate limit updates
   auto now = std::chrono::steady_clock::now();
   auto timeSinceLastUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastRaylibUpdate);
 
@@ -132,16 +133,14 @@ void PylonCameraTest::SendFrameToRaylib() {
     uint32_t height = m_formatConverterOutput.GetHeight();
 
     if (pImageBuffer && width > 0 && height > 0) {
-      // Send frame to raylib window
-      m_raylibWindow->UpdateVideoFrame(pImageBuffer, width, height, m_lastFrameTimestamp);
+
       m_lastRaylibUpdate = now;
     }
   }
   catch (const std::exception& e) {
-    std::cerr << "Error sending frame to raylib: " << e.what() << std::endl;
+    std::cerr << "Error sending frame to display: " << e.what() << std::endl;
   }
 }
-
 
 
 bool PylonCameraTest::ApplyExposureForNode(const std::string& nodeId) {
@@ -498,13 +497,20 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
   }
 
   // Add this somewhere in the camera controls (maybe after exposure settings):
+  // NEW CODE - using HasCameraFeed instead
   if (ImGui::CollapsingHeader("Raylib Video Feed")) {
     ImGui::Checkbox("Send to Raylib Window", &m_enableRaylibFeed);
     ImGui::SameLine();
     ImGui::TextDisabled("(Live Video page)");
 
     if (m_raylibWindow) {
-      ImGui::Text("Status: %s", m_raylibWindow->HasVideoFeed() ? "Active" : "Ready");
+      // Use HasCameraFeed() instead of HasVideoFeed()
+      ImGui::Text("Status: %s", m_raylibWindow->HasCameraFeed() ? "Camera Connected" : "No Camera");
+
+      // Optionally show more camera status
+      if (m_raylibWindow->HasCameraFeed()) {
+        ImGui::Text("Feed: %s", m_raylibWindow->IsCameraFeedVisible() ? "Visible" : "Hidden");
+      }
     }
     else {
       ImGui::TextColored(ImVec4(1, 1, 0, 1), "Raylib window not connected");
