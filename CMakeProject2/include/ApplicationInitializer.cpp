@@ -437,15 +437,25 @@ bool ApplicationInitializer::InitIOSystems(HardwareManagers& hw) {
   if (!hw.ioConfig->loadConfig("IOConfig.json")) {
     logger->LogWarning("Failed to load IO configuration, using defaults");
   }
+  else
+  {
+    //Load IO passed.
+    hw.ioConfig->initializeIOManager(*hw.ioManager);
+  }
 
-  hw.ioConfig->initializeIOManager(*hw.ioManager);
 
+  //if io can connect
   if (!hw.ioManager->connectAll()) {
     logger->LogWarning("Failed to connect to all IO devices");
   }
+  else
+  {
+		//then polling can start
+    hw.ioManager->startPolling(100);
+    logger->LogInfo("EziIO system initialized");
+  }
 
-  hw.ioManager->startPolling(100);
-  logger->LogInfo("EziIO system initialized");
+
 
   // Initialize Pneumatic System
   hw.pneumatic = std::make_unique<PneumaticManager>(*hw.ioManager);
@@ -453,31 +463,47 @@ bool ApplicationInitializer::InitIOSystems(HardwareManagers& hw) {
   // IMPORTANT: Configure BEFORE initialize!
   if (!hw.ioConfig->initializePneumaticManager(*hw.pneumatic)) {
     logger->LogWarning("Failed to configure pneumatic manager");
-    return false;
+    
+    
+		// do not fail the initialization if pneumatics config fails
+    //return false;
+
+
+
   }
-
-  // NOW initialize after configuration is loaded
-  if (!hw.pneumatic->initialize()) {
-    logger->LogWarning("Failed to initialize Pneumatic Manager");
-    return false;
-  }
-
-  hw.pneumatic->startPolling(100);
-
-  // Set up pneumatic callbacks
-  hw.pneumatic->setStateChangeCallback([this](const std::string& slideName, SlideState state) {
-    std::string stateStr;
-    switch (state) {
-    case SlideState::EXTENDED: stateStr = "Extended"; break;
-    case SlideState::RETRACTED: stateStr = "Retracted"; break;
-    case SlideState::MOVING: stateStr = "Moving"; break;
-    case SlideState::P_ERROR: stateStr = "ERROR"; break;
-    default: stateStr = "Unknown";
+  else
+  {
+    // NOW initialize after configuration is loaded
+    if (!hw.pneumatic->initialize()) {
+      logger->LogWarning("Failed to initialize Pneumatic Manager");
+      return false;
     }
-    logger->LogInfo("Pneumatic '" + slideName + "' -> " + stateStr);
-  });
+    else
+    {
+      hw.pneumatic->startPolling(100);
 
-  logger->LogInfo("Pneumatic system initialized");
+      // Set up pneumatic callbacks
+      hw.pneumatic->setStateChangeCallback([this](const std::string& slideName, SlideState state) {
+        std::string stateStr;
+        switch (state) {
+        case SlideState::EXTENDED: stateStr = "Extended"; break;
+        case SlideState::RETRACTED: stateStr = "Retracted"; break;
+        case SlideState::MOVING: stateStr = "Moving"; break;
+        case SlideState::P_ERROR: stateStr = "ERROR"; break;
+        default: stateStr = "Unknown";
+        }
+        logger->LogInfo("Pneumatic '" + slideName + "' -> " + stateStr);
+      });
+
+      logger->LogInfo("Pneumatic system initialized");
+    }
+  }
+
+
+
+
+
+
   return true;
 }
 
