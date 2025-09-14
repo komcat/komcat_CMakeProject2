@@ -929,53 +929,176 @@ void RunPageUI::OnFilterChanged() {
 
 
 
+
 void RunPageUI::RenderColumn3() {
   // Get available space
   ImVec2 availableRegion = ImGui::GetContentRegionAvail();
 
-  // === TOP SECTION: 3 PANELS ===
-  float panelWidth = (availableRegion.x - 20.0f) / 3.0f; // 10px spacing between
-  float panelHeight = 250.0f;
+  // === TOP SECTION: EXPANDABLE PANELS ===
+  float normalPanelHeight = 250.0f;
+  float spacing = 10.0f;
 
-  // Panel 1: Live Camera
-  ImGui::BeginChild("Panel1_Camera", ImVec2(panelWidth, panelHeight), true);
-  {
+  // Camera aspect ratio (1280x1024)
+  const float CAMERA_ASPECT_RATIO = 1280.0f / 1024.0f;
+
+  // Calculate panel dimensions based on current state
+  float panel1Width, panel2Width, panel3Width;
+  float panelHeight = normalPanelHeight;
+  bool showPanel1 = true, showPanel2 = true, showPanel3 = true;
+
+  switch (m_panelState) {
+  case PanelState::Normal:
+    // All panels equal width
+    panel1Width = (availableRegion.x - spacing * 2) / 3.0f;
+    panel2Width = panel1Width;
+    panel3Width = panel1Width;
+    panelHeight = normalPanelHeight;
+    break;
+
+  case PanelState::Panel1:
+    // Panel 1 takes full width - calculate height based on camera aspect ratio
+    panel1Width = availableRegion.x;
+    // Calculate height to maintain aspect ratio for full width
+    panelHeight = (panel1Width - 10) / CAMERA_ASPECT_RATIO + 35; // Account for padding and header
+    // Cap the height to available space if needed
+    if (panelHeight > availableRegion.y * 0.6f) {
+      panelHeight = availableRegion.y * 0.6f; // Don't take more than 60% of vertical space
+    }
+    showPanel2 = false;
+    showPanel3 = false;
+    break;
+
+  case PanelState::Panel2:
+    // Panel 2 takes full width
+    panel2Width = availableRegion.x;
+    panelHeight = 400.0f; // Fixed height for non-camera panels
+    showPanel1 = false;
+    showPanel3 = false;
+    break;
+
+  case PanelState::Panel3:
+    // Panel 3 takes full width
+    panel3Width = availableRegion.x;
+    panelHeight = 400.0f; // Fixed height for non-camera panels
+    showPanel1 = false;
+    showPanel2 = false;
+    break;
+  }
+
+  // Render Panel 1 if visible
+  if (showPanel1) {
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(5, 5));
+    ImGui::BeginChild("Panel1_Camera", ImVec2(panel1Width, panelHeight), true);
+
+    // Make header clickable
+    ImVec2 headerPos = ImGui::GetCursorPos();
     ImGui::Text("Live Camera");
+
+    // Invisible button over header for click detection
+    ImVec2 headerSize = ImVec2(panel1Width - 10, 20);
+    ImGui::SetCursorPos(headerPos);
+    if (ImGui::InvisibleButton("Panel1_Header", headerSize)) {
+      HandlePanelClick(1);
+    }
+
+    // Show expand/collapse icon
+    ImGui::SameLine(panel1Width - 30);
+    if (m_panelState == PanelState::Panel1) {
+      ImGui::Text("[−]"); // Collapse icon
+    }
+    else if (m_panelState == PanelState::Normal) {
+      ImGui::Text("[+]"); // Expand icon
+    }
+
     ImGui::Separator();
 
-    // Your existing camera code here
-    ImVec2 cameraSize = ImGui::GetContentRegionAvail();
-    if (m_embeddedCameraSubscriber && m_cameraSystemInitialized) {
-      RenderEmbeddedCameraFeed(cameraSize);
-    }
-    else {
-      RenderCameraPlaceholder(cameraSize, "Camera not available");
+    // Render panel content - use all available space
+    ImVec2 contentSize = ImVec2(panel1Width - 10, panelHeight - 35);
+    RenderPanelContent(1, contentSize);
+
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+
+    if (m_panelState == PanelState::Normal) {
+      ImGui::SameLine();
     }
   }
-  ImGui::EndChild();
 
-  ImGui::SameLine();
+  // Render Panel 2 if visible
+  if (showPanel2) {
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(5, 5));
+    ImGui::BeginChild("Panel2_Blank", ImVec2(panel2Width, panelHeight), true);
 
-  // Panel 2: Blank
-  ImGui::BeginChild("Panel2_Blank", ImVec2(panelWidth, panelHeight), true);
-  {
+    // Make header clickable
+    ImVec2 headerPos = ImGui::GetCursorPos();
     ImGui::Text("Panel 2");
+
+    // Invisible button over header
+    ImVec2 headerSize = ImVec2(panel2Width - 10, 20);
+    ImGui::SetCursorPos(headerPos);
+    if (ImGui::InvisibleButton("Panel2_Header", headerSize)) {
+      HandlePanelClick(2);
+    }
+
+    // Show expand/collapse icon
+    ImGui::SameLine(panel2Width - 30);
+    if (m_panelState == PanelState::Panel2) {
+      ImGui::Text("[−]");
+    }
+    else if (m_panelState == PanelState::Normal) {
+      ImGui::Text("[+]");
+    }
+
     ImGui::Separator();
-    ImGui::TextDisabled("Available for\nfuture content");
+
+    // Render panel content
+    ImVec2 contentSize = ImVec2(panel2Width - 10, panelHeight - 35);
+    RenderPanelContent(2, contentSize);
+
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+
+    if (m_panelState == PanelState::Normal) {
+      ImGui::SameLine();
+    }
   }
-  ImGui::EndChild();
 
-  ImGui::SameLine();
+  // Render Panel 3 if visible
+  if (showPanel3) {
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(5, 5));
+    ImGui::BeginChild("Panel3_Blank", ImVec2(panel3Width, panelHeight), true);
 
-  // Panel 3: Blank  
-  ImGui::BeginChild("Panel3_Blank", ImVec2(panelWidth, panelHeight), true);
-  {
+    // Make header clickable
+    ImVec2 headerPos = ImGui::GetCursorPos();
     ImGui::Text("Panel 3");
-    ImGui::Separator();
-    ImGui::TextDisabled("Available for\nfuture content");
-  }
-  ImGui::EndChild();
 
+    // Invisible button over header
+    ImVec2 headerSize = ImVec2(panel3Width - 10, 20);
+    ImGui::SetCursorPos(headerPos);
+    if (ImGui::InvisibleButton("Panel3_Header", headerSize)) {
+      HandlePanelClick(3);
+    }
+
+    // Show expand/collapse icon
+    ImGui::SameLine(panel3Width - 30);
+    if (m_panelState == PanelState::Panel3) {
+      ImGui::Text("[−]");
+    }
+    else if (m_panelState == PanelState::Normal) {
+      ImGui::Text("[+]");
+    }
+
+    ImGui::Separator();
+
+    // Render panel content
+    ImVec2 contentSize = ImVec2(panel3Width - 10, panelHeight - 35);
+    RenderPanelContent(3, contentSize);
+
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+  }
+
+  // === Rest of the function remains the same ===
   // === SPACING ===
   ImGui::Spacing();
   ImGui::Spacing();
@@ -989,29 +1112,26 @@ void RunPageUI::RenderColumn3() {
 
     // Initialize plot if needed
     if (!m_liveDataPlot) {
-      // Use the LiveDataPlotManager instead of direct construction
       auto* plotManager = LiveDataPlotManager::GetInstance();
       auto* plot = plotManager->GetPlot("column3_main_plot");
 
-      // Configure the plot
       LiveDataPlot::Config config;
-      config.channelName = "GPIB-Current";         // Fixed channel
-      config.timeWindow = 10.0f;                  // 30 second window
-      config.historySize = 1000;                  // Keep 1000 points
-      config.autoScale = true;                    // Auto-scale Y axis
-      config.showCurrentValue = true;             // Show current value display
-      config.enableChannelSelector = true;        // Enable channel switching
-      config.showGrid = true;                     // Show grid lines
-      config.showLegend = true;                   // Show legend
-      config.lineColor = ImVec4(0.0f, 1.0f, 0.2f, 1.0f); // Green line
-      config.lineThickness = 2.0f;                // Line thickness
-      config.yAxisLabel = "";                     // Auto-detect from channel name
+      config.channelName = "GPIB-Current";
+      config.timeWindow = 10.0f;
+      config.historySize = 1000;
+      config.autoScale = true;
+      config.showCurrentValue = true;
+      config.enableChannelSelector = true;
+      config.showGrid = true;
+      config.showLegend = true;
+      config.lineColor = ImVec4(0.0f, 1.0f, 0.2f, 1.0f);
+      config.lineThickness = 2.0f;
+      config.yAxisLabel = "";
 
       plot->Initialize(config);
-      m_liveDataPlot = plot; // Store the pointer (don't own it)
+      m_liveDataPlot = plot;
       m_plotInitialized = true;
 
-      // Log what channel was selected
       m_logger->LogInfo("LiveDataPlot initialized with channel: GPIB-Current");
     }
 
@@ -1025,8 +1145,9 @@ void RunPageUI::RenderColumn3() {
     }
   }
   ImGui::EndChild();
-  ImGui::Spacing();
 
+  // === TAB BAR ===
+  ImGui::Spacing();
   if (ImGui::BeginTabBar("Column3Tabs", ImGuiTabBarFlags_None)) {
     if (ImGui::BeginTabItem("Status")) {
       RenderStatusTab();
@@ -1045,6 +1166,95 @@ void RunPageUI::RenderColumn3() {
 }
 
 
+// ============================================================================
+// New method: HandlePanelClick
+// ============================================================================
+void RunPageUI::HandlePanelClick(int panelNumber) {
+  // Toggle between normal and expanded state
+  switch (panelNumber) {
+  case 1:
+    if (m_panelState == PanelState::Panel1) {
+      m_panelState = PanelState::Normal; // Collapse back to normal
+    }
+    else {
+      m_panelState = PanelState::Panel1; // Expand panel 1
+    }
+    break;
+
+  case 2:
+    if (m_panelState == PanelState::Panel2) {
+      m_panelState = PanelState::Normal;
+    }
+    else {
+      m_panelState = PanelState::Panel2;
+    }
+    break;
+
+  case 3:
+    if (m_panelState == PanelState::Panel3) {
+      m_panelState = PanelState::Normal;
+    }
+    else {
+      m_panelState = PanelState::Panel3;
+    }
+    break;
+  }
+
+  // Log state change
+  std::string stateStr = "Normal";
+  switch (m_panelState) {
+  case PanelState::Panel1: stateStr = "Panel1 Expanded"; break;
+  case PanelState::Panel2: stateStr = "Panel2 Expanded"; break;
+  case PanelState::Panel3: stateStr = "Panel3 Expanded"; break;
+  default: break;
+  }
+  m_logger->LogInfo("Panel state changed to: " + stateStr);
+}
+
+void RunPageUI::RenderPanelContent(int panelNumber, const ImVec2& size) {
+  switch (panelNumber) {
+  case 1:
+    // Camera content - use full available size
+    if (m_embeddedCameraSubscriber && m_cameraSystemInitialized) {
+      RenderEmbeddedCameraFeed(size);
+    }
+    else {
+      RenderCameraPlaceholder(size, "Camera not available");
+    }
+    break;
+
+  case 2:
+    // Panel 2 content
+    ImGui::BeginChild("Panel2Content", size);
+    ImGui::TextDisabled("Available for\nfuture content");
+
+    // Add some placeholder content when expanded
+    if (m_panelState == PanelState::Panel2) {
+      ImGui::Separator();
+      ImGui::Text("Expanded view for Panel 2");
+      ImGui::Text("Additional content can go here");
+      ImGui::Text("Width: %.0f", size.x);
+      ImGui::Text("Height: %.0f", size.y);
+    }
+    ImGui::EndChild();
+    break;
+
+  case 3:
+    // Panel 3 content
+    ImGui::BeginChild("Panel3Content", size);
+    ImGui::TextDisabled("Available for\nfuture content");
+
+    if (m_panelState == PanelState::Panel3) {
+      ImGui::Separator();
+      ImGui::Text("Expanded view for Panel 3");
+      ImGui::Text("Additional content can go here");
+      ImGui::Text("Width: %.0f", size.x);
+      ImGui::Text("Height: %.0f", size.y);
+    }
+    ImGui::EndChild();
+    break;
+  }
+}
 
 // In RunPageUI constructor or initialization method
 void RunPageUI::InitializeCameraViewport() {
@@ -3053,36 +3263,41 @@ void RunPageUI::ClearEmbeddedCameraFeed() {
   m_embeddedCameraSubscriber.reset();
 }
 
-// NEW: Render embedded camera feed (same logic as Live View)
 void RunPageUI::RenderEmbeddedCameraFeed(const ImVec2& canvasSize) {
   // Use the same texture update system as Live View
   UpdateCameraTexture();
 
   if (m_textureInitialized && m_textureWidth > 0 && m_textureHeight > 0) {
-    // Calculate display size maintaining aspect ratio (same as Live View)
+    // Calculate display size to exactly fill the canvas
     float aspectRatio = (float)m_textureWidth / (float)m_textureHeight;
 
+    // Try to fill width first
     float displayWidth = canvasSize.x;
     float displayHeight = displayWidth / aspectRatio;
 
+    // If height exceeds available, scale by height
     if (displayHeight > canvasSize.y) {
       displayHeight = canvasSize.y;
       displayWidth = displayHeight * aspectRatio;
+
+      // Center horizontally
+      float offsetX = (canvasSize.x - displayWidth) * 0.5f;
+      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
+    }
+    else {
+      // Center vertically if needed
+      float offsetY = (canvasSize.y - displayHeight) * 0.5f;
+      if (offsetY > 0) {
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offsetY);
+      }
     }
 
-    // Center the image (same as Live View)
-    float offsetX = (canvasSize.x - displayWidth) * 0.5f;
-    float offsetY = (canvasSize.y - displayHeight) * 0.5f;
-
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offsetY);
-
-    // Display the image (same as Live View)
+    // Display the image
     ImGui::Image((ImTextureID)(intptr_t)m_cameraTextureID,
       ImVec2(displayWidth, displayHeight));
   }
   else {
-    // Show placeholder (same as Live View)
+    // Show placeholder
     std::string message = "Waiting for video frames...";
     if (m_embeddedCameraSubscriber) {
       message += "\nFrames: " + std::to_string(m_embeddedCameraSubscriber->GetTotalFramesReceived());
@@ -3090,6 +3305,7 @@ void RunPageUI::RenderEmbeddedCameraFeed(const ImVec2& canvasSize) {
     RenderCameraPlaceholder(canvasSize, message);
   }
 }
+
 // Add this auto-recovery logic to your DebugCameraFrameFlow() method
 void RunPageUI::DebugCameraFrameFlow() {
   if (!m_cameraSubscriber || !m_cameraManager) {
@@ -3108,8 +3324,8 @@ void RunPageUI::DebugCameraFrameFlow() {
     uint64_t currentFrameCount = m_cameraSubscriber->GetTotalFramesReceived();
 
     // ADD THIS DEBUG LINE:
-    std::cout << "[DEBUG FLOW CHECK] Subscriber frame count: " << currentFrameCount
-      << " (last was: " << lastFrameCount << ")" << std::endl;
+    //std::cout << "[DEBUG FLOW CHECK] Subscriber frame count: " << currentFrameCount
+    //  << " (last was: " << lastFrameCount << ")" << std::endl;
 
     // Check if frames are still flowing
     if (currentFrameCount == lastFrameCount && currentFrameCount > 0) {

@@ -219,4 +219,18 @@ private:
   bool m_plotInitialized = false;
   // Method to check if plot is initialized
   bool IsPlotInitialized() const { return m_liveDataPlot != nullptr; }
+
+  // Panel expansion state
+  enum class PanelState {
+    Normal,     // All 3 panels visible
+    Panel1,     // Only Panel 1 expanded
+    Panel2,     // Only Panel 2 expanded  
+    Panel3      // Only Panel 3 expanded
+  };
+  PanelState m_panelState = PanelState::Normal;
+
+  // Method to handle panel clicks
+  void HandlePanelClick(int panelNumber);
+  void RenderPanelContent(int panelNumber, const ImVec2& size);
+
 };
