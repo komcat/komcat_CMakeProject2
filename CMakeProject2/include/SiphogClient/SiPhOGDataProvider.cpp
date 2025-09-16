@@ -360,8 +360,8 @@ void SiPhOGDataProvider::PublishDataUpdate(const std::map<std::string, float>& v
       static int callbackCounter = 0;
       callbackCounter++;
       if (callbackCounter % 50 == 1) {
-        DebugLog("*** CALLING CALLBACK *** Device: SiPhOG-Device, Status: " + statusString.substr(0, 80) + "...");
-        DebugLog("Callback function address: " + std::to_string(reinterpret_cast<uintptr_t>(&m_dataCallback)));
+        //DebugLog("*** CALLING CALLBACK *** Device: SiPhOG-Device, Status: " + statusString.substr(0, 80) + "...");
+        //DebugLog("Callback function address: " + std::to_string(reinterpret_cast<uintptr_t>(&m_dataCallback)));
       }
     }
 
@@ -371,7 +371,7 @@ void SiPhOGDataProvider::PublishDataUpdate(const std::map<std::string, float>& v
     if (m_debugMode) {
       static int publishCounter = 0;
       if (++publishCounter % 100 == 1) {
-        DebugLog("Published data: " + statusString.substr(0, 100) + "...");
+        //DebugLog("Published data: " + statusString.substr(0, 100) + "...");
       }
     }
   }

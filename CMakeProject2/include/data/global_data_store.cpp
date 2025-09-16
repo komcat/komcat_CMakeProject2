@@ -430,32 +430,38 @@ void GlobalDataStore::OnGenericDataUpdate(const std::string& providerName,
 	const std::string& deviceName,
 	const std::string& statusString) {
 
-	// DEBUG: Always log SiPhOG callbacks
-	if (providerName.find("SiPhOG") != std::string::npos) {
-		static int siphogCallbackCount = 0;
-		siphogCallbackCount++;
+	if (false) {
+		// DEBUG: Always log SiPhOG callbacks
+		if (providerName.find("SiPhOG") != std::string::npos) {
+			static int siphogCallbackCount = 0;
+			siphogCallbackCount++;
 
-		std::cout << "[DEBUG GlobalDataStore] *** SIPHOG CALLBACK RECEIVED #" << siphogCallbackCount << " ***" << std::endl;
-		std::cout << "[DEBUG GlobalDataStore] Provider: " << providerName << std::endl;
-		std::cout << "[DEBUG GlobalDataStore] Prefix: " << channelPrefix << std::endl;
-		std::cout << "[DEBUG GlobalDataStore] Device: " << deviceName << std::endl;
-		std::cout << "[DEBUG GlobalDataStore] Status: " << statusString.substr(0, 100) << "..." << std::endl;
+			std::cout << "[DEBUG GlobalDataStore] *** SIPHOG CALLBACK RECEIVED #" << siphogCallbackCount << " ***" << std::endl;
+			std::cout << "[DEBUG GlobalDataStore] Provider: " << providerName << std::endl;
+			std::cout << "[DEBUG GlobalDataStore] Prefix: " << channelPrefix << std::endl;
+			std::cout << "[DEBUG GlobalDataStore] Device: " << deviceName << std::endl;
+			std::cout << "[DEBUG GlobalDataStore] Status: " << statusString.substr(0, 100) << "..." << std::endl;
+		}
 	}
+
 
 	std::map<std::string, float> parsedValues;
 	bool parseResult = ParseProviderData(providerName, statusString, parsedValues);
 
-	// DEBUG: Log parse results for SiPhOG
-	if (providerName.find("SiPhOG") != std::string::npos) {
-		std::cout << "[DEBUG GlobalDataStore] Parse result: " << (parseResult ? "SUCCESS" : "FAILED") << std::endl;
-		std::cout << "[DEBUG GlobalDataStore] Parsed values count: " << parsedValues.size() << std::endl;
+	if(false) {
+		// DEBUG: Log parse results for SiPhOG
+		if (providerName.find("SiPhOG") != std::string::npos) {
+			std::cout << "[DEBUG GlobalDataStore] Parse result: " << (parseResult ? "SUCCESS" : "FAILED") << std::endl;
+			std::cout << "[DEBUG GlobalDataStore] Parsed values count: " << parsedValues.size() << std::endl;
 
-		if (parseResult) {
-			for (const auto& [key, value] : parsedValues) {
-				std::cout << "[DEBUG GlobalDataStore]   " << key << " = " << value << std::endl;
+			if (parseResult) {
+				for (const auto& [key, value] : parsedValues) {
+					std::cout << "[DEBUG GlobalDataStore]   " << key << " = " << value << std::endl;
+				}
 			}
 		}
 	}
+
 
 	if (parseResult) {
 		// Store values with appropriate channel names
@@ -463,9 +469,11 @@ void GlobalDataStore::OnGenericDataUpdate(const std::string& providerName,
 			std::string channelName = channelPrefix + deviceName + "-" + key;
 			SetValue(channelName, value);
 
-			// DEBUG: Log channel creation for SiPhOG
-			if (providerName.find("SiPhOG") != std::string::npos) {
-				std::cout << "[DEBUG GlobalDataStore] Created channel: " << channelName << " = " << value << std::endl;
+			// DEBUG: Log channel creation for SiPhOGif
+			if (false) {
+				if (providerName.find("SiPhOG") != std::string::npos) {
+					std::cout << "[DEBUG GlobalDataStore] Created channel: " << channelName << " = " << value << std::endl;
+				}
 			}
 		}
 
@@ -493,11 +501,14 @@ bool GlobalDataStore::ParseProviderData(const std::string& providerName,
 	std::map<std::string, float>& values) {
 
 	// DEBUG: Log all SiPhOG parse attempts
-	if (providerName.find("SiPhOG") != std::string::npos) {
-		std::cout << "[DEBUG GlobalDataStore] *** PARSING SIPHOG DATA ***" << std::endl;
-		std::cout << "[DEBUG GlobalDataStore] Provider: " << providerName << std::endl;
-		std::cout << "[DEBUG GlobalDataStore] Status: " << statusString << std::endl;
+	if (false) {
+		if (providerName.find("SiPhOG") != std::string::npos) {
+			std::cout << "[DEBUG GlobalDataStore] *** PARSING SIPHOG DATA ***" << std::endl;
+			std::cout << "[DEBUG GlobalDataStore] Provider: " << providerName << std::endl;
+			std::cout << "[DEBUG GlobalDataStore] Status: " << statusString << std::endl;
+		}
 	}
+
 
 	// Handle common error cases
 	if (statusString.find("Status read failed") != std::string::npos ||
@@ -557,7 +568,7 @@ bool GlobalDataStore::ParseProviderData(const std::string& providerName,
 
 	// NEW: Add SiPhOG-specific parsing
 	else if (providerName.find("SiPhOG") != std::string::npos) {
-		std::cout << "[DEBUG GlobalDataStore] Parsing SiPhOG format..." << std::endl;
+		//std::cout << "[DEBUG GlobalDataStore] Parsing SiPhOG format..." << std::endl;
 
 		// Parse SiPhOG format: "Connected | Output: ON | SLED_Current: 100.000 | Photo_Current: 134.586 | ..."
 
@@ -584,7 +595,7 @@ bool GlobalDataStore::ParseProviderData(const std::string& providerName,
 					float value = std::stof(valueStr);
 					values[channel] = value;
 
-					std::cout << "[DEBUG GlobalDataStore] Parsed " << channel << " = " << value << std::endl;
+					//std::cout << "[DEBUG GlobalDataStore] Parsed " << channel << " = " << value << std::endl;
 				}
 				catch (const std::exception& e) {
 					std::cout << "[DEBUG GlobalDataStore] Failed to parse " << channel << " from '" << valueStr << "': " << e.what() << std::endl;
@@ -595,7 +606,9 @@ bool GlobalDataStore::ParseProviderData(const std::string& providerName,
 			}
 		}
 
-		std::cout << "[DEBUG GlobalDataStore] SiPhOG parsing complete. Found " << values.size() << " values" << std::endl;
+		if(false) {
+			std::cout << "[DEBUG GlobalDataStore] SiPhOG parsing complete. Found " << values.size() << " values" << std::endl;
+			}
 		return !values.empty();
 	}
 
