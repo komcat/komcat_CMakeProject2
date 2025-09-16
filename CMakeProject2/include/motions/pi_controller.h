@@ -55,6 +55,7 @@ public:
   bool IsMoving(const std::string& axis);
   bool GetPosition(const std::string& axis, double& position);
   bool GetPositions(std::map<std::string, double>& positions);
+	float GetAxisPositionFloat(const std::string& axis);
 
   // Servo control
   bool EnableServo(const std::string& axis, bool enable);

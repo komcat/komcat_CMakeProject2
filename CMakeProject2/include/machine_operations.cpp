@@ -79,6 +79,9 @@ m_autoExposureEnabled(true)
 
   m_logger->LogInfo("MachineOperations: Initialized" +
     std::string(m_smuOps ? " with SMU support" : ""));
+
+  // Initialize GlobalMotionController
+  InitializeGlobalMotion();
 }
 
 
@@ -134,11 +137,51 @@ m_autoExposureEnabled(true)
 
   m_logger->LogInfo("MachineOperations: Initialized with CameraManager" +
     std::string(m_smuOps ? " and SMU support" : ""));
+
+
+  InitializeGlobalMotion();
 }
 
 
 MachineOperations::~MachineOperations() {
   m_logger->LogInfo("MachineOperations: Shutting down");
+}
+
+
+
+void MachineOperations::InitializeGlobalMotion(const std::string& matrixFile) {
+  m_logger->LogInfo("MachineOperations: Initializing GlobalMotionController");
+
+  // Create the global motion controller
+  m_globalMotionController = std::make_unique<GlobalMotionController>();
+
+  // Pass the existing controller managers
+  m_globalMotionController->SetPIController(&m_piControllerManager);
+  m_globalMotionController->SetACSController(&m_motionLayer.GetACSControllerManager());
+
+  // Load transformation matrices
+  if (!matrixFile.empty()) {
+    if (m_globalMotionController->LoadTransformationMatrices(matrixFile)) {
+      m_logger->LogInfo("MachineOperations: Loaded transformation matrices from " + matrixFile);
+    }
+    else {
+      m_logger->LogWarning("MachineOperations: Using default transformation matrices");
+    }
+  }
+
+  // Set global limits
+  GlobalLimits limits;
+  limits.minX = -150; limits.maxX = 150;
+  limits.minY = -150; limits.maxY = 150;
+  limits.minZ = -50; limits.maxZ = 50;
+  m_globalMotionController->SetGlobalLimits(limits);
+
+  // Set up status callback
+  m_globalMotionController->SetStatusCallback([this](const std::string& msg) {
+    this->LogInfo("GlobalMotion: " + msg);
+  });
+
+  m_logger->LogInfo("MachineOperations: GlobalMotionController initialized");
 }
 
 

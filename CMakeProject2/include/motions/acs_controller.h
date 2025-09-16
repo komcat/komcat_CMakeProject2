@@ -42,12 +42,20 @@ public:
   bool HomeAxis(const std::string& axis);
   bool StopAxis(const std::string& axis);
   bool StopAllAxes();
+  bool StopAllMotion();
+
+
+  //usage result = controller->MoveToAbsolutePosition(deviceX, deviceY, deviceZ, velocity);
+	bool MoveToAbsolutePosition(double x, double y, double z, double velocity, bool blocking = true);
 
   // Status methods
   bool IsMoving(const std::string& axis);
+  bool IsInMotion();
   bool GetPosition(const std::string& axis, double& position);
+	float GetAxisPositionFloat(const std::string& axis);
   bool GetPositions(std::map<std::string, double>& positions);
-
+	PositionStruct GetCurrentPosition(); // New method to get all axes positions X Y Z
+  
   // Servo control
   bool EnableServo(const std::string& axis, bool enable);
   bool IsServoEnabled(const std::string& axis, bool& enabled);

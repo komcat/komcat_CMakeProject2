@@ -21,7 +21,7 @@
 #include <memory>
 #include <chrono>
 #include <SDL_opengl.h>  // NEW: For OpenGL texture management
-
+#include "EmbeddedJogControl.h"
 // Forward declarations
 class CameraManager;
 
@@ -51,6 +51,7 @@ private:
   ImFont* m_imguiFont = nullptr;
   UserPromptUI* m_promptUI = nullptr;
   std::unique_ptr<OperationsDisplayUI> m_operationsDisplayUI;
+  std::unique_ptr<EmbeddedJogControl> m_jogControl;
 
   // UI state
   std::string m_statusMessage = "Ready";

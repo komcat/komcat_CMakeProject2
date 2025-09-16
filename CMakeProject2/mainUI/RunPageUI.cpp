@@ -7,6 +7,7 @@
 #include "ProcessRegistry.h"
 #include "LiveVideoSubscriber.h"
 #include "ManualAdjustmentOperation.h"
+
 // UPDATE RunPageUI.cpp - Constructor
 
 // NEW: Add to constructor
@@ -34,6 +35,26 @@ RunPageUI::RunPageUI(MachineOperations& machineOps)
   m_operationsDisplayUI = std::make_unique<OperationsDisplayUI>(machineOps);
 
   m_logger->LogInfo("RunPageUI: Initialized with process filtering and operations display support");
+
+  // Initialize embedded jog control
+  if (auto* globalMotion = m_machineOps.GetGlobalMotionController()) {
+    m_jogControl = std::make_unique<EmbeddedJogControl>(*globalMotion);
+    m_jogControl->SetCompactMode(false);
+    m_jogControl->SetShowPositionDisplay(true);
+    m_jogControl->SetShowTransformMatrix(true);
+
+    m_jogControl->SetStatusCallback([this](const std::string& msg) {
+      UpdateStatus("Jog: " + msg);
+    });
+
+    m_logger->LogInfo("RunPageUI: Embedded jog control initialized");
+  }
+  else {
+    m_logger->LogWarning("RunPageUI: GlobalMotionController not available");
+  }
+
+
+
 }
 
 RunPageUI::~RunPageUI() {
@@ -631,9 +652,32 @@ void RunPageUI::RenderProcessConfigTab() {
 }
 
 // New placeholder function for jog control
+
+// RenderJogControlTab remains the same
 void RunPageUI::RenderJogControlTab() {
-  ImGui::Text("Global Jog Controls place holder");
-  
+  if (m_jogControl) {
+    m_jogControl->Render();
+  }
+  else {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+      "Jog Control Not Available");
+    ImGui::Spacing();
+    ImGui::TextWrapped("Global motion controller is not initialized.");
+
+    // Try to initialize on demand
+    if (ImGui::Button("Initialize Motion Control")) {
+      m_machineOps.InitializeGlobalMotion();
+      if (auto* globalMotion = m_machineOps.GetGlobalMotionController()) {
+        m_jogControl = std::make_unique<EmbeddedJogControl>(*globalMotion);
+        m_jogControl->SetCompactMode(false);
+        m_jogControl->SetShowPositionDisplay(true);
+        m_jogControl->SetStatusCallback([this](const std::string& msg) {
+          UpdateStatus("Jog: " + msg);
+        });
+        UpdateStatus("Jog control initialized");
+      }
+    }
+  }
 }
 
 
