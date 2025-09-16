@@ -1,4 +1,7 @@
-﻿#include <iostream>
+﻿
+
+
+#include <iostream>
 #include <SDL.h>
 #include <SDL_opengl.h>
 
@@ -43,6 +46,8 @@
 #include "include/scanning/grid_volume_scanner_manager.h"
 #include "include/vision/VisionCameraExposureUI.h"
 #include "include/data/DUTDatabaseViewerUI.h"
+#include "include/SiphogClient/SiPhOGClientDebugUI.h"
+#include "include/SiphogClient/SiPhOGManager.h"
 
 
 // Keep your debug function as-is
@@ -310,7 +315,7 @@ int main(int argc, char* argv[])
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
 	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-	SDL_Window* window = SDL_CreateWindow(Version::getWindowTitle().c_str(),
+	SDL_Window* window = SDL_CreateWindow(("SAA_ANELLO " + Version::getWindowTitle()).c_str(),
 		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 		1200, 800, window_flags);
 
@@ -672,6 +677,48 @@ int main(int argc, char* argv[])
 	}
 
 
+	auto siphogDebugUI = std::make_unique<SiPhOGClientDebugUI>();
+
+	// Register with menu manager
+	if (menuManager && siphogDebugUI) {
+		menuManager->RegisterUI("siphog_debug", siphogDebugUI.get(), "Network");
+		logger->LogInfo("✅ Registered SiPhOG Debug UI with menu system");
+	}
+
+	// ===========================================
+// PHASE 3.6: CREATE SIPHOG PRODUCTION CLIENT
+// ===========================================
+
+	logger->LogInfo("Creating SiPhOG production client...");
+
+	// Create SiPhOG manager for production data integration
+	auto siphogManager = std::make_unique<SiPhOGManager>("127.0.0.1", 65432);
+	siphogManager->SetDebugMode(true);  // Enable for troubleshooting
+	siphogManager->SetChannelPrefix("SiPhOG-");
+
+	// Initialize the manager (subscribes to GlobalDataStore)
+	if (siphogManager->Initialize()) {
+		logger->LogInfo("✅ SiPhOG manager initialized successfully");
+
+		// Optionally auto-connect and start data collection
+		if (siphogManager->Connect()) {
+			logger->LogInfo("✅ SiPhOG connected to server");
+
+			if (siphogManager->StartDataCollection()) {
+				logger->LogInfo("✅ SiPhOG data collection started");
+				logger->LogInfo("📊 SiPhOG data now available in GlobalDataStore");
+			}
+			else {
+				logger->LogWarning("⚠️ Failed to start SiPhOG data collection");
+			}
+		}
+		else {
+			logger->LogInfo("ℹ️ SiPhOG server not available (will retry later)");
+		}
+	}
+	else {
+		logger->LogError("❌ Failed to initialize SiPhOG manager");
+	}
 
 
 	// ===========================================
@@ -764,6 +811,28 @@ int main(int argc, char* argv[])
 		if(dutViewerUI){
 			dutViewerUI->Render();
 		}
+
+		// Render SiPhOG Debug UI (now uses IImguiUI interface)
+		if (siphogDebugUI) {
+			siphogDebugUI->Render();
+		}
+
+		// Optional: Monitor SiPhOG connection and retry
+		if (siphogManager) {
+			static auto lastSiPhOGCheck = std::chrono::steady_clock::now();
+			auto now = std::chrono::steady_clock::now();
+			if (std::chrono::duration_cast<std::chrono::seconds>(now - lastSiPhOGCheck).count() >= 10) {
+				if (!siphogManager->IsConnected()) {
+					// Try to reconnect every 10 seconds if disconnected
+					logger->LogInfo("🔄 Attempting SiPhOG reconnection...");
+					if (siphogManager->Connect()) {
+						siphogManager->StartDataCollection();
+					}
+				}
+				lastSiPhOGCheck = now;
+			}
+		}
+
 
 
 #pragma region rayLibwindow
@@ -931,7 +1000,11 @@ int main(int argc, char* argv[])
 		raylibManager.reset();
 	}
 
-
+	// Shutdown SiPhOG manager
+	if (siphogManager) {
+		logger->LogInfo("Shutting down SiPhOG manager...");
+		siphogManager->Shutdown();  // Stops data collection and unsubscribes
+	}
 
 
 	// ===========================================
@@ -1007,6 +1080,8 @@ int main(int argc, char* argv[])
 		hardware.laser->DisconnectAll();
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
+
+
 
 
 

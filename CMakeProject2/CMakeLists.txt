@@ -733,7 +733,17 @@ add_executable(uaa3App
     "include/motions/IGantryManager.h" 
     "include/motions/ACSGantryAdapter.h" 
 
-     "include/camera/CameraViewport.h" "include/camera/CameraViewport.cpp" "include/data/LiveDataPlot.h" "include/data/LiveDataPlot.cpp")
+     "include/camera/CameraViewport.h"
+     "include/camera/CameraViewport.cpp"
+     "include/data/LiveDataPlot.h" 
+     "include/data/LiveDataPlot.cpp" 
+     "include/SiphogClient/SiphogClient.h" 
+     "include/SiphogClient/SiphogClient.cpp" 
+     "include/SiphogClient/SiPhOGClientDebugUI.h"
+     "include/SiphogClient/SiPhOGClientDebugUI.cpp"
+     "include/SiphogClient/SocketWrapper.h"
+     "include/SiphogClient/SocketWrapper.cpp"
+      "include/SiphogClient/SiPhOGDataProvider.h" "include/SiphogClient/SiPhOGDataProvider.cpp" "include/SiphogClient/SiPhOGManager.h" "include/SiphogClient/SiPhOGManager.cpp")
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
