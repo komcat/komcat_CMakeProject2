@@ -318,6 +318,33 @@ void ACSController::Disconnect() {
   m_logger->LogInfo("ACSController: Disconnected from controller");
 }
 
+bool ACSController::MoveToAbsolutePosition(double x, double y, double z, double velocity, bool blocking) {
+  if (!m_isConnected) {
+    m_logger->LogError("ACSController: Cannot move to absolute position - not connected");
+    return false;
+  }
+  // Set velocities for each axis
+  if (!SetVelocity("X", velocity) || !SetVelocity("Y", velocity) || !SetVelocity("Z", velocity)) {
+    return false;
+  }
+  // Move each axis to the specified position
+  if (!MoveToPosition("X", x, false) ||
+      !MoveToPosition("Y", y, false) ||
+      !MoveToPosition("Z", z, false)) {
+    return false;
+  }
+  // If blocking mode, wait for all axes to complete motion
+  if (blocking) {
+    bool success = true;
+    success &= WaitForMotionCompletion("X");
+    success &= WaitForMotionCompletion("Y");
+    success &= WaitForMotionCompletion("Z");
+    return success;
+  }
+  return true;
+}
+
+
 bool ACSController::MoveToPosition(const std::string& axis, double position, bool blocking) {
   if (!m_isConnected) {
     m_logger->LogError("ACSController: Cannot move axis - not connected");
@@ -455,6 +482,10 @@ bool ACSController::StopAxis(const std::string& axis) {
   return true;
 }
 
+bool ACSController::StopAllMotion() {
+  return StopAllAxes();
+}
+
 bool ACSController::StopAllAxes() {
   if (!m_isConnected) {
     m_logger->LogError("ACSController: Cannot stop all axes - not connected");
@@ -471,6 +502,20 @@ bool ACSController::StopAllAxes() {
   }
 
   return true;
+}
+
+
+bool ACSController::IsInMotion() {
+  if (!m_isConnected) {
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(m_mutex);
+  for (const auto& [axis, moving] : m_axisMoving) {
+    if (moving) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // In ACSController.cpp - modify IsMoving to use cached values
@@ -519,6 +564,14 @@ bool ACSController::IsMoving(const std::string& axis) {
 }
 
 
+float ACSController::GetAxisPositionFloat(const std::string& axis) {
+  double position = 0.0;
+  if (GetPosition(axis, position)) {
+    return static_cast<float>(position);
+  }
+  return 0.0f; // Default if unable to get position
+}
+
 // Modify logging in performance-critical areas
 // For example, in GetPosition method:
 bool ACSController::GetPosition(const std::string& axis, double& position) {
@@ -543,7 +596,22 @@ bool ACSController::GetPosition(const std::string& axis, double& position) {
   return true;
 }
 
-
+PositionStruct ACSController::GetCurrentPosition() {
+  PositionStruct pos = { 0.0, 0.0, 0.0 };
+  std::map<std::string, double> positions;
+  if (GetPositions(positions)) {
+    if (positions.find("X") != positions.end()) {
+      pos.x = positions["X"];
+    }
+    if (positions.find("Y") != positions.end()) {
+      pos.y = positions["Y"];
+    }
+    if (positions.find("Z") != positions.end()) {
+      pos.z = positions["Z"];
+    }
+  }
+  return pos;
+}
 
 // In ACSController::GetPositions - modify to use batch queries
 bool ACSController::GetPositions(std::map<std::string, double>& positions) {

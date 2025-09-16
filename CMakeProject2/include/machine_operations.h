@@ -28,6 +28,7 @@
 #include "include/data/OperationResultsManager.h"
 #include "include/camera/CameraManager.h"
 #include "include/vision/VisionCameraExposureManager.h"
+#include "GlobalMotionController.h"
 // Add these includes at the top:
 
 #include <string>
@@ -702,6 +703,37 @@ protected:
 	};
 
 	std::map<std::string, std::unique_ptr<ChannelRecorder>> m_activeRecorders;
+
+	// Helper to create and register a recorder
+	public:
+		AppContext* GetAppContext() const { return m_appContext; }
+		// or
+		PIControllerManager* GetPIController() const {
+			return m_appContext ? m_appContext->GetPIController() : nullptr;
+		}
+		ACSControllerManager* GetACSController() const {
+			return m_appContext ? m_appContext->GetACSController() : nullptr;
+		}
+
+		MotionConfigManager* GetMotionConfigManager() const {
+			return m_appContext ? m_appContext->GetMotionConfig() : nullptr;
+		}
+
+		MotionControlLayer* GetMotionControl() const {
+			return m_appContext ? m_appContext->GetMotionControlLayer() : nullptr;
+		}
+		// Global motion controller access
+		GlobalMotionController* GetGlobalMotionController() { return m_globalMotionController.get(); }
+		const GlobalMotionController* GetGlobalMotionController() const { return m_globalMotionController.get(); }
+
+		// Initialize global motion controller
+		void InitializeGlobalMotion(const std::string& matrixFile = "transformation_matrix.json");
+
+private:
+	AppContext* m_appContext = nullptr;
+
+	// Add GlobalMotionController member
+	std::unique_ptr<GlobalMotionController> m_globalMotionController;
 
 };
 

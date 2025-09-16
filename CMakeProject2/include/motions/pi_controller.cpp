@@ -849,6 +849,15 @@ bool PIController::MoveToNamedPosition(const std::string& deviceName, const std:
 	return true;
 }
 
+
+float PIController::GetAxisPositionFloat(const std::string& axis) {
+	double position = 0.0;
+	if (GetPosition(axis, position)) {
+		return static_cast<float>(position);
+	}
+	return 0.0f;  // Return 0 if unable to get position
+}
+
 // Update UI rendering to match the new axis identifiers
 // Optimize the individual GetPosition by using cached positions when possible
 bool PIController::GetPosition(const std::string& axis, double& position) {
