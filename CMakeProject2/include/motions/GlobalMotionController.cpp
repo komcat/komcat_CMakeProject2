@@ -493,7 +493,7 @@ void GlobalMotionController::ExecuteMovementThread(const std::string& deviceId,
         PIController* controller = m_piController->GetController(deviceId);
         if (controller && controller->IsConnected()) {
           // Set velocity
-          controller->SetSystemVelocity(velocity);
+          //controller->SetSystemVelocity(velocity);
 
           // Move to position WITHOUT waiting
           result = controller->MoveToPosition("X", deviceX, false) &&  // false = non-blocking

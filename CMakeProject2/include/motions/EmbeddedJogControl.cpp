@@ -254,9 +254,9 @@ void EmbeddedJogControl::RenderCompactJogButtons() {
   ImGui::SameLine();
   if (ImGui::Button("+X", ImVec2(btnSize, btnSize))) HandleJogMovement(0, m_jogState.stepSize);
   ImGui::SameLine();
-  if (ImGui::Button("-Y", ImVec2(btnSize, btnSize))) HandleJogMovement(1, -m_jogState.stepSize);
+  if (ImGui::Button("-Y", ImVec2(btnSize, btnSize))) HandleJogMovement(1, m_jogState.stepSize);
   ImGui::SameLine();
-  if (ImGui::Button("+Y", ImVec2(btnSize, btnSize))) HandleJogMovement(1, m_jogState.stepSize);
+  if (ImGui::Button("+Y", ImVec2(btnSize, btnSize))) HandleJogMovement(1, -m_jogState.stepSize);
   ImGui::SameLine();
   if (ImGui::Button("-Z", ImVec2(btnSize, btnSize))) HandleJogMovement(2, -m_jogState.stepSize);
   ImGui::SameLine();
@@ -374,11 +374,11 @@ void EmbeddedJogControl::ProcessKeyboardInput() {
     UpdateStatus("Key: +X");
   }
   if (ImGui::IsKeyPressed(ImGuiKey_W)) {
-    HandleJogMovement(1, m_jogState.stepSize);
+    HandleJogMovement(1, -m_jogState.stepSize);
     UpdateStatus("Key: +Y");
   }
   if (ImGui::IsKeyPressed(ImGuiKey_S)) {
-    HandleJogMovement(1, -m_jogState.stepSize);
+    HandleJogMovement(1, m_jogState.stepSize);
     UpdateStatus("Key: -Y");
   }
   if (ImGui::IsKeyPressed(ImGuiKey_R)) {

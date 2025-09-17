@@ -59,6 +59,7 @@ private:
   void RenderTransformMatrixInfo();
   void RenderStopButton();
 
+
   // Helper methods
   void HandleJogMovement(int axis, float distance);
   std::string GetDeviceIdFromSelection(int selection);
