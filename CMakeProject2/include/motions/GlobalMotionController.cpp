@@ -492,24 +492,16 @@ void GlobalMotionController::ExecuteMovementThread(const std::string& deviceId,
       if (m_piController) {
         PIController* controller = m_piController->GetController(deviceId);
         if (controller && controller->IsConnected()) {
-          // Set velocity first
-
+          // Set velocity
           controller->SetSystemVelocity(velocity);
-          //controller->SetVelocity("X", velocity);
-          //controller->SetVelocity("Y", velocity);
-          //controller->SetVelocity("Z", velocity);
 
-          // Move to position
-          result = controller->MoveToPosition("X", deviceX) &&
-            controller->MoveToPosition("Y", deviceY) &&
-            controller->MoveToPosition("Z", deviceZ);
+          // Move to position WITHOUT waiting
+          result = controller->MoveToPosition("X", deviceX, false) &&  // false = non-blocking
+            controller->MoveToPosition("Y", deviceY, false) &&
+            controller->MoveToPosition("Z", deviceZ, false);
 
-          // Wait for motion to complete
-          while (controller->IsMoving("X") ||
-            controller->IsMoving("Y") ||
-            controller->IsMoving("Z")) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-          }
+          // Don't wait for completion - allow immediate target updates
+          LogStatus(result ? "Movement command sent" : "Movement command failed");
         }
       }
     }
@@ -517,17 +509,13 @@ void GlobalMotionController::ExecuteMovementThread(const std::string& deviceId,
       if (m_acsController) {
         ACSController* controller = m_acsController->GetController(deviceId);
         if (controller && controller->IsConnected()) {
-          result = controller->MoveToAbsolutePosition(deviceX, deviceY, deviceZ, velocity);
+          // Non-blocking move for ACS
+          result = controller->MoveToAbsolutePosition(deviceX, deviceY, deviceZ, velocity, false);
 
-          // Wait for motion to complete
-          while (controller->IsInMotion()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-          }
+          LogStatus(result ? "Movement command sent" : "Movement command failed");
         }
       }
     }
-
-    LogStatus(result ? "Movement completed" : "Movement failed");
   }
   catch (const std::exception& e) {
     LogStatus("Movement error: " + std::string(e.what()));
@@ -535,6 +523,8 @@ void GlobalMotionController::ExecuteMovementThread(const std::string& deviceId,
 
   m_movementPending = false;
 }
+
+
 
 bool GlobalMotionController::JogGlobalAsync(const std::string& deviceId,
   int globalAxis, float distance,
