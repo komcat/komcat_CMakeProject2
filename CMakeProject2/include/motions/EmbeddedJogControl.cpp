@@ -190,7 +190,7 @@ void EmbeddedJogControl::RenderJogButtons() {
   ImGui::PushStyleColor(ImGuiCol_Button, activeColor);
   ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
   if (ImGui::Button(m_keyboardEnabled ? "+Y [W]" : "+Y", ImVec2(buttonSize, buttonSize))) {
-    HandleJogMovement(1, m_jogState.stepSize);
+    HandleJogMovement(1, -m_jogState.stepSize);
   }
   ImGui::PopStyleColor(2);
 
@@ -223,7 +223,7 @@ void EmbeddedJogControl::RenderJogButtons() {
   ImGui::PushStyleColor(ImGuiCol_Button, activeColor);
   ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
   if (ImGui::Button(m_keyboardEnabled ? "-Y [S]" : "-Y", ImVec2(buttonSize, buttonSize))) {
-    HandleJogMovement(1, -m_jogState.stepSize);
+    HandleJogMovement(1, m_jogState.stepSize);
   }
   ImGui::PopStyleColor(2);
 

@@ -288,10 +288,12 @@ void GlobalMotionController::GlobalToDevice(const std::string& deviceId,
   float& deviceX, float& deviceY, float& deviceZ) const {
   auto it = m_transformMatrices.find(deviceId);
   if (it != m_transformMatrices.end()) {
-    // Apply inverse transformation (transpose for rotation matrices)
-    Matrix3x3 inverse = it->second.GetInverse();
-    deviceX = globalX; deviceY = globalY; deviceZ = globalZ;
-    inverse.Transform(deviceX, deviceY, deviceZ);
+    // Apply transformation directly (not inverse!)
+    // This matches your legacy GlobalJogPanel behavior
+    const Matrix3x3& matrix = it->second;
+    deviceX = matrix.m[0][0] * globalX + matrix.m[0][1] * globalY + matrix.m[0][2] * globalZ;
+    deviceY = matrix.m[1][0] * globalX + matrix.m[1][1] * globalY + matrix.m[1][2] * globalZ;
+    deviceZ = matrix.m[2][0] * globalX + matrix.m[2][1] * globalY + matrix.m[2][2] * globalZ;
   }
   else {
     // No transformation, use identity
@@ -306,9 +308,10 @@ void GlobalMotionController::DeviceToGlobal(const std::string& deviceId,
   float& globalX, float& globalY, float& globalZ) const {
   auto it = m_transformMatrices.find(deviceId);
   if (it != m_transformMatrices.end()) {
-    // Apply forward transformation
+    // For device-to-global, NOW we need the inverse
+    Matrix3x3 inverse = it->second.GetInverse();
     globalX = deviceX; globalY = deviceY; globalZ = deviceZ;
-    it->second.Transform(globalX, globalY, globalZ);
+    inverse.Transform(globalX, globalY, globalZ);
   }
   else {
     // No transformation, use identity
