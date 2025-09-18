@@ -58,7 +58,10 @@ private:
   void RenderPositionDisplay();
   void RenderTransformMatrixInfo();
   void RenderStopButton();
-
+  // Add this method declaration in private section:
+  void HandleHexapodRotation(int rotAxis, float degrees);
+  void RenderRotationalJogButtons();
+  void RenderCompactRotationalJogButtons();
 
   // Helper methods
   void HandleJogMovement(int axis, float distance);
