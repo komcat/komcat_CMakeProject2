@@ -1,4 +1,5 @@
 #include "EmbeddedJogControl.h"
+#include "pi_controller_manager.h"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -36,7 +37,6 @@ void EmbeddedJogControl::Render(const std::string& title) {
   ImGui::Spacing();
 
   // Keyboard enable toggle with visual feedback
-  // FIXED: Capture state before button click to avoid push/pop mismatch
   bool wasKeyboardEnabled = m_keyboardEnabled;
 
   if (wasKeyboardEnabled) {
@@ -49,7 +49,7 @@ void EmbeddedJogControl::Render(const std::string& title) {
     UpdateStatus(m_keyboardEnabled ? "Keyboard control enabled" : "Keyboard control disabled");
   }
 
-  if (wasKeyboardEnabled) {  // Use captured state, not current state
+  if (wasKeyboardEnabled) {
     ImGui::PopStyleColor(2);
   }
 
@@ -90,11 +90,14 @@ void EmbeddedJogControl::Render(const std::string& title) {
     ImGui::Spacing();
   }
 
+  // Render linear jog buttons
   if (m_compactMode) {
     RenderCompactJogButtons();
+    RenderCompactRotationalJogButtons();  // ADD THIS LINE
   }
   else {
     RenderJogButtons();
+    RenderRotationalJogButtons();  // ADD THIS LINE
   }
 
   if (m_showPositionDisplay) {
@@ -113,7 +116,6 @@ void EmbeddedJogControl::Render(const std::string& title) {
   ImGui::Spacing();
   RenderStopButton();
 }
-
 
 
 void EmbeddedJogControl::RenderDeviceSelector() {
@@ -254,9 +256,9 @@ void EmbeddedJogControl::RenderCompactJogButtons() {
   ImGui::SameLine();
   if (ImGui::Button("+X", ImVec2(btnSize, btnSize))) HandleJogMovement(0, m_jogState.stepSize);
   ImGui::SameLine();
-  if (ImGui::Button("-Y", ImVec2(btnSize, btnSize))) HandleJogMovement(1, -m_jogState.stepSize);
+  if (ImGui::Button("-Y", ImVec2(btnSize, btnSize))) HandleJogMovement(1, m_jogState.stepSize);
   ImGui::SameLine();
-  if (ImGui::Button("+Y", ImVec2(btnSize, btnSize))) HandleJogMovement(1, m_jogState.stepSize);
+  if (ImGui::Button("+Y", ImVec2(btnSize, btnSize))) HandleJogMovement(1, -m_jogState.stepSize);
   ImGui::SameLine();
   if (ImGui::Button("-Z", ImVec2(btnSize, btnSize))) HandleJogMovement(2, -m_jogState.stepSize);
   ImGui::SameLine();
@@ -374,11 +376,11 @@ void EmbeddedJogControl::ProcessKeyboardInput() {
     UpdateStatus("Key: +X");
   }
   if (ImGui::IsKeyPressed(ImGuiKey_W)) {
-    HandleJogMovement(1, m_jogState.stepSize);
+    HandleJogMovement(1, -m_jogState.stepSize);
     UpdateStatus("Key: +Y");
   }
   if (ImGui::IsKeyPressed(ImGuiKey_S)) {
-    HandleJogMovement(1, -m_jogState.stepSize);
+    HandleJogMovement(1, m_jogState.stepSize);
     UpdateStatus("Key: -Y");
   }
   if (ImGui::IsKeyPressed(ImGuiKey_R)) {
@@ -391,3 +393,148 @@ void EmbeddedJogControl::ProcessKeyboardInput() {
   }
 }
 
+void EmbeddedJogControl::HandleHexapodRotation(int rotAxis, float degrees) {
+  // rotAxis: 0=U(Roll), 1=V(Pitch), 2=W(Yaw)
+
+  // Only for hexapod devices
+  if (m_jogState.selectedDevice >= 3) {
+    UpdateStatus("Rotation not available for gantry");
+    return;
+  }
+
+  // Check if already moving
+  if (m_motionController.IsAnyMovementPending()) {
+    UpdateStatus("Movement already in progress");
+    return;
+  }
+
+  // Get the PI controller manager
+  auto* piControllerManager = m_motionController.GetPIController();
+  if (!piControllerManager) {
+    UpdateStatus("PI Controller Manager not available");
+    return;
+  }
+
+  // Get the specific controller for this device
+  auto* controller = piControllerManager->GetController(m_jogState.activeDeviceId);
+  if (!controller) {
+    UpdateStatus("Controller not found for " + m_jogState.activeDeviceId);
+    return;
+  }
+
+  // Map axis index to PI axis names
+  std::string axisName;
+  switch (rotAxis) {
+  case 0: axisName = "U"; break;
+  case 1: axisName = "V"; break;
+  case 2: axisName = "W"; break;
+  default: return;
+  }
+
+  m_isMoving = true;
+
+  // Call MoveRelative on the specific controller
+  bool success = controller->MoveRelative(axisName, degrees);
+
+  if (success) {
+    std::stringstream ss;
+    ss << std::fixed << std::setprecision(3);
+    ss << "Rotating " << axisName << ": " << std::showpos << degrees << " deg";
+    UpdateStatus(ss.str());
+  }
+  else {
+    UpdateStatus("Rotation failed!");
+    m_isMoving = false;
+  }
+}
+
+
+// Update RenderRotationalJogButtons - no keyboard shortcuts
+void EmbeddedJogControl::RenderRotationalJogButtons() {
+  // Only show for hexapod devices
+  if (m_jogState.selectedDevice >= 3) {
+    return;
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  ImGui::Text("Hexapod Rotation (Local):");
+
+  float buttonSize = 60.0f;
+  ImVec4 activeColor = ImVec4(0.6f, 0.2f, 0.6f, 1.0f);
+  ImVec4 hoverColor = ImVec4(0.7f, 0.3f, 0.7f, 1.0f);
+
+  // Calculate rotation step in degrees
+  float rotStep = m_jogState.stepSize * 10.0f; // Convert mm to degrees
+
+  // U (Roll) controls
+  ImGui::Text("U (Roll):");
+  ImGui::SameLine();
+  ImGui::PushStyleColor(ImGuiCol_Button, activeColor);
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
+  if (ImGui::Button("-U", ImVec2(buttonSize, buttonSize / 2))) {
+    HandleHexapodRotation(0, -rotStep);
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("+U", ImVec2(buttonSize, buttonSize / 2))) {
+    HandleHexapodRotation(0, rotStep);
+  }
+  ImGui::PopStyleColor(2);
+
+  // V (Pitch) controls
+  ImGui::Text("V (Pitch):");
+  ImGui::SameLine();
+  ImGui::PushStyleColor(ImGuiCol_Button, activeColor);
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
+  if (ImGui::Button("-V", ImVec2(buttonSize, buttonSize / 2))) {
+    HandleHexapodRotation(1, -rotStep);
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("+V", ImVec2(buttonSize, buttonSize / 2))) {
+    HandleHexapodRotation(1, rotStep);
+  }
+  ImGui::PopStyleColor(2);
+
+  // W (Yaw) controls
+  ImGui::Text("W (Yaw):");
+  ImGui::SameLine();
+  ImGui::PushStyleColor(ImGuiCol_Button, activeColor);
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
+  if (ImGui::Button("-W", ImVec2(buttonSize, buttonSize / 2))) {
+    HandleHexapodRotation(2, -rotStep);
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("+W", ImVec2(buttonSize, buttonSize / 2))) {
+    HandleHexapodRotation(2, rotStep);
+  }
+  ImGui::PopStyleColor(2);
+
+  ImGui::Text("Rot Step: %.3f deg", rotStep);
+}
+
+// Compact version
+void EmbeddedJogControl::RenderCompactRotationalJogButtons() {
+  if (m_jogState.selectedDevice >= 3) {
+    return;
+  }
+
+  float btnSize = 35.0f;
+  float rotStep = m_jogState.stepSize * 10.0f;
+
+  ImGui::Text("Rot:");
+  ImGui::SameLine();
+
+  if (ImGui::Button("-U", ImVec2(btnSize, btnSize))) HandleHexapodRotation(0, -rotStep);
+  ImGui::SameLine();
+  if (ImGui::Button("+U", ImVec2(btnSize, btnSize))) HandleHexapodRotation(0, rotStep);
+  ImGui::SameLine();
+  if (ImGui::Button("-V", ImVec2(btnSize, btnSize))) HandleHexapodRotation(1, -rotStep);
+  ImGui::SameLine();
+  if (ImGui::Button("+V", ImVec2(btnSize, btnSize))) HandleHexapodRotation(1, rotStep);
+  ImGui::SameLine();
+  if (ImGui::Button("-W", ImVec2(btnSize, btnSize))) HandleHexapodRotation(2, -rotStep);
+  ImGui::SameLine();
+  if (ImGui::Button("+W", ImVec2(btnSize, btnSize))) HandleHexapodRotation(2, rotStep);
+}

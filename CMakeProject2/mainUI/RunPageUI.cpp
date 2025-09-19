@@ -7,7 +7,9 @@
 #include "ProcessRegistry.h"
 #include "LiveVideoSubscriber.h"
 #include "ManualAdjustmentOperation.h"
+#include <filesystem>
 
+using namespace UAA3ProcessBuilders;
 // UPDATE RunPageUI.cpp - Constructor
 
 // NEW: Add to constructor
@@ -54,6 +56,21 @@ RunPageUI::RunPageUI(MachineOperations& machineOps)
   }
 
 
+
+  // Add this after jog control initialization
+
+// Initialize process configuration system
+  m_processConfigUI = std::make_unique<ProcessConfigUI>();
+  m_currentProcessConfig = ProcessConfigBuilders::createPickPlaceConfig();
+
+  // Try to load last saved configuration
+  if (std::filesystem::exists("last_process_config.json")) {
+    m_currentProcessConfig.loadFromFile("last_process_config.json");
+    m_processConfigUI->setConfiguration(m_currentProcessConfig);
+    m_logger->LogInfo("RunPageUI: Loaded last process configuration");
+  }
+
+  m_logger->LogInfo("RunPageUI: Process configuration system initialized");
 
 }
 
@@ -158,6 +175,8 @@ void RunPageUI::RenderProgressBar() {
 
 
 
+// 1. Update RenderProcessTreeView() method to sync config when selecting a configurable process:
+
 void RunPageUI::RenderProcessTreeView() {
   ImGui::Text("Process Steps");
   ImGui::Separator();
@@ -169,8 +188,8 @@ void RunPageUI::RenderProcessTreeView() {
   auto sortedList = GetSortedProcessList();
 
   // Make items taller
-  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 10));    // More space between items
-  ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f)); // Center text vertically
+  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 10));
+  ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
 
   for (const auto& process : sortedList) {
     std::string displayName = process;
@@ -189,10 +208,16 @@ void RunPageUI::RenderProcessTreeView() {
     }
 
     // Use Selectable with custom height
-    if (ImGui::Selectable(displayName.c_str(), isSelected, 0, ImVec2(0, 35))) { // 35 pixels tall
+    if (ImGui::Selectable(displayName.c_str(), isSelected, 0, ImVec2(0, 35))) {
       m_selectedProcess = process;
       UpdateStatus("Selected: " + process);
       ExtractSelectedProcessOperations();
+
+      // NEW: Sync with ProcessConfigUI if it's a configurable process
+      if (process.find("_Configurable") != std::string::npos && m_processConfigUI) {
+        m_processConfigUI->setCurrentProcess(process);
+        m_logger->LogInfo("Synced ProcessConfigUI with: " + process);
+      }
 
       if (m_autoStartOnSelect && !m_processRunning) {
         StartProcess(process);
@@ -211,10 +236,8 @@ void RunPageUI::RenderProcessTreeView() {
   }
 
   ImGui::PopStyleVar(2);
-
   ImGui::EndChild();
 }
-
 
 // NEW: Render single-line running status with progress bar
 void RunPageUI::RenderRunningStatus() {
@@ -325,7 +348,6 @@ void RunPageUI::StartProcess(const std::string& processName) {
 
 
 
-// In RunPageUI.cpp, update RenderColumn2:
 void RunPageUI::RenderColumn2() {
   ImGui::Text(reinterpret_cast<const char*>(u8"📊 Status & Controls"));
   ImGui::Separator();
@@ -333,25 +355,31 @@ void RunPageUI::RenderColumn2() {
   // Add tab bar for the second column
   if (ImGui::BeginTabBar("Column2Tabs")) {
 
-    // Tab 1: Sequence Breakdown (NEW - show first)
+    // Tab 1: Sequence Breakdown (keep existing)
     if (ImGui::BeginTabItem("Sequence")) {
       RenderSequenceBreakdownTab();
       ImGui::EndTabItem();
     }
 
-    // Tab 2: Process Config 
+    // Tab 2: Process Config (keep existing)
     if (ImGui::BeginTabItem("Config")) {
       RenderProcessConfigTab();
       ImGui::EndTabItem();
     }
 
-    // Tab 3: Status & History 
+    // Tab 3: NEW - Configurable Process tab
+    if (ImGui::BeginTabItem("Configurable")) {
+      RenderConfigurableTab();
+      ImGui::EndTabItem();
+    }
+
+    // Tab 4: Status & History (keep existing)
     if (ImGui::BeginTabItem("Status")) {
       RenderStatusTabCol2();
       ImGui::EndTabItem();
     }
 
-    // Tab 4: Global Jog
+    // Tab 5: Global Jog (keep existing)
     if (ImGui::BeginTabItem("Jog")) {
       RenderJogControlTab();
       ImGui::EndTabItem();
@@ -360,6 +388,8 @@ void RunPageUI::RenderColumn2() {
     ImGui::EndTabBar();
   }
 }
+
+
 
 // Update RenderSequenceBreakdownTab() in RunPageUI.cpp:
 void RunPageUI::RenderSequenceBreakdownTab() {
@@ -643,9 +673,9 @@ void RunPageUI::RenderProcessConfigTab() {
 
   // If auto-confirm is enabled, show delay slider
   if (m_autoConfirm && m_promptUI) {
-    int delaySeconds = m_promptUI->GetAutoConfirmDelay();
+    int delaySeconds = static_cast<int>(m_promptUI->GetAutoConfirmDelay());
     if (ImGui::SliderInt("Auto-confirm delay", &delaySeconds, 1, 10, "%d sec")) {
-      m_promptUI->SetAutoConfirmDelay(delaySeconds);
+      m_promptUI->SetAutoConfirmDelay(static_cast<float>(delaySeconds));
       UpdateStatus("Auto-confirm delay set to " + std::to_string(delaySeconds) + " seconds");
     }
   }
@@ -973,7 +1003,6 @@ void RunPageUI::OnFilterChanged() {
 
 
 
-
 void RunPageUI::RenderColumn3() {
   // Get available space
   ImVec2 availableRegion = ImGui::GetContentRegionAvail();
@@ -1142,55 +1171,41 @@ void RunPageUI::RenderColumn3() {
     ImGui::PopStyleVar();
   }
 
-  // === Rest of the function remains the same ===
   // === SPACING ===
   ImGui::Spacing();
   ImGui::Spacing();
 
-  // === LIVE DATA PLOT ROW ===
-  float plotHeight = 200.0f;
+  // === UPDATED LIVE DATA PLOT ROW WITH SPEC CONTROL ===
+  float plotHeight = 250.0f;  // Increased from 200px to 250px
   ImGui::BeginChild("LiveDataPlotRow", ImVec2(-1, plotHeight), true);
   {
-    ImGui::Text("Live Data Plot");
+    ImGui::Text("Live Data Analysis");  // Changed title
     ImGui::Separator();
 
-    // Initialize plot if needed
-    if (!m_liveDataPlot) {
-      auto* plotManager = LiveDataPlotManager::GetInstance();
-      auto* plot = plotManager->GetPlot("column3_main_plot");
+    // Get available width and split 50/50
+    float availWidth = ImGui::GetContentRegionAvail().x;
+    float leftWidth = availWidth * 0.5f - 5.0f;   // 50% minus padding
+    float rightWidth = availWidth * 0.5f - 5.0f;  // 50% minus padding
 
-      LiveDataPlot::Config config;
-      config.channelName = "GPIB-Current";
-      config.timeWindow = 10.0f;
-      config.historySize = 1000;
-      config.autoScale = true;
-      config.showCurrentValue = true;
-      config.enableChannelSelector = true;
-      config.showGrid = true;
-      config.showLegend = true;
-      config.lineColor = ImVec4(0.0f, 1.0f, 0.2f, 1.0f);
-      config.lineThickness = 2.0f;
-      config.yAxisLabel = "";
-
-      plot->Initialize(config);
-      m_liveDataPlot = plot;
-      m_plotInitialized = true;
-
-      m_logger->LogInfo("LiveDataPlot initialized with channel: GPIB-Current");
+    // === LEFT COLUMN: SPEC CONTROL ===
+    ImGui::BeginChild("SpecControl", ImVec2(leftWidth, -1), true);
+    {
+      RenderSpecControl();  // New method for spec control
     }
+    ImGui::EndChild();
 
-    // Render the plot
-    if (m_liveDataPlot && m_plotInitialized) {
-      ImVec2 plotSize = ImGui::GetContentRegionAvail();
-      m_liveDataPlot->Render(plotSize);
+    ImGui::SameLine();
+
+    // === RIGHT COLUMN: LIVE PLOT ===
+    ImGui::BeginChild("LivePlot", ImVec2(rightWidth, -1), true);
+    {
+      RenderLivePlot();  // New method for plot rendering
     }
-    else {
-      ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Initializing plot...");
-    }
+    ImGui::EndChild();
   }
   ImGui::EndChild();
 
-  // === TAB BAR ===
+  // === TAB BAR (UNCHANGED) ===
   ImGui::Spacing();
   if (ImGui::BeginTabBar("Column3Tabs", ImGuiTabBarFlags_None)) {
     if (ImGui::BeginTabItem("Status")) {
@@ -1206,6 +1221,320 @@ void RunPageUI::RenderColumn3() {
       ImGui::EndTabItem();
     }
     ImGui::EndTabBar();
+  }
+}
+// RunPageUI.cpp - Add this new method
+
+// Helper: Get color based on percentage using Viridis color scheme
+ImVec4 RunPageUI::GetPercentageColor(float percentage) {
+  // Viridis-inspired color mapping
+  // Maps percentage to a scientific color scale from purple/blue (low) to yellow/green (high)
+
+  if (percentage >= m_thresholds.excellent) {
+    // Bright yellow-green for excellent (Viridis high end)
+    return ImVec4(0.99f, 0.91f, 0.15f, 1.0f);
+  }
+  else if (percentage >= m_thresholds.pass) {
+    // Green for pass (Viridis mid-high)
+    return ImVec4(0.13f, 0.82f, 0.52f, 1.0f);
+  }
+  else if (percentage >= m_thresholds.needWork) {
+    // Teal for needs work (Viridis mid)
+    return ImVec4(0.12f, 0.65f, 0.61f, 1.0f);
+  }
+  else {
+    // Dark purple-blue for low values (Viridis low end)
+    return ImVec4(0.27f, 0.0f, 0.33f, 1.0f);
+  }
+}
+
+void RunPageUI::RenderSpecControl() {
+  ImGui::Text("Spec Threshold Control");
+  ImGui::Separator();
+
+  // === LIVE COMPARISON AT TOP (MOST IMPORTANT) ===
+  if (m_specEnabled) {
+    // Get current value from plot
+    float currentValue = 0.0f;
+    if (m_liveDataPlot && m_plotInitialized) {
+      currentValue = m_liveDataPlot->GetCurrentValue();
+    }
+
+    // Calculate percentage
+    float percentage = 0.0f;
+    if (m_specThreshold != 0) {
+      percentage = (currentValue / m_specThreshold) * 100.0f;
+    }
+
+    // Display percentage and status in LARGE text
+    ImVec4 percentColor = GetPercentageColor(percentage);
+    const char* status = GetStatusText(percentage);
+
+    // Push larger font scale for emphasis
+    ImGui::PushStyleColor(ImGuiCol_Text, percentColor);
+    float oldScale = ImGui::GetFont()->Scale;
+    ImGui::GetFont()->Scale *= 1.8f;  // 80% larger for better visibility
+    ImGui::PushFont(ImGui::GetFont());
+
+    ImGui::Text("%.1f%% %s", percentage, status);
+
+    ImGui::GetFont()->Scale = oldScale;
+    ImGui::PopFont();
+    ImGui::PopStyleColor();
+
+    // Visual progress bar with Viridis gradient
+    RenderComparisonBar(percentage);
+
+    ImGui::Spacing();
+
+    // Current vs Target values - slightly larger
+    char valueBuffer[64];
+    FormatCurrentValue(currentValue, valueBuffer, sizeof(valueBuffer));
+
+    char specBuffer[64];
+    FormatCurrentValue(m_specThreshold, specBuffer, sizeof(specBuffer));
+
+    // Slightly larger font for values
+    ImGui::GetFont()->Scale *= 1.2f;  // 20% larger
+    ImGui::PushFont(ImGui::GetFont());
+
+    ImGui::Text("Current: %s", valueBuffer);
+    ImGui::Text("Target: %s (100%%)", specBuffer);
+
+    ImGui::GetFont()->Scale = oldScale;
+    ImGui::PopFont();
+  }
+  else {
+    // Show disabled state
+    ImGui::TextDisabled("Comparison Disabled");
+    ImGui::Text(" ");
+    ImGui::Text(" ");
+    ImGui::Text(" ");
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+
+  // === THRESHOLD GUIDELINES with Viridis colors ===
+  ImGui::Text("Thresholds:");
+  ImGui::TextColored(ImVec4(0.99f, 0.91f, 0.15f, 1.0f), ">110%% Excellent");      // Yellow
+  ImGui::TextColored(ImVec4(0.13f, 0.82f, 0.52f, 1.0f), ">100%% Pass");          // Green
+  ImGui::TextColored(ImVec4(0.12f, 0.65f, 0.61f, 1.0f), ">95%% Need more work"); // Teal
+  ImGui::TextColored(ImVec4(0.27f, 0.0f, 0.33f, 1.0f), "<95%% Are you sure?");   // Purple
+
+  // === SPEC INPUT AT BOTTOM ===
+  ImGui::Separator();
+
+  // Enable/disable checkbox
+  ImGui::Checkbox("Enable", &m_specEnabled);
+
+  ImGui::SameLine();
+
+  // Compact input field
+  ImGui::SetNextItemWidth(60);
+  if (ImGui::InputText("##SpecValue", m_specInputBuffer, sizeof(m_specInputBuffer),
+    ImGuiInputTextFlags_CharsDecimal)) {
+    UpdateSpecThreshold();
+  }
+
+  ImGui::SameLine();
+
+  // Unit combo box
+  ImGui::SetNextItemWidth(50);
+  const char* units[] = { "pA", "nA", "uA", "mA", "A" };
+  int currentUnit = GetUnitIndex(m_specUnit);
+  if (ImGui::Combo("##Unit", &currentUnit, units, IM_ARRAYSIZE(units))) {
+    m_specUnit = units[currentUnit];
+    UpdateSpecThreshold();
+  }
+}
+
+// Updated comparison bar with Viridis gradient
+void RunPageUI::RenderComparisonBar(float percentage) {
+  ImDrawList* drawList = ImGui::GetWindowDrawList();
+  ImVec2 pos = ImGui::GetCursorScreenPos();
+  float width = ImGui::GetContentRegionAvail().x - 10;
+  float height = 30.0f;
+
+  // Draw background rectangle (dark gray)
+  drawList->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height),
+    IM_COL32(30, 30, 30, 255));
+
+  // Calculate fill width based on percentage (max at 120%)
+  float fillWidth = (percentage / 120.0f) * width;
+  fillWidth = (std::min)(fillWidth, width);
+
+  // Create gradient effect for the fill bar using Viridis colors
+  // The bar gradually changes color based on percentage
+  int segments = 20;
+  float segmentWidth = fillWidth / segments;
+
+  for (int i = 0; i < segments; i++) {
+    float segmentPercentage = (percentage / segments) * (i + 1);
+    ImVec4 segmentColor = GetPercentageColor(segmentPercentage);
+    ImU32 color = ImGui::ColorConvertFloat4ToU32(segmentColor);
+
+    float x1 = pos.x + i * segmentWidth;
+    float x2 = pos.x + (i + 1) * segmentWidth;
+
+    drawList->AddRectFilled(ImVec2(x1, pos.y),
+      ImVec2(x2, pos.y + height),
+      color);
+  }
+
+  // Add threshold marker lines
+  float line100 = (100.0f / 120.0f) * width;  // 100% line
+  float line110 = (110.0f / 120.0f) * width;  // 110% line
+  float line95 = (95.0f / 120.0f) * width;    // 95% line
+
+  // Draw threshold lines with appropriate colors
+  drawList->AddLine(ImVec2(pos.x + line100, pos.y),
+    ImVec2(pos.x + line100, pos.y + height),
+    IM_COL32(255, 255, 255, 200), 2.0f);  // White for 100%
+
+  drawList->AddLine(ImVec2(pos.x + line110, pos.y),
+    ImVec2(pos.x + line110, pos.y + height),
+    IM_COL32(252, 232, 38, 200), 1.0f);   // Yellow for 110%
+
+  drawList->AddLine(ImVec2(pos.x + line95, pos.y),
+    ImVec2(pos.x + line95, pos.y + height),
+    IM_COL32(31, 166, 156, 200), 1.0f);   // Teal for 95%
+
+  // Add percentage text overlay
+  char text[32];
+  snprintf(text, sizeof(text), "%.1f%%", percentage);
+  ImVec2 textSize = ImGui::CalcTextSize(text);
+  ImVec2 textPos = ImVec2(pos.x + width / 2 - textSize.x / 2,
+    pos.y + height / 2 - textSize.y / 2);
+  drawList->AddText(textPos, IM_COL32(255, 255, 255, 255), text);
+
+  // Move cursor past the bar
+  ImGui::Dummy(ImVec2(0, height));
+}// RunPageUI.cpp - Add this new method (replaces the plot initialization code)
+
+
+// RenderLivePlot method with channel selector
+void RunPageUI::RenderLivePlot() {
+  // === CHANNEL SELECTOR AT TOP ===
+  ImGui::Text("Data Channel:");
+  ImGui::SameLine();
+
+  // Get available channels from GlobalDataStore
+  if (m_availableChannels.empty() || ImGui::GetFrameCount() % 120 == 0) { // Refresh every 2 seconds
+    GlobalDataStore* store = GlobalDataStore::GetInstance();
+    if (store) {
+      m_availableChannels = store->GetAvailableChannels();
+
+      // Find current channel index
+      auto it = std::find(m_availableChannels.begin(), m_availableChannels.end(), m_plotChannelName);
+      if (it != m_availableChannels.end()) {
+        m_selectedChannelIndex = std::distance(m_availableChannels.begin(), it);
+      }
+    }
+  }
+
+  // Channel dropdown combo box
+  ImGui::SetNextItemWidth(-1); // Use full width
+  if (!m_availableChannels.empty()) {
+    // Create array of channel names for combo
+    std::vector<const char*> items;
+    for (const auto& channel : m_availableChannels) {
+      items.push_back(channel.c_str());
+    }
+
+    if (ImGui::Combo("##ChannelSelect", &m_selectedChannelIndex, items.data(), items.size())) {
+      // Channel changed
+      if (m_selectedChannelIndex >= 0 && m_selectedChannelIndex < m_availableChannels.size()) {
+        m_plotChannelName = m_availableChannels[m_selectedChannelIndex];
+
+        // Update the plot with new channel
+        if (m_liveDataPlot && m_plotInitialized) {
+          m_liveDataPlot->SetChannel(m_plotChannelName);
+          m_logger->LogInfo("LiveDataPlot channel changed to: " + m_plotChannelName);
+        }
+      }
+    }
+  }
+  else {
+    ImGui::TextDisabled("No channels available");
+  }
+
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  // === INITIALIZE OR UPDATE PLOT ===
+  if (!m_liveDataPlot) {
+    auto* plotManager = LiveDataPlotManager::GetInstance();
+    auto* plot = plotManager->GetPlot("column3_main_plot");
+
+    LiveDataPlot::Config config;
+    config.channelName = m_plotChannelName;  // Use selected channel
+    config.timeWindow = 10.0f;
+    config.historySize = 1000;
+    config.autoScale = true;
+    config.showCurrentValue = true;
+    config.enableChannelSelector = false;  // Disable built-in selector since we have our own
+    config.showGrid = true;
+    config.showLegend = true;
+    config.lineColor = ImVec4(0.0f, 1.0f, 0.2f, 1.0f);
+    config.lineThickness = 2.0f;
+    config.yAxisLabel = "";
+
+    // Enable spec line if comparison is enabled
+    config.enableSpec = m_specEnabled;
+    config.specValue = m_specThreshold;
+
+    plot->Initialize(config);
+    m_liveDataPlot = plot;
+    m_plotInitialized = true;
+
+    m_logger->LogInfo("LiveDataPlot initialized with channel: " + m_plotChannelName);
+  }
+
+  // Update spec line in plot dynamically
+  if (m_liveDataPlot && m_plotInitialized) {
+    m_liveDataPlot->SetSpec(m_specThreshold, m_specEnabled);
+  }
+
+  // === RENDER THE PLOT ===
+  if (m_liveDataPlot && m_plotInitialized) {
+    ImVec2 plotSize = ImGui::GetContentRegionAvail();
+    m_liveDataPlot->Render(plotSize);
+  }
+  else {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Initializing plot...");
+  }
+
+  // === QUICK CHANNEL BUTTONS (Optional) ===
+  ImGui::Spacing();
+  ImGui::Text("Quick Select:");
+
+  // Add buttons for commonly used channels
+  if (ImGui::Button("GPIB-Current", ImVec2(-1, 0))) {
+    ChangeChannel("GPIB-Current");
+  }
+  if (ImGui::Button("GPIB-Voltage", ImVec2(-1, 0))) {
+    ChangeChannel("GPIB-Voltage");
+  }
+  if (ImGui::Button("Temperature", ImVec2(-1, 0))) {
+    ChangeChannel("Temperature");
+  }
+}
+
+// Helper method to change channel
+void RunPageUI::ChangeChannel(const std::string& channelName) {
+  m_plotChannelName = channelName;
+
+  // Update index
+  auto it = std::find(m_availableChannels.begin(), m_availableChannels.end(), channelName);
+  if (it != m_availableChannels.end()) {
+    m_selectedChannelIndex = std::distance(m_availableChannels.begin(), it);
+  }
+
+  // Update the plot
+  if (m_liveDataPlot && m_plotInitialized) {
+    m_liveDataPlot->SetChannel(m_plotChannelName);
+    m_logger->LogInfo("LiveDataPlot channel changed to: " + m_plotChannelName);
   }
 }
 
@@ -3196,39 +3525,114 @@ void RunPageUI::UpdateStatus(const std::string& message, bool isError) {
 }
 
 
-// ============================================================================
-// REPLACE: BuildSelectedProcess() method in RunPageUI.cpp
-// ============================================================================
+// RunPageUI::BuildSelectedProcess() - Thread-safe version
+
 std::unique_ptr<SequenceStep> RunPageUI::BuildSelectedProcess() {
-    // Check if process exists in registry
-    if (ProcessRegistry::GetInstance().HasProcess(m_selectedProcess)) {
-        if (m_promptUI) {
-            auto process = ProcessRegistry::GetInstance().BuildProcess(m_selectedProcess, m_machineOps, *m_promptUI);
-            if (process) {
-                UpdateStatus("Building process: " + m_selectedProcess);
-                return process;
-            }
-            else {
-                UpdateStatus("Failed to build process: " + m_selectedProcess, true);
-                return nullptr;
-            }
+  // Check if this is a configurable process
+  bool isConfigurable = (m_selectedProcess.find("_Configurable") != std::string::npos);
+
+  if (isConfigurable) {
+    // CRITICAL: Create a local copy to avoid thread conflicts
+    ProcessConfiguration localConfig;
+
+    // Safely get config from UI under mutex protection
+    {
+      std::lock_guard<std::mutex> lock(m_mutex);
+
+      if (m_processConfigUI) {
+        // Get a copy, not a reference
+        localConfig = m_processConfigUI->getConfig();
+        m_logger->LogInfo("Using configuration from ProcessConfigUI for: " + m_selectedProcess);
+      }
+      else {
+        // Create appropriate default config based on process name
+        if (m_selectedProcess.find("PickPlace") != std::string::npos) {
+          localConfig = ProcessConfigBuilders::createPickPlaceConfig();
+        }
+        else if (m_selectedProcess.find("UVCuring") != std::string::npos) {
+          localConfig = ProcessConfigBuilders::createUVCuringConfig();
+        }
+        else if (m_selectedProcess.find("Reject") != std::string::npos) {
+          localConfig = ProcessConfigBuilders::createRejectConfig();
+        }
+        else if (m_selectedProcess.find("Probing") != std::string::npos) {
+          localConfig = ProcessConfigBuilders::createProbingConfig();
         }
         else {
-            const auto* processInfo = ProcessRegistry::GetInstance().GetProcessInfo(m_selectedProcess);
-            if (processInfo && processInfo->requiresUserPromptUI) {
-                UpdateStatus("UserPromptUI not available for " + m_selectedProcess, true);
-            }
-            else {
-                UpdateStatus("UserPromptUI not configured", true);
-            }
-            return nullptr;
+          localConfig = ProcessConfigBuilders::createPickPlaceConfig();
+          m_logger->LogWarning("Could not determine config type for " + m_selectedProcess + ", using default PickPlace config");
         }
+
+        // Try to load saved config
+        std::string configFile = "last_" + m_selectedProcess + "_config.json";
+        if (std::filesystem::exists(configFile)) {
+          localConfig.loadFromFile(configFile);
+          m_logger->LogInfo("Loaded saved config from: " + configFile);
+        }
+      }
     }
 
-    // Process not found in registry
-    UpdateStatus("Unknown process selected: " + m_selectedProcess, true);
+    // Save configuration outside of mutex
+    localConfig.saveToFile("last_" + m_selectedProcess + "_config.json");
+    m_logger->LogInfo("Saved configuration for process execution");
+
+    // Check if UserPromptUI is available
+    if (!m_promptUI) {
+      UpdateStatus("UserPromptUI not available for configurable process", true);
+      return nullptr;
+    }
+
+    // Build the appropriate configurable process using local copy
+    if (m_selectedProcess == "UAA3_PickPlaceLeftLens_Configurable") {
+      return UAA3ProcessBuilders::BuildPickPlaceLeftLensSequence_uaa3_Configurable(
+        m_machineOps, *m_promptUI, localConfig);
+    }
+    else if (m_selectedProcess == "UAA3_PickPlaceRightLens_Configurable") {
+      return UAA3ProcessBuilders::BuildPickPlaceRightLensSequence_uaa3_Configurable(
+        m_machineOps, *m_promptUI, localConfig);
+    }
+    else if (m_selectedProcess == "UAA3_UVCuring_Configurable") {
+      return UAA3ProcessBuilders::BuildUVCuringSequence_uaa3_Configurable(
+        m_machineOps, *m_promptUI, localConfig);
+    }
+
+    // If unknown configurable process
+    UpdateStatus("Unknown configurable process: " + m_selectedProcess, true);
+    m_logger->LogError("Unknown configurable process: " + m_selectedProcess);
     return nullptr;
+  }
+
+  // Non-configurable process - use registry (existing code)
+  if (ProcessRegistry::GetInstance().HasProcess(m_selectedProcess)) {
+    if (m_promptUI) {
+      auto process = ProcessRegistry::GetInstance().BuildProcess(
+        m_selectedProcess, m_machineOps, *m_promptUI);
+      if (process) {
+        UpdateStatus("Building process: " + m_selectedProcess);
+        return process;
+      }
+      else {
+        UpdateStatus("Failed to build process: " + m_selectedProcess, true);
+        return nullptr;
+      }
+    }
+    else {
+      const auto* processInfo = ProcessRegistry::GetInstance().GetProcessInfo(m_selectedProcess);
+      if (processInfo && processInfo->requiresUserPromptUI) {
+        UpdateStatus("UserPromptUI not available for " + m_selectedProcess, true);
+      }
+      else {
+        UpdateStatus("UserPromptUI not configured", true);
+      }
+      return nullptr;
+    }
+  }
+
+  // Process not found in registry
+  UpdateStatus("Unknown process selected: " + m_selectedProcess, true);
+  return nullptr;
 }
+
 
 void RunPageUI::SetImguiFont(ImFont* font) {
   if (font) {
@@ -3406,3 +3810,139 @@ void RunPageUI::DebugCameraFrameFlow() {
     lastCheckTime = now;
   }
 }
+
+
+
+// RunPageUI.cpp - Fixed RenderConfigurableTab() to prevent infinite loading
+
+void RunPageUI::RenderConfigurableTab() {
+  using namespace UAA3ProcessBuilders;
+
+  // Header
+  ImGui::Text("Process Configuration Editor");
+  ImGui::Separator();
+
+  // Check if selected process is configurable
+  bool isConfigurable = (m_selectedProcess.find("_Configurable") != std::string::npos);
+
+  if (!isConfigurable) {
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+      "Select a configurable process to edit settings");
+    ImGui::Spacing();
+    ImGui::TextWrapped("Configurable processes have '_Configurable' in their name");
+    return;
+  }
+
+  // Initialize if needed
+  if (!m_processConfigUI) {
+    m_processConfigUI = std::make_unique<ProcessConfigUI>();
+    m_logger->LogInfo("Created ProcessConfigUI instance");
+  }
+
+  // CRITICAL FIX: Only sync when process actually changed
+  // Track the last synced process to avoid repeated calls
+  static std::string lastSyncedProcess = "";
+
+  if (lastSyncedProcess != m_selectedProcess) {
+    // Process changed - sync the configuration
+    m_processConfigUI->setCurrentProcess(m_selectedProcess);
+    lastSyncedProcess = m_selectedProcess;
+    m_logger->LogInfo("Synced ProcessConfigUI with: " + m_selectedProcess);
+  }
+
+  // Render the configuration UI embedded (pass true for embedded)
+  if (m_processConfigUI) {
+    static auto lastTime = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    float deltaTime = std::chrono::duration<float>(now - lastTime).count();
+    lastTime = now;
+
+    // Call with embedded = true
+    m_processConfigUI->render(deltaTime, true);
+
+    // Get updated configuration for use when building the process
+    m_currentProcessConfig = m_processConfigUI->getConfig();
+  }
+}
+
+
+// RunPageUI.cpp - Add these helper methods at the end of the file
+
+// ============================================================================
+// Helper: Update spec threshold from input buffer
+// ============================================================================
+void RunPageUI::UpdateSpecThreshold() {
+  float value = 0.0f;
+  try {
+    value = std::stof(m_specInputBuffer);
+  }
+  catch (...) {
+    return;  // Invalid input, don't update
+  }
+
+  // Convert to Amps based on selected unit
+  float multiplier = GetUnitMultiplier(m_specUnit);
+  m_specThreshold = value * multiplier;
+}
+
+// ============================================================================
+// Helper: Get unit multiplier for conversion to Amps
+// ============================================================================
+float RunPageUI::GetUnitMultiplier(const std::string& unit) {
+  if (unit == "pA") return 1e-12f;  // picoamps
+  if (unit == "nA") return 1e-9f;   // nanoamps
+  if (unit == "uA") return 1e-6f;   // microamps
+  if (unit == "mA") return 1e-3f;   // milliamps
+  if (unit == "A") return 1.0f;     // amps
+  return 1e-6f;  // Default to microamps
+}
+
+// ============================================================================
+// Helper: Get unit index for combo box
+// ============================================================================
+int RunPageUI::GetUnitIndex(const std::string& unit) {
+  if (unit == "pA") return 0;
+  if (unit == "nA") return 1;
+  if (unit == "uA") return 2;
+  if (unit == "mA") return 3;
+  if (unit == "A") return 4;
+  return 2;  // Default to uA (index 2)
+}
+
+// ============================================================================
+// Helper: Format current value with appropriate units
+// ============================================================================
+void RunPageUI::FormatCurrentValue(float value, char* buffer, size_t bufferSize) {
+  float absValue = std::abs(value);
+
+  if (absValue == 0.0f) {
+    snprintf(buffer, bufferSize, "0.00 A");
+  }
+  else if (absValue < 1e-9f) {
+    snprintf(buffer, bufferSize, "%.2f pA", value * 1e12f);
+  }
+  else if (absValue < 1e-6f) {
+    snprintf(buffer, bufferSize, "%.2f nA", value * 1e9f);
+  }
+  else if (absValue < 1e-3f) {
+    snprintf(buffer, bufferSize, "%.2f µA", value * 1e6f);
+  }
+  else if (absValue < 1.0f) {
+    snprintf(buffer, bufferSize, "%.3f mA", value * 1e3f);
+  }
+  else {
+    snprintf(buffer, bufferSize, "%.3f A", value);
+  }
+}
+
+
+// ============================================================================
+// Helper: Get status text based on percentage
+// ============================================================================
+const char* RunPageUI::GetStatusText(float percentage) {
+  if (percentage >= m_thresholds.excellent) return "Excellent";
+  if (percentage >= m_thresholds.pass) return "Pass";
+  if (percentage >= m_thresholds.needWork) return "Need more work";
+  return "Are you sure?";
+}
+

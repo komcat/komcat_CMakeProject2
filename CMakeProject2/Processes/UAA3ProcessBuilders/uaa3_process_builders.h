@@ -2,6 +2,7 @@
 
 #include "SequenceStep.h"
 #include "machine_operations.h"
+#include "ProcessConfiguration.h"  // <-- Add this include
 #include "Programming/UserPromptUI.h"
 #include <memory>
 #include <string>
@@ -32,17 +33,35 @@ namespace UAA3ProcessBuilders {
   std::unique_ptr<SequenceStep> BuildPickPlaceLeftLensSequence_uaa3(
     MachineOperations& machineOps, UserPromptUI& promptUI);
 
+  // New configurable version
+  std::unique_ptr<SequenceStep> BuildPickPlaceLeftLensSequence_uaa3_Configurable(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI,
+    const ProcessConfiguration& config);
+
   /// <summary>
   /// Build pick and place right lens sequence using UserPromptUI
   /// </summary>
   std::unique_ptr<SequenceStep> BuildPickPlaceRightLensSequence_uaa3(
     MachineOperations& machineOps, UserPromptUI& promptUI);
 
+  // New configurable version
+  std::unique_ptr<SequenceStep> BuildPickPlaceRightLensSequence_uaa3_Configurable(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI,
+    const ProcessConfiguration& config);
+
   /// <summary>
   /// Build UV curing sequence using UserPromptUI
   /// </summary>
   std::unique_ptr<SequenceStep> BuildUVCuringSequence_uaa3(
     MachineOperations& machineOps, UserPromptUI& promptUI);
+
+
+  std::unique_ptr<SequenceStep> BuildUVCuringSequence_uaa3_Configurable(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI,
+		const ProcessConfiguration& config);
 
   // ============================================================================
   // UTILITY SEQUENCES

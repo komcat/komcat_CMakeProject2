@@ -63,6 +63,14 @@ public:
     bool DeleteDevice(const std::string& deviceName);
     bool DeletePosition(const std::string& deviceName, const std::string& positionName);
 
+    // Check if a node exists in any graph
+    bool NodeExists(const std::string& nodeId) const;
+    bool HasNode(const std::string& nodeId) const;  // Alias for NodeExists
+
+    // Check if a node exists in a specific graph
+    bool NodeExists(const std::string& graphName, const std::string& nodeId) const;
+    bool HasNode(const std::string& graphName, const std::string& nodeId) const;  // Alias
+
     // Updated settings
     void UpdateSettings(const Settings& newSettings);
 

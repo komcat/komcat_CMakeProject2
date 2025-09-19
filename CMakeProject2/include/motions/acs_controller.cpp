@@ -324,9 +324,9 @@ bool ACSController::MoveToAbsolutePosition(double x, double y, double z, double 
     return false;
   }
   // Set velocities for each axis
-  if (!SetVelocity("X", velocity) || !SetVelocity("Y", velocity) || !SetVelocity("Z", velocity)) {
-    return false;
-  }
+  //if (!SetVelocity("X", velocity) || !SetVelocity("Y", velocity) || !SetVelocity("Z", velocity)) {
+  //  return false;
+  //}
   // Move each axis to the specified position
   if (!MoveToPosition("X", x, false) ||
       !MoveToPosition("Y", y, false) ||
