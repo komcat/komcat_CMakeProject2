@@ -246,4 +246,35 @@ private:
   // Add this with the other render methods
   void RenderConfigurableTab();
 
+  // === ADD THESE NEW MEMBERS FOR SPEC CONTROL ===
+// Spec threshold management
+  float m_specThreshold = 800e-6f;      // Default 800uA in Amps (scientific notation)
+  char m_specInputBuffer[32] = "800";   // Input buffer for ImGui text field
+  std::string m_specUnit = "uA";        // Current unit selection (uA default)
+  bool m_specEnabled = true;            // Enable/disable spec comparison
+
+  // Comparison thresholds structure
+  struct SpecThresholds {
+    float excellent = 110.0f;  // >110% threshold
+    float pass = 100.0f;       // >100% threshold  
+    float needWork = 95.0f;    // >95% threshold
+  } m_thresholds;
+
+
+  // === ADD THESE NEW METHOD DECLARATIONS ===
+ // Main rendering methods for split view
+  void RenderSpecControl();           // Renders left column spec control panel
+  void RenderLivePlot();              // Renders right column live plot
+
+  // Helper methods for spec control
+  void UpdateSpecThreshold();                                    // Updates threshold from input
+  float GetUnitMultiplier(const std::string& unit);             // Converts unit to multiplier
+  int GetUnitIndex(const std::string& unit);                    // Gets combo box index for unit
+  void FormatCurrentValue(float value, char* buffer, size_t bufferSize);  // Formats value with units
+
+  // Visual feedback helpers
+  ImVec4 GetPercentageColor(float percentage);                  // Returns color based on percentage
+  const char* GetStatusText(float percentage);                  // Returns status text
+  void RenderComparisonBar(float percentage);                   // Renders visual prog
+
 };
