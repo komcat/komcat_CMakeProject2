@@ -741,7 +741,7 @@ add_executable(uaa3App
   "Processes/ProcessConfigManager.h"
   "Processes/ProcessConfigUI.h"
 
-      "Processes/ProcessConfigUI.cpp")
+      "Processes/ProcessConfigUI.cpp" "mainUI/UIConfigVisualizerPositionSubscriber.h" "mainUI/UIConfigVisualizerPositionSubscriber.cpp")
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
