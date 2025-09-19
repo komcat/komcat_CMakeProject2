@@ -300,7 +300,7 @@ bool SiPhOGClientDebugUI::ParseData(const std::string& dataStr, std::map<std::st
     return false;
 
   }
-  catch (const std::exception& e) {
+  catch (const std::exception& ) {
     return false;
   }
 }

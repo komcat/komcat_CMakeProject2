@@ -411,8 +411,11 @@ void SiPhOGDataProvider::DebugLog(const std::string& message) {
     auto now = std::chrono::steady_clock::now();
     auto time_t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
+    std::tm timeinfo;
+    localtime_s(&timeinfo, &time_t);
+
     std::cout << "[DEBUG SiPhOGDataProvider "
-      << std::put_time(std::localtime(&time_t), "%H:%M:%S")
+      << std::put_time(&timeinfo, "%H:%M:%S")
       << "] " << message << std::endl;
   }
 }

@@ -740,8 +740,18 @@ add_executable(uaa3App
   "Processes/ProcessConfigBuilders.h"
   "Processes/ProcessConfigManager.h"
   "Processes/ProcessConfigUI.h"
-
-      "Processes/ProcessConfigUI.cpp" "mainUI/UIConfigVisualizerPositionSubscriber.h" "mainUI/UIConfigVisualizerPositionSubscriber.cpp")
+  "Processes/ProcessConfigUI.cpp" 
+  "mainUI/UIConfigVisualizerPositionSubscriber.h" 
+  "mainUI/UIConfigVisualizerPositionSubscriber.cpp"
+  "include/SiphogClient/SiPhOGClientDebugUI.h"
+  "include/SiphogClient/SiPhOGClientDebugUI.cpp"
+  "include/SiphogClient/SiPhOGDataProvider.h"
+  "include/SiphogClient/SiPhOGDataProvider.cpp"
+  "include/SiphogClient/SiPhOGManager.h"
+  "include/SiphogClient/SiPhOGManager.cpp"
+  "include/SiphogClient/SocketWrapper.cpp"
+  "include/SiphogClient/SocketWrapper.h"
+      )
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
