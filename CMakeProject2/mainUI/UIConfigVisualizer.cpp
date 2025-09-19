@@ -858,290 +858,356 @@ void UIConfigVisualizer::RenderDevicePositionsPanel() {
 
 	// Check if we have position subscriber with data
 	if (m_positionSubscriber && m_positionSubscriber->GetDeviceCount() > 0) {
-		// === REAL-TIME SUBSCRIBER MODE ===
-		ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "● Real-time Updates Active");
-		ImGui::Text("Total Updates: %llu", m_positionSubscriber->GetTotalUpdates());
-		ImGui::Separator();
-
-		// Get real-time positions from subscriber
-		auto currentPositions = m_positionSubscriber->GetAllPositions();
-
-		// Update position names cache if needed
-		auto now = std::chrono::steady_clock::now();
-		if (now - m_lastPositionNameUpdate > POSITION_NAME_CACHE_TIMEOUT) {
-			RefreshPositionNames();
-		}
-
-		// Create table for device positions
-		if (ImGui::BeginTable("DevicePositionsTable", 1, ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders)) {
-
-			size_t deviceIndex = 0;
-			size_t totalDevices = currentPositions.size();
-
-			for (const auto& [deviceName, position] : currentPositions) {
-				ImGui::TableNextRow();
-				ImGui::TableNextColumn();
-
-				// Check if device is moving
-				bool isMoving = m_positionSubscriber->IsDeviceMoving(deviceName);
-
-				// Device header with movement indicator
-				ImVec4 headerColor = isMoving ?
-					ImVec4(1.0f, 0.8f, 0.0f, 1.0f) :  // Orange when moving
-					ImVec4(0.8f, 1.0f, 0.8f, 1.0f);   // Green when idle
-
-				ImGui::PushStyleColor(ImGuiCol_Text, headerColor);
-				ImGui::Text("%s %s", deviceName.c_str(), isMoving ? "[MOVING]" : "");
-				ImGui::PopStyleColor();
-
-				// Get current position name from cache
-				std::string currentPosName;
-				auto it = m_cachedPositionNames.find(deviceName);
-				if (it != m_cachedPositionNames.end()) {
-					currentPosName = it->second;
-				}
-
-				// Position name
-				if (!currentPosName.empty()) {
-					ImGui::Text("Position: %s", currentPosName.c_str());
-				}
-				else {
-					ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f),
-						"Position: Not at named position");
-				}
-
-				// Node name
-				std::string currentNodeName = GetDeviceCurrentNodeName(deviceName);
-				if (!currentNodeName.empty()) {
-					ImGui::TextColored(ImVec4(0.8f, 0.8f, 1.0f, 1.0f),
-						"Node: %s", currentNodeName.c_str());
-				}
-				else {
-					ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f),
-						"Node: Not at any node");
-				}
-
-				// Coordinates
-				ImGui::Text("X: %.3f", position.x);
-				ImGui::Text("Y: %.3f", position.y);
-				ImGui::Text("Z: %.3f", position.z);
-
-				// Show rotation for hex devices
-				if (deviceName.find("hex") != std::string::npos) {
-					ImGui::Text("U: %.3f", position.u);
-					ImGui::Text("V: %.3f", position.v);
-					ImGui::Text("W: %.3f", position.w);
-				}
-
-				// Show time since last update with color coding
-				auto timeSince = m_positionSubscriber->GetTimeSinceUpdate(deviceName);
-				if (timeSince != (std::chrono::milliseconds::max)()) {
-					ImVec4 ageColor;
-					if (timeSince.count() < 100) {
-						ageColor = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);  // Green if < 100ms
-					}
-					else if (timeSince.count() < 500) {
-						ageColor = ImVec4(0.5f, 1.0f, 0.0f, 1.0f);  // Yellow-green if < 500ms
-					}
-					else if (timeSince.count() < 1000) {
-						ageColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);  // Yellow if < 1 sec
-					}
-					else {
-						ageColor = ImVec4(1.0f, 0.5f, 0.0f, 1.0f);  // Orange if > 1 sec
-					}
-
-					ImGui::TextColored(ageColor, "Updated: %d ms ago",
-						static_cast<int>(timeSince.count()));
-				}
-
-				// Add spacing between devices
-				ImGui::Spacing();
-				deviceIndex++;
-				if (deviceIndex < totalDevices) {
-					ImGui::Separator();
-				}
-			}
-
-			ImGui::EndTable();
-		}
-
-		// Control section
-		ImGui::Separator();
-
-		if (ImGui::Button("Refresh Subscriptions", ImVec2(-1, 25))) {
-			SubscribeToControllers();
-			RefreshPositionNames();
-		}
-
-		// Debug information
-		// Debug information
-		if (ImGui::CollapsingHeader("Debug Info", ImGuiTreeNodeFlags_None)) {
-			ImGui::Text("Tracked Devices: %zu", m_positionSubscriber->GetDeviceCount());
-			auto devices = m_positionSubscriber->GetTrackedDevices();
-			for (const auto& dev : devices) {
-				bool hasData = m_positionSubscriber->HasPositionData(dev);
-				ImGui::BulletText("%s %s", dev.c_str(),
-					hasData ? "(has data)" : "(no data)");
-			}
-
-			ImGui::Spacing();
-
-			// Add debug logging checkbox
-			static bool debugLogging = false;  // Use local static instead
-			if (ImGui::Checkbox("Enable Debug Logging", &debugLogging)) {
-				m_positionSubscriber->SetDebugLogging(debugLogging);
-			}
-		}
-
+		RenderRealtimeMode();
 	}
 	else {
-		// === FALLBACK POLLING MODE ===
-		if (!m_machineOperations) {
-			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "MachineOperations not available");
-			ImGui::TextWrapped("Device position information requires MachineOperations to be initialized.");
-			return;
+		RenderPollingMode();
+	}
+}
+
+void UIConfigVisualizer::RenderRealtimeMode() {
+	// Status header
+	ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "● Real-time Updates Active");
+	ImGui::Text("Total Updates: %llu", m_positionSubscriber->GetTotalUpdates());
+	ImGui::Separator();
+
+	// Get real-time positions from subscriber
+	auto currentPositions = m_positionSubscriber->GetAllPositions();
+
+	// Update position names cache if needed
+	auto now = std::chrono::steady_clock::now();
+	if (now - m_lastPositionNameUpdate > POSITION_NAME_CACHE_TIMEOUT) {
+		RefreshPositionNames();
+	}
+
+	// Create table for device positions
+	if (ImGui::BeginTable("DevicePositionsTable", 1, ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders)) {
+		size_t deviceIndex = 0;
+		size_t totalDevices = currentPositions.size();
+
+		for (const auto& [deviceName, position] : currentPositions) {
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+
+			RenderDevicePositionEntry(deviceName, position);
+
+			// Add spacing between devices
+			ImGui::Spacing();
+			deviceIndex++;
+			if (deviceIndex < totalDevices) {
+				ImGui::Separator();
+			}
+		}
+		ImGui::EndTable();
+	}
+
+	// Control section
+	ImGui::Separator();
+
+	if (ImGui::Button("Refresh Subscriptions", ImVec2(-1, 25))) {
+		SubscribeToControllers();
+		RefreshPositionNames();
+	}
+
+	// Debug information
+	if (ImGui::CollapsingHeader("Debug Info", ImGuiTreeNodeFlags_None)) {
+		RenderDebugInfo();
+	}
+}
+
+void UIConfigVisualizer::RenderDevicePositionEntry(const std::string& deviceName, const PositionStruct& position) {
+	// Check if device is moving
+	bool isMoving = m_positionSubscriber->IsDeviceMoving(deviceName);
+
+	// Render each component
+	RenderDeviceHeader(deviceName, isMoving);
+	RenderDevicePositionInfo(deviceName);
+	RenderDeviceCoordinates(deviceName, position);
+	RenderPositionUpdateTime(deviceName);
+	RenderDeviceSaveButton(deviceName);
+}
+
+void UIConfigVisualizer::RenderDeviceHeader(const std::string& deviceName, bool isMoving) {
+	ImVec4 headerColor = isMoving ?
+		ImVec4(1.0f, 0.8f, 0.0f, 1.0f) :  // Orange when moving
+		ImVec4(0.8f, 1.0f, 0.8f, 1.0f);   // Green when idle
+
+	ImGui::PushStyleColor(ImGuiCol_Text, headerColor);
+	ImGui::Text("%s %s", deviceName.c_str(), isMoving ? "[MOVING]" : "");
+	ImGui::PopStyleColor();
+}
+
+void UIConfigVisualizer::RenderDevicePositionInfo(const std::string& deviceName) {
+	// Get current position name from cache
+	std::string currentPosName;
+	auto it = m_cachedPositionNames.find(deviceName);
+	if (it != m_cachedPositionNames.end()) {
+		currentPosName = it->second;
+	}
+
+	// Position name
+	if (!currentPosName.empty()) {
+		ImGui::Text("Position: %s", currentPosName.c_str());
+	}
+	else {
+		ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f),
+			"Position: Not at named position");
+	}
+
+	// Node name
+	std::string currentNodeName = GetDeviceCurrentNodeName(deviceName);
+	if (!currentNodeName.empty()) {
+		ImGui::TextColored(ImVec4(0.8f, 0.8f, 1.0f, 1.0f),
+			"Node: %s", currentNodeName.c_str());
+	}
+	else {
+		ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f),
+			"Node: Not at any node");
+	}
+}
+
+void UIConfigVisualizer::RenderDeviceCoordinates(const std::string& deviceName, const PositionStruct& position) {
+	ImGui::Text("X: %.3f", position.x);
+	ImGui::Text("Y: %.3f", position.y);
+	ImGui::Text("Z: %.3f", position.z);
+
+	// Show rotation for hex devices
+	if (deviceName.find("hex") != std::string::npos) {
+		ImGui::Text("U: %.3f", position.u);
+		ImGui::Text("V: %.3f", position.v);
+		ImGui::Text("W: %.3f", position.w);
+	}
+}
+
+void UIConfigVisualizer::RenderPositionUpdateTime(const std::string& deviceName) {
+	auto timeSince = m_positionSubscriber->GetTimeSinceUpdate(deviceName);
+	if (timeSince != (std::chrono::milliseconds::max)()) {
+		ImVec4 ageColor;
+		if (timeSince.count() < 100) {
+			ageColor = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);  // Green
+		}
+		else if (timeSince.count() < 500) {
+			ageColor = ImVec4(0.5f, 1.0f, 0.0f, 1.0f);  // Yellow-green
+		}
+		else if (timeSince.count() < 1000) {
+			ageColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);  // Yellow
+		}
+		else {
+			ageColor = ImVec4(1.0f, 0.5f, 0.0f, 1.0f);  // Orange
 		}
 
-		// Get current positions from MachineOperations
-		auto currentPositions = m_machineOperations->GetCurrentPositions();
+		ImGui::TextColored(ageColor, "Updated: %d ms ago",
+			static_cast<int>(timeSince.count()));
+	}
+}
 
-		if (currentPositions.empty()) {
-			ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "No device positions available");
+void UIConfigVisualizer::RenderDeviceSaveButton(const std::string& deviceName) {
+	ImGui::Spacing();
 
-			// Offer to initialize subscription
-			if (m_positionSubscriber) {
-				if (ImGui::Button("Initialize Real-time Updates", ImVec2(-1, 25))) {
-					SubscribeToControllers();
+	// Check if a node is selected and it matches this device
+	bool canSaveToNode = false;
+	std::string targetPositionName;
+
+	if (!m_selectedNodeId.empty() && !m_activeGraph.empty()) {
+		auto graphOpt = configManager.GetGraph(m_activeGraph);
+		if (graphOpt.has_value()) {
+			const auto& graph = graphOpt.value().get();
+			for (const auto& node : graph.Nodes) {
+				if (node.Id == m_selectedNodeId && node.Device == deviceName) {
+					canSaveToNode = true;
+					targetPositionName = node.Position;
+					break;
 				}
 			}
-			else {
-				if (ImGui::Button("Refresh Positions", ImVec2(-1, 25))) {
-					m_machineOperations->UpdateAllCurrentPositions();
+		}
+	}
+
+	if (canSaveToNode && !targetPositionName.empty()) {
+		// Button to save current position to selected node's position
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 0.9f, 1.0f));
+
+		std::string buttonLabel = "Save to: " + targetPositionName + "##" + deviceName;
+		if (ImGui::Button(buttonLabel.c_str(), ImVec2(-1, 25))) {
+			// Save current position to the config
+			if (m_machineOperations) {
+				bool success = m_machineOperations->SaveCurrentPositionToConfig(
+					deviceName, targetPositionName);
+
+				if (success) {
+					m_logger->LogInfo("UIConfigVisualizer: Saved position '" +
+						targetPositionName + "' for device " + deviceName);
 					RefreshPositionNames();
 				}
-			}
-			return;
-		}
-
-		// Show that we're in polling mode
-		ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "● Manual Polling Mode");
-
-		// Add refresh button
-		if (ImGui::Button("Refresh", ImVec2(-1, 25))) {
-			m_machineOperations->UpdateAllCurrentPositions();
-			RefreshPositionNames();
-		}
-
-		ImGui::Separator();
-
-		// Update position names cache if needed
-		auto now = std::chrono::steady_clock::now();
-		if (now - m_lastPositionNameUpdate > POSITION_NAME_CACHE_TIMEOUT) {
-			RefreshPositionNames();
-		}
-
-		// Create table for device positions
-		if (ImGui::BeginTable("DevicePositionsTable", 1, ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders)) {
-
-			size_t deviceIndex = 0;
-			size_t totalDevices = currentPositions.size();
-
-			for (const auto& [deviceName, position] : currentPositions) {
-				ImGui::TableNextRow();
-				ImGui::TableNextColumn();
-
-				// Device header
-				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 1.0f, 0.8f, 1.0f));
-				ImGui::Text("%s", deviceName.c_str());
-				ImGui::PopStyleColor();
-
-				// Get current position name from cache
-				std::string currentPosName;
-				auto it = m_cachedPositionNames.find(deviceName);
-				if (it != m_cachedPositionNames.end()) {
-					currentPosName = it->second;
-				}
-
-				// Position name
-				if (!currentPosName.empty()) {
-					ImGui::Text("Position: %s", currentPosName.c_str());
-				}
 				else {
-					ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f),
-						"Position: Not at named position");
-				}
-
-				// Node name
-				std::string currentNodeName = GetDeviceCurrentNodeName(deviceName);
-				if (!currentNodeName.empty()) {
-					ImGui::TextColored(ImVec4(0.8f, 0.8f, 1.0f, 1.0f),
-						"Node: %s", currentNodeName.c_str());
-				}
-				else {
-					ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f),
-						"Node: Not at any node");
-				}
-
-				// Coordinates
-				ImGui::Text("X: %.3f", position.x);
-				ImGui::Text("Y: %.3f", position.y);
-				ImGui::Text("Z: %.3f", position.z);
-
-				// Show rotation for hex devices
-				if (deviceName.find("hex") != std::string::npos) {
-					ImGui::Text("U: %.3f", position.u);
-					ImGui::Text("V: %.3f", position.v);
-					ImGui::Text("W: %.3f", position.w);
-				}
-
-				// Add spacing between devices
-				ImGui::Spacing();
-				deviceIndex++;
-				if (deviceIndex < totalDevices) {
-					ImGui::Separator();
+					m_logger->LogError("UIConfigVisualizer: Failed to save position '" +
+						targetPositionName + "' for device " + deviceName);
 				}
 			}
-
-			ImGui::EndTable();
 		}
 
-		// Auto-refresh checkbox with configurable rate
-		ImGui::Separator();
-		static bool autoRefresh = false;
-		static int refreshRateMs = 1000; // Default 1 second
+		ImGui::PopStyleColor(2);
 
-		ImGui::Checkbox("Auto-refresh", &autoRefresh);
-		ImGui::SameLine();
-		ImGui::SetNextItemWidth(80);
-		ImGui::InputInt("ms", &refreshRateMs, 100, 500);
-		refreshRateMs = (std::max)(100, (std::min)(refreshRateMs, 5000)); // Clamp between 100ms and 5s
-
-		// Handle auto-refresh with configurable rate
-		if (autoRefresh) {
-			static auto lastRefresh = std::chrono::steady_clock::now();
-			auto now = std::chrono::steady_clock::now();
-			auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastRefresh).count();
-
-			if (elapsed >= refreshRateMs) {
-				m_machineOperations->UpdateAllCurrentPositions();
-				RefreshPositionNames();
-				lastRefresh = now;
-			}
-
-			// Show next refresh countdown
-			auto remaining = refreshRateMs - elapsed;
-			ImGui::Text("Next refresh: %dms", static_cast<int>(remaining));
+		if (ImGui::IsItemHovered()) {
+			ImGui::SetTooltip("Save current device position to '%s' in config\n"
+				"Selected Node: %s",
+				targetPositionName.c_str(),
+				m_selectedNodeId.c_str());
 		}
+	}
+	else if (!m_selectedNodeId.empty()) {
+		ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
+			"Select a node for %s to save", deviceName.c_str());
+	}
+	else {
+		ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
+			"Select a node to enable save");
+	}
+}
 
-		// Offer to switch to real-time mode if subscriber is available
+void UIConfigVisualizer::RenderDebugInfo() {
+	ImGui::Text("Tracked Devices: %zu", m_positionSubscriber->GetDeviceCount());
+	auto devices = m_positionSubscriber->GetTrackedDevices();
+	for (const auto& dev : devices) {
+		bool hasData = m_positionSubscriber->HasPositionData(dev);
+		ImGui::BulletText("%s %s", dev.c_str(),
+			hasData ? "(has data)" : "(no data)");
+	}
+
+	ImGui::Spacing();
+
+	static bool debugLogging = false;
+	if (ImGui::Checkbox("Enable Debug Logging", &debugLogging)) {
+		m_positionSubscriber->SetDebugLogging(debugLogging);
+	}
+}
+
+void UIConfigVisualizer::RenderPollingMode() {
+	if (!m_machineOperations) {
+		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "MachineOperations not available");
+		ImGui::TextWrapped("Device position information requires MachineOperations to be initialized.");
+		return;
+	}
+
+	// Get current positions from MachineOperations
+	auto currentPositions = m_machineOperations->GetCurrentPositions();
+
+	if (currentPositions.empty()) {
+		ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "No device positions available");
+
+		// Offer to initialize subscription
 		if (m_positionSubscriber) {
-			ImGui::Spacing();
-			if (ImGui::Button("Switch to Real-time Updates", ImVec2(-1, 25))) {
+			if (ImGui::Button("Initialize Real-time Updates", ImVec2(-1, 25))) {
 				SubscribeToControllers();
 			}
 		}
+		else {
+			if (ImGui::Button("Refresh Positions", ImVec2(-1, 25))) {
+				m_machineOperations->UpdateAllCurrentPositions();
+				RefreshPositionNames();
+			}
+		}
+		return;
+	}
+
+	// Show that we're in polling mode
+	ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "● Manual Polling Mode");
+
+	// Add refresh button
+	if (ImGui::Button("Refresh", ImVec2(-1, 25))) {
+		m_machineOperations->UpdateAllCurrentPositions();
+		RefreshPositionNames();
+	}
+
+	ImGui::Separator();
+
+	// Update position names cache if needed
+	auto now = std::chrono::steady_clock::now();
+	if (now - m_lastPositionNameUpdate > POSITION_NAME_CACHE_TIMEOUT) {
+		RefreshPositionNames();
+	}
+
+	// Create table for device positions
+	if (ImGui::BeginTable("DevicePositionsTable", 1, ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders)) {
+		size_t deviceIndex = 0;
+		size_t totalDevices = currentPositions.size();
+
+		for (const auto& [deviceName, position] : currentPositions) {
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+
+			// Device header (static - no motion indicator in polling mode)
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 1.0f, 0.8f, 1.0f));
+			ImGui::Text("%s", deviceName.c_str());
+			ImGui::PopStyleColor();
+
+			// Position info
+			RenderDevicePositionInfo(deviceName);
+
+			// Coordinates
+			RenderDeviceCoordinates(deviceName, position);
+
+			// Save button (reuse the same function)
+			RenderDeviceSaveButton(deviceName);
+
+			// Add spacing between devices
+			ImGui::Spacing();
+			deviceIndex++;
+			if (deviceIndex < totalDevices) {
+				ImGui::Separator();
+			}
+		}
+
+		ImGui::EndTable();
+	}
+
+	// Auto-refresh controls
+	ImGui::Separator();
+	RenderAutoRefreshControls();
+
+	// Offer to switch to real-time mode if subscriber is available
+	if (m_positionSubscriber) {
+		ImGui::Spacing();
+		if (ImGui::Button("Switch to Real-time Updates", ImVec2(-1, 25))) {
+			SubscribeToControllers();
+		}
 	}
 }
+
+void UIConfigVisualizer::RenderAutoRefreshControls() {
+	static bool autoRefresh = false;
+	static int refreshRateMs = 1000; // Default 1 second
+
+	ImGui::Checkbox("Auto-refresh", &autoRefresh);
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(80);
+	ImGui::InputInt("ms", &refreshRateMs, 100, 500);
+	refreshRateMs = (std::max)(100, (std::min)(refreshRateMs, 5000)); // Clamp between 100ms and 5s
+
+	// Handle auto-refresh with configurable rate
+	if (autoRefresh) {
+		static auto lastRefresh = std::chrono::steady_clock::now();
+		auto now = std::chrono::steady_clock::now();
+		auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastRefresh).count();
+
+		if (elapsed >= refreshRateMs) {
+			m_machineOperations->UpdateAllCurrentPositions();
+			RefreshPositionNames();
+			lastRefresh = now;
+		}
+
+		// Show next refresh countdown
+		auto remaining = refreshRateMs - elapsed;
+		ImGui::Text("Next refresh: %dms", static_cast<int>(remaining));
+	}
+}
+
+
+
+
+
+
+
 void UIConfigVisualizer::SetActiveGraph(const std::string& graphName) {
 	if (m_activeGraph != graphName) {
 		m_activeGraph = graphName;

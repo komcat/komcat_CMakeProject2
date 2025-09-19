@@ -231,4 +231,15 @@ private:
 	void SubscribeToControllers();
 
 	bool m_debugLoggingEnabled = false;
+
+	void RenderDevicePositionEntry(const std::string& deviceName, const PositionStruct& position);
+	void RenderDeviceHeader(const std::string& deviceName, bool isMoving);
+	void RenderDevicePositionInfo(const std::string& deviceName);
+	void RenderDeviceCoordinates(const std::string& deviceName, const PositionStruct& position);
+	void RenderDeviceSaveButton(const std::string& deviceName);
+	void RenderPositionUpdateTime(const std::string& deviceName);
+	void RenderRealtimeMode();
+	void RenderPollingMode();
+	void RenderDebugInfo();
+	void RenderAutoRefreshControls();
 };
