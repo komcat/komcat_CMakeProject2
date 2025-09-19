@@ -1412,26 +1412,75 @@ void RunPageUI::RenderComparisonBar(float percentage) {
   ImGui::Dummy(ImVec2(0, height));
 }// RunPageUI.cpp - Add this new method (replaces the plot initialization code)
 
+
+// RenderLivePlot method with channel selector
 void RunPageUI::RenderLivePlot() {
-  // Initialize plot if needed (this code is moved from RenderColumn3)
+  // === CHANNEL SELECTOR AT TOP ===
+  ImGui::Text("Data Channel:");
+  ImGui::SameLine();
+
+  // Get available channels from GlobalDataStore
+  if (m_availableChannels.empty() || ImGui::GetFrameCount() % 120 == 0) { // Refresh every 2 seconds
+    GlobalDataStore* store = GlobalDataStore::GetInstance();
+    if (store) {
+      m_availableChannels = store->GetAvailableChannels();
+
+      // Find current channel index
+      auto it = std::find(m_availableChannels.begin(), m_availableChannels.end(), m_plotChannelName);
+      if (it != m_availableChannels.end()) {
+        m_selectedChannelIndex = std::distance(m_availableChannels.begin(), it);
+      }
+    }
+  }
+
+  // Channel dropdown combo box
+  ImGui::SetNextItemWidth(-1); // Use full width
+  if (!m_availableChannels.empty()) {
+    // Create array of channel names for combo
+    std::vector<const char*> items;
+    for (const auto& channel : m_availableChannels) {
+      items.push_back(channel.c_str());
+    }
+
+    if (ImGui::Combo("##ChannelSelect", &m_selectedChannelIndex, items.data(), items.size())) {
+      // Channel changed
+      if (m_selectedChannelIndex >= 0 && m_selectedChannelIndex < m_availableChannels.size()) {
+        m_plotChannelName = m_availableChannels[m_selectedChannelIndex];
+
+        // Update the plot with new channel
+        if (m_liveDataPlot && m_plotInitialized) {
+          m_liveDataPlot->SetChannel(m_plotChannelName);
+          m_logger->LogInfo("LiveDataPlot channel changed to: " + m_plotChannelName);
+        }
+      }
+    }
+  }
+  else {
+    ImGui::TextDisabled("No channels available");
+  }
+
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  // === INITIALIZE OR UPDATE PLOT ===
   if (!m_liveDataPlot) {
     auto* plotManager = LiveDataPlotManager::GetInstance();
     auto* plot = plotManager->GetPlot("column3_main_plot");
 
     LiveDataPlot::Config config;
-    config.channelName = "GPIB-Current";
+    config.channelName = m_plotChannelName;  // Use selected channel
     config.timeWindow = 10.0f;
     config.historySize = 1000;
     config.autoScale = true;
     config.showCurrentValue = true;
-    config.enableChannelSelector = true;
+    config.enableChannelSelector = false;  // Disable built-in selector since we have our own
     config.showGrid = true;
     config.showLegend = true;
     config.lineColor = ImVec4(0.0f, 1.0f, 0.2f, 1.0f);
     config.lineThickness = 2.0f;
     config.yAxisLabel = "";
 
-    // === NEW: Enable spec line if comparison is enabled ===
+    // Enable spec line if comparison is enabled
     config.enableSpec = m_specEnabled;
     config.specValue = m_specThreshold;
 
@@ -1439,15 +1488,15 @@ void RunPageUI::RenderLivePlot() {
     m_liveDataPlot = plot;
     m_plotInitialized = true;
 
-    m_logger->LogInfo("LiveDataPlot initialized with channel: GPIB-Current");
+    m_logger->LogInfo("LiveDataPlot initialized with channel: " + m_plotChannelName);
   }
 
-  // === NEW: Update spec line in plot dynamically ===
+  // Update spec line in plot dynamically
   if (m_liveDataPlot && m_plotInitialized) {
     m_liveDataPlot->SetSpec(m_specThreshold, m_specEnabled);
   }
 
-  // Render the plot
+  // === RENDER THE PLOT ===
   if (m_liveDataPlot && m_plotInitialized) {
     ImVec2 plotSize = ImGui::GetContentRegionAvail();
     m_liveDataPlot->Render(plotSize);
@@ -1455,8 +1504,39 @@ void RunPageUI::RenderLivePlot() {
   else {
     ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Initializing plot...");
   }
+
+  // === QUICK CHANNEL BUTTONS (Optional) ===
+  ImGui::Spacing();
+  ImGui::Text("Quick Select:");
+
+  // Add buttons for commonly used channels
+  if (ImGui::Button("GPIB-Current", ImVec2(-1, 0))) {
+    ChangeChannel("GPIB-Current");
+  }
+  if (ImGui::Button("GPIB-Voltage", ImVec2(-1, 0))) {
+    ChangeChannel("GPIB-Voltage");
+  }
+  if (ImGui::Button("Temperature", ImVec2(-1, 0))) {
+    ChangeChannel("Temperature");
+  }
 }
 
+// Helper method to change channel
+void RunPageUI::ChangeChannel(const std::string& channelName) {
+  m_plotChannelName = channelName;
+
+  // Update index
+  auto it = std::find(m_availableChannels.begin(), m_availableChannels.end(), channelName);
+  if (it != m_availableChannels.end()) {
+    m_selectedChannelIndex = std::distance(m_availableChannels.begin(), it);
+  }
+
+  // Update the plot
+  if (m_liveDataPlot && m_plotInitialized) {
+    m_liveDataPlot->SetChannel(m_plotChannelName);
+    m_logger->LogInfo("LiveDataPlot channel changed to: " + m_plotChannelName);
+  }
+}
 
 
 // ============================================================================

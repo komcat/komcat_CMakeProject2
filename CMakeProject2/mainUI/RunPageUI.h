@@ -277,4 +277,11 @@ private:
   const char* GetStatusText(float percentage);                  // Returns status text
   void RenderComparisonBar(float percentage);                   // Renders visual prog
 
+
+
+  std::string m_plotChannelName = "GPIB-Current";  // Current channel for plot
+  std::vector<std::string> m_availableChannels;    // Cache of available channels
+  int m_selectedChannelIndex = 0;
+
+  void ChangeChannel(const std::string& channelName);
 };
