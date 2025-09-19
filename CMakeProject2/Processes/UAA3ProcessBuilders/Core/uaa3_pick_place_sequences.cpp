@@ -202,4 +202,67 @@ namespace UAA3ProcessBuilders {
     return sequence;
   }
 
+
+
+  std::unique_ptr<SequenceStep> BuildPickPlaceRightLensSequence_uaa3_Configurable(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI,
+    const ProcessConfiguration& config) {
+
+    auto sequence = std::make_unique<SequenceStep>("Pick and Place Right Lens", machineOps);
+
+    // Move hex-right to pick lens position - using config
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "hex-right", "Process_Flow",
+      config.getNode("hex-right", "pick")));
+
+    // Move gantry to view position - using config
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "gantry-main", "Process_Flow",
+      config.getNode("gantry", "right-pick-view")));
+
+    // Wait for user confirmation
+    sequence->AddOperation(UserPromptOperation::CreateBasic(
+      "Lens Position Check",
+      "Check the lens position before gripping & click confirm",
+      promptUI));
+
+    // Set output R-gripper to grab the lens - using config
+    int rightPin = config.getInt("gripper", "right-pin");
+    sequence->AddOperation(std::make_shared<SetOutputOperation>(
+      "IOBottom", rightPin, true));
+
+    // Release the lens temporarily
+    sequence->AddOperation(std::make_shared<SetOutputOperation>(
+      "IOBottom", rightPin, false));
+
+    // Wait - using config timing
+    sequence->AddOperation(std::make_shared<WaitOperation>(
+      config.getInt("gripper", "release-wait-ms")));
+
+    // Grip the lens again
+    sequence->AddOperation(std::make_shared<SetOutputOperation>(
+      "IOBottom", rightPin, true,
+      config.getInt("gripper", "regrip-wait-ms")));
+
+    // Confirmation
+    sequence->AddOperation(UserPromptOperation::CreateBasic(
+      "Grip Confirmation",
+      "Confirm right lens is successfully gripped",
+      promptUI));
+
+    // Move gantry to place view position
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "gantry-main", "Process_Flow",
+      config.getNode("gantry", "right-place-view")));
+
+    // Move to placement position
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "hex-right", "Process_Flow",
+      config.getNode("hex-right", "place")));
+
+    return sequence;
+  }
+
+
 }

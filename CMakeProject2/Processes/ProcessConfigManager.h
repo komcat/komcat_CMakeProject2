@@ -85,7 +85,7 @@ namespace UAA3ProcessBuilders {
         file << j.dump(4);
         return true;
       }
-      catch (const std::exception& e) {
+      catch (const std::exception& ) {
         return false;
       }
     }
@@ -107,7 +107,7 @@ namespace UAA3ProcessBuilders {
         }
         return true;
       }
-      catch (const std::exception& e) {
+      catch (const std::exception& ) {
         return false;
       }
     }

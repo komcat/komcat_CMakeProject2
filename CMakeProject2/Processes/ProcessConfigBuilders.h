@@ -57,6 +57,7 @@ namespace UAA3ProcessBuilders {
     }
 
     // UV Curing Configuration
+    // In ProcessConfigBuilders.h
     static ProcessConfiguration createUVCuringConfig() {
       ProcessConfiguration config("UVCuring");
 
@@ -65,15 +66,8 @@ namespace UAA3ProcessBuilders {
       config.addNode("hex-left", "home", "node_5480");
       config.addNode("hex-right", "home", "node_5136");
 
-      config.addParameter("laser", "high-current-mA", "0.250", "float");
-      config.addParameter("laser", "low-current-mA", "0.150", "float");
-
       config.addParameter("timing", "uv-curing-ms", "210000", "int");
       config.addParameter("timing", "monitor-interval-ms", "5000", "int");
-      config.addParameter("timing", "settling-ms", "300", "int");
-
-      config.addParameter("scanning", "step-size-1", "0.0002", "float");
-      config.addParameter("scanning", "step-size-2", "0.0001", "float");
 
       config.addParameter("io", "uv-plc-pin", "14", "int");
       config.addParameter("io", "vacuum-base-pin", "10", "int");

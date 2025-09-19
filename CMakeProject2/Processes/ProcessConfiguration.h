@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <iostream>
 #include "AppContext.h"
+#include "MotionConfigManager.h"
 
 
 

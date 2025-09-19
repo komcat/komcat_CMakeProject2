@@ -175,6 +175,8 @@ void RunPageUI::RenderProgressBar() {
 
 
 
+// 1. Update RenderProcessTreeView() method to sync config when selecting a configurable process:
+
 void RunPageUI::RenderProcessTreeView() {
   ImGui::Text("Process Steps");
   ImGui::Separator();
@@ -186,8 +188,8 @@ void RunPageUI::RenderProcessTreeView() {
   auto sortedList = GetSortedProcessList();
 
   // Make items taller
-  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 10));    // More space between items
-  ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f)); // Center text vertically
+  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 10));
+  ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
 
   for (const auto& process : sortedList) {
     std::string displayName = process;
@@ -206,10 +208,16 @@ void RunPageUI::RenderProcessTreeView() {
     }
 
     // Use Selectable with custom height
-    if (ImGui::Selectable(displayName.c_str(), isSelected, 0, ImVec2(0, 35))) { // 35 pixels tall
+    if (ImGui::Selectable(displayName.c_str(), isSelected, 0, ImVec2(0, 35))) {
       m_selectedProcess = process;
       UpdateStatus("Selected: " + process);
       ExtractSelectedProcessOperations();
+
+      // NEW: Sync with ProcessConfigUI if it's a configurable process
+      if (process.find("_Configurable") != std::string::npos && m_processConfigUI) {
+        m_processConfigUI->setCurrentProcess(process);
+        m_logger->LogInfo("Synced ProcessConfigUI with: " + process);
+      }
 
       if (m_autoStartOnSelect && !m_processRunning) {
         StartProcess(process);
@@ -228,10 +236,8 @@ void RunPageUI::RenderProcessTreeView() {
   }
 
   ImGui::PopStyleVar(2);
-
   ImGui::EndChild();
 }
-
 
 // NEW: Render single-line running status with progress bar
 void RunPageUI::RenderRunningStatus() {
@@ -667,9 +673,9 @@ void RunPageUI::RenderProcessConfigTab() {
 
   // If auto-confirm is enabled, show delay slider
   if (m_autoConfirm && m_promptUI) {
-    int delaySeconds = m_promptUI->GetAutoConfirmDelay();
+    int delaySeconds = static_cast<int>(m_promptUI->GetAutoConfirmDelay());
     if (ImGui::SliderInt("Auto-confirm delay", &delaySeconds, 1, 10, "%d sec")) {
-      m_promptUI->SetAutoConfirmDelay(delaySeconds);
+      m_promptUI->SetAutoConfirmDelay(static_cast<float>(delaySeconds));
       UpdateStatus("Auto-confirm delay set to " + std::to_string(delaySeconds) + " seconds");
     }
   }
@@ -3224,70 +3230,107 @@ void RunPageUI::UpdateStatus(const std::string& message, bool isError) {
 // REPLACE: BuildSelectedProcess() method in RunPageUI.cpp
 // ============================================================================
 std::unique_ptr<SequenceStep> RunPageUI::BuildSelectedProcess() {
-
-
   // Check if this is a configurable process
   bool isConfigurable = (m_selectedProcess.find("_Configurable") != std::string::npos);
 
   if (isConfigurable) {
-    // Get the current configuration from the UI
+    // IMPORTANT: Get config from ProcessConfigUI if available
     if (m_processConfigUI) {
+      // Sync to ensure we have the latest config
+      m_processConfigUI->setCurrentProcess(m_selectedProcess);
       m_currentProcessConfig = m_processConfigUI->getConfig();
-
-      // Save current configuration before building
-      m_currentProcessConfig.saveToFile("last_process_config.json");
-      m_logger->LogInfo("Saved process configuration for: " + m_selectedProcess);
+      m_logger->LogInfo("Using configuration from ProcessConfigUI for: " + m_selectedProcess);
     }
     else {
-      // Load default configuration if UI not available
-      m_currentProcessConfig = ProcessConfigBuilders::createPickPlaceConfig();
-      m_logger->LogWarning("ProcessConfigUI not available, using default configuration");
+      // Fallback: Load from file if UI not available
+      std::string configFile = "last_" + m_selectedProcess + "_config.json";
+      if (std::filesystem::exists(configFile)) {
+        m_currentProcessConfig.loadFromFile(configFile);
+        m_logger->LogInfo("Loaded saved config from: " + configFile);
+      }
+      else {
+        // Create default config based on type
+        if (m_selectedProcess.find("PickPlace") != std::string::npos) {
+          m_currentProcessConfig = ProcessConfigBuilders::createPickPlaceConfig();
+        }
+        else if (m_selectedProcess.find("UVCuring") != std::string::npos) {
+          m_currentProcessConfig = ProcessConfigBuilders::createUVCuringConfig();
+        }
+        else if (m_selectedProcess.find("Reject") != std::string::npos) {
+          m_currentProcessConfig = ProcessConfigBuilders::createRejectConfig();
+        }
+        else if (m_selectedProcess.find("Probing") != std::string::npos) {
+          m_currentProcessConfig = ProcessConfigBuilders::createProbingConfig();
+        }
+        else {
+          m_currentProcessConfig = ProcessConfigBuilders::createPickPlaceConfig();
+          m_logger->LogWarning("Could not determine config type for " + m_selectedProcess);
+        }
+      }
     }
 
-    // Build with configuration
+    // Save the config that will be used
+    m_currentProcessConfig.saveToFile("last_" + m_selectedProcess + "_config.json");
+    m_logger->LogInfo("Saved configuration for process execution");
+
+    // Check if UserPromptUI is available
+    if (!m_promptUI) {
+      UpdateStatus("UserPromptUI not available for configurable process", true);
+      return nullptr;
+    }
+
+    // Build the appropriate configurable process
     if (m_selectedProcess == "UAA3_PickPlaceLeftLens_Configurable") {
-      if (!m_promptUI) {
-        UpdateStatus("UserPromptUI not available for configurable process", true);
-        return nullptr;
-      }
       return UAA3ProcessBuilders::BuildPickPlaceLeftLensSequence_uaa3_Configurable(
+        m_machineOps, *m_promptUI, m_currentProcessConfig);
+    }
+    else if (m_selectedProcess == "UAA3_PickPlaceRightLens_Configurable") {
+      return UAA3ProcessBuilders::BuildPickPlaceRightLensSequence_uaa3_Configurable(
+        m_machineOps, *m_promptUI, m_currentProcessConfig);
+    }
+    else if (m_selectedProcess == "UAA3_UVCuring_Configurable") {
+      return UAA3ProcessBuilders::BuildUVCuringSequence_uaa3_Configurable(
         m_machineOps, *m_promptUI, m_currentProcessConfig);
     }
 
     // If unknown configurable process
     UpdateStatus("Unknown configurable process: " + m_selectedProcess, true);
+    m_logger->LogError("Unknown configurable process: " + m_selectedProcess);
     return nullptr;
   }
 
-    // Check if process exists in registry
-    if (ProcessRegistry::GetInstance().HasProcess(m_selectedProcess)) {
-        if (m_promptUI) {
-            auto process = ProcessRegistry::GetInstance().BuildProcess(m_selectedProcess, m_machineOps, *m_promptUI);
-            if (process) {
-                UpdateStatus("Building process: " + m_selectedProcess);
-                return process;
-            }
-            else {
-                UpdateStatus("Failed to build process: " + m_selectedProcess, true);
-                return nullptr;
-            }
-        }
-        else {
-            const auto* processInfo = ProcessRegistry::GetInstance().GetProcessInfo(m_selectedProcess);
-            if (processInfo && processInfo->requiresUserPromptUI) {
-                UpdateStatus("UserPromptUI not available for " + m_selectedProcess, true);
-            }
-            else {
-                UpdateStatus("UserPromptUI not configured", true);
-            }
-            return nullptr;
-        }
+  // Non-configurable process - use registry
+  if (ProcessRegistry::GetInstance().HasProcess(m_selectedProcess)) {
+    if (m_promptUI) {
+      auto process = ProcessRegistry::GetInstance().BuildProcess(
+        m_selectedProcess, m_machineOps, *m_promptUI);
+      if (process) {
+        UpdateStatus("Building process: " + m_selectedProcess);
+        return process;
+      }
+      else {
+        UpdateStatus("Failed to build process: " + m_selectedProcess, true);
+        return nullptr;
+      }
     }
+    else {
+      const auto* processInfo = ProcessRegistry::GetInstance().GetProcessInfo(m_selectedProcess);
+      if (processInfo && processInfo->requiresUserPromptUI) {
+        UpdateStatus("UserPromptUI not available for " + m_selectedProcess, true);
+      }
+      else {
+        UpdateStatus("UserPromptUI not configured", true);
+      }
+      return nullptr;
+    }
+  }
 
-    // Process not found in registry
-    UpdateStatus("Unknown process selected: " + m_selectedProcess, true);
-    return nullptr;
+  // Process not found in registry
+  UpdateStatus("Unknown process selected: " + m_selectedProcess, true);
+  return nullptr;
 }
+
+
 
 void RunPageUI::SetImguiFont(ImFont* font) {
   if (font) {
@@ -3467,6 +3510,9 @@ void RunPageUI::DebugCameraFrameFlow() {
 }
 
 
+
+// RunPageUI.cpp - Fixed RenderConfigurableTab() to prevent infinite loading
+
 void RunPageUI::RenderConfigurableTab() {
   using namespace UAA3ProcessBuilders;
 
@@ -3485,23 +3531,21 @@ void RunPageUI::RenderConfigurableTab() {
     return;
   }
 
-  // Show current process
-  ImGui::Text("Current Process: %s", m_selectedProcess.c_str());
-  ImGui::Separator();
-
   // Initialize if needed
   if (!m_processConfigUI) {
     m_processConfigUI = std::make_unique<ProcessConfigUI>();
+    m_logger->LogInfo("Created ProcessConfigUI instance");
+  }
 
-    // Load appropriate configuration
-    if (m_selectedProcess.find("PickPlace") != std::string::npos) {
-      m_currentProcessConfig = ProcessConfigBuilders::createPickPlaceConfig();
-    }
-    else {
-      m_currentProcessConfig = ProcessConfigBuilders::createPickPlaceConfig();
-    }
+  // CRITICAL FIX: Only sync when process actually changed
+  // Track the last synced process to avoid repeated calls
+  static std::string lastSyncedProcess = "";
 
-    m_processConfigUI->setConfiguration(m_currentProcessConfig);
+  if (lastSyncedProcess != m_selectedProcess) {
+    // Process changed - sync the configuration
+    m_processConfigUI->setCurrentProcess(m_selectedProcess);
+    lastSyncedProcess = m_selectedProcess;
+    m_logger->LogInfo("Synced ProcessConfigUI with: " + m_selectedProcess);
   }
 
   // Render the configuration UI embedded (pass true for embedded)
@@ -3514,7 +3558,7 @@ void RunPageUI::RenderConfigurableTab() {
     // Call with embedded = true
     m_processConfigUI->render(deltaTime, true);
 
-    // Get updated configuration
+    // Get updated configuration for use when building the process
     m_currentProcessConfig = m_processConfigUI->getConfig();
   }
 }
