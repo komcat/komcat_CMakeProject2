@@ -71,6 +71,70 @@ namespace UAA3ProcessBuilders {
     return sequence;
   }
 
+
+
+  std::unique_ptr<SequenceStep> BuildPickPlaceLeftLensSequence_uaa3_Configurable(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI,
+    const ProcessConfiguration& config) {
+
+    auto sequence = std::make_unique<SequenceStep>("Pick and Place Left Lens", machineOps);
+
+    // Move hex-left to pick lens position - using config
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "hex-left", "Process_Flow",
+      config.getNode("hex-left", "pick")));
+
+    // Move gantry to view position - using config
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "gantry-main", "Process_Flow",
+      config.getNode("gantry", "left-pick-view")));
+
+    // Wait for user confirmation
+    sequence->AddOperation(UserPromptOperation::CreateBasic(
+      "Lens Position Check",
+      "Check the lens position before gripping & click confirm",
+      promptUI));
+
+    // Set output L-gripper to grab the lens - using config
+    int leftPin = config.getInt("gripper", "left-pin");
+    sequence->AddOperation(std::make_shared<SetOutputOperation>(
+      "IOBottom", leftPin, true));
+
+    // Release the lens temporarily
+    sequence->AddOperation(std::make_shared<SetOutputOperation>(
+      "IOBottom", leftPin, false));
+
+    // Wait - using config timing
+    sequence->AddOperation(std::make_shared<WaitOperation>(
+      config.getInt("gripper", "release-wait-ms")));
+
+    // Grip the lens again
+    sequence->AddOperation(std::make_shared<SetOutputOperation>(
+      "IOBottom", leftPin, true,
+      config.getInt("gripper", "regrip-wait-ms")));
+
+    // Confirmation
+    sequence->AddOperation(UserPromptOperation::CreateBasic(
+      "Grip Confirmation",
+      "Confirm left lens is successfully gripped",
+      promptUI));
+
+    // Move gantry to place view position
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "gantry-main", "Process_Flow",
+      config.getNode("gantry", "left-place-view")));
+
+    // Move to placement position
+    sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
+      "hex-left", "Process_Flow",
+      config.getNode("hex-left", "place")));
+
+    return sequence;
+  }
+
+
+
   std::unique_ptr<SequenceStep> BuildPickPlaceRightLensSequence_uaa3(
     MachineOperations& machineOps, UserPromptUI& promptUI) {
 

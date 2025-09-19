@@ -4,6 +4,11 @@
 
 #include "ProcessRegistry.h"
 #include "uaa3_process_builders.h"
+#include "ProcessConfiguration.h"
+#include "ProcessConfigBuilders.h"
+
+
+using namespace UAA3ProcessBuilders;
 
 namespace UAA3ProcessRegistration {
 
@@ -35,6 +40,26 @@ namespace UAA3ProcessRegistration {
             "Pick and place left lens operation with grip verification",
             true,
             UAA3ProcessBuilders::BuildPickPlaceLeftLensSequence_uaa3
+        );
+
+
+        registry.RegisterProcess(
+          "UAA3_PickPlaceLeftLens_Configurable",
+          "Core",
+          "Configurable Pick and place left lens operation",
+          true,
+          [](MachineOperations& ops, UserPromptUI& ui) {
+          // Create or load the configuration here
+          ProcessConfiguration config = ProcessConfigBuilders::createPickPlaceConfig();
+
+          // Try to load from last saved config
+          if (std::filesystem::exists("last_pickplace_config.json")) {
+            config.loadFromFile("last_pickplace_config.json");
+          }
+
+          return UAA3ProcessBuilders::BuildPickPlaceLeftLensSequence_uaa3_Configurable(
+            ops, ui, config);
+        }
         );
 
         registry.RegisterProcess(

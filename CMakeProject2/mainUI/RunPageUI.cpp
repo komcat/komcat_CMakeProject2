@@ -7,7 +7,9 @@
 #include "ProcessRegistry.h"
 #include "LiveVideoSubscriber.h"
 #include "ManualAdjustmentOperation.h"
+#include <filesystem>
 
+using namespace UAA3ProcessBuilders;
 // UPDATE RunPageUI.cpp - Constructor
 
 // NEW: Add to constructor
@@ -54,6 +56,21 @@ RunPageUI::RunPageUI(MachineOperations& machineOps)
   }
 
 
+
+  // Add this after jog control initialization
+
+// Initialize process configuration system
+  m_processConfigUI = std::make_unique<ProcessConfigUI>();
+  m_currentProcessConfig = ProcessConfigBuilders::createPickPlaceConfig();
+
+  // Try to load last saved configuration
+  if (std::filesystem::exists("last_process_config.json")) {
+    m_currentProcessConfig.loadFromFile("last_process_config.json");
+    m_processConfigUI->setConfiguration(m_currentProcessConfig);
+    m_logger->LogInfo("RunPageUI: Loaded last process configuration");
+  }
+
+  m_logger->LogInfo("RunPageUI: Process configuration system initialized");
 
 }
 
@@ -325,7 +342,6 @@ void RunPageUI::StartProcess(const std::string& processName) {
 
 
 
-// In RunPageUI.cpp, update RenderColumn2:
 void RunPageUI::RenderColumn2() {
   ImGui::Text(reinterpret_cast<const char*>(u8"📊 Status & Controls"));
   ImGui::Separator();
@@ -333,25 +349,31 @@ void RunPageUI::RenderColumn2() {
   // Add tab bar for the second column
   if (ImGui::BeginTabBar("Column2Tabs")) {
 
-    // Tab 1: Sequence Breakdown (NEW - show first)
+    // Tab 1: Sequence Breakdown (keep existing)
     if (ImGui::BeginTabItem("Sequence")) {
       RenderSequenceBreakdownTab();
       ImGui::EndTabItem();
     }
 
-    // Tab 2: Process Config 
+    // Tab 2: Process Config (keep existing)
     if (ImGui::BeginTabItem("Config")) {
       RenderProcessConfigTab();
       ImGui::EndTabItem();
     }
 
-    // Tab 3: Status & History 
+    // Tab 3: NEW - Configurable Process tab
+    if (ImGui::BeginTabItem("Configurable")) {
+      RenderConfigurableTab();
+      ImGui::EndTabItem();
+    }
+
+    // Tab 4: Status & History (keep existing)
     if (ImGui::BeginTabItem("Status")) {
       RenderStatusTabCol2();
       ImGui::EndTabItem();
     }
 
-    // Tab 4: Global Jog
+    // Tab 5: Global Jog (keep existing)
     if (ImGui::BeginTabItem("Jog")) {
       RenderJogControlTab();
       ImGui::EndTabItem();
@@ -360,6 +382,8 @@ void RunPageUI::RenderColumn2() {
     ImGui::EndTabBar();
   }
 }
+
+
 
 // Update RenderSequenceBreakdownTab() in RunPageUI.cpp:
 void RunPageUI::RenderSequenceBreakdownTab() {
@@ -3200,6 +3224,41 @@ void RunPageUI::UpdateStatus(const std::string& message, bool isError) {
 // REPLACE: BuildSelectedProcess() method in RunPageUI.cpp
 // ============================================================================
 std::unique_ptr<SequenceStep> RunPageUI::BuildSelectedProcess() {
+
+
+  // Check if this is a configurable process
+  bool isConfigurable = (m_selectedProcess.find("_Configurable") != std::string::npos);
+
+  if (isConfigurable) {
+    // Get the current configuration from the UI
+    if (m_processConfigUI) {
+      m_currentProcessConfig = m_processConfigUI->getConfig();
+
+      // Save current configuration before building
+      m_currentProcessConfig.saveToFile("last_process_config.json");
+      m_logger->LogInfo("Saved process configuration for: " + m_selectedProcess);
+    }
+    else {
+      // Load default configuration if UI not available
+      m_currentProcessConfig = ProcessConfigBuilders::createPickPlaceConfig();
+      m_logger->LogWarning("ProcessConfigUI not available, using default configuration");
+    }
+
+    // Build with configuration
+    if (m_selectedProcess == "UAA3_PickPlaceLeftLens_Configurable") {
+      if (!m_promptUI) {
+        UpdateStatus("UserPromptUI not available for configurable process", true);
+        return nullptr;
+      }
+      return UAA3ProcessBuilders::BuildPickPlaceLeftLensSequence_uaa3_Configurable(
+        m_machineOps, *m_promptUI, m_currentProcessConfig);
+    }
+
+    // If unknown configurable process
+    UpdateStatus("Unknown configurable process: " + m_selectedProcess, true);
+    return nullptr;
+  }
+
     // Check if process exists in registry
     if (ProcessRegistry::GetInstance().HasProcess(m_selectedProcess)) {
         if (m_promptUI) {
@@ -3404,5 +3463,58 @@ void RunPageUI::DebugCameraFrameFlow() {
 
     lastFrameCount = currentFrameCount;
     lastCheckTime = now;
+  }
+}
+
+
+void RunPageUI::RenderConfigurableTab() {
+  using namespace UAA3ProcessBuilders;
+
+  // Header
+  ImGui::Text("Process Configuration Editor");
+  ImGui::Separator();
+
+  // Check if selected process is configurable
+  bool isConfigurable = (m_selectedProcess.find("_Configurable") != std::string::npos);
+
+  if (!isConfigurable) {
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+      "Select a configurable process to edit settings");
+    ImGui::Spacing();
+    ImGui::TextWrapped("Configurable processes have '_Configurable' in their name");
+    return;
+  }
+
+  // Show current process
+  ImGui::Text("Current Process: %s", m_selectedProcess.c_str());
+  ImGui::Separator();
+
+  // Initialize if needed
+  if (!m_processConfigUI) {
+    m_processConfigUI = std::make_unique<ProcessConfigUI>();
+
+    // Load appropriate configuration
+    if (m_selectedProcess.find("PickPlace") != std::string::npos) {
+      m_currentProcessConfig = ProcessConfigBuilders::createPickPlaceConfig();
+    }
+    else {
+      m_currentProcessConfig = ProcessConfigBuilders::createPickPlaceConfig();
+    }
+
+    m_processConfigUI->setConfiguration(m_currentProcessConfig);
+  }
+
+  // Render the configuration UI embedded (pass true for embedded)
+  if (m_processConfigUI) {
+    static auto lastTime = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    float deltaTime = std::chrono::duration<float>(now - lastTime).count();
+    lastTime = now;
+
+    // Call with embedded = true
+    m_processConfigUI->render(deltaTime, true);
+
+    // Get updated configuration
+    m_currentProcessConfig = m_processConfigUI->getConfig();
   }
 }

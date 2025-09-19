@@ -13,6 +13,10 @@
 #include "logger.h"
 #include "CameraViewport.h"
 #include "LiveVideoSubscriber.h"  // NEW: Add camera support
+// Add to includes section
+#include "ProcessConfiguration.h"
+#include "ProcessConfigBuilders.h"
+#include "ProcessConfigUI.h"
 #include <string>
 #include <vector>
 #include <thread>
@@ -22,6 +26,9 @@
 #include <chrono>
 #include <SDL_opengl.h>  // NEW: For OpenGL texture management
 #include "EmbeddedJogControl.h"
+
+using namespace UAA3ProcessBuilders;
+
 // Forward declarations
 class CameraManager;
 
@@ -43,6 +50,7 @@ public:
   bool HasUserPromptUI() const {
     return m_promptUI != nullptr;
   }
+
 private:
   // Existing members...
   MachineOperations& m_machineOps;
@@ -52,7 +60,9 @@ private:
   UserPromptUI* m_promptUI = nullptr;
   std::unique_ptr<OperationsDisplayUI> m_operationsDisplayUI;
   std::unique_ptr<EmbeddedJogControl> m_jogControl;
-
+  // Process configuration
+  std::unique_ptr<ProcessConfigUI> m_processConfigUI;
+  ProcessConfiguration m_currentProcessConfig;
   // UI state
   std::string m_statusMessage = "Ready";
   std::string m_selectedProcess = "Initialization";
@@ -233,5 +243,7 @@ private:
   // Method to handle panel clicks
   void HandlePanelClick(int panelNumber);
   void RenderPanelContent(int panelNumber, const ImVec2& size);
+  // Add this with the other render methods
+  void RenderConfigurableTab();
 
 };
