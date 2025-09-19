@@ -7,10 +7,19 @@
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <iostream>
+#include "AppContext.h"
+
+
+
+//  // Forward declaration to avoid circular dependencies
+//class AppContext;
+//class MotionConfig;
 
 namespace UAA3ProcessBuilders {
 
   using json = nlohmann::json;
+
+
 
   class ProcessConfiguration {
   public:
@@ -235,11 +244,24 @@ namespace UAA3ProcessBuilders {
       }
     }
 
-    // Validate node exists (optional - if you have a node validation system)
+
+    // Then update the validateNode method:
     bool validateNode(const std::string& nodeName) const {
-      // Could check against your motion config manager here
-      return !nodeName.empty() && nodeName.find("node_") != std::string::npos;
+      // Get AppContext instance (following your example pattern)
+      AppContext& context = AppContext::GetInstance();
+
+      // Get motion config from context
+      auto* motionConfig = context.GetMotionConfig();  // or GetMotionConfig() - check your AppContext
+      if (!motionConfig) {
+        // Fallback to basic validation
+        return !nodeName.empty() && nodeName.find("node_") != std::string::npos;
+      }
+
+
+      return motionConfig->NodeExists(nodeName);
+
     }
+
 
     // Validate all nodes in configuration
     std::vector<std::string> validateAllNodes() const {

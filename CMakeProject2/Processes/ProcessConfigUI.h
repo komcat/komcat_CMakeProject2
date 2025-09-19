@@ -20,7 +20,7 @@ namespace UAA3ProcessBuilders {
     char m_configName[256];
     std::string m_statusMessage;
     float m_statusMessageTimer = 0.0f;
-
+    bool m_showModifiedCount = false;  // Set to false to hide by default
   public:
     ProcessConfigUI() : m_configManager("process_configs") {
       strcpy_s(m_configName, "my_config");
@@ -151,11 +151,31 @@ namespace UAA3ProcessBuilders {
     }
 
     void renderConfigEditor() {
-      // Show modified count
+      // Get modified values once at the start
       auto modified = m_config.getModifiedValues();
-      if (!modified.empty()) {
-        ImGui::TextColored(ImVec4(1, 1, 0, 1),
-          "%d values modified from defaults", (int)modified.size());
+
+      // Status message area with fixed height (always at top)
+      ImGui::BeginChild("StatusArea", ImVec2(0, 25), false, ImGuiWindowFlags_NoScrollbar);
+      {
+        if (!m_statusMessage.empty() && m_statusMessageTimer > 0) {
+          float alpha = (std::min)(m_statusMessageTimer, 1.0f);
+          ImGui::TextColored(ImVec4(0, 1, 0, alpha), "%s", m_statusMessage.c_str());
+        }
+        else {
+          // Placeholder to maintain consistent height
+          ImGui::Text(" "); // Empty space
+        }
+      }
+      ImGui::EndChild();
+
+      ImGui::Separator();
+
+      // Show modified count (only if flag is true)
+      if (m_showModifiedCount) {
+        if (!modified.empty()) {
+          ImGui::TextColored(ImVec4(1, 1, 0, 1),
+            "%d values modified from defaults", (int)modified.size());
+        }
       }
 
       // Group configurations by category
@@ -289,7 +309,6 @@ namespace UAA3ProcessBuilders {
         }
       }
     }
-
 
 
     void renderActions() {
