@@ -825,10 +825,12 @@ void RealtimeChartPage::updateAvailableChannels() {
   if (storeChannels.size() > m_availableChannels.size()) {
     m_availableChannels = storeChannels;
 
-    // If our current channel isn't in the list, find its index
     auto it = std::find(m_availableChannels.begin(), m_availableChannels.end(), m_dataChannel);
     if (it != m_availableChannels.end()) {
-      m_selectedChannelIndex = std::distance(m_availableChannels.begin(), it);
+      auto distance = std::distance(m_availableChannels.begin(), it);
+      if (distance <= INT_MAX) {
+        m_selectedChannelIndex = static_cast<int>(distance);
+      }
     }
     else {
       m_selectedChannelIndex = 0;

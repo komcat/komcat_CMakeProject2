@@ -8,8 +8,15 @@
 #include "Programming/UserPromptUI.h"
 #include "ProcessFilterManager.h"
 #include "include/ui/OperationsDisplayUI.h"
+#include "include/camera/ICameraHardware.h"  // NEW: Add for camera hardware interface
+#include "include/data/LiveDataPlot.h"
 #include "logger.h"
+#include "CameraViewport.h"
 #include "LiveVideoSubscriber.h"  // NEW: Add camera support
+// Add to includes section
+#include "ProcessConfiguration.h"
+#include "ProcessConfigBuilders.h"
+#include "ProcessConfigUI.h"
 #include <string>
 #include <vector>
 #include <thread>
@@ -18,6 +25,9 @@
 #include <memory>
 #include <chrono>
 #include <SDL_opengl.h>  // NEW: For OpenGL texture management
+#include "EmbeddedJogControl.h"
+
+using namespace UAA3ProcessBuilders;
 
 // Forward declarations
 class CameraManager;
@@ -37,6 +47,9 @@ public:
   void SetSelectedCamera(const std::string& cameraId);
   void InitializeCameraFeed();
   void ClearCameraFeed();
+  bool HasUserPromptUI() const {
+    return m_promptUI != nullptr;
+  }
 
 private:
   // Existing members...
@@ -46,7 +59,10 @@ private:
   ImFont* m_imguiFont = nullptr;
   UserPromptUI* m_promptUI = nullptr;
   std::unique_ptr<OperationsDisplayUI> m_operationsDisplayUI;
-
+  std::unique_ptr<EmbeddedJogControl> m_jogControl;
+  // Process configuration
+  std::unique_ptr<ProcessConfigUI> m_processConfigUI;
+  ProcessConfiguration m_currentProcessConfig;
   // UI state
   std::string m_statusMessage = "Ready";
   std::string m_selectedProcess = "Initialization";
@@ -139,4 +155,149 @@ private:
   // Process management
   std::unique_ptr<SequenceStep> BuildSelectedProcess();
   void ProcessThreadFunc(const std::string& processName);
+
+  // NEW: Crosshair overlay control
+  bool m_showCrosshair = false;
+
+
+
+  // NEW: Add this method declaration with other camera rendering methods
+  void RenderCrosshairOverlay(const ImVec2& canvasPos, const ImVec2& canvasSize);
+
+  // NEW: Data overlay members
+  std::string m_selectedDataChannel;
+  bool m_showDataOverlay = false;
+  std::map<std::string, float> m_lastDataValues; // For change detection
+
+
+  // NEW: Spec value members
+  std::map<std::string, float> m_specValues;        // Parsed spec values per channel
+  std::map<std::string, std::string> m_specValueStrings; // String input per channel
+  std::map<std::string, bool> m_hasValidSpec;      // Whether spec is valid per channel
+
+  // NEW: Add these method declarations with other rendering methods
+  void RenderDataValueOverlay(const ImVec2& canvasPos, const ImVec2& canvasSize);
+  void FormatDataValueWithUnit(const std::string& channel, float value, char* buffer, size_t bufferSize);
+  bool HasDataValueChanged(const std::string& channel, float currentValue);
+
+
+  // New members for jog control
+  int m_selectedJogAxis = 0;  // 0=X, 1=Y, 2=Z, 3=R
+  int m_jogStepSize = 1;      // 0=0.01mm, 1=0.1mm, 2=1mm, 3=10mm
+
+  // New methods
+  void RenderStatusTabCol2();
+  void RenderProcessConfigTab();
+  void RenderJogControlTab();
+  void RenderProcessTreeView();
+  void RenderProgressBar();
+
+  bool m_autoStartOnSelect = false;  // Checkbox state for automatic start
+  std::string m_selectedTreeNode = "";  // Currently selected node in tree
+
+
+
+  // Store the operations of the selected process
+  std::vector<std::string> m_selectedProcessOperations;
+  // Track current operation during execution
+  size_t m_currentOperationIndex = 0;
+  size_t m_lastCompletedIndex = 0;  // ADD THIS
+  bool m_operationInProgress = false;
+  std::mutex m_operationMutex;  // For thread-safe operation tracking
+
+  // Add method declarations
+  void ExtractSelectedProcessOperations();
+  void RenderSequenceBreakdownTab();
+
+
+
+  // Camera viewport for embedded display
+  std::unique_ptr<CameraViewport> m_cameraViewport;
+  void InitializeCameraViewport();
+
+  // Add to private members in RunPageUI.h:
+  std::shared_ptr<LiveVideoSubscriber> m_embeddedCameraSubscriber;
+
+  // Add to private methods in RunPageUI.h:
+  void InitializeEmbeddedCameraFeed();
+  void ClearEmbeddedCameraFeed();
+  void RenderEmbeddedCameraFeed(const ImVec2& canvasSize);
+
+  void DebugCameraFrameFlow();
+
+  // In the private section
+  LiveDataPlot* m_liveDataPlot = nullptr;
+  bool m_plotInitialized = false;
+  // Method to check if plot is initialized
+  bool IsPlotInitialized() const { return m_liveDataPlot != nullptr; }
+
+  // Panel expansion state
+  enum class PanelState {
+    Normal,     // All 3 panels visible
+    Panel1,     // Only Panel 1 expanded
+    Panel2,     // Only Panel 2 expanded  
+    Panel3      // Only Panel 3 expanded
+  };
+  PanelState m_panelState = PanelState::Normal;
+
+  // Method to handle panel clicks
+  void HandlePanelClick(int panelNumber);
+  void RenderPanelContent(int panelNumber, const ImVec2& size);
+  // Add this with the other render methods
+  void RenderConfigurableTab();
+
+  // === ADD THESE NEW MEMBERS FOR SPEC CONTROL ===
+// Spec threshold management
+  float m_specThreshold = 800e-6f;      // Default 800uA in Amps (scientific notation)
+  char m_specInputBuffer[32] = "800";   // Input buffer for ImGui text field
+  std::string m_specUnit = "uA";        // Current unit selection (uA default)
+  bool m_specEnabled = true;            // Enable/disable spec comparison
+
+  // Comparison thresholds structure
+  struct SpecThresholds {
+    float excellent = 110.0f;  // >110% threshold
+    float pass = 100.0f;       // >100% threshold  
+    float needWork = 95.0f;    // >95% threshold
+  } m_thresholds;
+
+
+  // === ADD THESE NEW METHOD DECLARATIONS ===
+ // Main rendering methods for split view
+  void RenderSpecControl();           // Renders left column spec control panel
+  void RenderLivePlot();              // Renders right column live plot
+
+  // Helper methods for spec control
+  void UpdateSpecThreshold();                                    // Updates threshold from input
+  float GetUnitMultiplier(const std::string& unit);             // Converts unit to multiplier
+  int GetUnitIndex(const std::string& unit);                    // Gets combo box index for unit
+  void FormatCurrentValue(float value, char* buffer, size_t bufferSize);  // Formats value with units
+
+  // Visual feedback helpers
+  ImVec4 GetPercentageColor(float percentage);                  // Returns color based on percentage
+  const char* GetStatusText(float percentage);                  // Returns status text
+  void RenderComparisonBar(float percentage);                   // Renders visual prog
+
+
+
+  std::string m_plotChannelName = "GPIB-Current";  // Current channel for plot
+  std::string m_pendingChannelName = "";           // Channel waiting to be set
+  bool m_channelChangeRequested = false;           // Flag for pending channel change
+  std::vector<std::string> m_availableChannels;    // Cache of available channels
+  int m_selectedChannelIndex = 0;                  // Index for combo box
+
+  void ChangeChannel(const std::string& channelName);
+
+
+  // Add these member variables
+  bool m_showActionTab = true;
+  bool m_captureInProgress = false;
+  std::string m_lastCaptureStatus = "";
+
+  // Method declarations
+  void RenderActionTab();
+  void CaptureAllCameraFrames();
+
+  bool RenderFancyCameraButton();  // Returns true if clicked
+
+  float m_panel1ZoomLevel = 1.0f;  // 1.0 = 100%, 0.25 = 25%
 };

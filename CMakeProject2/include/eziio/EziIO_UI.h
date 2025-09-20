@@ -1,7 +1,7 @@
 #pragma once
 
 #include "EziIO_Manager.h"
-#include "IOConfigManager.h" // Add this
+#include "IOConfigManager.h"
 #include "imgui.h"
 #include <string>
 #include <memory>
@@ -12,34 +12,29 @@ class EziIO_UI {
 public:
   EziIO_UI(EziIOManager& manager);
   ~EziIO_UI();
-  // Add this method to set the config manager
+
   void setConfigManager(IOConfigManager* configManager) {
     m_configManager = configManager;
   }
-  // Render the ImGui UI window
+
   void RenderUI();
 
-  // Set callback for input pin change events
   void SetInputChangeCallback(std::function<void(const std::string&, int, bool)> callback);
-
-  // Set callback for output pin change events requested through UI
   void SetOutputChangeCallback(std::function<void(const std::string&, int, bool)> callback);
-  // Check if the window is currently visible
-  bool IsVisible() const { return m_showWindow; }
 
-  // Toggle window visibility
+  bool IsVisible() const { return m_showWindow; }
   void ToggleWindow() { m_showWindow = !m_showWindow; }
+
 private:
-  // Reference to the EziIO manager
   EziIOManager& m_ioManager;
-  // Add this for configuration
   IOConfigManager* m_configManager = nullptr;
+
   // UI state
   bool m_showWindow;
   bool m_autoRefresh;
-  float m_refreshInterval;  // in seconds
+  float m_refreshInterval;
   float m_refreshTimer;
-  bool m_showDebugInfo;     // Option to show debug information
+  bool m_showDebugInfo;
 
   // Cached state for UI
   struct DeviceState {
@@ -52,10 +47,11 @@ private:
     int inputCount;
     int outputCount;
     bool connected;
+    EziIOError lastError = EziIOError::SUCCESS;  // Add error tracking
   };
   std::vector<DeviceState> m_deviceStates;
 
-  // Callbacks for pin changes
+  // Callbacks
   std::function<void(const std::string&, int, bool)> m_inputChangeCallback;
   std::function<void(const std::string&, int, bool)> m_outputChangeCallback;
 
@@ -66,8 +62,9 @@ private:
   void RenderOutputPins(DeviceState& device);
   bool IsPinOn(uint32_t value, int pin) const;
   uint32_t GetOutputPinMask(const std::string& deviceName, int pin) const;
-
-  // Add this method to get pin name from config
   std::string GetPinName(const std::string& deviceName, bool isInput, int pin) const;
 
+  // New helper for error display
+  void ShowErrorTooltip(EziIOError error);
+  void HandleOutputControl(DeviceState& device, int pin, bool state);
 };

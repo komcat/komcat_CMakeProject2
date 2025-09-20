@@ -3,6 +3,7 @@
 
 #include "pi_controller.h"
 #include "MotionConfigManager.h"
+
 #include <string>
 #include <map>
 #include <memory>
@@ -12,6 +13,10 @@ public:
   PIControllerManager(MotionConfigManager& configManager);
   ~PIControllerManager();
 
+
+  // Get the number of controllers managed
+  size_t GetControllerCount() const { return m_controllers.size(); }
+
   // Initialize controllers from configuration
   void InitializeControllers();
 
@@ -20,6 +25,10 @@ public:
 
   // Disconnect all controllers
   void DisconnectAll();
+
+  // Connect/disconnect individual devices
+  bool ConnectDevice(const std::string& deviceName);
+  bool DisconnectDevice(const std::string& deviceName);
 
   // Get a specific controller by device name
   PIController* GetController(const std::string& deviceName);
@@ -66,6 +75,29 @@ public:
   //    controller->SetWindowVisible(m_isWindowVisible);
   //  }
   //}
+
+
+
+  // Get list of all device names managed by this controller
+  std::vector<std::string> GetDeviceNames() const {
+    std::vector<std::string> names;
+    for (const auto& [name, controller] : m_controllers) {
+      names.push_back(name);
+    }
+    return names;
+  }
+
+  // Get list of connected device names only
+  std::vector<std::string> GetConnectedDeviceNames() const {
+    std::vector<std::string> names;
+    for (const auto& [name, controller] : m_controllers) {
+      if (controller && controller->IsConnected()) {
+        names.push_back(name);
+      }
+    }
+    return names;
+  }
+
 private:
   MotionConfigManager& m_configManager;
   std::map<std::string, std::unique_ptr<PIController>> m_controllers;

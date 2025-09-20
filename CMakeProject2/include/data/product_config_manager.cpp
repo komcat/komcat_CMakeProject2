@@ -160,8 +160,13 @@ bool ProductConfigManager::SaveAsNewProduct(const std::string& productName, cons
     // Get current time
     auto now = std::chrono::system_clock::now();
     auto nowTimeT = std::chrono::system_clock::to_time_t(now);
+
+    // Use gmtime_s for Windows
+    std::tm timeinfo;
+    gmtime_s(&timeinfo, &nowTimeT);
+
     std::stringstream ss;
-    ss << std::put_time(std::gmtime(&nowTimeT), "%Y-%m-%dT%H:%M:%SZ");
+    ss << std::put_time(&timeinfo, "%Y-%m-%dT%H:%M:%SZ");
 
     metadata.version = "1.0";
     metadata.createdDate = ss.str();
@@ -259,8 +264,13 @@ bool ProductConfigManager::UpdateProductConfig(const std::string& productName)
     // Update the last modified timestamp
     auto now = std::chrono::system_clock::now();
     auto nowTimeT = std::chrono::system_clock::to_time_t(now);
+
+    // Use gmtime_s for Windows
+    std::tm timeinfo;
+    gmtime_s(&timeinfo, &nowTimeT);
+
     std::stringstream ss;
-    ss << std::put_time(std::gmtime(&nowTimeT), "%Y-%m-%dT%H:%M:%SZ");
+    ss << std::put_time(&timeinfo, "%Y-%m-%dT%H:%M:%SZ");
     metadata.lastUpdated = ss.str();
 
     // Save updated metadata

@@ -1,5 +1,13 @@
 #pragma once
 
+// Prevent winsock conflicts before any includes
+#ifdef _WIN32
+#define _WINSOCKAPI_   // Prevent winsock.h
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
+
 #include <pylon/PylonIncludes.h>
 #include <string>
 #include <atomic>
@@ -57,6 +65,9 @@ public:
 
   // Disconnect from the camera
   void Disconnect();
+  // NEW: Bool-returning version for interface compatibility
+  bool DisconnectWithResult();
+  bool StopGrabbingWithResult();
 
   // Start continuous image acquisition
   bool StartGrabbing();
@@ -134,6 +145,8 @@ public:
 
   // Debug method to print current camera settings
   void DebugCameraSettings();
+  // Get the latest frame data from continuous grabbing (thread-safe)
+  bool GetLatestFrameData(uint8_t*& imageData, uint32_t& width, uint32_t& height, bool& newFrame);
 
 private:
   // NEW: Enhanced connection methods
@@ -200,4 +213,12 @@ private:
 
   // Friend the handler so it can access private members
   friend class PylonDeviceRemovalHandler;
+
+
+  // Frame data for GetLatestFrameData method
+  mutable std::mutex m_frameDataMutex;
+  Pylon::CImageFormatConverter m_formatConverter;
+  Pylon::CPylonImage m_latestPylonImage;
+  Pylon::CPylonImage m_latestConvertedImage;
+  std::atomic<bool> m_hasLatestFrame;
 };

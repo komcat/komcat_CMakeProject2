@@ -189,6 +189,9 @@ double MotionControlLayer::GetPathProgress() const {
 	return static_cast<double>(m_currentNodeIndex) / static_cast<double>(m_plannedPath.size() - 1);
 }
 
+// motion_control_layer.cpp - UPDATE ExecutionThreadFunc method
+// Add this inside the execution loop to keep positions updated
+
 void MotionControlLayer::ExecutionThreadFunc() {
 	m_logger->LogInfo("MotionControlLayer: Execution thread started");
 
@@ -233,7 +236,7 @@ void MotionControlLayer::ExecutionThreadFunc() {
 				}
 			}
 
-			// Log node execution start with detailed information
+			// Log node execution start
 			std::stringstream nodeInfoLog;
 			nodeInfoLog << "MotionControlLayer: Executing node " << i + 1 << "/" << m_plannedPath.size()
 				<< ": " << currentNode.Id;
@@ -251,6 +254,9 @@ void MotionControlLayer::ExecutionThreadFunc() {
 				success = false;
 				break;
 			}
+
+			// ADD: Update realtime positions after each successful move
+			UpdateRealtimePositions();
 
 			// Log successful movement completion
 			m_logger->LogInfo("MotionControlLayer: Successfully moved to node " + currentNode.Id);
@@ -270,6 +276,9 @@ void MotionControlLayer::ExecutionThreadFunc() {
 
 		// Set execution complete
 		m_isExecuting = false;
+
+		// Final position update
+		UpdateRealtimePositions();
 
 		// Call completion callback if set
 		CompletionCallback callback = nullptr;
@@ -298,6 +307,8 @@ void MotionControlLayer::ExecutionThreadFunc() {
 
 	m_logger->LogInfo("MotionControlLayer: Execution thread stopped");
 }
+
+
 
 bool MotionControlLayer::MoveToNode(const Node& node) {
 	// Skip if no device or position specified
@@ -1643,4 +1654,68 @@ bool MotionControlLayer::acsc_StopAllBuffers(const std::string& deviceName) {
 
 bool MotionControlLayer::acsc_IsBufferRunning(const std::string& deviceName, int bufferNumber) {
 	return m_acsControllerManager.acsc_IsBufferRunning(deviceName, bufferNumber);
+}
+
+bool MotionControlLayer::StopAllMovement() {
+	m_logger->LogInfo("MotionControlLayer: Emergency stop requested - stopping all movement");
+
+	bool allStopped = true;
+
+	try {
+		// Cancel any path execution in progress
+		if (m_isExecuting) {
+			CancelExecution();
+			m_logger->LogInfo("MotionControlLayer: Cancelled path execution");
+		}
+
+		// Stop all PI controllers
+		auto enabledDevices = m_configManager.GetEnabledDevices();
+		for (const auto& [deviceName, device] : enabledDevices) {
+			try {
+				if (IsDevicePIController(deviceName)) {
+					// PI Controller
+					PIController* controller = m_piControllerManager.GetController(deviceName);
+					if (controller && controller->IsConnected()) {
+						// Stop all axes - you might need to implement StopAllAxes() in PIController
+						// Or stop each axis individually
+						std::vector<std::string> axes = { "X", "Y", "Z", "U", "V", "W" };
+						for (const auto& axis : axes) {
+							if (!controller->StopAllAxes()) { 
+								allStopped = false;
+							}
+						}
+						m_logger->LogInfo("MotionControlLayer: Stopped PI controller: " + deviceName);
+					}
+				}
+				else {
+					// ACS Controller  
+					ACSController* controller = m_acsControllerManager.GetController(deviceName);
+					if (controller && controller->IsConnected()) {
+						if (!m_acsControllerManager.acsc_StopAllBuffers(deviceName)) {
+							allStopped = false;
+						}
+						m_logger->LogInfo("MotionControlLayer: Stopped ACS controller: " + deviceName);
+					}
+				}
+			}
+			catch (const std::exception& e) {
+				m_logger->LogError("MotionControlLayer: Error stopping device " + deviceName + ": " + e.what());
+				allStopped = false;
+			}
+		}
+
+		if (allStopped) {
+			m_logger->LogInfo("MotionControlLayer: All movement stopped successfully");
+		}
+		else {
+			m_logger->LogWarning("MotionControlLayer: Some controllers failed to stop");
+		}
+
+	}
+	catch (const std::exception& e) {
+		m_logger->LogError("MotionControlLayer: Exception during stop all movement: " + std::string(e.what()));
+		allStopped = false;
+	}
+
+	return allStopped;
 }

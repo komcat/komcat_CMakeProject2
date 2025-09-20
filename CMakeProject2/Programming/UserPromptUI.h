@@ -64,6 +64,48 @@ public:
     return m_autoConfirmDelay;
   }
 
+  // ===== NEW TEXT INPUT FUNCTIONALITY =====
+
+  /// <summary>
+  /// Request text input from user with callback (basic version)
+  /// </summary>
+  void RequestInput(const std::string& title, const std::string& message,
+    const std::string& defaultValue,
+    std::function<void(const std::string&, bool)> callback);
+
+  /// <summary>
+  /// Request text input from user (thread-safe version for sequences)
+  /// </summary>
+  void RequestTextInput(const std::string& title,
+    const std::string& message,
+    const std::string& defaultValue,
+    std::function<void(bool, const std::string&)> callback);
+
+  /// <summary>
+  /// Check if text input is currently requested
+  /// </summary>
+  bool IsTextInputRequested() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_textInputRequested;
+  }
+
+  /// <summary>
+  /// Get text input details for rendering
+  /// </summary>
+  void GetTextInputDetails(std::string& title, std::string& message,
+    std::string& defaultValue, std::string& buffer) const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    title = m_inputTitle;
+    message = m_inputMessage;
+    defaultValue = m_inputDefaultValue;
+    buffer = m_inputBuffer;
+  }
+
+  /// <summary>
+  /// Complete text input with result
+  /// </summary>
+  void CompleteTextInput(bool accepted, const std::string& value);
+
 private:
   bool m_isVisible;
   bool m_isPromptActive;
@@ -80,12 +122,22 @@ private:
   float m_promptStartTime;     // When the prompt was first shown
   bool m_autoConfirmTriggered; // Prevent multiple auto-confirms
 
-  // NEW: Window sizing members
+  // Window sizing members
   bool m_windowSizeCalculated;  // Track if size was calculated
   ImVec2 m_calculatedWindowSize; // Store calculated size
 
   // Thread safety
   mutable std::mutex m_mutex;
+
+  // ===== TEXT INPUT MEMBERS =====
+  bool m_showInputPrompt = false;
+  bool m_textInputRequested = false;  // Thread-safe flag for text input
+  std::string m_inputTitle;
+  std::string m_inputMessage;
+  std::string m_inputDefaultValue;
+  std::string m_inputBuffer;
+  std::function<void(const std::string&, bool)> m_inputCallback;  // Original callback
+  std::function<void(bool, const std::string&)> m_textInputCallback;  // New callback format
 
   // UI styling
   void SetupPromptStyling();
@@ -101,6 +153,9 @@ private:
   void CheckAutoConfirm();
   float GetCurrentTime() const;
 
-  // NEW: Window sizing helper
+  // Window sizing helper
   void CalculateWindowSize();
+
+  // Text input rendering
+  void RenderTextInputDialog();
 };

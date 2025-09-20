@@ -346,6 +346,8 @@ void IOConfigManager::updateLastModified()
   auto nowTimeT = std::chrono::system_clock::to_time_t(now);
 
   std::stringstream ss;
-  ss << std::put_time(std::gmtime(&nowTimeT), "%Y-%m-%dT%H:%M:%SZ");
+  std::tm timeinfo;
+  gmtime_s(&timeinfo, &nowTimeT);
+  ss << std::put_time(&timeinfo, "%Y-%m-%dT%H:%M:%SZ");
   m_metadata.lastUpdated = ss.str();
 }

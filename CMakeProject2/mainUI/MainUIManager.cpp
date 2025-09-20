@@ -1,11 +1,13 @@
 ﻿#include "MainUIManager.h"
+#include "DatumUI.h"
 #include "UIConfigEditor.h"
 #include "UIConfigVisualizer.h"
 #include "UIJogWindow.h"
 #include "include/motions/MotionConfigManager.h"
 #include "include/motions/pi_controller_manager.h"
 #include "include/motions/acs_controller_manager.h"
-#include "include/cld101x_manager.h"
+#include "include/cld101x/cld101x_manager.h"
+#include "include/motions/ACSGantryAdapter.h"
 #include "CLD101xEquipmentUI.h"
 // Add this include at the top:
 #include "PIPanelUI.h"
@@ -20,7 +22,7 @@
 
 #include "include/data/global_data_store.h" // Add this with your other includes
 #include "include/machine_operations.h"  // Add this include at the top
-
+#include "AppContext.h"
 #include <SDL.h>
 #include "implot/implot.h"
 #include <deque>
@@ -32,6 +34,11 @@
 #include <string>
 #include <ctime>
 
+
+
+
+
+// UPDATE the constructor to initialize DatumUI:
 MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 	: motionConfigManager(configMgr),
 	m_piControllerManager(nullptr),
@@ -72,11 +79,6 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 		std::cout << "MainUIManager: MacroPanelUI connected to MacroManager and MachineBlockUI" << std::endl;
 	}
 
-	// STEP 5: Connect prompt UI to MachineBlockUI as well (if it has this method)
-	// if (m_machineBlockUI) {
-	//     m_machineBlockUI->SetPromptUI(m_promptUI.get());
-	// }
-
 	// Initialize TCP Data Manager UI
 	m_tcpDataManagerUI = std::make_unique<TCPDataManagerUI>();
 	if (!m_tcpDataManagerUI->Initialize(m_dataClientManager)) {
@@ -91,11 +93,311 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 	m_runPageUI = nullptr;
 	// NEW: Initialize IO Control Panel as nullptr - will be created when IO manager is set
 	m_ioControlPanel = nullptr;  // <-- ADD THIS LINE
-	
+
+
+	// Initialize Vision Panel UI
+	m_visionPanelUI = std::make_unique<UIVisionPanel>();
+	std::cout << "MainUIManager: Vision Panel UI created successfully" << std::endl;
+
+	// ADD THIS: Initialize DatumUI
+	m_datumUI = std::make_unique<DatumUI>();
+	std::cout << "MainUIManager: DatumUI created successfully" << std::endl;
+	// ADD THIS: Initialize ModuleAlignmentUI
+	m_moduleAlignmentUI = std::make_unique<ModuleAlignmentUI>();
+	std::cout << "MainUIManager: ModuleAlignmentUI created successfully" << std::endl;
+
+	// ADD these lines right after:
+	auto productReferenceManager = std::make_shared<ProductReferenceManager>();
+	m_moduleAlignmentUI->SetProductReferenceManager(productReferenceManager);
+
 }
 
 
 MainUIManager::~MainUIManager() = default;
+
+
+
+
+
+
+// 1. UPDATE the existing AppContext constructor (around line 165)
+// REPLACE the existing constructor with this:
+MainUIManager::MainUIManager(AppContext& context)
+	: m_context(&context),  // Store as pointer
+	motionConfigManager(*context.GetMotionConfig()) {  // Initialize reference
+
+	auto* logger = Logger::GetInstance();
+	logger->LogInfo("MainUIManager: Initializing with pure AppContext approach");
+
+	// Verify we have essential services
+	if (!context.GetMotionConfig()) {
+		logger->LogError("MainUIManager: MotionConfigManager not available in AppContext!");
+		throw std::runtime_error("MotionConfigManager required but not available in AppContext");
+	}
+
+	logger->LogInfo("MainUIManager: AppContext validation passed");
+
+	// Initialize all UI components
+	InitializeUIComponents();
+
+	// Connect UI components to services from AppContext
+	ConnectUIToServices();
+
+	logger->LogInfo("MainUIManager: Initialization complete with AppContext");
+}
+
+
+
+// TO THIS:
+void MainUIManager::InitializeUIComponents() {
+	auto* logger = Logger::GetInstance();
+	logger->LogInfo("MainUIManager: Creating base UI components...");
+
+	// Create base UI components that don't depend on services
+	m_visionPanelUI = std::make_unique<UIVisionPanel>();
+	m_datumUI = std::make_unique<DatumUI>();
+	m_moduleAlignmentUI = std::make_unique<ModuleAlignmentUI>();
+	m_tcpDataManagerUI = std::make_unique<TCPDataManagerUI>();
+	m_globalDataStoreViewerUI = std::make_unique<GlobalDataStoreViewerUI>();
+
+	// Programming UI components - CREATE ONLY ONE UserPromptUI
+	m_promptUI = std::make_unique<UserPromptUI>();
+	// m_userPromptUI will be created separately if needed for backward compatibility
+
+	m_machineBlockUI = std::make_unique<MachineBlockUI>();
+	m_macroManager = std::make_unique<MacroManager>();
+	m_macroPanelUI = std::make_unique<MacroPanelUI>();
+
+
+
+
+	// Connect programming components to each other
+	if (m_macroManager && m_machineBlockUI) {
+		m_macroManager->SetMachineBlockUI(m_machineBlockUI.get());
+		logger->LogInfo("MainUIManager: MacroManager connected to MachineBlockUI");
+	}
+
+	if (m_macroPanelUI && m_macroManager && m_machineBlockUI) {
+		m_macroPanelUI->SetMacroManager(m_macroManager.get());
+		m_macroPanelUI->SetMachineBlockUI(m_machineBlockUI.get());
+		m_macroPanelUI->SetPromptUI(m_promptUI.get());
+		logger->LogInfo("MainUIManager: MacroPanelUI connected to MacroManager and MachineBlockUI");
+	}
+
+	// Module alignment setup
+	if (m_moduleAlignmentUI) {
+		auto productReferenceManager = std::make_shared<ProductReferenceManager>();
+		m_moduleAlignmentUI->SetProductReferenceManager(productReferenceManager);
+	}
+
+	logger->LogInfo("MainUIManager: Base UI components created");
+}
+// MainUIManager.cpp - Complete methods to ADD or UPDATE
+
+
+
+// 2. UPDATE the ConnectUIToServices() method
+// REPLACE the existing method with this:
+void MainUIManager::ConnectUIToServices() {
+	auto* logger = Logger::GetInstance();
+	logger->LogInfo("MainUIManager: Connecting UI to services...");
+
+	// Get MotionConfigManager (required) - works for both constructors
+	MotionConfigManager* motionConfig = &motionConfigManager;
+
+	// Create UIConfigEditor and UIConfigVisualizer
+	uiConfigEditor = std::make_unique<UIConfigEditor>(*motionConfig);
+
+	// For UIConfigVisualizer, use smart getter for camera
+	auto* camera = GetCameraManagerSmart();
+	uiConfigVisualizer = std::make_unique<UIConfigVisualizer>(*motionConfig, camera);
+
+
+	// Create UIJogWindow
+	m_uiJogWindow = std::make_unique<UIJogWindow>(*motionConfig);
+
+	// Connect PI Controller UI using smart getter
+	if (auto* pi = GetPIController()) {
+		if (!m_piPanelUI) {  // Only create if not already created
+			m_piPanelUI = std::make_unique<PIPanelUI>(*pi);
+		}
+
+		// Connect to jog window
+		if (m_uiJogWindow) {
+			m_uiJogWindow->SetPIControllerManager(pi);
+		}
+
+		logger->LogInfo("MainUIManager: PI Controller UI connected");
+	}
+
+	// Connect ACS Controller UI using smart getter
+	if (auto* acs = GetACSController()) {
+		if (!m_acsPanelUI) {
+			m_acsPanelUI = std::make_unique<ACSPanelUI>(*acs);
+		}
+
+		// Connect to jog window
+		if (m_uiJogWindow) {
+			m_uiJogWindow->SetACSControllerManager(acs);
+		}
+
+		if (m_visionPanelUI)
+		{
+			// Create adapter for your specific device (e.g., "gantry-main")
+			auto gantryAdapter = std::make_unique<ACSGantryAdapter>(acs, "gantry-main");
+
+			// Set the adapter in CircleDetectionUI
+			m_visionPanelUI->SetGantryManager(gantryAdapter.get());
+
+		}
+
+
+		logger->LogInfo("MainUIManager: ACS Controller UI connected");
+	}
+
+	// Connect IO UI using smart getter
+	if (auto* io = GetIOManager()) {
+		if (!m_ioPanelUI) {
+			m_ioPanelUI = std::make_unique<IOPanelUI>(*io);
+
+			// Set IO config if available
+			if (auto* ioConfig = GetIOConfig()) {
+				m_ioPanelUI->SetConfigManager(ioConfig);
+			}
+		}
+
+		// Create IO Control Panel
+		if (!m_ioControlPanel) {
+			m_ioControlPanel = std::make_unique<IOControlPanel>(*io);
+			m_ioControlPanel->LoadConfiguration("io_panel_config.json");
+		}
+
+		logger->LogInfo("MainUIManager: IO Panel UI connected");
+	}
+
+	// Connect Pneumatic UI using smart getter
+	if (auto* pneumatic = GetPneumaticManager()) {
+		if (!m_pneumaticPanelUI) {
+			m_pneumaticPanelUI = std::make_unique<UIPneumaticPanel>(*pneumatic);
+		}
+		logger->LogInfo("MainUIManager: Pneumatic Panel UI connected");
+	}
+
+	// Connect Camera UI using smart getter
+	if (auto* cameraManager = GetCameraManagerSmart()) {
+		if (!m_cameraPanelUI) {
+			m_cameraPanelUI = std::make_unique<UICameraPanel>(*cameraManager);
+		}
+
+	
+
+		if(m_moduleAlignmentUI)
+			m_moduleAlignmentUI->SetCameraManager(cameraManager);
+
+		// Setup vision panel connections
+		if (m_visionPanelUI) {
+			m_visionPanelUI->SetCameraManager(cameraManager);
+			m_visionPanelUI->SetMotionConfigManager(motionConfig);
+
+			// Connect machine operations using smart getter
+			if (m_context) {
+				if (auto* machineOps = m_context->GetMachineOperations()) {
+					m_visionPanelUI->SetMachineOperations(machineOps);
+				}
+			}
+			else if (m_machineOperations) {
+				m_visionPanelUI->SetMachineOperations(m_machineOperations);
+			}
+		}
+
+		logger->LogInfo("MainUIManager: Camera Panel UI connected");
+	}
+
+	// Connect Data Services UI using smart getter
+	if (auto* dataClient = GetDataClient()) {
+		if (m_tcpDataManagerUI) {
+			m_tcpDataManagerUI->Initialize(dataClient);
+		}
+		if (m_globalDataStoreViewerUI) {
+			m_globalDataStoreViewerUI->SetDataClientManager(dataClient);
+		}
+		logger->LogInfo("MainUIManager: Data services UI connected");
+	}
+
+	// Connect Equipment UI using smart getter
+	if (auto* keithley = GetKeithley()) {
+		if (!m_smuPanelUI) {
+			m_smuPanelUI = std::make_unique<UISMUPanel>(*keithley);
+		}
+		logger->LogInfo("MainUIManager: SMU Panel UI connected");
+	}
+
+	// ADD THIS - Create SPD UI when SPD manager is available
+	if (auto* spdManager = GetSPDManager()) {
+		if (!m_spdPowerSupplyUI) {
+			m_spdPowerSupplyUI = std::make_unique<SPDPowerSupplyUI>(spdManager);
+		}
+		logger->LogInfo("MainUIManager: SPD Power Supply UI connected");
+	}
+
+	// Connect RunPageUI using smart getter for MachineOperations
+	auto* machineOps = m_context ? m_context->GetMachineOperations() : m_machineOperations;
+	if (machineOps) {
+
+		if (machineOps && !m_runPageUI) {
+			// RunPageUI constructor needs MachineOperations reference
+			m_runPageUI = std::make_unique<RunPageUI>(*machineOps);  // Pass as reference
+			m_runPageUI->SetUserPromptUI(m_promptUI.get());  // Connect UserPromptUI
+			m_runPageUI->SetCameraManager(GetCameraManagerSmart());  // Connect camera manager
+
+		}
+
+		if (m_machineBlockUI) {
+			m_machineBlockUI->SetMachineOperations(machineOps);  // Connect MachineOperations
+		}
+
+		if (m_macroPanelUI) {
+			m_macroPanelUI->SetMachineBlockUI(m_machineBlockUI.get());  // Connect MachineBlockUI
+
+		}
+
+
+
+		logger->LogInfo("MainUIManager: Run Page UI connected");
+	}
+	if (machineOps)
+	{
+		if (m_moduleAlignmentUI) {
+			m_moduleAlignmentUI->SetMachineOperations(machineOps);  // Connect machine operations
+
+		}
+	}
+
+	if (machineOps)	{
+		uiConfigVisualizer->SetMachineOperations(machineOps);
+		m_visionPanelUI->SetMachineOperations(machineOps);
+	}
+
+	// FIXED code:
+	if (auto* cld101manager = GetCLD101x()) {
+		if (!m_cld101xEquipmentUI) {
+			m_cld101xEquipmentUI = std::make_unique<CLD101xEquipmentUI>();  // Default constructor
+			m_cld101xEquipmentUI->SetCLD101xManager(cld101manager);  // Set manager via setter
+		}
+		logger->LogInfo("MainUIManager: CLD101x Equipment UI connected");
+	}
+	else {
+		// Still create the UI even without manager - allows manual setup later
+		if (!m_cld101xEquipmentUI) {
+			m_cld101xEquipmentUI = std::make_unique<CLD101xEquipmentUI>();
+			logger->LogWarning("MainUIManager: CLD101x Equipment UI created without manager");
+		}
+	}
+
+
+	logger->LogInfo("MainUIManager: Service connections complete");
+}
+
 
 
 void MainUIManager::RenderUI() {
@@ -137,8 +439,8 @@ void MainUIManager::RenderUI() {
 	}
 
 	// Render UserPromptUI (handles prompts from UAA3 sequences)
-	if (m_userPromptUI) {
-		m_userPromptUI->Render();
+	if (m_promptUI) {
+		m_promptUI->Render();
 	}
 }
 
@@ -167,6 +469,9 @@ void MainUIManager::RenderBackButton() {
 		else if (currentProgrammingSubPage != ProgrammingSubPage::NONE) {
 			currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Handle programming sub-pages
 		}
+		else if (currentVisionSubPage != VisionSubPage::NONE) {  // ADD THIS LINE
+			currentVisionSubPage = VisionSubPage::NONE;           // ADD THIS LINE
+		}                                                         // ADD THIS LINE
 		else {
 			currentMainPage = MainPage::MAIN;
 		}
@@ -221,7 +526,8 @@ void MainUIManager::RenderTopMenuBar() {
 		currentManualSubPage = ManualSubPage::NONE;
 		currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
 		currentConfigSubPage = ConfigSubPage::NONE;
-		currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
+		currentProgrammingSubPage = ProgrammingSubPage::NONE;
+		currentVisionSubPage = VisionSubPage::NONE;  // ADD THIS LINE
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("Programming", ImVec2(130, 40))) {
@@ -409,6 +715,10 @@ void MainUIManager::RenderBreadcrumbs() {
 		case DataInstrumentSubPage::SMU_MANAGER:
 			breadcrumb += " > SMU Manager";
 			break;
+			// Update RenderBreadcrumbs() - add SPD breadcrumb:
+		case DataInstrumentSubPage::SPD_POWER_SUPPLY:
+			breadcrumb += " > SPD Power Supply";
+			break;
 		default:
 			break;
 		}
@@ -433,9 +743,19 @@ void MainUIManager::RenderBreadcrumbs() {
 		break;
 	case MainPage::VISION:
 		breadcrumb += " > Vision";
+		switch (currentVisionSubPage) {
+		case VisionSubPage::FIDUCIAL:
+			breadcrumb += " > Fiducial";
+			break;
+		case VisionSubPage::DATUM_REFERENCE:
+			breadcrumb += " > Datum Reference";
+			break;
+		case VisionSubPage::MODULE_ALIGNMENT:     // ADD THIS CASE
+			breadcrumb += " > Module Alignment";  // ADD THIS CASE
+			break;                                // ADD THIS CASE
+		}
 		break;
 	}
-
 	ImGui::Text("%s", breadcrumb.c_str());
 }
 
@@ -476,7 +796,12 @@ void MainUIManager::RenderMainContent() {
 		}
 	}
 	else if (currentMainPage == MainPage::VISION) {
-		RenderVisionPage();
+		if (currentVisionSubPage == VisionSubPage::NONE) {
+			RenderVisionPage();
+		}
+		else {
+			RenderVisionSubPage();
+		}
 	}
 	else if (currentMainPage == MainPage::PROGRAMMING) {
 		if (currentProgrammingSubPage == ProgrammingSubPage::NONE) {
@@ -515,16 +840,6 @@ void MainUIManager::RenderMainPage() {
 	ImGui::Separator();
 	ImGui::Spacing();
 
-	// Simple status display
-	ImGui::SetWindowFontScale(1.3f);
-	ImGui::Text("System Status");
-	ImGui::SetWindowFontScale(1.0f);
-
-	ImGui::Spacing();
-	ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Motion Config Manager: Ready");
-	ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ UI Config Editor: Ready");
-	ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ UI Config Visualizer: Ready");
-
 	// Show jog status
 	if (m_uiJogWindow) {
 		ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "✓ Global Jog Panel: Ready");
@@ -545,6 +860,77 @@ void MainUIManager::RenderMainPage() {
 	ImGui::Spacing();
 	ImGui::Text("All systems operational. You can use the Config Editor to manage motion settings");
 	ImGui::Text("and the Node Visualizer to view and edit motion graphs interactively.");
+
+	// Add this to your MainUIManager render method (like RenderMainPage)
+	ImGuiIO& io = ImGui::GetIO();
+
+	ImGui::Text("=== FONT SIZE CONTROLS ===");
+
+	// High res button - scale up font
+	if (ImGui::Button("High Res (1.5x)")) {
+		io.FontGlobalScale = 1.8f;  // Scale up existing font
+	}
+	ImGui::SameLine();
+
+	// Normal res button - default scale
+	if (ImGui::Button("Normal (1.0x)")) {
+		io.FontGlobalScale = 1.0f;  // Default scale
+	}
+	ImGui::SameLine();
+
+	// Low res button - scale down font
+	if (ImGui::Button("Low Res (0.75x)")) {
+		io.FontGlobalScale = 0.65f;  // Scale down existing font
+	}
+
+	// Show current scaling info
+	ImGui::Text("Font global scale: %.2fx", io.FontGlobalScale);
+	ImGui::Text("Current DPI: %.0f x %.0f",
+		96.0f * io.DisplayFramebufferScale.x,
+		96.0f * io.DisplayFramebufferScale.y);
+
+
+
+
+	// In any MainUIManager render method
+	ImFont* currentFont = ImGui::GetFont();
+	if (currentFont) {
+		ImGui::Text("Current font size: %.1f", currentFont->FontSize);
+		ImGui::Text("Font pointer: %p", (void*)currentFont);
+		if (m_imguiFont) {  // Use the stored font from SetImguiFont
+			ImGui::Text("Stored font pointer: %p", (void*)m_imguiFont);
+			ImGui::Text("Using correct font: %s", (currentFont == m_imguiFont) ? "YES" : "NO");
+		}
+	}
+
+
+	ImGui::Text("=== FONT SCALING DEBUG ===");
+	ImGui::Text("Font global scale: %.3f", io.FontGlobalScale);
+	ImGui::Text("Display scale X: %.3f", io.DisplayFramebufferScale.x);
+	ImGui::Text("Display scale Y: %.3f", io.DisplayFramebufferScale.y);
+
+	if (currentFont) {
+		ImGui::Text("Current font size: %.1f", currentFont->FontSize);
+		ImGui::Text("Font scale: %.3f", currentFont->Scale);
+
+		// Calculate what the actual rendered size should be
+		float actualSize = currentFont->FontSize * io.FontGlobalScale * currentFont->Scale;
+		ImGui::Text("Calculated actual size: %.1f", actualSize);
+	}
+
+
+	ImGui::Text("=== RESOLUTION DEBUG ===");
+	ImGui::Text("Display size: %.0fx%.0f", io.DisplaySize.x, io.DisplaySize.y);
+	ImGui::Text("Framebuffer size: %.0fx%.0f",
+		io.DisplaySize.x * io.DisplayFramebufferScale.x,
+		io.DisplaySize.y * io.DisplayFramebufferScale.y);
+	// Calculate DPI from framebuffer scale (assuming 96 base DPI)
+	float dpiX = 96.0f * io.DisplayFramebufferScale.x;
+	float dpiY = 96.0f * io.DisplayFramebufferScale.y;
+	ImGui::Text("Estimated DPI: %.0f x %.0f", dpiX, dpiY);
+	if (io.DisplayFramebufferScale.x != 1.0f || io.DisplayFramebufferScale.y != 1.0f) {
+		ImGui::Text("High DPI detected: %.0f%% scaling", io.DisplayFramebufferScale.x * 100.0f);
+	}
 }
 
 
@@ -556,37 +942,134 @@ void MainUIManager::RenderManualPage() {
 	ImGui::SetWindowFontScale(1.5f);
 	ImGui::Text("Manual Control");
 	ImGui::SetWindowFontScale(1.0f);
-
 	ImGui::Spacing();
+
+	// ========== ADD THIS SECTION: Real-time Position Display ==========
+	// Get GlobalDataStore instance
+	GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+
+	// Display live position data in a collapsible section
+	if (ImGui::CollapsingHeader("Live Device Positions", ImGuiTreeNodeFlags_DefaultOpen)) {
+		// Create a nice table for position display
+		if (ImGui::BeginTable("PositionTable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+			// Setup columns
+			ImGui::TableSetupColumn("Device", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+			ImGui::TableSetupColumn("X", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Y", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Z", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("U", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("V", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("W", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+			ImGui::TableHeadersRow();
+
+			// UPDATE: Use your actual device names
+			std::vector<std::string> devices = { "hex-left", "hex-right", "gantry-main" };
+
+
+			for (const auto& device : devices) {
+				ImGui::TableNextRow();
+
+				// Device name
+				ImGui::TableNextColumn();
+				ImGui::Text("%s", device.c_str());
+
+				// X, Y, Z positions
+				for (const auto& axis : { "X", "Y", "Z" }) {
+					ImGui::TableNextColumn();
+					std::string posKey = device + "-POS-" + axis;
+					if (dataStore->HasValue(posKey)) {
+						float pos = dataStore->GetValue(posKey);
+						ImGui::Text("%.3f", pos);
+					}
+					else {
+						ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "N/A");
+					}
+				}
+
+				// U, V, W positions (for hexapods)
+				for (const auto& axis : { "U", "V", "W" }) {
+					ImGui::TableNextColumn();
+					std::string posKey = device + "-POS-" + axis;
+					if (dataStore->HasValue(posKey)) {
+						float pos = dataStore->GetValue(posKey);
+						// Convert to degrees if it's an angular axis
+						float angleDeg = dataStore->GetValue(device + "-ANGLE-" + axis, pos);
+						ImGui::Text("%.2f°", angleDeg);
+					}
+					else {
+						ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "---");
+					}
+				}
+
+				// Status column - check if any axis is moving
+				ImGui::TableNextColumn();
+				bool anyAxisMoving = false;
+				for (const auto& axis : { "X", "Y", "Z", "U", "V", "W" }) {
+					std::string movingKey = device + "-MOVING-" + axis;
+					if (dataStore->GetValue(movingKey, 0.0f) > 0.5f) {
+						anyAxisMoving = true;
+						break;
+					}
+				}
+
+				if (anyAxisMoving) {
+					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "MOVING");
+				}
+				else {
+					ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "IDLE");
+				}
+			}
+
+			ImGui::EndTable();
+		}
+
+		// Add a refresh indicator
+		ImGui::Text("Data updates automatically at 20Hz (PI) / 5Hz (ACS)");
+
+		// Display additional info
+		ImGui::Separator();
+		ImGui::Text("Available Channels: %zu", dataStore->GetAvailableChannels().size());
+
+		// Optional: Show all available channels in a combo box
+		static bool showAllChannels = false;
+		ImGui::Checkbox("Show All Channels", &showAllChannels);
+
+		if (showAllChannels) {
+			auto channels = dataStore->GetAvailableChannels();
+			if (ImGui::BeginChild("ChannelList", ImVec2(0, 200), true, ImGuiWindowFlags_HorizontalScrollbar)) {
+				for (const auto& channel : channels) {
+					float value = dataStore->GetValue(channel);
+					ImGui::Text("%s = %.3f", channel.c_str(), value);
+				}
+			}
+			ImGui::EndChild();
+		}
+	}
+
+	ImGui::Separator();
+	// ========== END OF ADDED SECTION ==========
+
 	ImGui::Text("Select a manual control option:");
 	ImGui::Spacing();
 
-
-
-	// OPTION 1: Use simple single-character emojis (avoid compound emojis)
+	// Original buttons
 	if (ImGui::Button(reinterpret_cast<const char*>(u8"1. PI 🤖"), ImVec2(200, 50))) {
 		currentManualSubPage = ManualSubPage::PI;
 	}
-
-	if (ImGui::Button(reinterpret_cast<const char*>(u8"2. Gantry 🦾"), ImVec2(200, 50))) { // Changed from 🦿 to 🦾
+	if (ImGui::Button(reinterpret_cast<const char*>(u8"2. Gantry 🦾"), ImVec2(200, 50))) {
 		currentManualSubPage = ManualSubPage::GANTRY;
 	}
-
-	if (ImGui::Button(reinterpret_cast<const char*>(u8"3. IO ⚡"), ImVec2(200, 50))) { // Changed from 🔌 to ⚡
+	if (ImGui::Button(reinterpret_cast<const char*>(u8"3. IO ⚡"), ImVec2(200, 50))) {
 		currentManualSubPage = ManualSubPage::IO;
 	}
-
 	if (ImGui::Button(reinterpret_cast<const char*>(u8"4. Pneumatic 💨"), ImVec2(200, 50))) {
 		currentManualSubPage = ManualSubPage::PNEUMATIC;
 	}
-
 	if (ImGui::Button(reinterpret_cast<const char*>(u8"5. Camera 📷"), ImVec2(200, 50))) {
 		currentManualSubPage = ManualSubPage::CAMERA;
 	}
-
-
 }
-
 
 // Update RenderManualSubPage() to include pneumatic case:
 void MainUIManager::RenderManualSubPage() {
@@ -726,9 +1209,8 @@ void MainUIManager::RenderCameraPage() {
 
 
 
-// Update RenderDataInstrumentPage() to show the 4 buttons
 
-// 1. UPDATE RenderDataInstrumentPage() - Change button text and enum:
+// Update RenderDataInstrumentPage() - add the button:
 void MainUIManager::RenderDataInstrumentPage() {
 	ImGui::SetWindowFontScale(1.5f);
 	ImGui::Text("Data & Instrument");
@@ -746,7 +1228,6 @@ void MainUIManager::RenderDataInstrumentPage() {
 		currentDataInstrumentSubPage = DataInstrumentSubPage::TCP_DATA_MANAGER;
 	}
 
-	// UPDATED BUTTON TEXT AND ENUM:
 	if (ImGui::Button("3. CLD101x Equipment", ImVec2(250, 50))) {
 		currentDataInstrumentSubPage = DataInstrumentSubPage::CLD101X_EQUIPMENT;
 	}
@@ -754,28 +1235,17 @@ void MainUIManager::RenderDataInstrumentPage() {
 	if (ImGui::Button("4. SMU Manager", ImVec2(250, 50))) {
 		currentDataInstrumentSubPage = DataInstrumentSubPage::SMU_MANAGER;
 	}
+
+	// ADD THIS - New SPD button
+	if (ImGui::Button("5. SPD Power Supply", ImVec2(250, 50))) {
+		currentDataInstrumentSubPage = DataInstrumentSubPage::SPD_POWER_SUPPLY;
+	}
 }
 
 
 // Add new method to handle Data Instrument sub-pages
 
-// ==============================================================================
-// HEADER FILE CHANGES (MainUIManager.h)
-// ==============================================================================
 
-// 1. UPDATE the DataInstrumentSubPage enum - RENAME CLD101X_TEC to CLD101X_EQUIPMENT:
-enum class DataInstrumentSubPage {
-	NONE,
-	GLOBAL_DATA_STORE,
-	TCP_DATA_MANAGER,
-	CLD101X_EQUIPMENT,    // RENAMED from CLD101X_TEC
-	SMU_MANAGER
-};
-
-// 2. UPDATE method declaration in private section:
-// CHANGE: void RenderCld101xTecPage();
-// TO:
-void RenderCld101xEquipmentPage();
 
 
 // ==============================================================================
@@ -797,6 +1267,9 @@ void MainUIManager::RenderDataInstrumentSubPage() {
 		break;
 	case DataInstrumentSubPage::SMU_MANAGER:
 		RenderSmuManagerPage();
+		break;
+	case DataInstrumentSubPage::SPD_POWER_SUPPLY:  // ADD THIS
+		RenderSPDPowerSupplyPage();
 		break;
 	default:
 		break;
@@ -858,31 +1331,22 @@ void MainUIManager::SetCLD101xManager(CLD101xManager* cld101xManager) {
 
 
 void MainUIManager::RenderCld101xEquipmentPage() {
-	if (m_cld101xManager) {
-		// Use ONLY the manager's built-in UI - no duplication
-		m_cld101xManager->RenderUI();
-
-		// REMOVE the duplicate client rendering loop:
-		// auto clientNames = m_cld101xManager->GetClientNames();
-		// for (const auto& clientName : clientNames) { ... }
+	if (m_cld101xEquipmentUI) {
+		// Use the equipment UI directly
+		m_cld101xEquipmentUI->Render();
 	}
 	else {
-		// Fallback when manager not available
+		// Fallback when UI not available
 		ImGui::SetWindowFontScale(1.5f);
 		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "CLD101x Equipment Control");
 		ImGui::SetWindowFontScale(1.0f);
 
 		ImGui::Spacing();
-		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "CLD101x Manager not available");
-		ImGui::Text("Equipment control is not initialized.");
-		ImGui::Spacing();
-		ImGui::Text("This typically means:");
-		ImGui::BulletText("CLD101x manager is still loading");
-		ImGui::BulletText("No CLD101x devices are configured");
-		ImGui::BulletText("Hardware connection issues");
-		ImGui::BulletText("Check network connectivity to laser controllers");
+		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "CLD101x UI not initialized");
+		ImGui::Text("This is an internal error - please check the console for details.");
 	}
 }
+
 
 // Update RenderSmuManagerPage() method to use the dedicated UI:
 void MainUIManager::RenderSmuManagerPage() {
@@ -958,36 +1422,75 @@ void MainUIManager::RenderConfigPage() {
 }
 
 
+
+// Update RenderVisionPage() to include the third button:
 void MainUIManager::RenderVisionPage() {
 	ImGui::SetWindowFontScale(1.5f);
-	ImGui::Text("Vision & Image Processing");
+	ImGui::Text("Vision System");
 	ImGui::SetWindowFontScale(1.0f);
 
 	ImGui::Spacing();
-	ImGui::Text("Computer vision and image processing tools will be implemented here");
-
-	// Placeholder Vision controls
-	ImGui::Separator();
-	ImGui::Text("Image Processing Controls:");
-
-	static float threshold = 128.0f;
-	static float blur = 1.0f;
-	static bool enableEdgeDetection = false;
-
-	ImGui::SliderFloat("Threshold", &threshold, 0.0f, 255.0f);
-	ImGui::SliderFloat("Blur Radius", &blur, 0.0f, 10.0f);
-	ImGui::Checkbox("Enable Edge Detection", &enableEdgeDetection);
-
+	ImGui::Text("Select a vision processing option:");
 	ImGui::Spacing();
-	if (ImGui::Button("Process Image")) {
-		std::cout << "Processing image with threshold: " << threshold
-			<< ", blur: " << blur
-			<< ", edge detection: " << (enableEdgeDetection ? "ON" : "OFF") << std::endl;
+
+	if (ImGui::Button("1. Fiducial Detection", ImVec2(250, 50))) {
+		currentVisionSubPage = VisionSubPage::FIDUCIAL;
 	}
 
-	ImGui::SameLine();
-	if (ImGui::Button("Capture & Analyze")) {
-		std::cout << "Capturing and analyzing image..." << std::endl;
+	if (ImGui::Button("2. Datum Reference", ImVec2(250, 50))) {
+		currentVisionSubPage = VisionSubPage::DATUM_REFERENCE;
+	}
+
+	// ADD THIS: Third button for Module Alignment
+	if (ImGui::Button("3. Module Alignment", ImVec2(250, 50))) {
+		currentVisionSubPage = VisionSubPage::MODULE_ALIGNMENT;
+	}
+}
+
+
+// Update RenderVisionSubPage() to handle Module Alignment:
+void MainUIManager::RenderVisionSubPage() {
+	switch (currentVisionSubPage) {
+	case VisionSubPage::FIDUCIAL:
+		RenderFiducialPage();
+		break;
+	case VisionSubPage::DATUM_REFERENCE:
+		RenderDatumReferencePage();
+		break;
+	case VisionSubPage::MODULE_ALIGNMENT:       // ADD THIS CASE
+		RenderModuleAlignmentPage();             // ADD THIS CASE
+		break;                                   // ADD THIS CASE
+	default:
+		break;
+	}
+}
+
+// 6. ADD Fiducial page method (move current UIVisionPanel here):
+void MainUIManager::RenderFiducialPage() {
+	// Move the current UIVisionPanel rendering here
+	if (m_visionPanelUI) {
+		m_visionPanelUI->RenderUI();
+	}
+}
+
+// 7. ADD Datum Reference page method (placeholder for now):
+
+// REPLACE the existing RenderDatumReferencePage() method with:
+void MainUIManager::RenderDatumReferencePage() {
+	if (m_datumUI) {
+		m_datumUI->RenderUI();
+	}
+	else {
+		// Fallback if DatumUI is not initialized
+		ImGui::SetWindowFontScale(1.5f);
+		ImGui::Text("Datum Reference");
+		ImGui::SetWindowFontScale(1.0f);
+
+		ImGui::Spacing();
+		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Datum Reference System not available");
+		ImGui::Text("DatumUI has not been initialized.");
+		ImGui::Spacing();
+		ImGui::Text("This is an internal error - please check the console for details.");
 	}
 }
 
@@ -1148,6 +1651,9 @@ void MainUIManager::SetKeithley2400Manager(Keithley2400Manager* keithleyManager)
 }
 
 // Add this method implementation:
+// In MainUIManager.cpp - Update the SetCameraManager method
+// Add this code to pass camera manager to RunPageUI
+
 void MainUIManager::SetCameraManager(CameraManager* cameraManager) {
 	m_cameraManager = cameraManager;
 
@@ -1169,8 +1675,32 @@ void MainUIManager::SetCameraManager(CameraManager* cameraManager) {
 		m_macroPanelUI->SetCameraManager(m_cameraManager);
 		std::cout << "MainUIManager: MacroPanelUI updated with Camera Manager" << std::endl;
 	}
+
+	// IMPORTANT: Pass camera manager to RunPageUI if it exists
+	if (m_runPageUI && m_cameraManager) {
+		m_runPageUI->SetCameraManager(m_cameraManager);
+		std::cout << "MainUIManager: RunPageUI updated with Camera Manager" << std::endl;
+	}
+
+
+	// ADD THIS: Connect camera manager to vision panel
+	if (m_visionPanelUI && m_cameraManager) {
+		m_visionPanelUI->SetCameraManager(m_cameraManager);
+		std::cout << "MainUIManager: Vision Panel connected to Camera Manager" << std::endl;
+	}
+
+	// ADD THIS: Connect camera manager to ModuleAlignmentUI
+	if (m_moduleAlignmentUI && m_cameraManager) {
+		m_moduleAlignmentUI->SetCameraManager(m_cameraManager);
+		std::cout << "MainUIManager: ModuleAlignmentUI updated with Camera Manager" << std::endl;
+	}
+
 }
 
+
+
+
+// REPLACE the SetMachineOperations method in MainUIManager.cpp with this fixed version
 
 void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
 	m_machineOperations = machineOps;
@@ -1186,9 +1716,7 @@ void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
 			std::cout << "MainUIManager: MachineBlockUI updated with MachineOperations" << std::endl;
 		}
 
-
 		// IMPORTANT: Reconnect MacroManager to MachineBlockUI after MachineOperations is set
-		// This ensures MacroManager has access to the fully initialized MachineBlockUI
 		if (m_macroManager && m_machineBlockUI) {
 			m_macroManager->SetMachineBlockUI(m_machineBlockUI.get());
 			std::cout << "MainUIManager: MacroManager reconnected with initialized MachineBlockUI" << std::endl;
@@ -1201,35 +1729,81 @@ void MainUIManager::SetMachineOperations(MachineOperations* machineOps) {
 			std::cout << "MainUIManager: MacroPanelUI reconnected with initialized components" << std::endl;
 		}
 
+		// Create UserPromptUI and RunPageUI when MachineOperations is available
+		if (!m_userPromptUI) {
+			// 1. Create UserPromptUI
+			m_userPromptUI = std::make_unique<UserPromptUI>();
+			std::cout << "MainUIManager: UserPromptUI created" << std::endl;
+		}
 
-		// Create RunPageUI when MachineOperations is available
-		if (m_machineOperations) {
+		// ADD THIS: Connect to ModuleAlignmentUI
+		if (m_moduleAlignmentUI) {
+			m_moduleAlignmentUI->SetMachineOperations(m_machineOperations);
+			std::cout << "MainUIManager: ModuleAlignmentUI updated with MachineOperations" << std::endl;
+		}
+
+		if (!m_runPageUI) {
+			// 2. Create RunPageUI
 			m_runPageUI = std::make_unique<RunPageUI>(*m_machineOperations);
+			std::cout << "MainUIManager: RunPageUI created" << std::endl;
+
+			// 3. Connect UserPromptUI to RunPageUI
+			if (m_userPromptUI) {
+				m_runPageUI->SetUserPromptUI(m_userPromptUI.get());
+				std::cout << "MainUIManager: UserPromptUI connected to RunPageUI" << std::endl;
+			}
+
+			// Connect UserPromptUI to RunPageUI
+			if (m_userPromptUI) {
+				m_runPageUI->SetUserPromptUI(m_userPromptUI.get());
+				std::cout << "MainUIManager: UserPromptUI connected to RunPageUI" << std::endl;
+
+				// VERIFY the connection worked
+				if (m_runPageUI->HasUserPromptUI()) {
+					std::cout << "✓ UserPromptUI connection verified" << std::endl;
+				}
+				else {
+					std::cout << "✗ UserPromptUI connection FAILED" << std::endl;
+				}
+			}
+			else {
+				std::cout << "✗ UserPromptUI is NULL!" << std::endl;
+			}
 
 			// 4. Set font if available
 			if (m_imguiFont) {
 				m_runPageUI->SetImguiFont(m_imguiFont);
+				std::cout << "MainUIManager: Font set on RunPageUI" << std::endl;
 			}
+
+			// 5. CRITICAL: Set camera manager if available
+			if (m_cameraManager) {
+				m_runPageUI->SetCameraManager(m_cameraManager);
+				std::cout << "MainUIManager: Camera Manager set on RunPageUI" << std::endl;
+			}
+
+			// NEW: Connect to vision panel
+			if (m_visionPanelUI) {
+				m_visionPanelUI->SetMachineOperations(m_machineOperations);
+				std::cout << "MainUIManager: Vision Panel updated with MachineOperations" << std::endl;
+			}
+
+			// Also connect MotionConfigManager if available
+			if (m_visionPanelUI) {
+				m_visionPanelUI->SetMotionConfigManager(&motionConfigManager);
+				std::cout << "MainUIManager: Vision Panel updated with MotionConfigManager" << std::endl;
+			}
+
 		}
+
 
 	}
 	else {
 		std::cout << "MainUIManager: MachineOperations cleared" << std::endl;
 	}
-
-	// Create UserPromptUI when MachineOperations is available
-	if (m_machineOperations) {
-		// 1. Create UserPromptUI
-		m_userPromptUI = std::make_unique<UserPromptUI>();
-
-		// 2. Create RunPageUI
-		m_runPageUI = std::make_unique<RunPageUI>(*m_machineOperations);
-
-		// 3. Connect UserPromptUI to RunPageUI
-		m_runPageUI->SetUserPromptUI(m_userPromptUI.get());
-	}
-
 }
+
+
 
 // Optionally, add a getter method as well
 MachineOperations* MainUIManager::GetMachineOperations() {
@@ -1450,5 +2024,147 @@ void MainUIManager::ProcessKeyInput(SDL_Keycode key, bool pressed) {
 	// Forward keyboard input to UIJogWindow if it exists
 	if (m_uiJogWindow) {
 		m_uiJogWindow->ProcessKeyInput(key, pressed);
+	}
+}
+
+// Alternative: Add a dedicated method for setting up vision panel
+void MainUIManager::SetupVisionPanel() {
+	if (!m_visionPanelUI) {
+		std::cout << "MainUIManager: Vision Panel not created" << std::endl;
+		return;
+	}
+
+	// Connect MotionConfigManager
+	m_visionPanelUI->SetMotionConfigManager(&motionConfigManager);
+	std::cout << "MainUIManager: Connected MotionConfigManager to Vision Panel" << std::endl;
+
+	// Connect MachineOperations if available
+	if (m_machineOperations) {
+		m_visionPanelUI->SetMachineOperations(m_machineOperations);
+		std::cout << "MainUIManager: Connected MachineOperations to Vision Panel" << std::endl;
+	}
+
+	// Connect CameraManager if available
+	if (m_cameraManager) {
+		m_visionPanelUI->SetCameraManager(m_cameraManager);
+		std::cout << "MainUIManager: Connected CameraManager to Vision Panel" << std::endl;
+	}
+
+
+}
+
+// Add the new RenderModuleAlignmentPage() method:
+void MainUIManager::RenderModuleAlignmentPage() {
+	if (m_moduleAlignmentUI) {
+		m_moduleAlignmentUI->RenderUI();
+	}
+	else {
+		// Fallback if ModuleAlignmentUI is not initialized
+		ImGui::SetWindowFontScale(1.5f);
+		ImGui::Text("Module Alignment");
+		ImGui::SetWindowFontScale(1.0f);
+
+		ImGui::Spacing();
+		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Module Alignment System not available");
+		ImGui::Text("ModuleAlignmentUI has not been initialized.");
+		ImGui::Spacing();
+		ImGui::Text("This is an internal error - please check the console for details.");
+	}
+}
+
+// 1. ADD the smart getter methods implementations
+PIControllerManager* MainUIManager::GetPIController() const {
+	if (m_context) {
+		if (auto* pi = m_context->GetPIController()) return pi;
+	}
+	return m_piControllerManager;  // Fallback to old way
+}
+
+ACSControllerManager* MainUIManager::GetACSController() const {
+	if (m_context) {
+		if (auto* acs = m_context->GetACSController()) return acs;
+	}
+	return m_acsControllerManager;  // Fallback to old way
+}
+
+CameraManager* MainUIManager::GetCameraManagerSmart() const {
+	if (m_context) {
+		if (auto* camera = m_context->GetCameraManager()) return camera;
+	}
+	return m_cameraManager;  // Fallback to old way
+}
+
+EziIOManager* MainUIManager::GetIOManager() const {
+	if (m_context) {
+		if (auto* io = m_context->GetIOManager()) return io;
+	}
+	return m_ioManager;  // Fallback to old way
+}
+
+IOConfigManager* MainUIManager::GetIOConfig() const {
+	if (m_context) {
+		if (auto* ioConfig = m_context->GetIOConfig()) return ioConfig;
+	}
+	return m_ioConfigManager;  // Fallback to old way
+}
+
+PneumaticManager* MainUIManager::GetPneumaticManager() const {
+	if (m_context) {
+		if (auto* pneumatic = m_context->GetPneumaticManager()) return pneumatic;
+	}
+	return m_pneumaticManager;  // Fallback to old way
+}
+
+DataClientManager* MainUIManager::GetDataClient() const {
+	if (m_context) {
+		if (auto* dataClient = m_context->GetDataClient()) return dataClient;
+	}
+	return m_dataClientManager;  // Fallback to old way
+}
+
+Keithley2400Manager* MainUIManager::GetKeithley() const {
+	if (m_context) {
+		if (auto* keithley = m_context->GetKeithley()) return keithley;
+	}
+	return m_keithleyManager;  // Fallback to old way
+}
+
+// Add SPD manager getter method to MainUIManager (add to both .h and .cpp):
+SPDPowerSupplyManager* MainUIManager::GetSPDManager() const {
+	if (m_context) {
+		if (auto* spd = m_context->GetSPDPowerSupply()) return spd;
+	}
+	return nullptr;  // Add fallback member if you add it later
+}
+
+CLD101xManager* MainUIManager::GetCLD101x() const {
+	if (m_context) {
+		if (auto* cld101x = m_context->GetCLD101x()) {
+			Logger::GetInstance()->LogInfo("GetCLD101x: Found in AppContext");
+			return cld101x;
+		}
+	}
+	if (m_cld101xManager) {
+		Logger::GetInstance()->LogInfo("GetCLD101x: Using fallback member variable");
+		return m_cld101xManager;
+	}
+	Logger::GetInstance()->LogWarning("GetCLD101x: No CLD101x manager available!");
+	return nullptr;
+}
+
+
+// Add the render method implementation:
+void MainUIManager::RenderSPDPowerSupplyPage() {
+	if (m_spdPowerSupplyUI) {
+		m_spdPowerSupplyUI->RenderUI();
+	}
+	else {
+		ImGui::SetWindowFontScale(1.5f);
+		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "SPD Power Supply Control");
+		ImGui::SetWindowFontScale(1.0f);
+
+		ImGui::Spacing();
+		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "SPD UI not initialized");
+		ImGui::Text("SPD Power Supply Manager may not be available.");
 	}
 }

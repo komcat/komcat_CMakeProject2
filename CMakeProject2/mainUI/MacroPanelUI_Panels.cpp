@@ -33,7 +33,7 @@ void MacroPanelUI::RenderMacroList() {
       items.push_back(macro.c_str());
     }
 
-    if (ImGui::Combo("##MacroSelect", &m_selectedMacroIndex, items.data(), items.size())) {
+    if (ImGui::Combo("##MacroSelect", &m_selectedMacroIndex, items.data(), static_cast<int>(items.size()))) {
       if (m_selectedMacroIndex >= 0 && m_selectedMacroIndex < m_availableMacros.size()) {
         m_currentMacroName = m_availableMacros[m_selectedMacroIndex];
         RefreshProgramItems();

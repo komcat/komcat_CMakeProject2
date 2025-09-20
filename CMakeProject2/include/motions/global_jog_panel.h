@@ -1,6 +1,15 @@
 // global_jog_panel.h - Split version header
 #pragma once
 
+// Prevent winsock conflicts before any includes
+#ifdef _WIN32
+#define _WINSOCKAPI_   // Prevent winsock.h
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
+
+
 #include "include/motions/MotionConfigManager.h"
 #include "include/motions/pi_controller_manager.h"
 #include "include/motions/acs_controller_manager.h"

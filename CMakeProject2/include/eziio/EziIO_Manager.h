@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <string>
 #include <vector>
@@ -9,8 +9,16 @@
 #include <atomic>
 #include <mutex>
 #include "FAS_EziMOTIONPlusE.h"
+#include "EziIO_Observer.h"
 
-class EziIODevice {
+enum class EziIOError {
+  SUCCESS = 0,
+  DEVICE_NOT_FOUND,
+  DEVICE_DISCONNECTED,
+  OPERATION_FAILED
+};
+
+class EziIODevice : public EziIOPublisher {
 public:
   EziIODevice(int id, const std::string& name, const std::string& ip,
     int inputCount, int outputCount);
@@ -38,6 +46,10 @@ public:
   int getInputCount() const { return m_inputCount; }
   int getOutputCount() const { return m_outputCount; }
 
+  // Enable/disable change detection
+  void setChangeDetectionEnabled(bool enabled) { m_changeDetectionEnabled = enabled; }
+  bool isChangeDetectionEnabled() const { return m_changeDetectionEnabled; }
+
 private:
   // Device specific pin masks based on output pin count
   static const uint32_t OUTPUT_PIN_MASKS_16[16];
@@ -61,9 +73,20 @@ private:
   uint32_t m_lastOutputs;
   uint32_t m_lastOutputStatus;
   bool m_statusUpdated;
+
+  // Observer pattern support
+  bool m_changeDetectionEnabled;
+  uint32_t m_previousInputs;
+  uint32_t m_previousOutputs;
+  bool m_firstRead;
+
+  // Helper methods for change detection
+  void checkAndNotifyInputChanges(uint32_t newInputs);
+  void checkAndNotifyOutputChanges(uint32_t newOutputs);
+  uint32_t getCurrentTimestamp() const;
 };
 
-class EziIOManager {
+class EziIOManager : public EziIOPublisher {
 public:
   EziIOManager();
   ~EziIOManager();
@@ -79,15 +102,15 @@ public:
   bool connectDevice(int deviceId);
   bool disconnectDevice(int deviceId);
 
-  // Input operations
-  bool readInputs(int deviceId, uint32_t& inputs, uint32_t& latch);
-  bool getLastInputStatus(int deviceId, uint32_t& inputs, uint32_t& latch);
+  // Input operations - now return EziIOError
+  EziIOError readInputs(int deviceId, uint32_t& inputs, uint32_t& latch);
+  EziIOError getLastInputStatus(int deviceId, uint32_t& inputs, uint32_t& latch);
 
-  // Output operations
-  bool getOutputs(int deviceId, uint32_t& outputs, uint32_t& status);
-  bool getLastOutputStatus(int deviceId, uint32_t& outputs, uint32_t& status);
-  bool setOutputs(int deviceId, uint32_t setMask, uint32_t clearMask);
-  bool setOutput(int deviceId, int outputPin, bool state);
+  // Output operations - now return EziIOError
+  EziIOError getOutputs(int deviceId, uint32_t& outputs, uint32_t& status);
+  EziIOError getLastOutputStatus(int deviceId, uint32_t& outputs, uint32_t& status);
+  EziIOError setOutputs(int deviceId, uint32_t setMask, uint32_t clearMask);
+  EziIOError setOutput(int deviceId, int outputPin, bool state);
 
   // Polling thread control
   void startPolling(unsigned int intervalMs = 100);
@@ -100,12 +123,31 @@ public:
   EziIODevice* getDeviceByName(const std::string& name);
 
   const std::vector<std::shared_ptr<EziIODevice>>& getDevices() const { return m_devices; }
+  int getConnectedDeviceCount() const { return m_connectedDeviceCount; }
+
+  void setLogging(bool enable) { m_enableLogging = enable; }
+
+  // Helper to get error message
+  static std::string getErrorString(EziIOError error);
+
+  // Observer pattern - subscribe to specific device
+  void subscribeToDevice(int deviceId, std::shared_ptr<IEziIOObserver> observer);
+  void subscribeCallbackToDevice(int deviceId, std::function<void(const PinChangeEvent&)> callback);
+
+  // Subscribe to all devices
+  void subscribeToAllDevices(std::shared_ptr<IEziIOObserver> observer);
+  void subscribeCallbackToAllDevices(std::function<void(const PinChangeEvent&)> callback);
+
+  // Enable/disable change detection for all devices
+  void setChangeDetectionEnabled(bool enabled);
 
 private:
+  bool m_enableLogging = true;
   std::vector<std::shared_ptr<EziIODevice>> m_devices;
   std::map<int, std::shared_ptr<EziIODevice>> m_deviceMap;
   std::map<std::string, std::shared_ptr<EziIODevice>> m_deviceNameMap;
   bool m_initialized;
+  std::atomic<int> m_connectedDeviceCount{ 0 };
 
   // Threading
   std::thread* m_pollingThread;
@@ -114,4 +156,7 @@ private:
 
   // Thread function
   void pollingThreadFunc();
+
+  // Helper method for validation
+  EziIOError validateDevice(int deviceId, EziIODevice** device, const std::string& operation);
 };

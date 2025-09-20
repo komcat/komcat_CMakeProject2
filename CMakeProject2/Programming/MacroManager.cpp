@@ -1,8 +1,4 @@
-﻿#ifdef _WIN32
-#include <windows.h>
-#else
-#include <filesystem>
-#endif
+﻿
 
 #include "MacroManager.h"
 #include "MachineBlockUI.h"
@@ -1093,7 +1089,7 @@ void MacroManager::RenderEditMacrosSection() {
 
           for (size_t i = 0; i < macro.programs.size(); i++) {
             const auto& program = macro.programs[i];
-            bool isSelected = editState.IsProgramSelected(i);
+            bool isSelected = editState.IsProgramSelected(static_cast<int>(i));
 
             if (isEditMode) {
               // === EDIT MODE: Show remove buttons ===
@@ -1103,7 +1099,7 @@ void MacroManager::RenderEditMacrosSection() {
               std::string buttonId = "X" + program.name + "##" + std::to_string(i);
               if (ImGui::Button(buttonId.c_str(), ImVec2(140, 40))) {
                 // Remove this program
-                RemoveProgramFromMacro(name, i);
+                RemoveProgramFromMacro(name, static_cast<int>(i));
                 editState.SetProgramCount(macro.programs.size() - 1);
                 ImGui::PopStyleColor(2);
                 break; // Exit loop since we modified the container
@@ -1115,7 +1111,7 @@ void MacroManager::RenderEditMacrosSection() {
                 ImGui::Separator();
 
                 if (ImGui::MenuItem("[Del] Delete Program")) {
-                  RemoveProgramFromMacro(name, i);
+                  RemoveProgramFromMacro(name, static_cast<int>(i));
                   editState.SetProgramCount(macro.programs.size() - 1);
                   ImGui::EndPopup();
                   ImGui::PopStyleColor(2);
@@ -1150,7 +1146,7 @@ void MacroManager::RenderEditMacrosSection() {
 
               std::string buttonId = program.name + "##" + std::to_string(i);
               if (ImGui::Button(buttonId.c_str(), ImVec2(120, 40))) {
-                editState.SelectSingleProgram(i);
+                editState.SelectSingleProgram(static_cast<int>(i));
               }
 
               // Right click menu
@@ -1159,18 +1155,18 @@ void MacroManager::RenderEditMacrosSection() {
                 ImGui::Separator();
 
                 if (ImGui::MenuItem("Run This Only")) {
-                  editState.SelectSingleProgram(i);
+                  editState.SelectSingleProgram(static_cast<int>(i));
                   ExecuteSingleProgram(program.name);
                 }
 
                 if (ImGui::MenuItem("Run From Here to End")) {
-                  editState.SetRunFromIndex(i);
+                  editState.SetRunFromIndex(static_cast<int>(i));
                   // Give visual feedback
                   AddExecutionLog("Set to run from '" + program.name + "' to end");
                 }
 
                 if (ImGui::MenuItem("Toggle Selection")) {
-                  editState.ToggleProgramSelection(i);
+                  editState.ToggleProgramSelection(static_cast<int>(i));
                 }
 
                 ImGui::Separator();
@@ -1232,7 +1228,7 @@ void MacroManager::RenderEditMacrosSection() {
             items.push_back(progName.c_str());
           }
 
-          ImGui::Combo(("##AddProgram_" + name).c_str(), &selectedProgram, items.data(), items.size());
+          ImGui::Combo(("##AddProgram_" + name).c_str(), &selectedProgram, items.data(), static_cast<int>(items.size()));
           ImGui::PopItemWidth();
 
           ImGui::SameLine();
@@ -1500,7 +1496,7 @@ void MacroManager::RenderLoadMacroSection() {
       ImGui::SetColumnWidth(0, 300);
 
       ImGui::PushItemWidth(-1);
-      ImGui::Combo("##MacroFileSelect", &selectedMacroFile, macroFileItems.data(), macroFileItems.size());
+      ImGui::Combo("##MacroFileSelect", &selectedMacroFile, macroFileItems.data(), static_cast<int>(macroFileItems.size()));
       ImGui::PopItemWidth();
       ImGui::NextColumn();
 
@@ -1804,7 +1800,12 @@ std::string MacroManager::GetCurrentTimeString() {
     now.time_since_epoch()) % 1000;
 
   std::stringstream ss;
-  ss << std::put_time(std::localtime(&time_t), "%H:%M:%S");
+
+  // Use localtime_s for Windows
+  std::tm timeinfo;
+  localtime_s(&timeinfo, &time_t);
+
+  ss << std::put_time(&timeinfo, "%H:%M:%S");
   ss << "." << std::setfill('0') << std::setw(3) << ms.count();
   return ss.str();
 }

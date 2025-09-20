@@ -1,22 +1,22 @@
 {
-  "manager_settings": {
-    "auto_connect": true,
-    "default_polling_interval": 200,
-    "bulk_voltage": 0.0,
-    "bulk_current": 0.001,
-    "bulk_compliance": 0.1,
-    "bulk_source_mode": 0
-  },
   "clients": [
     {
-      "name": "SMU1",
-      "display_name": "Keithley 2400 Main Device",
-      "ip": "127.0.0.101",
-      "port": 8888,
       "auto_connect": true,
+      "description": "Primary Keithley 2400 for main measurements",
+      "display_name": "Keithley 2400 Main Device",
       "enabled": true,
+      "ip": "127.0.0.101",
+      "name": "SMU1",
       "polling_interval": 1000,
-      "description": "Primary Keithley 2400 for main measurements"
+      "port": 8888
     }
-  ]
+  ],
+  "manager_settings": {
+    "auto_connect": true,
+    "bulk_compliance": 0.1,
+    "bulk_current": 0.001,
+    "bulk_source_mode": 0,
+    "bulk_voltage": 0.0,
+    "default_polling_interval": 200
+  }
 }

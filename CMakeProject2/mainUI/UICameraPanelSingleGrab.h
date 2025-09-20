@@ -1,72 +1,61 @@
-// UICameraPanelSingleGrab.h - Updated with new method declarations
+// UICameraPanelSingleGrab.h - Single Frame Capture Panel
 #pragma once
-#include "imgui.h"
-#include <memory>
+
 #include <string>
-#include <chrono>
 
 // Forward declarations
 class CameraManager;
-class PylonCameraTest;
-class CameraFeedDisplay;
+class ICameraHardware;
 
 class UICameraPanelSingleGrab {
 public:
   UICameraPanelSingleGrab(CameraManager& cameraManager);
   ~UICameraPanelSingleGrab();
 
-  // Disable copy/move
+  // Disable copy/move to avoid issues with references
   UICameraPanelSingleGrab(const UICameraPanelSingleGrab&) = delete;
   UICameraPanelSingleGrab& operator=(const UICameraPanelSingleGrab&) = delete;
   UICameraPanelSingleGrab(UICameraPanelSingleGrab&&) = delete;
   UICameraPanelSingleGrab& operator=(UICameraPanelSingleGrab&&) = delete;
 
-  // Main rendering method
-  void RenderTab(PylonCameraTest* camera, const std::string& cameraId);
+  // Tab rendering for use in UICameraPanel
+  void RenderTab(ICameraHardware* camera, const std::string& cameraId);
 
   // Camera management
-  void SetSelectedCamera(PylonCameraTest* camera, const std::string& cameraId);
+  void SetSelectedCamera(ICameraHardware* camera, const std::string& cameraId);
   void ClearCamera();
-
-  // Frame capture operations
-  bool GrabSingleFrame();
-  void ClearCapturedFrame();
-  bool SaveFrameToDisk();
-
-  // Status queries
-  bool HasCapturedFrame() const { return m_hasCapturedFrame; }
-  std::string GetCaptureTimeText() const;
 
 private:
   // Reference to camera manager
   CameraManager& m_cameraManager;
 
   // Current camera state
+  ICameraHardware* m_currentCamera = nullptr;
   std::string m_currentCameraId;
-  PylonCameraTest* m_currentCamera = nullptr;
 
-  // Single frame display
-  std::unique_ptr<CameraFeedDisplay> m_frameDisplay;
+  // Single frame capture state
+  bool m_captureInProgress = false;
+  std::string m_lastCaptureStatus;
 
-  // Capture state
+  // OpenGL texture for captured frame display
+  unsigned int m_capturedTextureId = 0;
+  int m_capturedWidth = 0;
+  int m_capturedHeight = 0;
   bool m_hasCapturedFrame = false;
-  std::chrono::steady_clock::time_point m_lastCaptureTime;
-  std::string m_lastSavedPath;
 
-  // UI settings
-  bool m_autoSave = false;
-  bool m_showCaptureInfo = true;
+  // UI rendering methods
+  void RenderCaptureControls();
+  void RenderCapturedFrameDisplay();
+  void RenderCaptureStatus();
 
-  // **NEW: UI rendering helpers for reorganized layout**
-  void RenderMainControls();           // Main controls for left column
-  void RenderDetailedStatus();         // Detailed status for right column
-  void RenderCaptureSettings();        // Capture settings for right column
-  void RenderFrameDisplay();           // Frame display area
-  void RenderPlaceholderCanvas(float width, float height, const std::string& text);
-  void RenderCaptureInfoOverlay(ImVec2 canvasSize);
+  // Capture operations
+  void CaptureSingleFrame();
+  void ClearCapturedFrame();
 
-  // Internal operations
+  // Texture management
+  void UpdateCapturedTexture(const struct CameraFrameData& frameData);
+  void CleanupCapturedTexture();
+
+  // Validation
   bool ValidateCamera() const;
-  void UpdateCaptureDisplay();
-  std::string GenerateFilename() const;
 };

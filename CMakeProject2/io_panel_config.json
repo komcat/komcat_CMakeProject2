@@ -1,59 +1,59 @@
 {
   "metadata": {
-    "version": "1.0",
-    "lastUpdated": "2025-02-07T12:00:00Z"
+    "lastUpdated": "2025-02-07T12:00:00Z",
+    "version": "1.0"
   },
   "panels": [
     {
       "name": "IO Quick Control",
       "pins": [
         {
-          "deviceName": "IOBottom",
           "deviceId": 0,
-          "pinNumber": 0,
-          "label": "L_Gripper"
+          "deviceName": "IOBottom",
+          "label": "L_Gripper",
+          "pinNumber": 0
         },
         {
-          "deviceName": "IOBottom",
           "deviceId": 0,
-          "pinNumber": 2,
-          "label": "R_Gripper"
+          "deviceName": "IOBottom",
+          "label": "R_Gripper",
+          "pinNumber": 2
         },
         {
-          "deviceName": "IOBottom",
           "deviceId": 0,
-          "pinNumber": 10,
-          "label": "Vacuum_Base"
+          "deviceName": "IOBottom",
+          "label": "Vacuum_Base",
+          "pinNumber": 10
         },
         {
-          "deviceName": "IOBottom",
           "deviceId": 0,
-          "pinNumber": 15,
-          "label": "Dispenser_Shot"
+          "deviceName": "IOBottom",
+          "label": "Dispenser_Shot",
+          "pinNumber": 15
         },
         {
-          "deviceName": "IOBottom",
           "deviceId": 0,
-          "pinNumber": 4,
-          "label": "UV_Head"
+          "deviceName": "IOBottom",
+          "label": "UV_Head",
+          "pinNumber": 4
         },
         {
-          "deviceName": "IOBottom",
           "deviceId": 0,
-          "pinNumber": 5,
-          "label": "Dispenser_Head"
+          "deviceName": "IOBottom",
+          "label": "Dispenser_Head",
+          "pinNumber": 5
         },
         {
-          "deviceName": "IOBottom",
           "deviceId": 0,
-          "pinNumber": 14,
-          "label": "UV_PLC1"
+          "deviceName": "IOBottom",
+          "label": "UV_PLC1",
+          "pinNumber": 14
         },
         {
-          "deviceName": "IOBottom",
           "deviceId": 0,
-          "pinNumber": 13,
-          "label": "UV_PLC2"
+          "deviceName": "IOBottom",
+          "label": "UV_PLC2",
+          "pinNumber": 13
         }
       ]
     }

@@ -73,10 +73,6 @@ void PIController::StopCommunicationThread() {
 	}
 }
 
-
-// Add this improved version to the CommunicationThreadFunc
-// 4. Update CommunicationThreadFunc in pi_controller.cpp
-// Updated communication thread - now includes analog reading
 void PIController::CommunicationThreadFunc() {
 	const auto updateInterval = std::chrono::milliseconds(50);  // 20Hz update rate
 	int frameCounter = 0;
@@ -88,8 +84,13 @@ void PIController::CommunicationThreadFunc() {
 			// Always update positions
 			std::map<std::string, double> positions;
 			if (GetPositions(positions)) {
-				std::lock_guard<std::mutex> lock(m_mutex);
-				m_axisPositions = positions;
+				{
+					std::lock_guard<std::mutex> lock(m_mutex);
+					m_axisPositions = positions;
+				}
+
+				// *** ADD THIS LINE - THIS IS WHAT'S MISSING! ***
+				NotifyPositionSubscribers(positions);
 			}
 
 			// Update motion status
@@ -102,7 +103,14 @@ void PIController::CommunicationThreadFunc() {
 					const std::vector<std::string> axisNames = { "X", "Y", "Z", "U", "V", "W" };
 
 					for (int i = 0; i < 6; i++) {
-						m_axisMoving[axisNames[i]] = (isMovingArray[i] == TRUE);
+						bool wasMoving = m_axisMoving[axisNames[i]];
+						bool nowMoving = (isMovingArray[i] == TRUE);
+						m_axisMoving[axisNames[i]] = nowMoving;
+
+						// Notify if motion status changed
+						if (wasMoving != nowMoving) {
+							NotifyMotionStatusSubscribers(axisNames[i], nowMoving);
+						}
 					}
 				}
 			}
@@ -118,7 +126,7 @@ void PIController::CommunicationThreadFunc() {
 				}
 			}
 
-			// NEW: Update analog readings every frame (if enabled)
+			// Update analog readings every frame (if enabled)
 			if (m_enableAnalogReading && frameCounter % 2 == 0) {  // Update analog every other frame (10Hz)
 				UpdateAnalogReadings();
 			}
@@ -129,7 +137,6 @@ void PIController::CommunicationThreadFunc() {
 		m_condVar.wait_for(lock, updateInterval, [this]() { return m_terminateThread.load(); });
 	}
 }
-
 // NEW: Update analog readings in communication thread
 void PIController::UpdateAnalogReadings() {
 	if (!m_isConnected || !m_enableAnalogReading || m_activeAnalogChannels.empty()) {
@@ -840,6 +847,15 @@ bool PIController::MoveToNamedPosition(const std::string& deviceName, const std:
 	// 2. Move each axis to the specified position
 
 	return true;
+}
+
+
+float PIController::GetAxisPositionFloat(const std::string& axis) {
+	double position = 0.0;
+	if (GetPosition(axis, position)) {
+		return static_cast<float>(position);
+	}
+	return 0.0f;  // Return 0 if unable to get position
 }
 
 // Update UI rendering to match the new axis identifiers
@@ -1881,4 +1897,57 @@ std::string PIController::AxesToString(const std::vector<std::string>& axes) con
 	}
 
 	return result;
+}
+
+
+void PIController::SubscribeToPositions(IPositionSubscriber* subscriber,
+	const std::string& subscriberId) {
+	if (!subscriber) {
+		m_logger->LogError("PIController: Cannot subscribe null subscriber");
+		return;
+	}
+
+	std::lock_guard<std::mutex> lock(m_subscribersMutex);
+	m_positionSubscribers[subscriberId] = subscriber;
+	m_logger->LogInfo("PIController: Position subscriber added: " + subscriberId);
+}
+
+void PIController::UnsubscribeFromPositions(const std::string& subscriberId) {
+	std::lock_guard<std::mutex> lock(m_subscribersMutex);
+	auto it = m_positionSubscribers.find(subscriberId);
+	if (it != m_positionSubscribers.end()) {
+		m_positionSubscribers.erase(it);
+		m_logger->LogInfo("PIController: Position subscriber removed: " + subscriberId);
+	}
+}
+
+void PIController::NotifyPositionSubscribers(const std::map<std::string, double>& positions) {
+	std::lock_guard<std::mutex> lock(m_subscribersMutex);
+
+	for (const auto& [subscriberId, subscriber] : m_positionSubscribers) {
+		if (subscriber) {
+			try {
+				subscriber->OnPositionsUpdate(m_deviceName, positions);
+			}
+			catch (const std::exception& e) {
+				m_logger->LogError("PIController: Exception notifying subscriber " +
+					subscriberId + ": " + e.what());
+			}
+		}
+	}
+}
+
+void PIController::NotifyMotionStatusSubscribers(const std::string& axis, bool isMoving) {
+	std::lock_guard<std::mutex> lock(m_subscribersMutex);
+
+	for (const auto& [subscriberId, subscriber] : m_positionSubscribers) {
+		if (subscriber) {
+			try {
+				subscriber->OnMotionStatusChange(m_deviceName, axis, isMoving);
+			}
+			catch (const std::exception& e) {
+				// Silent catch - OnMotionStatusChange is optional
+			}
+		}
+	}
 }

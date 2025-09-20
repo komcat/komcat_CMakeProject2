@@ -1,6 +1,18 @@
 // pi_controller.h - Updated with integrated analog reading
 #pragma once
+
+// Prevent Windows.h conflicts
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX  // Prevent min/max macro conflicts
+#endif
 #include <Windows.h>
+#endif
+
+#include "IPositionSubscriber.h"
 #include <string>
 #include <atomic>
 #include <thread>
@@ -43,6 +55,7 @@ public:
   bool IsMoving(const std::string& axis);
   bool GetPosition(const std::string& axis, double& position);
   bool GetPositions(std::map<std::string, double>& positions);
+	float GetAxisPositionFloat(const std::string& axis);
 
   // Servo control
   bool EnableServo(const std::string& axis, bool enable);
@@ -112,6 +125,9 @@ public:
   bool IsAnalogReadingEnabled() const { return m_enableAnalogReading; }
 
   void StopCommunicationThread();
+  // Subscribe/Unsubscribe for position updates
+  void SubscribeToPositions(IPositionSubscriber* subscriber, const std::string& subscriberId);
+  void UnsubscribeFromPositions(const std::string& subscriberId);
 
 private:
   bool m_debugVerbose = false;
@@ -173,4 +189,11 @@ private:
 
   // Helper method to convert vector of axes to space-separated string
   std::string AxesToString(const std::vector<std::string>& axes) const;
+
+  // Position subscribers
+  std::map<std::string, IPositionSubscriber*> m_positionSubscribers;
+  mutable std::mutex m_subscribersMutex;
+  // Notify all subscribers
+  void NotifyPositionSubscribers(const std::map<std::string, double>& positions);
+  void NotifyMotionStatusSubscribers(const std::string& axis, bool isMoving);
 };

@@ -8,14 +8,17 @@
 // Forward declarations
 class CameraManager;
 class Logger;
-struct CameraInfo;  // This is the existing CameraInfo from CameraManager.h
+struct CameraInfo;           // This is the existing CameraInfo from CameraManager.h
+struct ExtendedCameraInfo;   // This is the ExtendedCameraInfo from CameraManager.h
 
 // Structure to hold camera configuration data (renamed to avoid conflict with CameraManager::CameraInfo)
 struct CameraConfigData {
   std::string id;
   std::string displayName;
-  std::string connectionType;  // "ip", "auto", "serial"
+  std::string connectionType;  // "ip", "auto", "serial", "index"
+  std::string cameraType;      // "PYLON" (or "BASLER") or "IDS" - NEW FIELD
   std::string ipAddress;
+  std::string serialNumber;    // NEW: Add explicit serial number field
   int port;
   bool enabled;
   bool autoConnect;
@@ -30,8 +33,13 @@ struct CameraConfigData {
   // Default constructor
   CameraConfigData()
     : port(0), enabled(true), autoConnect(true),
-    exposureTime(1000), gain(1.0), width(0), height(0) {
+    exposureTime(1000), gain(1.0), width(0), height(0),
+    cameraType("PYLON") {  // Default to PYLON for backward compatibility
   }
+
+  // Helper methods
+  bool IsPylonCamera() const { return cameraType == "PYLON" || cameraType == "BASLER"; }
+  bool IsIDSCamera() const { return cameraType == "IDS"; }
 };
 
 // Structure to hold manager-level settings
@@ -106,8 +114,11 @@ public:
   // Create default configuration
   void CreateDefaultConfig();
 
-  // Helper function to convert CameraConfigData to CameraInfo (for CameraManager compatibility)
-  // This converts from our config format TO the existing CameraManager::CameraInfo struct
+  // Helper function to convert CameraConfigData to ExtendedCameraInfo (for CameraManager compatibility)
+  // This converts from our config format TO the ExtendedCameraInfo struct
+  ExtendedCameraInfo ConvertToExtendedCameraInfo(const CameraConfigData& configData) const;
+
+  // Legacy method for backward compatibility
   CameraInfo ConvertToCameraInfo(const CameraConfigData& configData) const;
 
 private:

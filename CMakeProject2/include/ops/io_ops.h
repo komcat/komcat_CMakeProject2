@@ -21,6 +21,8 @@ public:
   );
   ~IOOps();
 
+  bool Initialize();
+
   // Digital I/O control methods with caller context tracking
   bool SetOutput(const std::string& deviceName, int outputPin, bool state,
     const std::string& callerContext = "");

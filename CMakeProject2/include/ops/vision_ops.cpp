@@ -43,6 +43,10 @@ VisionOps::~VisionOps() {
   m_logger->LogInfo("VisionOps: Shutting down");
 }
 
+bool VisionOps::Initialize() {
+  return InitializeCamera();
+}
+
 // Camera control methods
 bool VisionOps::InitializeCamera() {
   if (!m_cameraTest) {
@@ -211,7 +215,9 @@ bool VisionOps::CaptureImageToFile(const std::string& filename) {
     auto now = std::chrono::system_clock::now();
     auto time = std::chrono::system_clock::to_time_t(now);
     std::stringstream ss;
-    ss << "capture_" << std::put_time(std::localtime(&time), "%Y%m%d_%H%M%S") << ".png";
+		std::tm timeinfo;
+		localtime_s(&timeinfo, &time);
+    ss << "capture_" << std::put_time(&timeinfo, "%Y%m%d_%H%M%S") << ".png";
     actualFilename = ss.str();
   }
 

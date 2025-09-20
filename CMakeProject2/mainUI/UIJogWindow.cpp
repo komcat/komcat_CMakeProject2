@@ -1,8 +1,12 @@
-﻿// UIJogWindow.cpp - Updated to wrap GlobalJogPanel
+﻿// UIJogWindow.cpp - Updated with position subscription support
 #include "UIJogWindow.h"
+#include "include/motions/pi_controller_manager.h"
+#include "include/motions/acs_controller_manager.h"
+#include "include/motions/MotionConfigManager.h"
 #include "imgui.h"
 #include <vector>
 #include <string>
+#include <iostream>
 
 // Constructor for testing/mock mode
 UIJogWindow::UIJogWindow(MotionConfigManager& configManager)
@@ -19,11 +23,19 @@ UIJogWindow::UIJogWindow(MotionConfigManager& configManager,
   m_piControllerManager(&piControllerManager),
   m_acsControllerManager(&acsControllerManager) {
 
+  // Subscribe to controllers
+  SubscribeToPIControllers();
+  SubscribeToACSControllers();
+
   // Create GlobalJogPanel immediately since we have controllers
   CreateGlobalJogPanel();
 }
 
-UIJogWindow::~UIJogWindow() = default;
+UIJogWindow::~UIJogWindow() {
+  // Unsubscribe from all controllers before destruction
+  UnsubscribeFromPIControllers();
+  UnsubscribeFromACSControllers();
+}
 
 void UIJogWindow::CreateGlobalJogPanel() {
   // Only create if we have both managers
@@ -36,8 +48,76 @@ void UIJogWindow::CreateGlobalJogPanel() {
   }
 }
 
+void UIJogWindow::SubscribeToPIControllers() {
+  if (!m_piControllerManager) return;
+
+  // Get all devices from config that are PI controllers (port 50000)
+  const auto& devices = m_configManager.GetAllDevices();
+
+  for (const auto& [name, device] : devices) {
+    if (device.Port == 50000) { // PI controller port
+      auto controller = m_piControllerManager->GetController(name);
+      if (controller) {
+        controller->SubscribeToPositions(this, "UIJogWindow");
+        m_subscribedPIDevices.push_back(name);
+        std::cout << "UIJogWindow: Subscribed to PI controller " << name << std::endl;
+      }
+    }
+  }
+}
+
+void UIJogWindow::UnsubscribeFromPIControllers() {
+  if (!m_piControllerManager) return;
+
+  for (const auto& deviceName : m_subscribedPIDevices) {
+    auto controller = m_piControllerManager->GetController(deviceName);
+    if (controller) {
+      controller->UnsubscribeFromPositions("UIJogWindow");
+      std::cout << "UIJogWindow: Unsubscribed from PI controller " << deviceName << std::endl;
+    }
+  }
+  m_subscribedPIDevices.clear();
+}
+
+void UIJogWindow::SubscribeToACSControllers() {
+  if (!m_acsControllerManager) return;
+
+  // Get all devices from config that are ACS controllers (port 701)
+  const auto& devices = m_configManager.GetAllDevices();
+
+  for (const auto& [name, device] : devices) {
+    if (device.Port == 701) { // ACS controller port (ACSC_SOCKET_STREAM_PORT)
+      auto controller = m_acsControllerManager->GetController(name);
+      if (controller) {
+        controller->SubscribeToPositions(this, "UIJogWindow");
+        m_subscribedACSDevices.push_back(name);
+        std::cout << "UIJogWindow: Subscribed to ACS controller " << name << std::endl;
+      }
+    }
+  }
+}
+
+void UIJogWindow::UnsubscribeFromACSControllers() {
+  if (!m_acsControllerManager) return;
+
+  for (const auto& deviceName : m_subscribedACSDevices) {
+    auto controller = m_acsControllerManager->GetController(deviceName);
+    if (controller) {
+      controller->UnsubscribeFromPositions("UIJogWindow");
+      std::cout << "UIJogWindow: Unsubscribed from ACS controller " << deviceName << std::endl;
+    }
+  }
+  m_subscribedACSDevices.clear();
+}
+
 void UIJogWindow::SetPIControllerManager(PIControllerManager* piManager) {
+  // Unsubscribe from old controllers
+  UnsubscribeFromPIControllers();
+
   m_piControllerManager = piManager;
+
+  // Subscribe to new controllers
+  SubscribeToPIControllers();
 
   // Try to create GlobalJogPanel if we now have both managers
   if (m_piControllerManager && m_acsControllerManager && !m_globalJogPanel) {
@@ -46,12 +126,45 @@ void UIJogWindow::SetPIControllerManager(PIControllerManager* piManager) {
 }
 
 void UIJogWindow::SetACSControllerManager(ACSControllerManager* acsManager) {
+  // Unsubscribe from old controllers
+  UnsubscribeFromACSControllers();
+
   m_acsControllerManager = acsManager;
+
+  // Subscribe to new controllers
+  SubscribeToACSControllers();
 
   // Try to create GlobalJogPanel if we now have both managers
   if (m_piControllerManager && m_acsControllerManager && !m_globalJogPanel) {
     CreateGlobalJogPanel();
   }
+}
+
+// IPositionSubscriber implementation
+void UIJogWindow::OnPositionsUpdate(const std::string& deviceName,
+  const std::map<std::string, double>& positions) {
+  std::lock_guard<std::mutex> lock(m_positionMutex);
+  m_cachedPositions[deviceName] = positions;
+
+  // GlobalJogPanel will automatically use these cached positions on next render
+  // since it queries positions from the controllers which now have updated values
+}
+
+void UIJogWindow::OnMotionStatusChange(const std::string& deviceName,
+  const std::string& axis, bool isMoving) {
+  std::lock_guard<std::mutex> lock(m_positionMutex);
+  m_cachedMotionStatus[deviceName][axis] = isMoving;
+
+  // This can be used to update UI indicators for motion status
+}
+
+std::map<std::string, double> UIJogWindow::GetCachedPositions(const std::string& deviceName) const {
+  std::lock_guard<std::mutex> lock(m_positionMutex);
+  auto it = m_cachedPositions.find(deviceName);
+  if (it != m_cachedPositions.end()) {
+    return it->second;
+  }
+  return {};
 }
 
 void UIJogWindow::ToggleWindow() {
@@ -254,21 +367,40 @@ void UIJogWindow::RenderMockJogWindow() {
   }
   ImGui::PopStyleColor();
 
-  // Mock position display
+  // Mock position display with cached positions if available
   if (showPositions) {
     ImGui::Separator();
     ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "Current Positions for %s", mockDevices[selectedDevice]);
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Mock Mode - No Real Position Data");
+
+    // Check if we have cached positions
+    bool hasCachedData = false;
+    std::map<std::string, double> cachedPos;
+
+    {
+      std::lock_guard<std::mutex> lock(m_positionMutex);
+      if (!m_cachedPositions.empty()) {
+        // Get first available cached positions for display
+        cachedPos = m_cachedPositions.begin()->second;
+        hasCachedData = true;
+      }
+    }
+
+    if (hasCachedData) {
+      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Live Position Data");
+    }
+    else {
+      ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Mock Mode - No Real Position Data");
+    }
 
     if (ImGui::Button("Refresh Positions")) {
-      // Mock refresh
+      // In real mode, positions update automatically
     }
     ImGui::SameLine();
     if (ImGui::Button("Copy to Clipboard")) {
       // Mock copy
     }
 
-    // Mock position table
+    // Position table
     if (ImGui::BeginTable("PositionsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
       ImGui::TableSetupColumn("Axis", ImGuiTableColumnFlags_WidthFixed, 60.0f);
       ImGui::TableSetupColumn("Position (mm/deg)", ImGuiTableColumnFlags_WidthStretch);
@@ -283,11 +415,21 @@ void UIJogWindow::RenderMockJogWindow() {
         ImGui::TableNextColumn();
         ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "%s", labels[i]);
         ImGui::TableNextColumn();
+
+        // Use cached position if available, otherwise mock
+        double position = mockPositions[i];
+        if (hasCachedData) {
+          auto it = cachedPos.find(axes[i]);
+          if (it != cachedPos.end()) {
+            position = it->second;
+          }
+        }
+
         if (i >= 3) { // Rotation axes
-          ImGui::Text("%.4f°", mockPositions[i]);
+          ImGui::Text("%.4f°", position);
         }
         else { // Linear axes
-          ImGui::Text("%.6f mm", mockPositions[i]);
+          ImGui::Text("%.6f mm", position);
         }
       }
       ImGui::EndTable();
@@ -370,7 +512,19 @@ void UIJogWindow::RenderMockJogWindow() {
     }
   }
 
-  ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Status: Mock Mode - Motion controllers not available");
+  // Show subscription status
+  {
+    std::lock_guard<std::mutex> lock(m_positionMutex);
+    if (!m_subscribedPIDevices.empty() || !m_subscribedACSDevices.empty()) {
+      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f),
+        "Subscribed to %zu PI and %zu ACS controllers",
+        m_subscribedPIDevices.size(), m_subscribedACSDevices.size());
+    }
+    else {
+      ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+        "Status: Mock Mode - Motion controllers not available");
+    }
+  }
 
   ImGui::End();
 }

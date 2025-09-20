@@ -565,3 +565,53 @@ bool MotionConfigManager::ReloadConfig() {
     return false;
   }
 }
+
+std::vector<std::string> MotionConfigManager::GetAllGraphNames() const {
+  std::vector<std::string> graphNames;
+  graphNames.reserve(m_graphs.size()); // Reserve space for efficiency
+
+  for (const auto& [name, graph] : m_graphs) {
+    graphNames.push_back(name);
+  }
+
+  return graphNames;
+}
+
+// Check if a node exists in any graph
+bool MotionConfigManager::NodeExists(const std::string& nodeId) const {
+  // Search through all graphs
+  for (const auto& [graphName, graph] : m_graphs) {
+    for (const auto& node : graph.Nodes) {
+      if (node.Id == nodeId) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Alias for NodeExists
+bool MotionConfigManager::HasNode(const std::string& nodeId) const {
+  return NodeExists(nodeId);
+}
+
+// Check if a node exists in a specific graph
+bool MotionConfigManager::NodeExists(const std::string& graphName, const std::string& nodeId) const {
+  auto graphOpt = GetGraph(graphName);
+  if (!graphOpt.has_value()) {
+    return false;
+  }
+
+  const auto& graph = graphOpt.value().get();
+  for (const auto& node : graph.Nodes) {
+    if (node.Id == nodeId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Alias for graph-specific NodeExists
+bool MotionConfigManager::HasNode(const std::string& graphName, const std::string& nodeId) const {
+  return NodeExists(graphName, nodeId);
+}

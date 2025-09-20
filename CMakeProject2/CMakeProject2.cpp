@@ -1646,9 +1646,9 @@ int main(int argc, char* argv[])
 		if (globalJogPanel) {
 			toolbarVertical->AddReference(CreateHierarchicalUI(*globalJogPanel, "Global Jog Panel"));
 		}
-		if (pylonCameraTest) {
-			toolbarVertical->AddReference(CreatePylonCameraAdapter(*pylonCameraTest, "Top Camera"));
-		}
+		//if (pylonCameraTest) {
+		//	toolbarVertical->AddReference(CreatePylonCameraAdapter(*pylonCameraTest, "Top Camera"));
+		//}
 
 		// Add components to Motors category
 		if (piControllerManager) {

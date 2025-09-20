@@ -26,11 +26,12 @@ enum PageType {
 };
 
 
+// Update the constructor to remove old video frame initialization:
 RaylibWindow::RaylibWindow()
   : isRunning(false), isVisible(false), shouldClose(false), shouldShutdown(false)
-  , piManager(nullptr), dataStore(nullptr), logger(nullptr), machineOperations(nullptr)  // Change variable name
-  , newVideoFrameReady(false) {  // Initialize new video flag
-
+  , piManager(nullptr), dataStore(nullptr), logger(nullptr), machineOperations(nullptr)
+  // REMOVED: , newVideoFrameReady(false)
+{
   // Initialize machine data
   machineData = { 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false };
 }
@@ -58,38 +59,7 @@ RaylibWindow::~RaylibWindow() {
   if (logger) logger->LogInfo("RaylibWindow destructor completed");
 }
 
-// NEW: Video frame management methods
-void RaylibWindow::UpdateVideoFrame(const unsigned char* imageData, int width, int height, uint64_t timestamp) {
-  if (!imageData || width <= 0 || height <= 0) return;
 
-  std::lock_guard<std::mutex> lock(videoMutex);
-  currentVideoFrame.UpdateFrame(imageData, width, height, timestamp);
-  newVideoFrameReady.store(true);
-}
-
-void RaylibWindow::ClearVideoFrame() {
-  std::lock_guard<std::mutex> lock(videoMutex);
-  currentVideoFrame.Clear();
-  raylibVideoFrame.Clear();
-  newVideoFrameReady.store(false);
-}
-
-bool RaylibWindow::HasVideoFeed() const {
-  return newVideoFrameReady.load() || raylibVideoFrame.isValid;
-}
-
-VideoFrame RaylibWindow::GetVideoFrameThreadSafe() {
-  std::lock_guard<std::mutex> lock(videoMutex);
-  return currentVideoFrame;  // This will copy the frame data
-}
-
-void RaylibWindow::UpdateRaylibVideoFrame() {
-  if (newVideoFrameReady.load()) {
-    std::lock_guard<std::mutex> lock(videoMutex);
-    raylibVideoFrame = currentVideoFrame;  // Copy frame data
-    newVideoFrameReady.store(false);
-  }
-}
 
 bool RaylibWindow::Initialize() {
   if (isRunning.load()) return true;
@@ -195,108 +165,8 @@ MachineData RaylibWindow::GetMachineDataThreadSafe() {
   return machineData;
 }
 
-// Helper function to render Live Video Page with video feed
-void RenderLiveVideoPage(RenderTexture2D& canvas, Vector2& canvasPos, VideoFrame& videoFrame, bool& videoPaused) {
-  // Update video texture if we have a new frame and video is not paused
-  static Texture2D videoTexture = { 0 };
-  static bool videoTextureLoaded = false;
 
-  if (videoFrame.isValid && !videoPaused) {
-    // Unload previous texture if it exists
-    if (videoTextureLoaded) {
-      UnloadTexture(videoTexture);
-    }
 
-    // Create Image from video frame data (C++17 compatible)
-    Image videoImage;
-    videoImage.data = videoFrame.data.data();
-    videoImage.width = videoFrame.width;
-    videoImage.height = videoFrame.height;
-    videoImage.mipmaps = 1;
-    videoImage.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8;
-
-    // Load texture from image
-    videoTexture = LoadTextureFromImage(videoImage);
-    videoTextureLoaded = true;
-  }
-
-  // Calculate video display area (maintain aspect ratio)
-  int screenWidth = GetScreenWidth();
-  int screenHeight = GetScreenHeight();
-
-  // Reserve space for UI at top
-  int uiHeight = 80;
-  int availableWidth = screenWidth - 20;  // 10px margin on each side
-  int availableHeight = screenHeight - uiHeight - 20;  // Space for UI + margins
-
-  Rectangle videoDisplayArea = { 10, (float)uiHeight, (float)availableWidth, (float)availableHeight };
-
-  if (videoTextureLoaded && videoFrame.isValid) {
-    // Calculate scaled size maintaining aspect ratio
-    float videoAspect = (float)videoFrame.width / (float)videoFrame.height;
-    float containerAspect = videoDisplayArea.width / videoDisplayArea.height;
-
-    float displayWidth, displayHeight;
-    if (videoAspect > containerAspect) {
-      // Video is wider - fit to width
-      displayWidth = videoDisplayArea.width;
-      displayHeight = displayWidth / videoAspect;
-    }
-    else {
-      // Video is taller - fit to height
-      displayHeight = videoDisplayArea.height;
-      displayWidth = displayHeight * videoAspect;
-    }
-
-    // Center the video in the display area
-    float videoX = videoDisplayArea.x + (videoDisplayArea.width - displayWidth) / 2;
-    float videoY = videoDisplayArea.y + (videoDisplayArea.height - displayHeight) / 2;
-
-    Rectangle videoDest = { videoX, videoY, displayWidth, displayHeight };
-    Rectangle videoSource = { 0, 0, (float)videoTexture.width, (float)videoTexture.height };
-
-    // Draw the video
-    DrawTexturePro(videoTexture, videoSource, videoDest, { 0, 0 }, 0.0f, WHITE);
-
-    // Draw video info overlay
-    DrawText(TextFormat("Video: %dx%d", videoFrame.width, videoFrame.height),
-      (int)videoX, (int)videoY - 20, 14, WHITE);
-  }
-  else {
-    // No video available
-    DrawRectangleRec(videoDisplayArea, DARKGRAY);
-    const char* noVideoText = "No Video Feed Available";
-    int textWidth = MeasureText(noVideoText, 20);
-    DrawText(noVideoText,
-      (screenWidth - textWidth) / 2,
-      screenHeight / 2,
-      20, LIGHTGRAY);
-  }
-
-  // Draw UI elements
-  DrawText("Live Video Page", 10, 10, 20, DARKBLUE);
-  DrawText("M: Menu | S: Status | R: Rectangles | C: Chart | ESC: Close", 10, 35, 14, GRAY);
-
-  // Video controls
-  static Rectangle playPauseButton = { 10, 50, 80, 25 };
-  static Rectangle stopButton = { 100, 50, 60, 25 };
-
-  Vector2 mousePos = GetMousePosition();
-
-  // Play/Pause button
-  Color playPauseColor = CheckCollisionPointRec(mousePos, playPauseButton) ? LIGHTGRAY : GRAY;
-  DrawRectangleRec(playPauseButton, playPauseColor);
-  DrawRectangleLinesEx(playPauseButton, 1, BLACK);
-  const char* playPauseText = videoPaused ? "Play" : "Pause";
-  DrawText(playPauseText, (int)playPauseButton.x + 15, (int)playPauseButton.y + 5, 14, BLACK);
-
-  if (CheckCollisionPointRec(mousePos, playPauseButton) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-    videoPaused = !videoPaused;
-  }
-
-  // Status indicator
-  DrawText(videoPaused ? "PAUSED" : "LIVE", 170, 55, 14, videoPaused ? RED : GREEN);
-}
 // Helper function to render Menu Page
 void RenderMenuPage(Logger* logger) {
   DrawText("Menu Page", 10, 10, 20, DARKBLUE);
@@ -344,6 +214,7 @@ void RenderMenuPage(Logger* logger) {
   }
 }
 
+
 void RaylibWindow::RaylibThreadFunction() {
   try {
     if (logger) logger->LogInfo("Raylib thread function starting...");
@@ -353,12 +224,8 @@ void RaylibWindow::RaylibThreadFunction() {
     InitWindow(1200, 800, "Raylib Canvas Window");
     SetExitKey(0);  // 0 = disables ESC as exit key
 
-
-    // ADD THIS LINE to disable raylib debug output
-    SetTraceLogLevel(LOG_WARNING); // Only show warnings and errors
-    // Or use LOG_ERROR to only show errors
-    // Or use LOG_NONE to disable all raylib logging
-
+    // Disable raylib debug output
+    SetTraceLogLevel(LOG_WARNING);
 
     if (!IsWindowReady()) {
       if (logger) logger->LogError("Failed to create raylib window in thread");
@@ -368,23 +235,12 @@ void RaylibWindow::RaylibThreadFunction() {
     if (logger) logger->LogInfo("Raylib window created successfully in thread");
     SetTargetFPS(60);
 
-    // Create a render texture as canvas for picture rendering
-    RenderTexture2D canvas = LoadRenderTexture(600, 400);
-
-    // Canvas position on screen
-    Vector2 canvasPos = { 100, 100 };
-
-    // Initialize canvas with white background
-    BeginTextureMode(canvas);
-    ClearBackground(WHITE);
-    EndTextureMode();
-
     // Create page instances
     StatusPage statusPage(logger);
     VisualizePage visualizePage(logger);
-    RealtimeChartPage realtimeChartPage(logger);  // ADD THIS LINE
+    RealtimeChartPage realtimeChartPage(logger);
 
-    // CONNECT MACHINE OPERATIONS TO REALTIME CHART PAGE:
+    // Connect machine operations to realtime chart page
     if (dataStore) {
       realtimeChartPage.SetDataStore(dataStore);
       if (logger) {
@@ -392,8 +248,8 @@ void RaylibWindow::RaylibThreadFunction() {
       }
     }
 
-    if (machineOperations) {  // Change from scanningUI
-      realtimeChartPage.SetMachineOperations(machineOperations);  // Change method name
+    if (machineOperations) {
+      realtimeChartPage.SetMachineOperations(machineOperations);
       if (logger) {
         logger->LogInfo("RaylibWindow: Connected MachineOperations to RealtimeChartPage");
       }
@@ -406,114 +262,148 @@ void RaylibWindow::RaylibThreadFunction() {
       }
     }
 
+    // Page management
     PageType currentPage = LIVE_VIDEO_PAGE;
 
-    // Video playback control
-    bool videoPaused = false;
+    // State management for Live Video Page
+    bool savedFullscreenState = false;
+    bool savedShowState = true;
 
     // Mark as running AFTER successful initialization
     isRunning.store(true);
     isVisible.store(true);
 
-    if (logger) logger->LogInfo("Raylib ready with live video support and MachineOperations integration");
-
-    // REPLACE your main raylib loop in RaylibThreadFunction() with this:
+    if (logger) logger->LogInfo("Raylib ready with camera feed support");
 
     // Main raylib loop
     while (!WindowShouldClose() && !shouldShutdown.load()) {
 
-      // === ADD CAMERA UPDATE HERE (CRITICAL!) ===
       // Update camera texture from OpenGL - MUST be called every frame
       UpdateCameraTexture();
-      // ==========================================
 
-      // Update video frame for raylib thread
-      UpdateRaylibVideoFrame();
+      // Track previous page for state management
+      PageType previousPage = currentPage;
 
       // Handle page switching input
-      if (IsKeyPressed(KEY_M)) {
-        currentPage = MENU_PAGE;
-      }
-      if (IsKeyPressed(KEY_V)) {
-        currentPage = LIVE_VIDEO_PAGE;
-      }
-      if (IsKeyPressed(KEY_S)) {
-        currentPage = STATUS_PAGE;
-      }
-      if (IsKeyPressed(KEY_R)) {  // R for Rectangles/Visualize
-        currentPage = VISUALIZE_PAGE;
-      }
-      if (IsKeyPressed(KEY_C)) {
-        currentPage = REALTIME_CHART_PAGE;
+      if (IsKeyPressed(KEY_M)) currentPage = MENU_PAGE;
+      if (IsKeyPressed(KEY_V)) currentPage = LIVE_VIDEO_PAGE;
+      if (IsKeyPressed(KEY_S)) currentPage = STATUS_PAGE;
+      if (IsKeyPressed(KEY_R)) currentPage = VISUALIZE_PAGE;
+      if (IsKeyPressed(KEY_C)) currentPage = REALTIME_CHART_PAGE;
+
+      // Handle Live Video Page special fullscreen behavior
+      if (currentPage != previousPage) {
+        if (currentPage == LIVE_VIDEO_PAGE) {
+          // Entering Live Video Page - save current state and force fullscreen
+          savedFullscreenState = m_cameraFullscreenMode;
+          savedShowState = m_showCameraFeed;
+          m_cameraFullscreenMode = true;  // Force fullscreen on Live Video Page
+          m_showCameraFeed = true;        // Force camera visible
+          if (logger) {
+            logger->LogInfo("Entered Live Video Page - camera forced to fullscreen");
+          }
+        }
+        else if (previousPage == LIVE_VIDEO_PAGE) {
+          // Leaving Live Video Page - restore previous state
+          m_cameraFullscreenMode = savedFullscreenState;
+          m_showCameraFeed = savedShowState;
+          if (logger) {
+            logger->LogInfo("Left Live Video Page - restored camera state");
+          }
+        }
       }
 
-      // === ADD CAMERA CONTROLS HERE ===
-      // Handle camera visibility toggle with different key (since C is used for chart)
-      if (IsKeyPressed(KEY_F)) {  // F for Feed toggle
+      // Camera controls
+      if (IsKeyPressed(KEY_F)) {
+        // F key toggles camera visibility
         ToggleCameraFeed();
         if (logger) {
           logger->LogInfo("Camera feed " + std::string(m_showCameraFeed ? "enabled" : "disabled"));
         }
       }
 
-      // Handle camera fullscreen toggle
-      if (IsKeyPressed(KEY_G)) {  // G for fullscreen toggle (since V is used for video page)
-        m_cameraFullscreenMode = !m_cameraFullscreenMode;
-        if (logger) {
-          logger->LogInfo("Camera view mode: " + std::string(m_cameraFullscreenMode ? "Fullscreen" : "Corner"));
+      if (IsKeyPressed(KEY_G)) {
+        // G key toggles fullscreen/corner mode (disabled on Live Video Page)
+        if (currentPage != LIVE_VIDEO_PAGE) {
+          m_cameraFullscreenMode = !m_cameraFullscreenMode;
+          if (logger) {
+            logger->LogInfo("Camera view mode: " + std::string(m_cameraFullscreenMode ? "Fullscreen" : "Corner"));
+          }
+        }
+        else {
+          if (logger) {
+            logger->LogInfo("Fullscreen toggle disabled on Live Video Page");
+          }
         }
       }
-      // ================================
 
-      // Handle video controls via keyboard
-      if (IsKeyPressed(KEY_SPACE)) {
-        videoPaused = !videoPaused;
+      if (IsKeyPressed(KEY_H)) {
+        // H key toggles crosshair (only works in fullscreen mode)
+        if (m_cameraFullscreenMode && m_showCameraFeed) {
+          m_showCrosshair = !m_showCrosshair;
+          if (logger) {
+            logger->LogInfo("Camera crosshair " + std::string(m_showCrosshair ? "enabled" : "disabled"));
+          }
+        }
+        else {
+          if (logger) {
+            logger->LogInfo("Crosshair requires fullscreen mode with camera visible");
+          }
+        }
       }
 
-      // Render everything
+      // Begin rendering
       BeginDrawing();
       ClearBackground(DARKGRAY);
 
-      if (currentPage == LIVE_VIDEO_PAGE) {
-        RenderLiveVideoPage(canvas, canvasPos, raylibVideoFrame, videoPaused);
-      }
-      else if (currentPage == MENU_PAGE) {
+      // Render current page
+      switch (currentPage) {
+      case LIVE_VIDEO_PAGE:
+        RenderLiveVideoPage();  // Member function, no parameters
+        break;
+      case MENU_PAGE:
         RenderMenuPage(logger);
-      }
-      else if (currentPage == STATUS_PAGE) {
+        break;
+      case STATUS_PAGE:
         statusPage.Render();
-      }
-      else if (currentPage == VISUALIZE_PAGE) {
+        break;
+      case VISUALIZE_PAGE:
         visualizePage.Render();
-      }
-      else if (currentPage == REALTIME_CHART_PAGE) {
+        break;
+      case REALTIME_CHART_PAGE:
         realtimeChartPage.Render();
+        break;
       }
 
-      // === ADD CAMERA OVERLAY RENDERING HERE (CRITICAL!) ===
-      // Render camera overlay on ALL pages - MUST be called every frame
+      // Always render camera overlay (this actually draws the camera feed)
       RenderCameraOverlay();
 
-      // Add camera status display
-      if (m_cameraFeedDisplay) {
+      // Display camera status for non-Live Video pages
+      if (currentPage != LIVE_VIDEO_PAGE && m_cameraFeedDisplay) {
         std::string cameraStatus = m_cameraFeedDisplay->GetStatusText();
         Color statusColor = m_cameraFeedDisplay->IsReceivingFrames() ? GREEN : ORANGE;
         DrawText(cameraStatus.c_str(), 10, GetScreenHeight() - 60, 16, statusColor);
 
         if (m_cameraFeedDisplay->HasValidTexture()) {
           DrawText("Camera: F=Toggle, G=Fullscreen", 10, GetScreenHeight() - 40, 12, LIGHTGRAY);
+
+          if (m_cameraFullscreenMode) {
+            std::string crosshairStatus = m_showCrosshair ? "H=Crosshair [ON]" : "H=Crosshair [OFF]";
+            Color crosshairColor = m_showCrosshair ? GREEN : LIGHTGRAY;
+            DrawText(crosshairStatus.c_str(), 10, GetScreenHeight() - 20, 12, crosshairColor);
+          }
         }
       }
-      // =====================================================
 
+      // Always show FPS
       DrawFPS(10, GetScreenHeight() - 30);
 
       EndDrawing();
     }
+
     if (logger) logger->LogInfo("Raylib thread main loop ended, cleaning up...");
 
     // Cleanup
-    UnloadRenderTexture(canvas);
     CloseWindow();
     shouldClose.store(true);
 
@@ -530,9 +420,7 @@ void RaylibWindow::RaylibThreadFunction() {
   if (logger) logger->LogInfo("Raylib thread function ended");
 }
 
-// Update your existing RaylibWindow::RenderScene() method in raylibclass.cpp
-// Check your RenderScene() method in raylibclass.cpp
-// Make sure it looks like this and is actually being called:
+
 
 void RaylibWindow::RenderScene() {
   // Add this debug at the very beginning to verify the method is called
@@ -644,35 +532,12 @@ void RaylibWindow::UpdateCameraTexture() {
 }
 
 
+
+// ============================================
+// SIMPLIFIED RenderCameraOverlay - Remove duplicate key handling
 void RaylibWindow::RenderCameraOverlay() {
   if (!m_showCameraFeed || !m_cameraFeedDisplay || m_cameraTextureID == 0) {
-    // NEW: Log why we're not rendering
-    static int noRenderCount = 0;
-    noRenderCount++;
-
-    if (noRenderCount % 300 == 0) { // Log every 5 seconds
-      if (m_logger) {
-        std::string reason = "Unknown";
-        if (!m_showCameraFeed) reason = "Feed not visible";
-        else if (!m_cameraFeedDisplay) reason = "No feed display";
-        else if (m_cameraTextureID == 0) reason = "No texture ID";
-
-        m_logger->LogInfo("RaylibWindow: Not rendering camera overlay - " + reason);
-      }
-    }
     return;
-  }
-
-  // NEW: Log successful renders occasionally
-  static int renderCount = 0;
-  renderCount++;
-
-  if (renderCount % 300 == 0) { // Log every 5 seconds
-    if (m_logger) {
-      m_logger->LogInfo("RaylibWindow: Rendering camera overlay (render #" + std::to_string(renderCount) + ")");
-      m_logger->LogInfo("  Texture ID: " + std::to_string(m_cameraTextureID));
-      m_logger->LogInfo("  Mode: " + std::string(m_cameraFullscreenMode ? "Fullscreen" : "Corner"));
-    }
   }
 
   // Get camera texture dimensions
@@ -680,31 +545,43 @@ void RaylibWindow::RenderCameraOverlay() {
   uint32_t texHeight = m_cameraFeedDisplay->GetTextureHeight();
 
   if (texWidth == 0 || texHeight == 0) {
-    if (m_logger && renderCount % 300 == 0) {
-      m_logger->LogInfo("RaylibWindow: Invalid texture dimensions: " +
-        std::to_string(texWidth) + "x" + std::to_string(texHeight));
-    }
     return;
   }
 
-  // Toggle with 'V' key
-  if (IsKeyPressed(KEY_V)) {
-    m_cameraFullscreenMode = !m_cameraFullscreenMode;
-    if (m_logger) {
-      m_logger->LogInfo("Camera view mode: " + std::string(m_cameraFullscreenMode ? "Fullscreen" : "Corner"));
-    }
-  }
-
+  // REMOVED duplicate key handling - it's now only in main loop
+  // Just render based on current state
   if (m_cameraFullscreenMode) {
     RenderCameraFullscreen();
   }
   else {
     RenderCameraInCorner();
+    // Reset crosshair when not in fullscreen
+    if (m_showCrosshair) {
+      m_showCrosshair = false;
+    }
   }
 }
 
+void RaylibWindow::RenderLiveVideoPage() {
+  int screenWidth = GetScreenWidth();
+  int screenHeight = GetScreenHeight();
 
+  // The camera should already be in fullscreen mode from the main loop
+  // Just draw the UI overlay
 
+  // Draw header with transparency so camera shows through
+  DrawRectangle(0, 0, screenWidth, 90, Fade(BLACK, 0.5f));
+  DrawText("LIVE CAMERA FEED", 10, 10, 24, WHITE);
+  DrawText("Navigation: M=Menu | S=Status | R=Visualize | C=Chart | ESC=Exit", 10, 40, 14, LIGHTGRAY);
+
+  // Show camera controls
+  if (m_cameraFeedDisplay && m_cameraTextureID != 0) {
+    DrawText("Camera Controls: F=Hide/Show | H=Crosshair", 10, 65, 14, GREEN);
+  }
+  else {
+    DrawText("Camera: Not Connected", 10, 65, 14, RED);
+  }
+}
 // First, add this include at the top of your raylibclass.cpp file:
 // #include <GL/gl.h>  // For OpenGL functions like glIsTexture
 // OR if you're using a different OpenGL loader:
@@ -802,6 +679,9 @@ void RaylibWindow::RenderCameraInCorner() {
 }
 
 
+
+// In raylibclass.cpp, replace the RenderCameraFullscreen() method with this simpler version:
+
 void RaylibWindow::RenderCameraFullscreen() {
   if (m_cameraTextureID == 0) return;
 
@@ -819,19 +699,19 @@ void RaylibWindow::RenderCameraFullscreen() {
   // Fit to screen while maintaining aspect ratio
   if (aspectRatio > ((float)screenWidth / screenHeight)) {
     // Fit by width
-    displayWidth = screenWidth;
+    displayWidth = (float)screenWidth;
     displayHeight = screenWidth / aspectRatio;
     offsetY = (screenHeight - displayHeight) * 0.5f;
   }
   else {
     // Fit by height
-    displayHeight = screenHeight;
+    displayHeight = (float)screenHeight;
     displayWidth = screenHeight * aspectRatio;
     offsetX = (screenWidth - displayWidth) * 0.5f;
   }
 
   Rectangle destRect = { offsetX, offsetY, displayWidth, displayHeight };
-  Rectangle sourceRect = { 0, 0, texWidth, texHeight };  // Negative height to flip Y
+  Rectangle sourceRect = { 0, 0, texWidth, texHeight };
 
   // Create texture reference
   Texture2D cameraTexture = {
@@ -848,8 +728,73 @@ void RaylibWindow::RenderCameraFullscreen() {
   // Draw camera feed
   DrawTexturePro(cameraTexture, sourceRect, destRect, Vector2{ 0, 0 }, 0.0f, WHITE);
 
+  // SIMPLIFIED CROSSHAIR - Just basic lines, no fancy features
+  if (m_showCrosshair) {
+    // Calculate center of the IMAGE
+    float imageCenterX = offsetX + displayWidth / 2.0f;
+    float imageCenterY = offsetY + displayHeight / 2.0f;
+
+    // Simple crosshair - just draw the lines directly
+    // Horizontal line (full width of image)
+    DrawLineEx(
+      Vector2{ offsetX, imageCenterY },
+      Vector2{ offsetX + displayWidth, imageCenterY },
+      2.0f,
+      GREEN  // Simple green color
+    );
+
+    // Vertical line (full height of image)
+    DrawLineEx(
+      Vector2{ imageCenterX, offsetY },
+      Vector2{ imageCenterX, offsetY + displayHeight },
+      2.0f,
+      GREEN
+    );
+
+    // Center dot
+    DrawCircle((int)imageCenterX, (int)imageCenterY, 5, RED);
+
+    // Simple status text
+    DrawText("CROSSHAIR ON", screenWidth - 150, 20, 20, GREEN);
+  }
+
   // Draw controls
   DrawText("CAMERA FEED - FULLSCREEN MODE", 20, 20, 24, WHITE);
-  DrawText("Press 'V' to return to corner view", 20, 50, 16, LIGHTGRAY);
-  DrawText("Press 'C' to hide camera feed", 20, 70, 16, LIGHTGRAY);
+  DrawText("Press 'G' to return to corner view", 20, 50, 16, LIGHTGRAY);
+  DrawText("Press 'F' to hide camera feed", 20, 70, 16, LIGHTGRAY);
+
+  // Show crosshair control
+  if (m_showCrosshair) {
+    DrawText("Press 'H' to hide crosshair [ON]", 20, 130, 16, GREEN);
+  }
+  else {
+    DrawText("Press 'H' to show crosshair [OFF]", 20, 130, 16, LIGHTGRAY);
+  }
+}
+
+// Also add this debug method to help troubleshoot:
+void RaylibWindow::DebugCrosshair() {
+  if (m_logger) {
+    m_logger->LogInfo("=== CROSSHAIR DEBUG ===");
+    m_logger->LogInfo("Crosshair enabled: " + std::string(m_showCrosshair ? "YES" : "NO"));
+    m_logger->LogInfo("Fullscreen mode: " + std::string(m_cameraFullscreenMode ? "YES" : "NO"));
+    m_logger->LogInfo("Camera feed visible: " + std::string(m_showCameraFeed ? "YES" : "NO"));
+
+    if (m_cameraFeedDisplay) {
+      m_logger->LogInfo("Camera texture ID: " + std::to_string(m_cameraTextureID));
+      m_logger->LogInfo("Camera dimensions: " +
+        std::to_string(m_cameraFeedDisplay->GetTextureWidth()) + "x" +
+        std::to_string(m_cameraFeedDisplay->GetTextureHeight()));
+    }
+    m_logger->LogInfo("===================");
+  }
+
+  // Also draw debug info on screen
+  if (m_showCrosshair && m_cameraFullscreenMode) {
+    DrawText("CROSSHAIR DEBUG: SHOULD BE VISIBLE", 400, 20, 20, YELLOW);
+    DrawRectangle(400, 50, 300, 100, Fade(RED, 0.3f));
+    DrawText("If you see this red box but no crosshair,", 410, 60, 14, WHITE);
+    DrawText("there's a rendering issue.", 410, 80, 14, WHITE);
+    DrawText("Check console for debug output.", 410, 100, 14, WHITE);
+  }
 }

@@ -1,6 +1,7 @@
 #include "MenuManager_uaa3.h"
 #include "imgui.h"
 #include "Version.h"
+#include "include/logger.h"
 
 MenuManagerUaa3::MenuManagerUaa3() {
 }
@@ -8,12 +9,101 @@ MenuManagerUaa3::MenuManagerUaa3() {
 MenuManagerUaa3::~MenuManagerUaa3() {
 }
 
+void MenuManagerUaa3::RegisterUI(const std::string& id, IImguiUI* ui, const std::string& menuCategory) {
+  if (!ui) {
+    Logger::GetInstance()->LogWarning("Attempted to register null UI with ID: " + id);
+    return;
+  }
 
+  UIEntry entry;
+  entry.rawPtr = ui;
+  entry.menuCategory = menuCategory;
+  entry.isShared = false;
+
+  m_registeredUIs[id] = entry;
+  Logger::GetInstance()->LogInfo("Registered UI: " + id + " (" + ui->GetName() + ") in category: " + menuCategory);
+}
+
+void MenuManagerUaa3::RegisterUI(const std::string& id, std::shared_ptr<IImguiUI> ui, const std::string& menuCategory) {
+  if (!ui) {
+    Logger::GetInstance()->LogWarning("Attempted to register null shared UI with ID: " + id);
+    return;
+  }
+
+  UIEntry entry;
+  entry.sharedPtr = ui;
+  entry.rawPtr = ui.get();
+  entry.menuCategory = menuCategory;
+  entry.isShared = true;
+
+  m_registeredUIs[id] = entry;
+  Logger::GetInstance()->LogInfo("Registered shared UI: " + id + " (" + ui->GetName() + ") in category: " + menuCategory);
+}
+
+void MenuManagerUaa3::UnregisterUI(const std::string& id) {
+  auto it = m_registeredUIs.find(id);
+  if (it != m_registeredUIs.end()) {
+    m_registeredUIs.erase(it);
+    Logger::GetInstance()->LogInfo("Unregistered UI: " + id);
+  }
+}
+
+void MenuManagerUaa3::ShowUI(const std::string& id) {
+  auto it = m_registeredUIs.find(id);
+  if (it != m_registeredUIs.end() && it->second.rawPtr) {
+    it->second.rawPtr->Show();
+  }
+}
+
+void MenuManagerUaa3::HideUI(const std::string& id) {
+  auto it = m_registeredUIs.find(id);
+  if (it != m_registeredUIs.end() && it->second.rawPtr) {
+    it->second.rawPtr->Hide();
+  }
+}
+
+void MenuManagerUaa3::ToggleUI(const std::string& id) {
+  auto it = m_registeredUIs.find(id);
+  if (it != m_registeredUIs.end() && it->second.rawPtr) {
+    it->second.rawPtr->Toggle();
+  }
+}
+
+void MenuManagerUaa3::ToggleUI(IImguiUI* ui) {
+  if (ui) {
+    ui->Toggle();
+  }
+}
+
+IImguiUI* MenuManagerUaa3::GetUI(const std::string& id) {
+  auto it = m_registeredUIs.find(id);
+  if (it != m_registeredUIs.end()) {
+    return it->second.rawPtr;
+  }
+  return nullptr;
+}
+
+std::shared_ptr<IImguiUI> MenuManagerUaa3::GetSharedUI(const std::string& id) {
+  auto it = m_registeredUIs.find(id);
+  if (it != m_registeredUIs.end() && it->second.isShared) {
+    return it->second.sharedPtr;
+  }
+  return nullptr;
+}
+
+void MenuManagerUaa3::RenderRegisteredUIs() {
+  for (auto& [id, entry] : m_registeredUIs) {
+    if (entry.rawPtr && entry.rawPtr->IsVisible()) {
+      entry.rawPtr->Render();
+    }
+  }
+}
 
 void MenuManagerUaa3::RenderMainMenuBar() {
   if (ImGui::BeginMainMenuBar()) {
     //RenderFileMenu();
     RenderRaylibMenu();
+    RenderWindowsMenu();  // Add this to show registered windows
     //RenderDebugMenu();
     //RenderHelpMenu();
 
@@ -22,6 +112,31 @@ void MenuManagerUaa3::RenderMainMenuBar() {
 
   // Render dialogs that might be opened from menus
   RenderAboutDialog();
+}
+
+void MenuManagerUaa3::RenderWindowsMenu() {
+  // Group UIs by category
+  std::unordered_map<std::string, std::vector<std::string>> categorizedUIs;
+
+  for (const auto& [id, entry] : m_registeredUIs) {
+    categorizedUIs[entry.menuCategory].push_back(id);
+  }
+
+  // Render each category as a menu
+  for (const auto& [category, uiIds] : categorizedUIs) {
+    if (ImGui::BeginMenu(category.c_str())) {
+      for (const auto& id : uiIds) {
+        auto it = m_registeredUIs.find(id);
+        if (it != m_registeredUIs.end() && it->second.rawPtr) {
+          bool visible = it->second.rawPtr->IsVisible();
+          if (ImGui::MenuItem(it->second.rawPtr->GetName().c_str(), nullptr, &visible)) {
+            ToggleUI(id);
+          }
+        }
+      }
+      ImGui::EndMenu();
+    }
+  }
 }
 
 void MenuManagerUaa3::RenderFileMenu() {
@@ -52,11 +167,19 @@ void MenuManagerUaa3::RenderRaylibMenu() {
 
     ImGui::Separator();
 
-    // Add IDS Camera Test option
-    if (ImGui::MenuItem("IDS Camera Test", nullptr,
-      m_idsCameraUI ? m_idsCameraUI->IsVisible() : false)) {
-      if (m_idsCameraUI) {
-        m_idsCameraUI->ToggleVisibility();
+    // Legacy menu items - these could be replaced with registered UIs
+    ImGui::MenuItem("Debug Grid Scanner", nullptr, &m_showGridScannerUI);
+    ImGui::Separator();
+    ImGui::MenuItem("Debug Grid Volume Scanner", nullptr, &m_showGridVolumeScannerUI);
+
+    // Also show any registered UIs in the "Raylib" category
+    ImGui::Separator();
+    for (const auto& [id, entry] : m_registeredUIs) {
+      if (entry.menuCategory == "Raylib" && entry.rawPtr) {
+        bool visible = entry.rawPtr->IsVisible();
+        if (ImGui::MenuItem(entry.rawPtr->GetName().c_str(), nullptr, &visible)) {
+          ToggleUI(id);
+        }
       }
     }
 
@@ -76,6 +199,17 @@ void MenuManagerUaa3::RenderDebugMenu() {
 
     if (ImGui::MenuItem("Motion Test Window")) {
       // TODO: Show motion test window
+    }
+
+    // Show any registered UIs in the "Debug" category
+    ImGui::Separator();
+    for (const auto& [id, entry] : m_registeredUIs) {
+      if (entry.menuCategory == "Debug" && entry.rawPtr) {
+        bool visible = entry.rawPtr->IsVisible();
+        if (ImGui::MenuItem(entry.rawPtr->GetName().c_str(), nullptr, &visible)) {
+          ToggleUI(id);
+        }
+      }
     }
 
     ImGui::EndMenu();

@@ -15,7 +15,7 @@ class MotionConfigManager {
 public:
     // Constructor that takes a path to the JSON configuration file
     MotionConfigManager(const std::string& configFilePath);
-
+    std::vector<std::string> GetAllGraphNames() const;
     // Get all motion devices
     const std::map<std::string, MotionDevice>& GetAllDevices() const;
 
@@ -62,6 +62,14 @@ public:
     void AddDevice(const std::string& deviceName, const MotionDevice& device);
     bool DeleteDevice(const std::string& deviceName);
     bool DeletePosition(const std::string& deviceName, const std::string& positionName);
+
+    // Check if a node exists in any graph
+    bool NodeExists(const std::string& nodeId) const;
+    bool HasNode(const std::string& nodeId) const;  // Alias for NodeExists
+
+    // Check if a node exists in a specific graph
+    bool NodeExists(const std::string& graphName, const std::string& nodeId) const;
+    bool HasNode(const std::string& graphName, const std::string& nodeId) const;  // Alias
 
     // Updated settings
     void UpdateSettings(const Settings& newSettings);

@@ -273,8 +273,11 @@ std::string ProcessFilterManager::GetCurrentTimestamp() const {
     auto now = std::chrono::system_clock::now();
     auto time_t = std::chrono::system_clock::to_time_t(now);
 
+		std::tm timeinfo;
+		localtime_s(&timeinfo, &time_t);
+
     std::stringstream ss;
-    ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+    ss << std::put_time(&timeinfo, "%Y-%m-%d %H:%M:%S");
     return ss.str();
 }
 
@@ -598,7 +601,7 @@ void ProcessFilterManager::RenderFilterWindow(bool* showWindow) {
         static char textFilterBuffer[256] = "";
 
         if (strlen(textFilterBuffer) == 0 && !m_textFilter.empty()) {
-            strncpy(textFilterBuffer, m_textFilter.c_str(), sizeof(textFilterBuffer) - 1);
+          strncpy_s(textFilterBuffer, sizeof(textFilterBuffer), m_textFilter.c_str(), _TRUNCATE);
         }
 
         ImGui::SetNextItemWidth(200);
@@ -743,7 +746,7 @@ void ProcessFilterManager::RenderFilterWindow(bool* showWindow) {
             }
 
             ImGui::SetNextItemWidth(200);
-            ImGui::Combo("##CustomPresets", &selectedPresetIndex, presetNames.data(), presetNames.size());
+            ImGui::Combo("##CustomPresets", &selectedPresetIndex, presetNames.data(), static_cast<int>(presetNames.size()));
 
             ImGui::SameLine();
             if (ImGui::Button("Load")) {

@@ -1,79 +1,69 @@
-// UICameraPanelLiveVideo.h - Updated with LiveVideoSubscriber
+// UICameraPanelLiveVideo.h - UPDATED VERSION
+// Added validation method for debugging subscription issues
+
 #pragma once
 
 #include <memory>
 #include <string>
-#include <chrono>
-#include "include/camera/CameraFrameData.h"
+#include <atomic>
 
 // Forward declarations
 class CameraManager;
-class PylonCameraTest;
-class LiveVideoSubscriber;  // Changed from CameraFeedDisplay
+class ICameraHardware;
+class LiveVideoSubscriber;
 
 class UICameraPanelLiveVideo {
 public:
   UICameraPanelLiveVideo(CameraManager& cameraManager);
   ~UICameraPanelLiveVideo();
 
-  // Disable copy/move
+  // Disable copy/move to avoid issues with references
   UICameraPanelLiveVideo(const UICameraPanelLiveVideo&) = delete;
   UICameraPanelLiveVideo& operator=(const UICameraPanelLiveVideo&) = delete;
   UICameraPanelLiveVideo(UICameraPanelLiveVideo&&) = delete;
   UICameraPanelLiveVideo& operator=(UICameraPanelLiveVideo&&) = delete;
 
-  // Main rendering method
-  void RenderTab(PylonCameraTest* camera, const std::string& cameraId);
+  // Tab rendering for use in UICameraPanel
+  void RenderTab(ICameraHardware* camera, const std::string& cameraId);
 
   // Camera management
-  void SetSelectedCamera(PylonCameraTest* camera, const std::string& cameraId);
+  void SetSelectedCamera(ICameraHardware* camera, const std::string& cameraId);
   void ClearCamera();
 
-  // Status queries
-  bool IsLiveActive() const;
-  std::string GetStatusText() const;
-
-  // Access to subscriber for debugging
-  std::shared_ptr<LiveVideoSubscriber> GetSubscriber() const { return m_subscriber; }
+  // NEW: Debugging and validation
+  void ValidateSubscriptionState();
 
 private:
   // Reference to camera manager
   CameraManager& m_cameraManager;
 
   // Current camera state
+  ICameraHardware* m_currentCamera = nullptr;
   std::string m_currentCameraId;
-  PylonCameraTest* m_currentCamera = nullptr;
+  std::atomic<bool> m_isGrabbing{ false };
 
-  // Broadcasting subscriber (NEW: replaced CameraFeedDisplay)
+  // Broadcasting subscriber for frame data
   std::shared_ptr<LiveVideoSubscriber> m_subscriber;
 
-  // Display texture for ImGui (NEW: direct texture management)
-  unsigned int m_textureID = 0;
-  bool m_textureInitialized = false;
-  uint32_t m_textureWidth = 0;
-  uint32_t m_textureHeight = 0;
+  // OpenGL texture for display
+  unsigned int m_textureId = 0;
+  int m_textureWidth = 0;
+  int m_textureHeight = 0;
+  bool m_needsTextureCleanup = false;
 
-  // State tracking
-  bool m_isGrabbing = false;
-  std::chrono::steady_clock::time_point m_lastStatusUpdate;
-
-  // UI rendering helpers
+  // UI rendering methods
   void RenderControls();
-  void RenderDetailedStatus();
   void RenderFeedDisplay();
-  void RenderErrorCanvas(float width, float height, const std::string& errorText);
+  void RenderDetailedStatus();
 
-  // Camera operations
-  void StartLiveVideo();
-  void StopLiveVideo();
+  // Live video control
   void ToggleLiveVideo();
+  void UpdateGrabbingState();
 
-  // Frame processing methods (NEW: for subscriber pattern)
-  void UpdateTextureFromFrameData(const CameraFrameData& frameData);
-  void CreateOrUpdateTexture(const uint8_t* imageData, uint32_t width, uint32_t height);
+  // Texture management
+  void UpdateTextureFromFrameData(const struct CameraFrameData& frameData);
   void CleanupTexture();
 
-  // Internal state management
-  void UpdateGrabbingState();
+  // Validation
   bool ValidateCamera() const;
 };

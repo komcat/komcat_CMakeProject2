@@ -1,7 +1,19 @@
 // machine_operations.h - FIXED VERSION
 #pragma once
 
+// Prevent winsock conflicts before any includes
+#ifdef _WIN32
+#define _WINSOCKAPI_   // Prevent winsock.h
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
+
+#include "AppContext.h"
+#include "include/SMU/keithley2400_operations.h" // Include the SMU operations header
+#include "include/cld101x/cld101x_operations.h"  // Include it here, not in the header
 #include "include/motions/motion_control_layer.h"
+#include "include/data/data_client_manager.h"
 #include "include/motions/pi_controller_manager.h"
 #include "include/eziio/EziIO_Manager.h"
 #include "include/eziio/PneumaticManager.h"
@@ -15,6 +27,10 @@
 #include "include/data/DatabaseManager.h"
 #include "include/data/OperationResultsManager.h"
 #include "include/camera/CameraManager.h"
+#include "include/vision/VisionCameraExposureManager.h"
+#include "GlobalMotionController.h"
+// Add these includes at the top:
+
 #include <string>
 #include <vector>
 #include <chrono>
@@ -27,6 +43,7 @@
 
 class CLD101xOperations;
 class Keithley2400Operations;
+
 
 extern "C" {
 	bool MachineOperations_PerformScan(void* machineOpsPtr,
@@ -87,6 +104,8 @@ public:
 
 	~MachineOperations();
 
+	Logger* m_logger;
+
 	// Add these public methods for result access
 	std::shared_ptr<OperationResultsManager> GetResultsManager() { return m_resultsManager; }
 	std::shared_ptr<DatabaseManager> GetDatabaseManager() { return m_dbManager; }
@@ -101,10 +120,24 @@ public:
 	std::vector<OperationResult> GetOperationsBySequence(const std::string& sequenceName, int limit = 50);
 	double GetSequenceSuccessRate(const std::string& sequenceName = "");
 
+	/**
+ * @brief Store a data value in the GlobalDataStore
+ * @param key Data key/channel name
+ * @param value Value to store
+ * @return true if successful
+ */
+	bool SetDataValue(const std::string& dataKey, double value,
+		const std::string& callerContext);
+
+
 
 	//update method with caller Context
 	//updated
-
+	// Add this method declaration in the public section
+	bool MoveDeviceToPosition(const std::string& deviceName,
+		const PositionStruct& position,
+		bool waitForCompletion = true,
+		const std::string& callerContext = "");
 	// NEW: Methods that accept caller context for tracking
 	bool MoveDeviceToNode(const std::string& deviceName, const std::string& graphName,
 		const std::string& targetNodeId, bool blocking = true,
@@ -267,6 +300,22 @@ public:
 		}
 	}
 
+	// ADD THIS NEW METHOD:
+	// ADD THIS IMPLEMENTATION:
+	void LogDebug(const std::string& message) {
+		auto* logger = Logger::GetInstance();
+		if (logger) {
+			logger->LogDebug(message);  // Assuming your Logger has LogDebug
+			// OR if your Logger doesn't have LogDebug, you could use:
+			// logger->LogInfo("[DEBUG] " + message);
+		}
+
+		// Optional: Only output debug in debug builds
+#ifdef _DEBUG
+		std::cout << "[DEBUG] " << message << std::endl;
+#endif
+	}
+
 	// Camera control methods
 	bool InitializeCamera();
 	bool ConnectCamera();
@@ -276,7 +325,7 @@ public:
 	bool IsCameraInitialized() const;
 	bool IsCameraConnected() const;
 	bool IsCameraGrabbing() const;
-
+	bool HasCameraManager() const { return m_cameraManager != nullptr; }
 	// Camera capture methods
 	bool CaptureImageToFile(const std::string& filename = "");
 	bool UpdateCameraDisplay();
@@ -294,6 +343,16 @@ public:
 	// Scanner cleanup methods
 	bool CleanupAllScanners();
 	bool ResetScanState(const std::string& deviceName);
+
+
+	// Add setter methods
+	void SetVisionExposureManager(VisionCameraExposureManager* manager) {
+		m_visionExposureManager = manager;
+	}
+
+	void SetCameraManager(CameraManager* manager) {
+		m_cameraManager = manager;
+	}
 
 	// Camera exposure control methods
 	bool ApplyCameraExposureForNode(const std::string& nodeId);
@@ -388,6 +447,27 @@ public:
 	bool SMU_ReadPower(double& power, const std::string& clientName = "");
 	bool SMU_SendCommand(const std::string& command, const std::string& clientName = "");
 	bool SMU_QueryCommand(const std::string& command, std::string& response, const std::string& clientName = "");
+	// In the public section with other SMU methods:
+	bool SMU_GetStatus(std::string& instrumentId, std::string& outputState,
+		std::string& sourceFunction, const std::string& clientName = "");
+
+	// Simple SMU Sweep operations
+	bool SMU_VoltageSweep(double startVoltage, double stopVoltage, int steps,
+		double currentCompliance = 0.1, double delayMs = 100,
+		const std::string& clientName = "",
+		const std::string& callerContext = "");
+
+	bool SMU_CurrentSweep(double startCurrent, double stopCurrent, int steps,
+		double voltageCompliance = 10.0, double delayMs = 100,
+		const std::string& clientName = "",
+		const std::string& callerContext = "");
+
+	// Get sweep results (if you want to retrieve them programmatically)
+	bool SMU_GetLastVoltageSweepResults(std::vector<std::pair<double, double>>& results,
+		const std::string& clientName = "");
+	bool SMU_GetLastCurrentSweepResults(std::vector<std::pair<double, double>>& results,
+		const std::string& clientName = "");
+
 
 	// UI Component Access Methods (for MenuManager)
 	// ==============================================
@@ -433,8 +513,58 @@ public:
 	// Add this method declaration
 	void SetSMUOperations(Keithley2400Operations* ops);
 
-private:
-	Logger* m_logger;
+
+	bool StopAllMovement();
+
+
+
+	// Simple realtime position access
+	const std::map<std::string, PositionStruct>& GetRealtimePositions() const {
+		return m_motionLayer.GetRealtimePositions();
+	}
+
+	bool GetRealtimePosition(const std::string& deviceName, PositionStruct& position) const {
+		return m_motionLayer.GetRealtimePosition(deviceName, position);
+	}
+
+	void ForceUpdatePositions() {
+		m_motionLayer.UpdateRealtimePositions();
+	}
+
+	bool GetDataValue(const std::string& dataKey, double& value,
+		const std::string& callerContext = "");
+
+
+	// Data channel operations
+	//float ReadDataValue(const std::string& channelId);
+	std::vector<DataPoint> GetChannelDataBuffer(const std::string& channelId, size_t maxPoints);
+	std::vector<DataPoint> GetChannelDataSince(const std::string& channelId,
+		const std::chrono::system_clock::time_point& sinceTime);
+	bool StartChannelRecording(const std::vector<std::string>& channels,
+		const std::string& filename,
+		const std::string& recordingId);
+	bool StopChannelRecording(const std::string& recordingId, size_t& recordedPoints);
+
+	MotionControlLayer& GetMotionLayer() const { return m_motionLayer; }
+
+	/**
+	 * @brief Find and move to the nearest reachable node in a graph
+	 * @param deviceName Device to move (e.g., "hex-left", "hex-right", "gantry-main")
+	 * @param graphName Graph containing the nodes
+	 * @param maxDistance Maximum distance to consider (mm) - optional safety limit
+	 * @param waitForCompletion Wait for movement to complete
+	 * @param callerContext Context string for tracking
+	 * @return True if successfully moved to nearest node
+	 */
+	bool MoveToNearestNode(
+		const std::string& deviceName,
+		const std::string& graphName,
+		double maxDistance = 100.0,
+		bool waitForCompletion = true,
+		const std::string& callerContext = ""
+	);
+protected:
+	
 	bool m_enableDebug = false;
 	
 	// Core system references
@@ -443,11 +573,15 @@ private:
 	EziIOManager& m_ioManager;
 	PneumaticManager& m_pneumaticManager;
 
+
+
 	// Optional components
 	CLD101xOperations* m_laserOps;
 	Keithley2400Operations* m_smuOps;  // Added SMU operations
 	PylonCameraTest* m_cameraTest;
 	CameraManager* m_cameraManager;  // Optional camera manager
+	// Add these member variables
+	VisionCameraExposureManager* m_visionExposureManager = nullptr;
 
 
 
@@ -511,6 +645,96 @@ private:
 	// Helper method for consistent result storage
 	void StorePositionResult(const std::string& operationId, const std::string& prefix,
 		const PositionStruct& position);
+
+
+
+	struct RecordingInfo {
+		std::vector<std::string> channels;
+		std::string filename;
+		std::chrono::system_clock::time_point startTime;
+	};
+	std::map<std::string, RecordingInfo> m_activeRecordings;
+
+	class ChannelRecorder : public IDataSubscriber {
+	public:
+		ChannelRecorder(const std::string& filename, const std::vector<std::string>& channels)
+			: m_filename(filename), m_channels(channels), m_recordCount(0) {
+			// Open file for writing
+			m_file.open(m_filename);  // Use m_filename here
+			if (m_file.is_open()) {
+				// Write CSV header
+				m_file << "timestamp,channel,value\n";
+			}
+		}
+
+		~ChannelRecorder() {
+			if (m_file.is_open()) {
+				m_file.close();
+			}
+		}
+
+		void OnDataReceived(const std::string& channelId, float value, const DataPoint& dataPoint) override {
+			// Check if this channel is in our list
+			if (std::find(m_channels.begin(), m_channels.end(), channelId) != m_channels.end()) {
+				if (m_file.is_open()) {
+					auto time_t = std::chrono::system_clock::to_time_t(dataPoint.timestamp);
+					m_file << time_t << "," << channelId << "," << value << "\n";
+					m_file.flush();
+					m_recordCount++;
+				}
+			}
+		}
+
+		void OnConnectionChanged(const std::string& channelId, bool connected) override {}
+		void OnDataError(const std::string& channelId, const std::string& errorMessage) override {}
+
+		std::string GetSubscriberName() const override {
+			return "ChannelRecorder_" + m_filename;  // Use m_filename here
+		}
+
+		size_t GetRecordCount() const { return m_recordCount; }
+		const std::vector<std::string>& GetChannels() const { return m_channels; }
+
+	private:
+		std::string m_filename;  // Add this member variable
+		std::ofstream m_file;
+		std::vector<std::string> m_channels;
+		std::atomic<size_t> m_recordCount;
+	};
+
+	std::map<std::string, std::unique_ptr<ChannelRecorder>> m_activeRecorders;
+
+	// Helper to create and register a recorder
+	public:
+		AppContext* GetAppContext() const { return m_appContext; }
+		// or
+		PIControllerManager* GetPIController() const {
+			return m_appContext ? m_appContext->GetPIController() : nullptr;
+		}
+		ACSControllerManager* GetACSController() const {
+			return m_appContext ? m_appContext->GetACSController() : nullptr;
+		}
+
+		MotionConfigManager* GetMotionConfigManager() const {
+			return m_appContext ? m_appContext->GetMotionConfig() : nullptr;
+		}
+
+		MotionControlLayer* GetMotionControl() const {
+			return m_appContext ? m_appContext->GetMotionControlLayer() : nullptr;
+		}
+		// Global motion controller access
+		GlobalMotionController* GetGlobalMotionController() { return m_globalMotionController.get(); }
+		const GlobalMotionController* GetGlobalMotionController() const { return m_globalMotionController.get(); }
+
+		// Initialize global motion controller
+		void InitializeGlobalMotion(const std::string& matrixFile = "transformation_matrix.json");
+
+private:
+	AppContext* m_appContext = nullptr;
+
+	// Add GlobalMotionController member
+	std::unique_ptr<GlobalMotionController> m_globalMotionController;
+
 };
 
 

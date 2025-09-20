@@ -74,6 +74,12 @@ public:
   bool CleanupByCount(int maxOperations = 10000);
   // Hash-based change detection for running operations
   std::string GetRunningOperationsHash() const;
+
+
+  bool EndOperation(const std::string& operationId,
+    const std::string& status,
+    const std::string& errorMessage,
+    const std::map<std::string, std::string>& results);
 private:
   std::shared_ptr<DatabaseManager> m_dbManager;
   std::atomic<uint64_t> m_operationCounter{ 1 };

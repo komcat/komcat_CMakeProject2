@@ -8,14 +8,15 @@
       "gain_auto": false
     },
     "nodes": {
-      "node_4083": {
-        "description": "Sled viewing position",
+      "SeeCaldot": {
+        "description": "See calibrate dot dispensing XY",
         "exposure_auto": false,
         "exposure_time": 619.0,
         "gain": 0.0,
         "gain_auto": false
-      },"SeeCaldot": {
-        "description": "See calibrate dot dispensing XY",
+      },
+      "node_4083": {
+        "description": "Sled viewing position",
         "exposure_auto": false,
         "exposure_time": 619.0,
         "gain": 0.0,

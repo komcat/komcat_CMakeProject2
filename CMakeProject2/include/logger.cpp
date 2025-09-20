@@ -70,6 +70,11 @@ void Logger::OpenLogFile() {
 }
 
 void Logger::CheckAndUpdateLogFile() {
+  if (!this) return;  // Defensive check
+  //std::lock_guard<std::mutex> lock(m_logMutex);  // Add if missing
+
+
+
   // Get current date
   auto now = std::chrono::system_clock::now();
   auto time = std::chrono::system_clock::to_time_t(now);

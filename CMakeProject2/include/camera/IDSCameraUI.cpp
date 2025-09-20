@@ -11,7 +11,7 @@
 
 IDSCameraUI::IDSCameraUI()
   : m_camera(std::make_unique<IDSCameraTest>()),
-  m_isVisible(true),
+  m_isVisible(false),
   m_selectedCameraIdIndex(0),
   m_textureID(0),
   m_textureInitialized(false),
@@ -19,9 +19,8 @@ IDSCameraUI::IDSCameraUI()
   m_imageTextureHeight(0),
   m_autoSaveWithTimestamp(true),
   m_autoScrollStatusLog(true) {
-
   // Initialize filename buffer
-  strcpy(m_saveFilename, "capture.bmp");
+  strcpy_s(m_saveFilename, sizeof(m_saveFilename), "capture.bmp");
 
   // Initialize frame buffer
   m_bufferedFrame = FrameBuffer();
@@ -99,7 +98,7 @@ void IDSCameraUI::RenderConnectionControls() {
     }
 
     ImGui::SetNextItemWidth(200);
-    ImGui::Combo("##CameraID", &m_selectedCameraIdIndex, idCStrings.data(), idCStrings.size());
+    ImGui::Combo("##CameraID", &m_selectedCameraIdIndex, idCStrings.data(), static_cast<int>(idCStrings.size()));
     ImGui::SameLine();
 
     if (ImGui::Button("Connect") && !m_camera->IsConnected()) {
@@ -476,7 +475,11 @@ void IDSCameraUI::AddStatusMessage(const std::string& message) {
   auto time_t = std::chrono::system_clock::to_time_t(now);
 
   std::stringstream ss;
-  ss << "[" << std::put_time(std::localtime(&time_t), "%H:%M:%S") << "] " << message;
+
+  std::tm timeinfo;
+	localtime_s(&timeinfo, &time_t);
+
+  ss << "[" << std::put_time(&timeinfo, "%H:%M:%S") << "] " << message;
 
   m_statusMessages.push_back(ss.str());
 

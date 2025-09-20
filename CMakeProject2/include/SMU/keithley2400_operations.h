@@ -39,6 +39,13 @@ public:
   // Convenience methods
   bool IsOutputEnabled(const std::string& clientName = "");
   std::string GetLastError(const std::string& clientName = "");
+  bool VoltageSweep(double startVoltage, double stopVoltage, int steps,
+    double currentCompliance, double delayMs,
+    const std::string& clientName = "");
+
+  bool CurrentSweep(double startCurrent, double stopCurrent, int steps,
+    double voltageCompliance, double delayMs,
+    const std::string& clientName = "");
 
 private:
   Keithley2400Manager& m_manager;

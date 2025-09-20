@@ -475,7 +475,7 @@ std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertMoveRelativeAx
   try {
     distance = std::stod(distanceStr);
   }
-  catch (const std::exception& e) {
+  catch (const std::exception&) {
     m_machineOps.LogWarning("MOVE_RELATIVE_AXIS block has invalid distance_mm parameter: " + distanceStr);
     return nullptr;
   }
@@ -613,7 +613,7 @@ std::shared_ptr<SequenceOperation> BlockSequenceConverter::ConvertScanOperationB
         double stepMm = stepUm / 1000.0;  // Convert micrometers to millimeters
         stepSizes.push_back(stepMm);
       }
-      catch (const std::exception& e) {
+      catch (const std::exception&) {
         m_machineOps.LogWarning("Invalid step size '" + stepStr + "', using default 0.001mm");
         stepSizes.push_back(0.001);  // Default 1µm in mm
       }

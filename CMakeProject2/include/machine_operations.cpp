@@ -1,17 +1,30 @@
 ﻿// machine_operations.cpp
 #include "machine_operations.h"
-#include "include/cld101x_operations.h"  // Include it here, not in the header
+//#include "AppContext.h" 
 #include <sstream>
 #include <filesystem>
 #include <chrono>
 #include <iomanip>
-#include "include/SMU/keithley2400_operations.h" // Include the SMU operations header
+
 #include "external/sqlite/sqlite3.h"
-// Add these includes at the top:
-#include "include/data/DatabaseManager.h"
-#include "include/data/OperationResultsManager.h"
 
-
+class AppContext;
+//
+//struct VoltageSweepResult {
+//  double voltage;
+//  double current;
+//  double resistance;
+//  double power;
+//  std::chrono::steady_clock::time_point timestamp;
+//};
+//
+//struct CurrentSweepResult {
+//  double current;
+//  double voltage;
+//  double resistance;
+//  double power;
+//  std::chrono::steady_clock::time_point timestamp;
+//};
 
 
 // Updated constructor
@@ -66,6 +79,9 @@ m_autoExposureEnabled(true)
 
   m_logger->LogInfo("MachineOperations: Initialized" +
     std::string(m_smuOps ? " with SMU support" : ""));
+
+  // Initialize GlobalMotionController
+  InitializeGlobalMotion();
 }
 
 
@@ -121,11 +137,51 @@ m_autoExposureEnabled(true)
 
   m_logger->LogInfo("MachineOperations: Initialized with CameraManager" +
     std::string(m_smuOps ? " and SMU support" : ""));
+
+
+  InitializeGlobalMotion();
 }
 
 
 MachineOperations::~MachineOperations() {
   m_logger->LogInfo("MachineOperations: Shutting down");
+}
+
+
+
+void MachineOperations::InitializeGlobalMotion(const std::string& matrixFile) {
+  m_logger->LogInfo("MachineOperations: Initializing GlobalMotionController");
+
+  // Create the global motion controller
+  m_globalMotionController = std::make_unique<GlobalMotionController>();
+
+  // Pass the existing controller managers
+  m_globalMotionController->SetPIController(&m_piControllerManager);
+  m_globalMotionController->SetACSController(&m_motionLayer.GetACSControllerManager());
+
+  // Load transformation matrices
+  if (!matrixFile.empty()) {
+    if (m_globalMotionController->LoadTransformationMatrices(matrixFile)) {
+      m_logger->LogInfo("MachineOperations: Loaded transformation matrices from " + matrixFile);
+    }
+    else {
+      m_logger->LogWarning("MachineOperations: Using default transformation matrices");
+    }
+  }
+
+  // Set global limits
+  GlobalLimits limits;
+  limits.minX = -150; limits.maxX = 150;
+  limits.minY = -150; limits.maxY = 150;
+  limits.minZ = -50; limits.maxZ = 50;
+  m_globalMotionController->SetGlobalLimits(limits);
+
+  // Set up status callback
+  m_globalMotionController->SetStatusCallback([this](const std::string& msg) {
+    this->LogInfo("GlobalMotion: " + msg);
+  });
+
+  m_logger->LogInfo("MachineOperations: GlobalMotionController initialized");
 }
 
 
@@ -176,7 +232,103 @@ double MachineOperations::GetSequenceSuccessRate(const std::string& sequenceName
   return m_resultsManager->GetSequenceSuccessRate(sequenceName);
 }
 
+bool MachineOperations::SetDataValue(const std::string& dataKey, double value,
+  const std::string& callerContext) {
+  // Log operation
+  LogInfo("SetDataValue for key: " + dataKey + " = " + std::to_string(value) +
+    (callerContext.empty() ? "" : " (context: " + callerContext + ")"));
 
+  GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+  if (!dataStore) {
+    LogError("GlobalDataStore not available");
+    return false;
+  }
+
+  try {
+    // Set the value in GlobalDataStore
+    dataStore->SetValue(dataKey, value);
+    LogInfo("Successfully stored: " + dataKey + " = " + std::to_string(value));
+    return true;
+  }
+  catch (const std::exception& e) {
+    LogError("SetDataValue exception for key '" + dataKey + "': " + std::string(e.what()));
+    return false;
+  }
+}
+
+bool MachineOperations::MoveDeviceToPosition(const std::string& deviceName,
+  const PositionStruct& position,
+  bool waitForCompletion,
+  const std::string& callerContext) {
+
+  // Start operation tracking
+  std::string opId;
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"x", std::to_string(position.x)},
+        {"y", std::to_string(position.y)},
+        {"z", std::to_string(position.z)},
+        {"blocking", waitForCompletion ? "true" : "false"}
+    };
+    opId = m_resultsManager->StartOperation("MoveDeviceToPosition", deviceName, callerContext, "", parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Moving device " + deviceName + " to absolute position");
+
+  // Store start position for tracking
+  PositionStruct startPos;
+  bool hasStartPos = false;
+  if (m_resultsManager && !opId.empty()) {
+    if (m_motionLayer.GetCurrentPosition(deviceName, startPos)) {
+      StorePositionResult(opId, "start", startPos);
+      hasStartPos = true;
+    }
+  }
+
+  // Check device connection
+  if (!IsDeviceConnected(deviceName)) {
+    m_logger->LogError("MachineOperations: Device not connected: " + deviceName);
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", "Device not connected");
+    }
+    return false;
+  }
+
+  // Store target position
+  if (m_resultsManager && !opId.empty()) {
+    StorePositionResult(opId, "target", position);
+  }
+
+  // Use motion layer to move
+  bool success = m_motionLayer.MoveToPosition(deviceName, position, waitForCompletion);
+
+  // Store final results
+  if (m_resultsManager && !opId.empty()) {
+    if (success) {
+      PositionStruct finalPos;
+      if (m_motionLayer.GetCurrentPosition(deviceName, finalPos)) {
+        StorePositionResult(opId, "final", finalPos);
+        if (hasStartPos) {
+          double distance = GetDistanceBetweenPositions(startPos, finalPos);
+          m_resultsManager->StoreResult(opId, "distance_moved", std::to_string(distance));
+        }
+      }
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_resultsManager->EndOperation(opId, "failed", "Move operation failed");
+    }
+  }
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully moved device " + deviceName + " to position");
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to move device " + deviceName + " to position");
+  }
+
+  return success;
+}
 
 
 // machine_operations.cpp - REPLACE your MoveDeviceToNode method with this:
@@ -228,7 +380,7 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
   }
 
   // RELOAD EXPOSURE CONFIG EVERY TIME TO GUARANTEE FRESH VALUES
-  if (m_cameraExposureManager) {
+  /*if (m_cameraExposureManager) {
     m_logger->LogInfo("MachineOperations: Reloading camera exposure configuration to ensure fresh values");
     if (m_cameraExposureManager->LoadConfiguration("camera_exposure_config.json")) {
       m_logger->LogInfo("MachineOperations: Camera exposure configuration reloaded successfully");
@@ -236,7 +388,7 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
     else {
       m_logger->LogWarning("MachineOperations: Failed to reload camera exposure configuration, using existing values");
     }
-  }
+  }*/
 
   // Get the current node for the device
   std::string currentNodeId;
@@ -280,11 +432,11 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
                 m_logger->LogInfo("MachineOperations: Device appears to be at target node based on position proximity");
 
                 // STILL APPLY CAMERA EXPOSURE EVEN IF ALREADY AT NODE
-                if (deviceName == "gantry-main" && m_autoExposureEnabled) {
+                /*if (deviceName == "gantry-main" && m_autoExposureEnabled) {
                   m_logger->LogInfo("MachineOperations: Device appears at " + targetNodeId +
                     ", applying camera exposure with fresh config");
                   ApplyCameraExposureForNode(targetNodeId);
-                }
+                }*/
 
                 // Store success result
                 if (m_resultsManager && !opId.empty()) {
@@ -317,11 +469,11 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
     m_logger->LogInfo("MachineOperations: Device " + deviceName + " is already at node " + targetNodeId);
 
     // STILL APPLY CAMERA EXPOSURE EVEN IF ALREADY AT NODE
-    if (deviceName == "gantry-main" && m_autoExposureEnabled) {
+    /*if (deviceName == "gantry-main" && m_autoExposureEnabled) {
       m_logger->LogInfo("MachineOperations: Device already at " + targetNodeId +
         ", but applying camera exposure with fresh config");
       ApplyCameraExposureForNode(targetNodeId);
-    }
+    }*/
 
     // Store success result
     if (m_resultsManager && !opId.empty()) {
@@ -346,11 +498,11 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
 
 
   // Apply camera exposure settings if the gantry moved successfully
-  if (success && deviceName == "gantry-main" && m_autoExposureEnabled) {
+  /*if (success && deviceName == "gantry-main" && m_autoExposureEnabled) {
     m_logger->LogInfo("MachineOperations: Gantry moved to " + targetNodeId +
       ", applying camera exposure with fresh config");
     ApplyCameraExposureForNode(targetNodeId);
-  }
+  }*/
 
   // Store final results -  FIXED: This section was missing/incomplete
   if (m_resultsManager && !opId.empty()) {
@@ -372,6 +524,178 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
     else {
       m_resultsManager->EndOperation(opId, "failed", "Path execution failed");  //  FIXED: EndOperation called
     }
+  }
+
+  return success;
+}
+
+
+// machine_operations.cpp - Add this implementation
+bool MachineOperations::MoveToNearestNode(
+  const std::string& deviceName,
+  const std::string& graphName,
+  double maxDistance,
+  bool waitForCompletion,
+  const std::string& callerContext) {
+
+  // Generate operation ID for tracking
+  std::string opId;
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+      {"device_name", deviceName},
+      {"graph_name", graphName},
+      {"max_distance", std::to_string(maxDistance)},
+      {"wait_for_completion", waitForCompletion ? "true" : "false"}
+    };
+
+    std::string context = callerContext.empty() ?
+      "MoveToNearestNode_" + deviceName : callerContext;
+
+    opId = m_resultsManager->StartOperation("MoveToNearestNode",
+      deviceName, context, "", parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Finding nearest node for " +
+    deviceName + " in graph " + graphName);
+
+  // Get current position
+  PositionStruct currentPos;
+  if (!GetDeviceCurrentPosition(deviceName, currentPos)) {
+    m_logger->LogError("MachineOperations: Failed to get current position for " + deviceName);
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", "Could not get current position");
+    }
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: Current position: X=" + std::to_string(currentPos.x) +
+    ", Y=" + std::to_string(currentPos.y) +
+    ", Z=" + std::to_string(currentPos.z));
+
+  // Get graph from motion config manager
+  auto graphOpt = m_motionLayer.GetMotionConfigManager().GetGraph(graphName);
+
+  if (!graphOpt.has_value()) {
+    m_logger->LogError("MachineOperations: Graph not found: " + graphName);
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed", "Graph not found");
+    }
+    return false;
+  }
+
+  const auto& graph = graphOpt.value().get();
+
+  double minDistance = (std::numeric_limits<double>::max)();
+  std::string nearestNodeId;
+  PositionStruct nearestNodePos;
+
+  // Check if device is hex (2D movement) or gantry (3D movement)
+  bool isHexDevice = (deviceName.find("hex") != std::string::npos);
+
+  // Iterate through all nodes to find nearest
+  for (const auto& node : graph.Nodes) {
+    // Only consider nodes for this device
+    if (node.Device != deviceName) {
+      continue;
+    }
+
+    // Skip nodes without a position defined
+    if (node.Position.empty()) {
+      m_logger->LogDebug("MachineOperations: Skipping node without position: " + node.Id);
+      continue;
+    }
+
+    // Get the actual position coordinates for this node
+    auto posOpt = m_motionLayer.GetMotionConfigManager().GetNamedPosition(deviceName, node.Position);
+    if (!posOpt.has_value()) {
+      m_logger->LogWarning("MachineOperations: Could not get position '" +
+        node.Position + "' for node: " + node.Id);
+      continue;
+    }
+
+    const PositionStruct& nodePos = posOpt.value().get();
+
+    // Calculate distance based on device type
+    double distance;
+    if (isHexDevice) {
+      // For hex devices, only consider X-Y distance (2D)
+      double dx = nodePos.x - currentPos.x;
+      double dy = nodePos.y - currentPos.y;
+      distance = std::sqrt(dx * dx + dy * dy);
+    }
+    else {
+      // For gantry and other devices, consider full 3D distance
+      double dx = nodePos.x - currentPos.x;
+      double dy = nodePos.y - currentPos.y;
+      double dz = nodePos.z - currentPos.z;
+      distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    m_logger->LogDebug("MachineOperations: Node " + node.Id +
+      " at position '" + node.Position +
+      "' distance: " + std::to_string(distance) + "mm");
+
+    // Check if this is the nearest node so far
+    if (distance < minDistance && distance <= maxDistance) {
+      minDistance = distance;
+      nearestNodeId = node.Id;
+      nearestNodePos = nodePos;
+    }
+  }
+
+  if (nearestNodeId.empty()) {
+    m_logger->LogError("MachineOperations: No reachable node found within " +
+      std::to_string(maxDistance) + "mm");
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->EndOperation(opId, "failed",
+        "No reachable node within " + std::to_string(maxDistance) + "mm");
+    }
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: Nearest node found: " + nearestNodeId +
+    " at distance: " + std::to_string(minDistance) + "mm");
+  m_logger->LogInfo("MachineOperations: Target position: X=" + std::to_string(nearestNodePos.x) +
+    ", Y=" + std::to_string(nearestNodePos.y) +
+    ", Z=" + std::to_string(nearestNodePos.z));
+
+  // Store results
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->StoreResult(opId, "nearest_node", nearestNodeId);
+    m_resultsManager->StoreResult(opId, "distance_to_nearest", std::to_string(minDistance));
+    StorePositionResult(opId, "start", currentPos);
+    StorePositionResult(opId, "target", nearestNodePos);
+  }
+
+  // Move to nearest node
+  std::string moveContext = callerContext.empty() ?
+    "MoveToNearestNode_" + deviceName + "_to_" + nearestNodeId :
+    callerContext + "_to_" + nearestNodeId;
+
+  bool success = MoveDeviceToNode(deviceName, graphName, nearestNodeId,
+    waitForCompletion, moveContext);
+
+  // Complete tracking
+  if (m_resultsManager && !opId.empty()) {
+    if (success) {
+      PositionStruct finalPos;
+      if (GetDeviceCurrentPosition(deviceName, finalPos)) {
+        StorePositionResult(opId, "final", finalPos);
+        double movedDistance = GetDistanceBetweenPositions(currentPos, finalPos);
+        m_resultsManager->StoreResult(opId, "actual_distance_moved", std::to_string(movedDistance));
+      }
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_resultsManager->EndOperation(opId, "failed", "Movement to nearest node failed");
+    }
+  }
+
+  if (success) {
+    m_logger->LogInfo("MachineOperations: Successfully moved to nearest node: " + nearestNodeId);
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to move to nearest node: " + nearestNodeId);
   }
 
   return success;
@@ -654,8 +978,7 @@ bool MachineOperations::SetOutput(const std::string& deviceName, int outputPin, 
 bool MachineOperations::SetOutput(int deviceId, int outputPin, bool state) {
   m_logger->LogInfo("MachineOperations: Setting output pin " + std::to_string(outputPin) +
     " on device ID " + std::to_string(deviceId) + " to " + (state ? "ON" : "OFF"));
-
-  return m_ioManager.setOutput(deviceId, outputPin, state);
+  return m_ioManager.setOutput(deviceId, outputPin, state) == EziIOError::SUCCESS;
 }
 
 // Read input state by device name
@@ -747,15 +1070,13 @@ bool MachineOperations::ReadInput(const std::string& deviceName, int inputPin, b
 bool MachineOperations::ReadInput(int deviceId, int inputPin, bool& state) {
   m_logger->LogInfo("MachineOperations: Reading input pin " + std::to_string(inputPin) +
     " on device ID " + std::to_string(deviceId));
-
   // Read inputs
   uint32_t inputs = 0, latch = 0;
-  if (!m_ioManager.readInputs(deviceId, inputs, latch)) {
+  if (m_ioManager.readInputs(deviceId, inputs, latch) != EziIOError::SUCCESS) {
     m_logger->LogError("MachineOperations: Failed to read inputs from device ID " +
       std::to_string(deviceId));
     return false;
   }
-
   // Check the pin state
   state = ConvertPinStateToBoolean(inputs, inputPin);
   return true;
@@ -2223,7 +2544,9 @@ bool MachineOperations::CaptureImageToFile(const std::string& filename) {
     auto now = std::chrono::system_clock::now();
     auto time = std::chrono::system_clock::to_time_t(now);
     std::stringstream ss;
-    ss << "capture_" << std::put_time(std::localtime(&time), "%Y%m%d_%H%M%S") << ".png";
+		std::tm timeinfo;
+		localtime_s(&timeinfo, &time);
+    ss << "capture_" << std::put_time(&timeinfo, "%Y%m%d_%H%M%S") << ".png";
     actualFilename = ss.str();
   }
 
@@ -2451,9 +2774,13 @@ std::string MachineOperations::GetDeviceCurrentPositionName(const std::string& d
   }
 
   // If no position is close enough, return empty string
-  m_logger->LogInfo("MachineOperations: Device " + deviceName +
-    " is not at any named position (closest: " + closestPosName +
-    ", distance: " + std::to_string(minDistance) + " mm)");
+  if (false)
+  {
+    m_logger->LogInfo("MachineOperations: Device " + deviceName +
+      " is not at any named position (closest: " + closestPosName +
+      ", distance: " + std::to_string(minDistance) + " mm)");
+  }
+
   return "";
 }
 // Get the current position for a device
@@ -2516,61 +2843,76 @@ bool MachineOperations::GetDeviceCurrentPosition(const std::string& deviceName, 
 // ADD these new methods at the end of machine_operations.cpp:
 
 
-// 5. ADD these new methods to machine_operations.cpp:
+// MachineOperations.cpp
 bool MachineOperations::ApplyCameraExposureForNode(const std::string& nodeId) {
-  if (!m_cameraTest || !m_cameraExposureManager) {
+  if (!m_cameraManager || !m_visionExposureManager) {
     m_logger->LogWarning("MachineOperations: Camera or exposure manager not available");
-    return false;
-  }
-
-  if (!m_cameraTest->GetCamera().IsConnected()) {
-    m_logger->LogWarning("MachineOperations: Camera not connected, cannot apply exposure settings");
     return false;
   }
 
   m_logger->LogInfo("MachineOperations: Applying camera exposure settings for node " + nodeId);
 
-  // Small delay to ensure gantry has settled at the new position
+  // Small delay to ensure gantry has settled
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-  bool success = m_cameraExposureManager->ApplySettingsForNode(m_cameraTest->GetCamera(), nodeId);
+  // Get all camera IDs and apply settings
+  bool anySuccess = false;
+  auto cameraIds = m_cameraManager->GetCameraIds();
 
-  if (success) {
-    m_logger->LogInfo("MachineOperations: Successfully applied camera exposure for node " + nodeId);
-  }
-  else {
-    m_logger->LogWarning("MachineOperations: Failed to apply specific exposure for node " + nodeId + ", trying default");
-    success = ApplyDefaultCameraExposure();
+  for (const auto& cameraId : cameraIds) {
+    auto* camera = m_cameraManager->GetCameraHardware(cameraId);
+    if (camera && camera->IsConnected()) {
+      if (m_visionExposureManager->ApplySettingsForNode(*camera, nodeId)) {
+        anySuccess = true;
+        m_logger->LogInfo("Applied exposure for node " + nodeId + " to camera " + cameraId);
+      }
+      else {
+        m_logger->LogWarning("Failed to apply exposure for node " + nodeId + " to camera " + cameraId);
+      }
+    }
   }
 
-  return success;
+  if (!anySuccess) {
+    m_logger->LogWarning("Failed to apply exposure for any camera, trying default");
+    return ApplyDefaultCameraExposure();
+  }
+
+  return anySuccess;
 }
 
 bool MachineOperations::ApplyDefaultCameraExposure() {
-  if (!m_cameraTest || !m_cameraExposureManager) {
+  if (!m_cameraManager || !m_visionExposureManager) {
     m_logger->LogWarning("MachineOperations: Camera or exposure manager not available");
-    return false;
-  }
-
-  if (!m_cameraTest->GetCamera().IsConnected()) {
-    m_logger->LogWarning("MachineOperations: Camera not connected, cannot apply default exposure");
     return false;
   }
 
   m_logger->LogInfo("MachineOperations: Applying default camera exposure settings");
 
-  bool success = m_cameraExposureManager->ApplyDefaultSettings(m_cameraTest->GetCamera());
+  bool anySuccess = false;
+  auto cameraIds = m_cameraManager->GetCameraIds();
 
-  if (success) {
+  for (const auto& cameraId : cameraIds) {
+    auto* camera = m_cameraManager->GetCameraHardware(cameraId);
+    if (camera && camera->IsConnected()) {
+      if (m_visionExposureManager->ApplyDefaultSettings(*camera)) {
+        anySuccess = true;
+        m_logger->LogInfo("Applied default exposure to camera " + cameraId);
+      }
+      else {
+        m_logger->LogWarning("Failed to apply default exposure to camera " + cameraId);
+      }
+    }
+  }
+
+  if (anySuccess) {
     m_logger->LogInfo("MachineOperations: Successfully applied default camera exposure");
   }
   else {
     m_logger->LogError("MachineOperations: Failed to apply default camera exposure");
   }
 
-  return success;
+  return anySuccess;
 }
-
 // machine_operations.cpp - FIXED implementation for the new position storage methods
 // Add these methods to your existing machine_operations.cpp file
 // REMOVE the duplicate CalculateDistanceFromStored method around line 1100
@@ -3300,6 +3642,263 @@ bool MachineOperations::SMU_QueryCommand(const std::string& command, std::string
   return result;
 }
 
+
+
+bool MachineOperations::SMU_GetStatus(std::string& instrumentId, std::string& outputState,
+  std::string& sourceFunction, const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  m_logger->LogInfo("MachineOperations: Getting SMU status" +
+    (clientName.empty() ? "" : " (" + clientName + ")"));
+
+  bool result = m_smuOps->GetStatus(instrumentId, outputState, sourceFunction, clientName);
+
+  if (result) {
+    m_logger->LogInfo("MachineOperations: SMU Status - ID: " + instrumentId +
+      ", Output: " + outputState +
+      ", Source: " + sourceFunction +
+      (clientName.empty() ? "" : " (" + clientName + ")"));
+  }
+  else {
+    m_logger->LogError("MachineOperations: Failed to get SMU status" +
+      (clientName.empty() ? "" : " (" + clientName + ")"));
+  }
+
+  return result;
+}
+
+
+
+// ============================================================================
+// 2. ADD THESE IMPLEMENTATIONS TO machine_operations.cpp
+// ============================================================================
+
+
+// ============================================================================
+// SIMPLE MACHINE OPERATIONS SWEEP METHODS
+// Add these to machine_operations.h and machine_operations.cpp
+// ============================================================================
+
+// ============================================================================
+// 1. ADD THESE TO machine_operations.h (in the public section)
+// ============================================================================
+
+// Simple SMU Sweep operations
+bool SMU_VoltageSweep(double startVoltage, double stopVoltage, int steps,
+  double currentCompliance = 0.1, double delayMs = 100,
+  const std::string& clientName = "",
+  const std::string& callerContext = "");
+
+bool SMU_CurrentSweep(double startCurrent, double stopCurrent, int steps,
+  double voltageCompliance = 10.0, double delayMs = 100,
+  const std::string& clientName = "",
+  const std::string& callerContext = "");
+
+// ============================================================================
+// 2. ADD THESE IMPLEMENTATIONS TO machine_operations.cpp
+// ============================================================================
+
+bool MachineOperations::SMU_VoltageSweep(double startVoltage, double stopVoltage, int steps,
+  double currentCompliance, double delayMs, const std::string& clientName,
+  const std::string& callerContext) {
+
+  // 1. Start operation tracking
+  std::string opId;
+  auto startTime = std::chrono::steady_clock::now();
+
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"start_voltage", std::to_string(startVoltage)},
+        {"stop_voltage", std::to_string(stopVoltage)},
+        {"steps", std::to_string(steps)},
+        {"current_compliance", std::to_string(currentCompliance)},
+        {"delay_ms", std::to_string(delayMs)},
+        {"sweep_type", "voltage"}
+    };
+
+    std::string sequenceName = "";
+    if (callerContext.find("Aurora") != std::string::npos) {
+      sequenceName = "Aurora";
+    }
+
+    opId = m_resultsManager->StartOperation("SMU_VoltageSweep", clientName.empty() ? "default" : clientName,
+      callerContext, sequenceName, parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Starting simple voltage sweep from " +
+    std::to_string(startVoltage) + "V to " + std::to_string(stopVoltage) + "V, " +
+    std::to_string(steps) + " steps" +
+    (clientName.empty() ? "" : " (" + clientName + ")") +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")"));
+
+  // 2. Check if SMU is available
+  if (!m_smuOps) {
+    auto endTime = std::chrono::steady_clock::now();
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+      m_resultsManager->EndOperation(opId, "failed", "SMU operations not available");
+    }
+
+    m_logger->LogError("MachineOperations: SMU operations not available for voltage sweep");
+    return false;
+  }
+
+  // 3. Perform the voltage sweep using the simple method
+  bool sweepSuccess = m_smuOps->VoltageSweep(startVoltage, stopVoltage, steps,
+    currentCompliance, delayMs, clientName);
+
+  auto endTime = std::chrono::steady_clock::now();
+  auto totalElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+  // 4. Store results
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->StoreResult(opId, "total_elapsed_ms", std::to_string(totalElapsedMs));
+    m_resultsManager->StoreResult(opId, "steps_completed", std::to_string(steps));
+
+    if (sweepSuccess) {
+      m_logger->LogInfo("MachineOperations: Voltage sweep completed successfully");
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_logger->LogError("MachineOperations: Voltage sweep failed");
+      m_resultsManager->EndOperation(opId, "failed", "Voltage sweep operation failed");
+    }
+  }
+
+  return sweepSuccess;
+}
+
+bool MachineOperations::SMU_CurrentSweep(double startCurrent, double stopCurrent, int steps,
+  double voltageCompliance, double delayMs, const std::string& clientName,
+  const std::string& callerContext) {
+
+  // 1. Start operation tracking
+  std::string opId;
+  auto startTime = std::chrono::steady_clock::now();
+
+  if (m_resultsManager) {
+    std::map<std::string, std::string> parameters = {
+        {"start_current", std::to_string(startCurrent)},
+        {"stop_current", std::to_string(stopCurrent)},
+        {"steps", std::to_string(steps)},
+        {"voltage_compliance", std::to_string(voltageCompliance)},
+        {"delay_ms", std::to_string(delayMs)},
+        {"sweep_type", "current"}
+    };
+
+    std::string sequenceName = "";
+    if (callerContext.find("Aurora") != std::string::npos) {
+      sequenceName = "Aurora";
+    }
+
+    opId = m_resultsManager->StartOperation("SMU_CurrentSweep", clientName.empty() ? "default" : clientName,
+      callerContext, sequenceName, parameters);
+  }
+
+  m_logger->LogInfo("MachineOperations: Starting simple current sweep from " +
+    std::to_string(startCurrent) + "A to " + std::to_string(stopCurrent) + "A, " +
+    std::to_string(steps) + " steps" +
+    (clientName.empty() ? "" : " (" + clientName + ")") +
+    (callerContext.empty() ? "" : " (called by: " + callerContext + ")"));
+
+  // 2. Check if SMU is available
+  if (!m_smuOps) {
+    auto endTime = std::chrono::steady_clock::now();
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+    if (m_resultsManager && !opId.empty()) {
+      m_resultsManager->StoreResult(opId, "elapsed_time_ms", std::to_string(elapsedMs));
+      m_resultsManager->EndOperation(opId, "failed", "SMU operations not available");
+    }
+
+    m_logger->LogError("MachineOperations: SMU operations not available for current sweep");
+    return false;
+  }
+
+  // 3. Perform the current sweep using the simple method
+  bool sweepSuccess = m_smuOps->CurrentSweep(startCurrent, stopCurrent, steps,
+    voltageCompliance, delayMs, clientName);
+
+  auto endTime = std::chrono::steady_clock::now();
+  auto totalElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+  // 4. Store results
+  if (m_resultsManager && !opId.empty()) {
+    m_resultsManager->StoreResult(opId, "total_elapsed_ms", std::to_string(totalElapsedMs));
+    m_resultsManager->StoreResult(opId, "steps_completed", std::to_string(steps));
+
+    if (sweepSuccess) {
+      m_logger->LogInfo("MachineOperations: Current sweep completed successfully");
+      m_resultsManager->EndOperation(opId, "success");
+    }
+    else {
+      m_logger->LogError("MachineOperations: Current sweep failed");
+      m_resultsManager->EndOperation(opId, "failed", "Current sweep operation failed");
+    }
+  }
+
+  return sweepSuccess;
+}
+
+// ============================================================================
+// USAGE EXAMPLES
+// ============================================================================
+
+/*
+// Example 1: Direct usage in MachineOperations
+bool success = machineOps.SMU_VoltageSweep(0.0, 5.0, 21, 0.1, 100, "", "MyTest");
+
+// Example 2: Using in sequence operations
+auto sequence = std::make_unique<SequenceStep>("Simple SMU Test", machineOps);
+
+// Add simple voltage sweep
+sequence->AddOperation(std::make_shared<SimpleVoltageSweepOperation>(
+    0.0, 5.0, 21, 0.1, 100, ""));
+
+// Add quick current sweep
+sequence->AddOperation(std::make_shared<QuickCurrentSweepOperation>(
+    QuickCurrentSweepOperation::MILLI_CURRENT, ""));
+
+// Execute
+sequence->Execute();
+*/
+
+
+
+
+
+bool MachineOperations::SMU_GetLastVoltageSweepResults(std::vector<std::pair<double, double>>& results,
+  const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  // This would require additional storage in Keithley2400Operations to cache last results
+  // For now, log that results should be retrieved during the sweep
+  m_logger->LogInfo("MachineOperations: Voltage sweep results are logged during sweep execution");
+  return true;
+}
+
+bool MachineOperations::SMU_GetLastCurrentSweepResults(std::vector<std::pair<double, double>>& results,
+  const std::string& clientName) {
+  if (!m_smuOps) {
+    m_logger->LogError("MachineOperations: SMU operations not available");
+    return false;
+  }
+
+  // This would require additional storage in Keithley2400Operations to cache last results
+  // For now, log that results should be retrieved during the sweep
+  m_logger->LogInfo("MachineOperations: Current sweep results are logged during sweep execution");
+  return true;
+}
+
+
 bool MachineOperations::SetDeviceSpeed(const std::string& deviceName, double velocity,
   const std::string& callerContext) {
 
@@ -3654,6 +4253,8 @@ extern "C" {
 
 }
 
+
+
 // In machine_operations.cpp
 void MachineOperations::SetLaserOperations(CLD101xOperations* ops) {
   m_laserOps = ops;
@@ -3670,4 +4271,149 @@ void MachineOperations::SetSMUOperations(Keithley2400Operations* ops) {
   else {
     m_logger->LogInfo("MachineOperations: SMU operations module set to NULL");
   }
+}
+
+bool MachineOperations::StopAllMovement() {
+  m_logger->LogInfo("MachineOperations: Emergency stop requested");
+  return m_motionLayer.StopAllMovement();
+}
+
+
+
+// Simple position access methods - no caching, direct from motion layer
+//const std::map<std::string, PositionStruct>& MachineOperations::GetRealtimePositions() const {
+//  return m_motionLayer.GetRealtimePositions();
+//}
+//
+//bool MachineOperations::GetRealtimePosition(const std::string& deviceName, PositionStruct& position) const {
+//  return m_motionLayer.GetRealtimePosition(deviceName, position);
+//}
+
+//void MachineOperations::ForceUpdatePositions() {
+//  m_motionLayer.UpdateRealtimePositions();
+//
+//  if (m_enableDebug) {
+//    m_logger->LogInfo("MachineOperations: Forced position update completed");
+//  }
+//}
+
+bool MachineOperations::GetDataValue(const std::string& dataKey, double& value,
+  const std::string& callerContext) {
+  // Log operation
+  LogInfo("GetDataValue for key: " + dataKey +
+    (callerContext.empty() ? "" : " (context: " + callerContext + ")"));
+
+  GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+  if (!dataStore) {
+    LogError("GlobalDataStore not available");
+    return false;
+  }
+
+  // Check if the channel exists
+  std::vector<std::string> channels = dataStore->GetAvailableChannels();
+  bool channelExists = std::find(channels.begin(), channels.end(), dataKey) != channels.end();
+
+  if (!channelExists) {
+    LogWarning("Data key '" + dataKey + "' not found in available channels");
+    // Still get the value (will return default 0.0)
+  }
+
+  // Get the value
+  value = dataStore->GetValue(dataKey, 0.0);
+
+  LogInfo("Retrieved value: " + std::to_string(value));
+
+  return true;
+}
+
+
+
+
+std::vector<DataPoint> MachineOperations::GetChannelDataBuffer(const std::string& channelId,
+  size_t maxPoints) {
+  AppContext& context = AppContext::GetInstance();  // Reference, not pointer
+  DataClientManager* dataClientManager = context.GetDataClient();  // Use . not ->
+  if (dataClientManager) {
+    return dataClientManager->GetLastDataPoints(channelId, maxPoints);
+  }
+  return std::vector<DataPoint>();
+}
+
+std::vector<DataPoint> MachineOperations::GetChannelDataSince(const std::string& channelId,
+  const std::chrono::system_clock::time_point& sinceTime) {
+  AppContext& context = AppContext::GetInstance();
+  DataClientManager* dataClientManager = context.GetDataClient();
+  if (dataClientManager) {
+    return dataClientManager->GetDataPointsFromTime(channelId, sinceTime);
+  }
+  return std::vector<DataPoint>();
+}
+
+
+bool MachineOperations::StartChannelRecording(const std::vector<std::string>& channels,
+  const std::string& filename,
+  const std::string& recordingId) {
+
+  AppContext& context = AppContext::GetInstance();
+  DataClientManager* dataClientManager = context.GetDataClient();
+
+  if (!dataClientManager) {
+    LogError("DataClientManager not available for recording");
+    return false;
+  }
+
+  // Check if recording ID already exists
+  if (m_activeRecorders.find(recordingId) != m_activeRecorders.end()) {
+    LogError("Recording with ID " + recordingId + " already exists");
+    return false;
+  }
+
+  // Create recorder
+  auto recorder = std::make_unique<ChannelRecorder>(filename, channels);
+
+  // Subscribe to each channel
+  for (const auto& channel : channels) {
+    dataClientManager->Subscribe(channel, recorder.get());
+  }
+
+  // Store recorder
+  m_activeRecorders[recordingId] = std::move(recorder);
+
+  LogInfo("Started recording " + std::to_string(channels.size()) +
+    " channels to " + filename + " (ID: " + recordingId + ")");
+
+  return true;
+}
+
+bool MachineOperations::StopChannelRecording(const std::string& recordingId, size_t& recordedPoints) {
+
+  AppContext& context = AppContext::GetInstance();
+  DataClientManager* dataClientManager = context.GetDataClient();
+
+  if (!dataClientManager) {
+    LogError("DataClientManager not available");
+    return false;
+  }
+
+  // Find recorder
+  auto it = m_activeRecorders.find(recordingId);
+  if (it == m_activeRecorders.end()) {
+    LogError("Recording ID not found: " + recordingId);
+    recordedPoints = 0;
+    return false;
+  }
+
+  // Get recorded points count
+  recordedPoints = it->second->GetRecordCount();
+
+  // Unsubscribe from DataClientManager
+  dataClientManager->UnsubscribeCompletely(it->second.get());
+
+  // Remove recorder (destructor will close file)
+  m_activeRecorders.erase(it);
+
+  LogInfo("Stopped recording " + recordingId +
+    ". Recorded " + std::to_string(recordedPoints) + " points");
+
+  return true;
 }

@@ -1,105 +1,105 @@
 {
-  "version": "1.0",
   "slots": [
     {
-      "scriptPath": "scripts/initialization.aas",
       "displayName": "System Initialize",
-      "enabled": true
+      "enabled": true,
+      "scriptPath": "scripts/initialization.aas"
     },
     {
-      "scriptPath": "scripts/test1.aas",
       "displayName": "Test Movement 1",
-      "enabled": true
+      "enabled": true,
+      "scriptPath": "scripts/test1.aas"
     },
     {
-      "scriptPath": "scripts/test2.aas",
       "displayName": "Test Movement 2",
-      "enabled": true
+      "enabled": true,
+      "scriptPath": "scripts/test2.aas"
     },
     {
-      "scriptPath": "scripts/alignment_routine.aas",
       "displayName": "Lens Alignment",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": "scripts/alignment_routine.aas"
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     },
     {
-      "scriptPath": "",
       "displayName": "",
-      "enabled": false
+      "enabled": false,
+      "scriptPath": ""
     }
-  ]
+  ],
+  "version": "1.0"
 }

@@ -1,30 +1,29 @@
 // UICameraPanelUtility.h - Camera Utility and Control Panel
 #pragma once
 
-#include <memory>
 #include <string>
+#include <chrono>
 
 // Forward declarations
 class CameraManager;
-class PylonCameraTest;
-class PylonCamera;
+class ICameraHardware;
 
 class UICameraPanelUtility {
 public:
   UICameraPanelUtility(CameraManager& cameraManager);
   ~UICameraPanelUtility();
 
-  // Disable copy/move
+  // Disable copy/move to avoid issues with references
   UICameraPanelUtility(const UICameraPanelUtility&) = delete;
   UICameraPanelUtility& operator=(const UICameraPanelUtility&) = delete;
   UICameraPanelUtility(UICameraPanelUtility&&) = delete;
   UICameraPanelUtility& operator=(UICameraPanelUtility&&) = delete;
 
-  // Main rendering method
-  void RenderPanel(PylonCameraTest* camera, const std::string& cameraId);
+  // Panel rendering for use in UICameraPanel
+  void RenderPanel(ICameraHardware* camera, const std::string& cameraId);
 
   // Camera management
-  void SetSelectedCamera(PylonCameraTest* camera, const std::string& cameraId);
+  void SetSelectedCamera(ICameraHardware* camera, const std::string& cameraId);
   void ClearCamera();
 
 private:
@@ -32,16 +31,20 @@ private:
   CameraManager& m_cameraManager;
 
   // Current camera state
+  ICameraHardware* m_currentCamera = nullptr;
   std::string m_currentCameraId;
-  PylonCameraTest* m_currentCamera = nullptr;
 
   // UI state for exposure controls
-  float m_customExposureTime = 1000.0f;  // microseconds
-  float m_customGain = 1.0f;              // 0-10 scale
-  bool m_exposureAuto = false;
-  bool m_gainAuto = false;
+  float m_exposureTimeUI = 10000.0f; // microseconds
+  float m_gainUI = 1.0f;
+  bool m_autoExposureUI = false;
+  bool m_autoGainUI = false;
 
-  // UI sections
+  // Error rate limiting
+  std::chrono::steady_clock::time_point m_lastErrorTime;
+  static constexpr std::chrono::seconds ERROR_RATE_LIMIT{ 3 }; // Limit errors to once per 3 seconds
+
+  // UI rendering methods
   void RenderCameraHeader();
   void RenderConnectionControls();
   void RenderCameraStatus();
@@ -51,9 +54,11 @@ private:
   void RenderAdvancedControls();
   void RenderDebugControls();
 
-  // Helper methods
+  // Validation and helper methods
   bool ValidateCamera() const;
   void UpdateExposureUIFromCamera();
-  void ApplyExposureSettingsToCamera();
-  void SafeDisconnectCamera();
+  void ApplyExposureSettingsFromUI();
+
+  // Error rate limiting helper
+  bool CanLogError();
 };

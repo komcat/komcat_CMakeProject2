@@ -515,8 +515,12 @@ bool CameraWindow::CaptureImage()
     // Generate a filename based on current time
     auto now = std::chrono::system_clock::now();
     auto time = std::chrono::system_clock::to_time_t(now);
+
+		std::tm timeinfo;
+		localtime_s(&timeinfo, &time); // Thread-safe version of localtime
+
     std::stringstream ss;
-    ss << "capture_" << std::put_time(std::localtime(&time), "%Y%m%d_%H%M%S") << ".png";
+    ss << "capture_" << std::put_time(&timeinfo, "%Y%m%d_%H%M%S") << ".png";
     std::string filename = ss.str();
 
     // Save the image
@@ -738,7 +742,7 @@ void CameraWindow::RenderUI()
 
                 // Rate-limit UI updates for better performance
                 static float lastFrameUpdateTime = 0.0f;
-                float currentTime = ImGui::GetTime();
+                float currentTime = static_cast<float>(ImGui::GetTime());
                 static const float TARGET_FRAME_UPDATE_INTERVAL = 1.0f / 30.0f; // 30 FPS for UI updates
 
                 bool hasValidFrame = false;

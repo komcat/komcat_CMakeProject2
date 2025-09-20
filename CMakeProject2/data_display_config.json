@@ -1,92 +1,92 @@
 {
+  "channels": [
+    {
+      "displayName": "Current Reading",
+      "displayUnitSuffix": true,
+      "enable": true,
+      "id": "GPIB-Current",
+      "unit": "A"
+    },
+    {
+      "displayName": "Sagnac V",
+      "displayUnitSuffix": true,
+      "enable": true,
+      "id": "SagnacV",
+      "unit": "V"
+    },
+    {
+      "displayName": "SMU1 Voltage",
+      "displayUnitSuffix": true,
+      "enable": true,
+      "id": "SMU1-Voltage",
+      "unit": "V"
+    },
+    {
+      "displayName": "SMU1 Current",
+      "displayUnitSuffix": true,
+      "enable": true,
+      "id": "SMU1-Current",
+      "unit": "A"
+    },
+    {
+      "displayName": "SMU1 Resistance",
+      "displayUnitSuffix": true,
+      "enable": false,
+      "id": "SMU1-Resistance",
+      "unit": "Ohms"
+    },
+    {
+      "displayName": "SMU1 Power",
+      "displayUnitSuffix": true,
+      "enable": false,
+      "id": "SMU1-Power",
+      "unit": "W"
+    },
+    {
+      "displayName": "Virtual Channel 1",
+      "displayUnitSuffix": true,
+      "enable": false,
+      "id": "Virtual_1",
+      "unit": "V"
+    },
+    {
+      "displayName": "Virtual Channel 2",
+      "displayUnitSuffix": true,
+      "enable": false,
+      "id": "Virtual_2",
+      "unit": "W"
+    },
+    {
+      "displayName": "Voltage L5",
+      "displayUnitSuffix": true,
+      "enable": false,
+      "id": "hex-left-A-5",
+      "unit": "V"
+    },
+    {
+      "displayName": "Voltage L6",
+      "displayUnitSuffix": true,
+      "enable": false,
+      "id": "hex-left-A-6",
+      "unit": "V"
+    },
+    {
+      "displayName": "Voltage R5",
+      "displayUnitSuffix": true,
+      "enable": false,
+      "id": "hex-right-A-5",
+      "unit": "V"
+    },
+    {
+      "displayName": "Voltage R6",
+      "displayUnitSuffix": true,
+      "enable": false,
+      "id": "hex-right-A-6",
+      "unit": "V"
+    }
+  ],
   "settings": {
     "maxPoints": 500,
     "timeWindow": 30.0
-  },
-  "channels": [
-    {
-      "id": "GPIB-Current",
-      "displayName": "Current Reading",
-      "unit": "A",
-      "displayUnitSuffix": true,
-      "enable": true
-    },
-    {
-      "id": "SagnacV",
-      "displayName": "Sagnac V",
-      "unit": "V",
-      "displayUnitSuffix": true,
-      "enable": true
-    },
-    {
-      "id": "SMU1-Voltage",
-      "displayName": "SMU1 Voltage",
-      "unit": "V",
-      "displayUnitSuffix": true,
-      "enable": true
-    },
-    {
-      "id": "SMU1-Current",
-      "displayName": "SMU1 Current",
-      "unit": "A",
-      "displayUnitSuffix": true,
-      "enable": true
-    },
-    {
-      "id": "SMU1-Resistance",
-      "displayName": "SMU1 Resistance",
-      "unit": "Ohms",
-      "displayUnitSuffix": true,
-      "enable": false
-    },
-    {
-      "id": "SMU1-Power",
-      "displayName": "SMU1 Power",
-      "unit": "W",
-      "displayUnitSuffix": true,
-      "enable": false
-    },
-    {
-      "id": "Virtual_1",
-      "displayName": "Virtual Channel 1",
-      "unit": "V",
-      "displayUnitSuffix": true,
-      "enable": false
-    },
-    {
-      "id": "Virtual_2",
-      "displayName": "Virtual Channel 2",
-      "unit": "W",
-      "displayUnitSuffix": true,
-      "enable": false
-    },
-    {
-      "id": "hex-left-A-5",
-      "displayName": "Voltage L5",
-      "unit": "V",
-      "displayUnitSuffix": true,
-      "enable": false
-    },
-    {
-      "id": "hex-left-A-6",
-      "displayName": "Voltage L6",
-      "unit": "V",
-      "displayUnitSuffix": true,
-      "enable": false
-    },
-    {
-      "id": "hex-right-A-5",
-      "displayName": "Voltage R5",
-      "unit": "V",
-      "displayUnitSuffix": true,
-      "enable": false
-    },
-    {
-      "id": "hex-right-A-6",
-      "displayName": "Voltage R6",
-      "unit": "V",
-      "displayUnitSuffix": true,
-      "enable": false
-    }
-  ]
+  }
 }

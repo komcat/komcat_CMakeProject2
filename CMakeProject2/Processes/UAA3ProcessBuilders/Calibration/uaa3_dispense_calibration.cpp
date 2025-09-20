@@ -1,5 +1,6 @@
 // Calibration/uaa3_dispense_calibration.cpp
 #include "../uaa3_process_builders.h"
+#include "ManualAdjustmentOperation.h"
 
 namespace UAA3ProcessBuilders {
 
@@ -26,12 +27,17 @@ namespace UAA3ProcessBuilders {
     sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
       "gantry-main", "_cam_dispense_1"));
 
-    // 2. Prompt user to confirm location (they might manually adjust while prompting)
-    sequence->AddOperation(UserPromptOperation::CreateBasic(
-      "Dispense Position Setup",
-      "Position the camera crosshair exactly where you want to dispense. "
-      "Use manual controls to adjust if needed, then confirm when ready.",
-      promptUI));
+    // 2. Manual adjustment for dispense position (replaces user prompt)
+    sequence->AddOperation(std::make_shared<ManualAdjustmentOperation>(
+      "gantry-main",                              // axisSystem
+      "Dispense Position Setup",                  // title
+      "Position the camera crosshair exactly where you want to dispense.\n"
+      "Use the adjustment controls to fine-tune the position.",  // instructions
+      promptUI,                                    // UserPromptUI& (REQUIRED - you missed this)
+      true,                                        // enableX
+      true,                                        // enableY
+      true                                         // enableZ
+    ));
 
     // 3. Save current location to _cam_dispense_1
     sequence->AddOperation(std::make_shared<SaveCurrentPositionToConfigOperation>(
@@ -51,12 +57,17 @@ namespace UAA3ProcessBuilders {
     // Wait for dispenser to extend
     sequence->AddOperation(std::make_shared<WaitOperation>(500));
 
-    // 6. Prompt user to adjust dispense height
-    sequence->AddOperation(UserPromptOperation::CreateBasic(
-      "Dispense Height Adjustment",
-      "Adjust the dispenser tip to the correct height for dispensing. "
-      "Use Z-axis controls to set the proper tip-to-surface distance, then confirm.",
-      promptUI));
+    // 6. Manual adjustment for dispense height
+    sequence->AddOperation(std::make_shared<ManualAdjustmentOperation>(
+      "gantry-main",                              // axisSystem
+      "Dispense Height Adjustment",               // title
+      "Adjust the dispenser tip to the correct height for dispensing.\n"
+      "Use Z-axis controls to set the proper tip-to-surface distance.",  // instructions
+      promptUI,                                    // UserPromptUI&
+      false,                                       // enableX - disabled for Z-only adjustment
+      false,                                       // enableY - disabled for Z-only adjustment  
+      true                                         // enableZ - enabled for height adjustment
+    ));
 
     // 7. Save current location to dispense1
     sequence->AddOperation(std::make_shared<SaveCurrentPositionToConfigOperation>(
@@ -112,12 +123,17 @@ namespace UAA3ProcessBuilders {
     sequence->AddOperation(std::make_shared<MoveToPointNameOperation>(
       "gantry-main", "_cam_dispense_2"));
 
-    // 2. Prompt user to confirm location
-    sequence->AddOperation(UserPromptOperation::CreateBasic(
-      "Dispense Position Setup",
-      "Position the camera crosshair exactly where you want to dispense. "
-      "Use manual controls to adjust if needed, then confirm when ready.",
-      promptUI));
+    // 2. Manual adjustment for dispense position (replaces user prompt)
+    sequence->AddOperation(std::make_shared<ManualAdjustmentOperation>(
+      "gantry-main",                              // axisSystem
+      "Dispense Position Setup",                  // title
+      "Position the camera crosshair exactly where you want to dispense.\n"
+      "Use the adjustment controls to fine-tune the position.",  // instructions
+      promptUI,                                    // UserPromptUI& (REQUIRED - you missed this)
+      true,                                        // enableX
+      true,                                        // enableY
+      true                                         // enableZ
+    ));
 
     // 3. Save current location to _cam_dispense_2
     sequence->AddOperation(std::make_shared<SaveCurrentPositionToConfigOperation>(
@@ -137,12 +153,17 @@ namespace UAA3ProcessBuilders {
     // Wait for dispenser to extend
     sequence->AddOperation(std::make_shared<WaitOperation>(500));
 
-    // 6. Prompt user to adjust dispense height
-    sequence->AddOperation(UserPromptOperation::CreateBasic(
-      "Dispense Height Adjustment",
-      "Adjust the dispenser tip to the correct height for dispensing. "
-      "Use Z-axis controls to set the proper tip-to-surface distance, then confirm.",
-      promptUI));
+    // 6. Manual adjustment for dispense height
+    sequence->AddOperation(std::make_shared<ManualAdjustmentOperation>(
+      "gantry-main",                              // axisSystem
+      "Dispense Height Adjustment",               // title
+      "Adjust the dispenser tip to the correct height for dispensing.\n"
+      "Use Z-axis controls to set the proper tip-to-surface distance.",  // instructions
+      promptUI,                                    // UserPromptUI&
+      false,                                       // enableX - disabled for Z-only adjustment
+      false,                                       // enableY - disabled for Z-only adjustment  
+      true                                         // enableZ - enabled for height adjustment
+    ));
 
     // 7. Save current location to dispense2
     sequence->AddOperation(std::make_shared<SaveCurrentPositionToConfigOperation>(

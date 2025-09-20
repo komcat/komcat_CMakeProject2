@@ -1,0 +1,26 @@
+{
+	"spdManager": {
+		"name": "SPD Power Supply Manager",
+		"version": "1.0",
+		"autoConnect": true,
+		"defaultPollingInterval": 500,
+		"autoDiscovery": true,
+		"safetyMode": true
+	},
+	"devices": [
+		{
+			"name": "SPD1",
+			"resourceString": "USB0::0xF4EC::0x1410::SPD13DCQ7R0719::INSTR",
+			"maxChannels": 1,
+			"autoConnect": true,
+			"pollingInterval": 500,
+			"description": "Siglent SPD1305X single channel power supply"
+		}
+	],
+	"globalSettings": {
+		"enableOutputOnConnect": false,
+		"resetOnConnect": false,
+		"logAllOperations": false,
+		"safetyTimeoutMs": 10000
+	}
+}

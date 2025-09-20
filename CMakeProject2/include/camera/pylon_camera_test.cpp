@@ -111,13 +111,14 @@ PylonCameraTest::~PylonCameraTest() {
 
 
 
-// NEW: Add this method
+// NEW METHOD - Send frame through CameraFeedDisplay instead
 void PylonCameraTest::SendFrameToRaylib() {
-  if (!m_raylibWindow || !m_formatConverterOutput.IsValid()) {
+  // Check if we have CameraFeedDisplay instead of RaylibWindow
+  if ( !m_formatConverterOutput.IsValid()) {
     return;
   }
 
-  // Rate limit updates to avoid overwhelming raylib
+  // Rate limit updates
   auto now = std::chrono::steady_clock::now();
   auto timeSinceLastUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastRaylibUpdate);
 
@@ -132,16 +133,14 @@ void PylonCameraTest::SendFrameToRaylib() {
     uint32_t height = m_formatConverterOutput.GetHeight();
 
     if (pImageBuffer && width > 0 && height > 0) {
-      // Send frame to raylib window
-      m_raylibWindow->UpdateVideoFrame(pImageBuffer, width, height, m_lastFrameTimestamp);
+
       m_lastRaylibUpdate = now;
     }
   }
   catch (const std::exception& e) {
-    std::cerr << "Error sending frame to raylib: " << e.what() << std::endl;
+    std::cerr << "Error sending frame to display: " << e.what() << std::endl;
   }
 }
-
 
 
 bool PylonCameraTest::ApplyExposureForNode(const std::string& nodeId) {
@@ -498,13 +497,20 @@ void PylonCameraTest::RenderUIWithMachineOps(MachineOperations* machineOps) {
   }
 
   // Add this somewhere in the camera controls (maybe after exposure settings):
+  // NEW CODE - using HasCameraFeed instead
   if (ImGui::CollapsingHeader("Raylib Video Feed")) {
     ImGui::Checkbox("Send to Raylib Window", &m_enableRaylibFeed);
     ImGui::SameLine();
     ImGui::TextDisabled("(Live Video page)");
 
     if (m_raylibWindow) {
-      ImGui::Text("Status: %s", m_raylibWindow->HasVideoFeed() ? "Active" : "Ready");
+      // Use HasCameraFeed() instead of HasVideoFeed()
+      ImGui::Text("Status: %s", m_raylibWindow->HasCameraFeed() ? "Camera Connected" : "No Camera");
+
+      // Optionally show more camera status
+      if (m_raylibWindow->HasCameraFeed()) {
+        ImGui::Text("Feed: %s", m_raylibWindow->IsCameraFeedVisible() ? "Visible" : "Hidden");
+      }
     }
     else {
       ImGui::TextColored(ImVec4(1, 1, 0, 1), "Raylib window not connected");
@@ -695,7 +701,10 @@ bool PylonCameraTest::CaptureImage()
     auto now = std::chrono::system_clock::now();
     auto time = std::chrono::system_clock::to_time_t(now);
     std::stringstream ss;
-    ss << "capture_" << std::put_time(std::localtime(&time), "%Y%m%d_%H%M%S") << ".png";
+    std::tm timeinfo;
+		localtime_s(&timeinfo, &time);
+
+    ss << "capture_" << std::put_time(&timeinfo, "%Y%m%d_%H%M%S") << ".png";
     std::string filename = ss.str();
 
     // Save the image
@@ -742,14 +751,36 @@ bool PylonCameraTest::GrabSingleFrame()
     return false;
   }
 
-  // If already grabbing continuously, don't do anything
+  // FIXED: If already grabbing continuously, use the current frame instead of trying to grab a new one
   if (m_camera.IsGrabbing()) {
-    std::cerr << "Already grabbing continuously" << std::endl;
+    std::cout << "Camera already grabbing continuously - using current frame" << std::endl;
+
+    // Check if we have a valid current frame
+    {
+      std::lock_guard<std::mutex> lock(m_imageMutex);
+      if (m_ptrGrabResult && m_ptrGrabResult->GrabSucceeded() && m_formatConverterOutput.IsValid()) {
+        std::cout << "Using current frame from continuous grabbing" << std::endl;
+        m_hasValidImage = true;
+        m_newFrameReady = true;
+
+        // Force texture creation for display
+        for (int attempt = 0; attempt < 3; attempt++) {
+          if (CreateTexture()) {
+            std::cout << "[DEBUG] Texture updated from continuous frame on attempt " << (attempt + 1) << std::endl;
+            break;
+          }
+        }
+
+        return true;
+      }
+    }
+
+    std::cerr << "No valid frame available from continuous grabbing" << std::endl;
     return false;
   }
 
   try {
-    // Start single frame acquisition
+    // Original single frame acquisition code (only when NOT grabbing continuously)
     std::cout << "Grabbing single frame..." << std::endl;
 
     // Create a temporary grab result
@@ -782,7 +813,7 @@ bool PylonCameraTest::GrabSingleFrame()
     if (grabResult && grabResult->GrabSucceeded()) {
       std::cout << "Single frame grabbed successfully" << std::endl;
 
-      // **ENHANCED: Process the frame immediately and create texture**
+      // Process the frame immediately and create texture
       {
         // Lock mutex while updating the image
         std::lock_guard<std::mutex> lock(m_imageMutex);
@@ -815,19 +846,6 @@ bool PylonCameraTest::GrabSingleFrame()
         std::cout << "[DEBUG] Single frame processed: " << m_lastFrameWidth << "x" << m_lastFrameHeight << std::endl;
       }
 
-      // **CRITICAL: Force texture creation immediately**
-      std::cout << "[DEBUG] Creating texture for single frame..." << std::endl;
-
-      // Force texture update multiple times if needed
-      for (int attempt = 0; attempt < 5; attempt++) {
-        if (CreateTexture()) {
-          std::cout << "[DEBUG] Single frame texture created successfully on attempt " << (attempt + 1) << std::endl;
-          std::cout << "[DEBUG] Texture ID: " << m_textureID << ", Valid: " << (m_textureInitialized && m_hasValidImage) << std::endl;
-          break;
-        }
-        std::cout << "[DEBUG] Texture creation failed, attempt " << (attempt + 1) << std::endl;
-      }
-
       return true;
     }
     else {
@@ -836,15 +854,14 @@ bool PylonCameraTest::GrabSingleFrame()
     }
   }
   catch (const Pylon::GenericException& e) {
-    std::cerr << "Pylon exception during single frame grab: " << e.GetDescription() << std::endl;
+    std::cerr << "Pylon error during single frame grab: " << e.GetDescription() << std::endl;
     return false;
   }
   catch (const std::exception& e) {
-    std::cerr << "Exception during single frame grab: " << e.what() << std::endl;
+    std::cerr << "Error during single frame grab: " << e.what() << std::endl;
     return false;
   }
 }
-
 
 
 

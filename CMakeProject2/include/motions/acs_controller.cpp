@@ -65,33 +65,27 @@ void ACSController::StopCommunicationThread() {
   }
 }
 
-// In ACSController.cpp - improve CommunicationThreadFunc
+// Update the CommunicationThreadFunc in acs_controller.cpp
 void ACSController::CommunicationThreadFunc() {
-  // Set update interval to 200ms (5 Hz)
   const auto updateInterval = std::chrono::milliseconds(200);
-
-  // Frame counter for less frequent updates
   int frameCounter = 0;
 
-  // Initialization of last update timestamps
   m_lastStatusUpdate = std::chrono::steady_clock::now();
   m_lastPositionUpdate = m_lastStatusUpdate;
 
   while (!m_terminateThread) {
     auto cycleStartTime = std::chrono::steady_clock::now();
 
-    // Process any pending motor commands first for responsiveness
+    // Process any pending motor commands first
     {
       std::lock_guard<std::mutex> lock(m_commandMutex);
       for (auto& cmd : m_commandQueue) {
         if (!cmd.executed) {
-          // Execute the command
           MoveRelative(cmd.axis, cmd.distance, false);
           cmd.executed = true;
         }
       }
 
-      // Remove executed commands
       m_commandQueue.erase(
         std::remove_if(m_commandQueue.begin(), m_commandQueue.end(),
           [](const MotorCommand& cmd) { return cmd.executed; }),
@@ -102,24 +96,45 @@ void ACSController::CommunicationThreadFunc() {
     if (m_isConnected) {
       frameCounter++;
 
-      // Always update positions
+      // Always update positions and notify subscribers
       std::map<std::string, double> positions;
       if (GetPositions(positions)) {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_axisPositions = positions;
-        m_lastPositionUpdate = std::chrono::steady_clock::now();
-      }
-
-      // Update other status less frequently (every 3rd frame, ~1.67Hz)
-      if (frameCounter % 3 == 0) {
-        // Update axis motion status for X, Y, Z only
-        for (const auto& axis : { "X", "Y", "Z" }) {
-          bool moving = IsMoving(axis);
+        {
           std::lock_guard<std::mutex> lock(m_mutex);
-          m_axisMoving[axis] = moving;
+          m_axisPositions = positions;
+          m_lastPositionUpdate = std::chrono::steady_clock::now();
         }
 
-        // Update servo status for X, Y, Z only
+        // ADDED: Notify all position subscribers
+        NotifyPositionSubscribers(positions);
+      }
+
+      // Update motion status less frequently (every 3rd frame)
+      if (frameCounter % 3 == 0) {
+        // Track previous states for change detection
+        std::map<std::string, bool> previousMovingStates;
+        {
+          std::lock_guard<std::mutex> lock(m_mutex);
+          previousMovingStates = m_axisMoving;
+        }
+
+        // Update axis motion status for X, Y, Z
+        for (const auto& axis : { "X", "Y", "Z" }) {
+          bool moving = IsMoving(axis);
+
+          {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_axisMoving[axis] = moving;
+          }
+
+          // ADDED: Notify if motion status changed
+          auto prevIt = previousMovingStates.find(axis);
+          if (prevIt != previousMovingStates.end() && prevIt->second != moving) {
+            NotifyMotionStatusSubscribers(axis, moving);
+          }
+        }
+
+        // Update servo status for X, Y, Z
         for (const auto& axis : { "X", "Y", "Z" }) {
           bool enabled;
           if (IsServoEnabled(axis, enabled)) {
@@ -132,7 +147,7 @@ void ACSController::CommunicationThreadFunc() {
       }
     }
 
-    // Calculate how long to sleep to maintain consistent update rate
+    // Calculate sleep time
     auto cycleEndTime = std::chrono::steady_clock::now();
     auto cycleDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
       cycleEndTime - cycleStartTime);
@@ -144,13 +159,11 @@ void ACSController::CommunicationThreadFunc() {
       m_condVar.wait_for(lock, sleepTime, [this]() { return m_terminateThread.load(); });
     }
     else {
-      // No sleep needed if we're already behind schedule, but yield to let other threads run
       lock.unlock();
       std::this_thread::yield();
     }
   }
 }
-
 
 // Helper method to process the command queue
 void ACSController::ProcessCommandQueue() {
@@ -231,8 +244,8 @@ bool ACSController::Connect(const std::string& ipAddress, int port) {
   // Attempt to connect to the controller
   // ACS requires a non-const char buffer for the IP address
   char ipBuffer[64];
-  strncpy(ipBuffer, m_ipAddress.c_str(), sizeof(ipBuffer) - 1);
-  ipBuffer[sizeof(ipBuffer) - 1] = '\0'; // Ensure null termination
+  strncpy_s(ipBuffer, sizeof(ipBuffer), m_ipAddress.c_str(), _TRUNCATE);
+  // No need for manual null termination - strncpy_s handles it
 
   m_controllerId = acsc_OpenCommEthernet(ipBuffer, m_port);
 
@@ -304,6 +317,33 @@ void ACSController::Disconnect() {
 
   m_logger->LogInfo("ACSController: Disconnected from controller");
 }
+
+bool ACSController::MoveToAbsolutePosition(double x, double y, double z, double velocity, bool blocking) {
+  if (!m_isConnected) {
+    m_logger->LogError("ACSController: Cannot move to absolute position - not connected");
+    return false;
+  }
+  // Set velocities for each axis
+  //if (!SetVelocity("X", velocity) || !SetVelocity("Y", velocity) || !SetVelocity("Z", velocity)) {
+  //  return false;
+  //}
+  // Move each axis to the specified position
+  if (!MoveToPosition("X", x, false) ||
+      !MoveToPosition("Y", y, false) ||
+      !MoveToPosition("Z", z, false)) {
+    return false;
+  }
+  // If blocking mode, wait for all axes to complete motion
+  if (blocking) {
+    bool success = true;
+    success &= WaitForMotionCompletion("X");
+    success &= WaitForMotionCompletion("Y");
+    success &= WaitForMotionCompletion("Z");
+    return success;
+  }
+  return true;
+}
+
 
 bool ACSController::MoveToPosition(const std::string& axis, double position, bool blocking) {
   if (!m_isConnected) {
@@ -442,6 +482,10 @@ bool ACSController::StopAxis(const std::string& axis) {
   return true;
 }
 
+bool ACSController::StopAllMotion() {
+  return StopAllAxes();
+}
+
 bool ACSController::StopAllAxes() {
   if (!m_isConnected) {
     m_logger->LogError("ACSController: Cannot stop all axes - not connected");
@@ -458,6 +502,20 @@ bool ACSController::StopAllAxes() {
   }
 
   return true;
+}
+
+
+bool ACSController::IsInMotion() {
+  if (!m_isConnected) {
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(m_mutex);
+  for (const auto& [axis, moving] : m_axisMoving) {
+    if (moving) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // In ACSController.cpp - modify IsMoving to use cached values
@@ -506,6 +564,14 @@ bool ACSController::IsMoving(const std::string& axis) {
 }
 
 
+float ACSController::GetAxisPositionFloat(const std::string& axis) {
+  double position = 0.0;
+  if (GetPosition(axis, position)) {
+    return static_cast<float>(position);
+  }
+  return 0.0f; // Default if unable to get position
+}
+
 // Modify logging in performance-critical areas
 // For example, in GetPosition method:
 bool ACSController::GetPosition(const std::string& axis, double& position) {
@@ -530,7 +596,22 @@ bool ACSController::GetPosition(const std::string& axis, double& position) {
   return true;
 }
 
-
+PositionStruct ACSController::GetCurrentPosition() {
+  PositionStruct pos = { 0.0, 0.0, 0.0 };
+  std::map<std::string, double> positions;
+  if (GetPositions(positions)) {
+    if (positions.find("X") != positions.end()) {
+      pos.x = positions["X"];
+    }
+    if (positions.find("Y") != positions.end()) {
+      pos.y = positions["Y"];
+    }
+    if (positions.find("Z") != positions.end()) {
+      pos.z = positions["Z"];
+    }
+  }
+  return pos;
+}
 
 // In ACSController::GetPositions - modify to use batch queries
 bool ACSController::GetPositions(std::map<std::string, double>& positions) {
@@ -892,8 +973,10 @@ void ACSController::RenderUI() {
   if (!m_isConnected) {
     // Show connection controls
     char ipBuffer[64];
-    strncpy(ipBuffer, m_ipAddress.empty() ? "192.168.0.50" : m_ipAddress.c_str(), sizeof(ipBuffer) - 1);
-    ipBuffer[sizeof(ipBuffer) - 1] = '\0';
+    strncpy_s(ipBuffer, sizeof(ipBuffer),
+      m_ipAddress.empty() ? "192.168.0.50" : m_ipAddress.c_str(),
+      _TRUNCATE);
+    // No need for manual null termination - strncpy_s handles it
 
     int port = m_port == 0 ? ACSC_SOCKET_STREAM_PORT : m_port;
 
@@ -1236,8 +1319,7 @@ bool ACSController::RunBuffer(int bufferNumber, const std::string& labelName) {
     }
 
     // Copy to buffer for ACS API
-    strncpy(labelBuffer, upperLabel.c_str(), sizeof(labelBuffer) - 1);
-    labelBuffer[sizeof(labelBuffer) - 1] = '\0';
+    strncpy_s(labelBuffer, sizeof(labelBuffer), upperLabel.c_str(), _TRUNCATE);
     labelPtr = labelBuffer;
 
     m_logger->LogInfo("ACSController: Running buffer " + std::to_string(bufferNumber) +
@@ -1305,4 +1387,62 @@ bool ACSController::StopAllBuffers() {
 
   m_logger->LogInfo("ACSController: Successfully stopped all buffers");
   return true;
+}
+
+// Add these methods to acs_controller.cpp
+
+void ACSController::SubscribeToPositions(IPositionSubscriber* subscriber,
+  const std::string& subscriberId) {
+  if (!subscriber) {
+    m_logger->LogError("ACSController: Cannot subscribe null subscriber");
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(m_subscribersMutex);
+  m_positionSubscribers[subscriberId] = subscriber;
+  m_logger->LogInfo("ACSController: Position subscriber added: " + subscriberId);
+}
+
+void ACSController::UnsubscribeFromPositions(const std::string& subscriberId) {
+  std::lock_guard<std::mutex> lock(m_subscribersMutex);
+  auto it = m_positionSubscribers.find(subscriberId);
+  if (it != m_positionSubscribers.end()) {
+    m_positionSubscribers.erase(it);
+    m_logger->LogInfo("ACSController: Position subscriber removed: " + subscriberId);
+  }
+}
+
+void ACSController::NotifyPositionSubscribers(const std::map<std::string, double>& positions) {
+  std::lock_guard<std::mutex> lock(m_subscribersMutex);
+
+  for (const auto& [subscriberId, subscriber] : m_positionSubscribers) {
+    if (subscriber) {
+      try {
+        subscriber->OnPositionsUpdate(m_deviceName, positions);
+      }
+      catch (const std::exception& e) {
+        m_logger->LogError("ACSController: Exception notifying subscriber " +
+          subscriberId + ": " + e.what());
+      }
+    }
+  }
+}
+
+void ACSController::NotifyMotionStatusSubscribers(const std::string& axis, bool isMoving) {
+  std::lock_guard<std::mutex> lock(m_subscribersMutex);
+
+  for (const auto& [subscriberId, subscriber] : m_positionSubscribers) {
+    if (subscriber) {
+      try {
+        subscriber->OnMotionStatusChange(m_deviceName, axis, isMoving);
+      }
+      catch (const std::exception& e) {  // CHANGED: Added '& e' to catch the exception
+        // OnMotionStatusChange is optional, so we can silently ignore or log in debug
+        if (m_enableDebug) {
+          m_logger->LogWarning("ACSController: Exception in motion status callback for " +
+            subscriberId + ": " + e.what());
+        }
+      }
+    }
+  }
 }

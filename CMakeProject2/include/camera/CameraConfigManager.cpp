@@ -1,6 +1,7 @@
 ﻿#include "CameraConfigManager.h"
 #include "include/logger.h"
-#include "include/camera/CameraManager.h"  // This will include the CameraInfo struct
+#include "include/camera/CameraManager.h"  // This includes CameraInfo and ExtendedCameraInfo
+#include "include/camera/ICameraHardware.h"  // For ICameraHardware::CameraType
 #include "include/camera/pylon_camera_test.h"
 #include <fstream>
 #include <algorithm>
@@ -109,15 +110,19 @@ bool CameraConfigManager::InitializeCameraManager(CameraManager& cameraManager) 
       enabledCameras++;
 
       try {
-        // Convert our CameraConfigData to the existing CameraInfo struct that CameraManager expects
-        CameraInfo camera = ConvertToCameraInfo(camConfig);
+        // Convert our CameraConfigData to ExtendedCameraInfo that CameraManager expects
+        ExtendedCameraInfo extendedCamera = ConvertToExtendedCameraInfo(camConfig);
+
+        // NEW: Add debug logging for camera type
+        LogInfo("Camera " + camConfig.id + " configured as: " +
+          (camConfig.IsIDSCamera() ? "IDS" : "PYLON") + " type");
 
         LogInfo("Adding " + camConfig.connectionType + " camera: " + camConfig.id +
           " (" + (camConfig.ipAddress.empty() ? "auto-detect" : camConfig.ipAddress) + ") - " +
           camConfig.displayName);
 
-        // Add camera to manager
-        cameraManager.AddCamera(camera);
+        // Add camera to manager using ExtendedCameraInfo
+        cameraManager.AddCamera(extendedCamera);
         addedCameras++;
 
         LogInfo("Successfully added camera: " + camConfig.id);
@@ -267,6 +272,7 @@ std::vector<std::string> CameraConfigManager::GetValidationErrors() const {
   return validationErrors_;
 }
 
+// Updated CreateDefaultConfig to include camera types
 void CameraConfigManager::CreateDefaultConfig() {
   LogInfo("Creating default camera configuration");
 
@@ -276,11 +282,12 @@ void CameraConfigManager::CreateDefaultConfig() {
   // Clear existing configs
   cameraConfigs_.clear();
 
-  // Add default cameras
+  // Add default Pylon cameras
   CameraConfigData mainCamera;
   mainCamera.id = "main_camera";
   mainCamera.displayName = "Top view camera";
   mainCamera.connectionType = "ip";
+  mainCamera.cameraType = "PYLON";                    // NEW: Specify camera type
   mainCamera.ipAddress = "192.168.0.68";
   mainCamera.port = 0;
   mainCamera.enabled = true;
@@ -292,12 +299,25 @@ void CameraConfigManager::CreateDefaultConfig() {
   auxCamera.id = "aux_camera";
   auxCamera.displayName = "Auxiliary Camera";
   auxCamera.connectionType = "ip";
+  auxCamera.cameraType = "PYLON";                     // NEW: Specify camera type
   auxCamera.ipAddress = "192.168.0.69";
   auxCamera.port = 0;
   auxCamera.enabled = true;
   auxCamera.autoConnect = true;
   auxCamera.description = "Secondary camera for auxiliary imaging";
   cameraConfigs_.push_back(auxCamera);
+
+  // Add default IDS camera (disabled by default)
+  CameraConfigData idsCamera;
+  idsCamera.id = "ids_camera_1";
+  idsCamera.displayName = "IDS Test Camera";
+  idsCamera.connectionType = "index";
+  idsCamera.cameraType = "IDS";                       // NEW: IDS camera type
+  idsCamera.port = 0;                                 // Device index 0
+  idsCamera.enabled = false;                          // Disabled by default
+  idsCamera.autoConnect = false;
+  idsCamera.description = "IDS camera connected via USB";
+  cameraConfigs_.push_back(idsCamera);
 
   configLoaded_ = true;
 }
@@ -342,13 +362,17 @@ nlohmann::json CameraConfigManager::SaveToJson() const {
   return jsonConfig;
 }
 
+// Updated parsing and saving methods in CameraConfigManager.cpp
+
 CameraConfigData CameraConfigManager::ParseCameraConfig(const nlohmann::json& camJson) const {
   CameraConfigData config;
 
   config.id = camJson.value("id", "");
   config.displayName = camJson.value("display_name", "Unknown Camera");
   config.connectionType = camJson.value("connection_type", "auto");
+  config.cameraType = camJson.value("camera_type", "PYLON");  // NEW: Parse camera type
   config.ipAddress = camJson.value("ip_address", "");
+  config.serialNumber = camJson.value("serial_number", "");   // NEW: Parse serial number
   config.port = camJson.value("port", 0);
   config.enabled = camJson.value("enabled", true);
   config.autoConnect = camJson.value("auto_connect", true);
@@ -384,7 +408,9 @@ nlohmann::json CameraConfigManager::CameraConfigToJson(const CameraConfigData& c
   camJson["id"] = config.id;
   camJson["display_name"] = config.displayName;
   camJson["connection_type"] = config.connectionType;
+  camJson["camera_type"] = config.cameraType;          // NEW: Save camera type
   camJson["ip_address"] = config.ipAddress;
+  camJson["serial_number"] = config.serialNumber;     // NEW: Save serial number
   camJson["port"] = config.port;
   camJson["enabled"] = config.enabled;
   camJson["auto_connect"] = config.autoConnect;
@@ -445,6 +471,12 @@ bool CameraConfigManager::ValidateCameraConfig(const CameraConfigData& config, s
     isValid = false;
   }
 
+  // NEW: Validate camera type
+  if (config.cameraType != "PYLON" && config.cameraType != "BASLER" && config.cameraType != "IDS") {
+    errors.push_back("Camera " + config.id + " has invalid camera type: " + config.cameraType);
+    isValid = false;
+  }
+
   return isValid;
 }
 
@@ -487,25 +519,44 @@ void CameraConfigManager::LogError(const std::string& message) const {
   }
 }
 
-// Helper function to convert CameraConfigData to CameraInfo (for CameraManager compatibility)
-// This takes our CameraConfigData (loaded from JSON) and converts it to the existing 
-// CameraInfo struct that CameraManager expects
-CameraInfo CameraConfigManager::ConvertToCameraInfo(const CameraConfigData& configData) const {
-  if (configData.connectionType == "ip") {
-    return CameraInfo::CreateByIP(configData.id, configData.ipAddress, configData.displayName, configData.autoConnect);
-  }
-  else if (configData.connectionType == "serial") {
-    // For serial connection, you might need to implement CreateBySerial if not available
-    return CameraInfo(configData.id, configData.displayName, configData.autoConnect);
-  }
-  else if (configData.connectionType == "index") {
-    // For device index connection
-    return CameraInfo::CreateByIndex(configData.id, configData.port, configData.displayName, configData.autoConnect);
+// Convert CameraConfigData to ExtendedCameraInfo with proper camera type support
+ExtendedCameraInfo CameraConfigManager::ConvertToExtendedCameraInfo(const CameraConfigData& configData) const {
+  // Determine camera type from configuration
+  ICameraHardware::CameraType cameraType;
+  if (configData.IsIDSCamera()) {
+    cameraType = ICameraHardware::CameraType::IDS;
   }
   else {
-    // Default to auto-detection
-    return CameraInfo(configData.id, configData.displayName, configData.autoConnect);
+    cameraType = ICameraHardware::CameraType::PYLON;
   }
+
+  // Create base CameraInfo using appropriate factory method or constructor based on connection type
+  if (configData.connectionType == "ip") {
+    // Use the static factory method for IP connection
+    CameraInfo baseInfo = CameraInfo::CreateByIP(configData.id, configData.ipAddress, configData.displayName, configData.autoConnect);
+    return ExtendedCameraInfo(baseInfo, cameraType, configData.description);
+  }
+  else if (configData.connectionType == "serial") {
+    // Use the constructor for serial connection
+    CameraInfo baseInfo(configData.id, configData.serialNumber, configData.displayName, configData.autoConnect);
+    return ExtendedCameraInfo(baseInfo, cameraType, configData.description);
+  }
+  else if (configData.connectionType == "index") {
+    // Use the static factory method for device index connection
+    CameraInfo baseInfo = CameraInfo::CreateByIndex(configData.id, configData.port, configData.displayName, configData.autoConnect);
+    return ExtendedCameraInfo(baseInfo, cameraType, configData.description);
+  }
+  else {
+    // Use the constructor for auto connection
+    CameraInfo baseInfo(configData.id, configData.displayName, configData.autoConnect);
+    return ExtendedCameraInfo(baseInfo, cameraType, configData.description);
+  }
+}
+
+// Legacy method for backward compatibility
+CameraInfo CameraConfigManager::ConvertToCameraInfo(const CameraConfigData& configData) const {
+  ExtendedCameraInfo extended = ConvertToExtendedCameraInfo(configData);
+  return static_cast<CameraInfo>(extended);  // Base class conversion
 }
 
 // Convenience methods for common operations

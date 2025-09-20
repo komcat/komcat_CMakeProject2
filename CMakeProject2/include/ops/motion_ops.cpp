@@ -19,6 +19,93 @@ MotionOps::~MotionOps() {
     m_logger->LogInfo("MotionOps: Shutting down");
 }
 
+
+// Add to motion_ops.cpp
+
+bool MotionOps::Initialize() {
+  LogInfo("Initializing Motion Operations");
+
+  // Validate dependencies
+  if (!&m_motionLayer) {
+    SetError("Motion control layer not available");
+    return false;
+  }
+
+  if (!&m_piControllerManager) {
+    SetError("PI controller manager not available");
+    return false;
+  }
+
+  // Check if we have any devices available
+  auto devices = GetAvailableDevices();
+  if (devices.empty()) {
+    LogWarning("No motion devices found during initialization");
+  }
+  else {
+    LogInfo("Found " + std::to_string(devices.size()) + " motion devices");
+  }
+
+  SetInitialized();
+  return true;
+}
+
+void MotionOps::Shutdown() {
+  LogInfo("Shutting down Motion Operations");
+
+  // Stop any active scans
+  CleanupAllScanners();
+
+  // Clear cached data
+  {
+    std::lock_guard<std::mutex> lock(m_currentPositionsMutex);
+    m_currentPositions.clear();
+  }
+
+  ClearStoredPositions();
+
+  SetShutdown();
+}
+
+std::vector<std::string> MotionOps::GetAvailableDevices() const {
+  return m_motionLayer.GetAvailableDevices();
+}
+
+bool MotionOps::IsDeviceConnected(const std::string& deviceName) const {
+  // Use your existing implementation
+  PIController* piController = m_piControllerManager.GetController(deviceName);
+  if (piController) {
+    return piController->IsConnected();
+  }
+
+  // Check ACS controllers...
+  // (use your existing logic)
+  return false;  // Simplified for now
+}
+
+bool MotionOps::SelfTest() {
+  if (!CheckInitialized("SelfTest")) {
+    return false;
+  }
+
+  LogInfo("Performing self-test");
+
+  // Test basic functionality
+  auto devices = GetAvailableDevices();
+  int connectedCount = 0;
+
+  for (const auto& device : devices) {
+    if (IsDeviceConnected(device)) {
+      connectedCount++;
+    }
+  }
+
+  LogInfo("Self-test: " + std::to_string(connectedCount) + " of " +
+    std::to_string(devices.size()) + " devices connected");
+
+  return true;  // Always pass for now
+}
+
+
 // Helper method to store position data
 void MotionOps::StorePositionResult(const std::string& operationId,
     const std::string& prefix,

@@ -115,9 +115,14 @@ void CameraFeedDisplay::OnNewFrame(const CameraFrameData& frameData) {
   if (frameCount % 300 == 1) {  // Log every 10 seconds at 30fps
     Logger* logger = Logger::GetInstance();
     if (logger) {
-      logger->LogInfo("CameraFeedDisplay: Received frame #" + std::to_string(frameCount) +
-        " from " + frameData.cameraId + " (" +
-        std::to_string(frameData.width) + "x" + std::to_string(frameData.height) + ")");
+
+      //close debug message
+      if (false) {
+        logger->LogInfo("CameraFeedDisplay: Received frame #" + std::to_string(frameCount) +
+          " from " + frameData.cameraId + " (" +
+          std::to_string(frameData.width) + "x" + std::to_string(frameData.height) + ")");
+      }
+      
     }
   }
 }
