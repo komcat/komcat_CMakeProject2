@@ -1413,14 +1413,47 @@ void RunPageUI::RenderComparisonBar(float percentage) {
 }// RunPageUI.cpp - Add this new method (replaces the plot initialization code)
 
 
-// RenderLivePlot method with channel selector
+
+// Fixed RenderLivePlot method - uses deferred update pattern
 void RunPageUI::RenderLivePlot() {
-  // === CHANNEL SELECTOR AT TOP ===
+  // === PROCESS ANY PENDING CHANNEL CHANGE FIRST ===
+  // This happens before any rendering to avoid mutex issues
+  if (m_channelChangeRequested && m_liveDataPlot && m_plotInitialized) {
+    if (!m_pendingChannelName.empty() && m_pendingChannelName != m_plotChannelName) {
+      // Safely change the channel
+      m_plotChannelName = m_pendingChannelName;
+
+      // Instead of calling SetChannel directly, reinitialize the plot config
+      LiveDataPlot::Config config;
+      config.channelName = m_plotChannelName;
+      config.timeWindow = 10.0f;
+      config.historySize = 1000;
+      config.autoScale = true;
+      config.showCurrentValue = true;
+      config.enableChannelSelector = false;
+      config.showGrid = true;
+      config.showLegend = true;
+      config.lineColor = ImVec4(0.0f, 1.0f, 0.2f, 1.0f);
+      config.lineThickness = 2.0f;
+      config.yAxisLabel = "";
+      config.enableSpec = m_specEnabled;
+      config.specValue = m_specThreshold;
+
+      // Update config instead of SetChannel to avoid mutex issues
+      m_liveDataPlot->UpdateConfig(config);
+
+      m_logger->LogInfo("LiveDataPlot channel changed to: " + m_plotChannelName);
+    }
+    m_channelChangeRequested = false;
+    m_pendingChannelName = "";
+  }
+
+  // === CHANNEL SELECTOR UI ===
   ImGui::Text("Data Channel:");
   ImGui::SameLine();
 
-  // Get available channels from GlobalDataStore
-  if (m_availableChannels.empty() || ImGui::GetFrameCount() % 120 == 0) { // Refresh every 2 seconds
+  // Refresh available channels periodically
+  if (m_availableChannels.empty() || ImGui::GetFrameCount() % 120 == 0) {
     GlobalDataStore* store = GlobalDataStore::GetInstance();
     if (store) {
       m_availableChannels = store->GetAvailableChannels();
@@ -1443,15 +1476,10 @@ void RunPageUI::RenderLivePlot() {
     }
 
     if (ImGui::Combo("##ChannelSelect", &m_selectedChannelIndex, items.data(), items.size())) {
-      // Channel changed
+      // Channel selected - request a change for next frame
       if (m_selectedChannelIndex >= 0 && m_selectedChannelIndex < m_availableChannels.size()) {
-        m_plotChannelName = m_availableChannels[m_selectedChannelIndex];
-
-        // Update the plot with new channel
-        if (m_liveDataPlot && m_plotInitialized) {
-          m_liveDataPlot->SetChannel(m_plotChannelName);
-          m_logger->LogInfo("LiveDataPlot channel changed to: " + m_plotChannelName);
-        }
+        m_pendingChannelName = m_availableChannels[m_selectedChannelIndex];
+        m_channelChangeRequested = true;
       }
     }
   }
@@ -1462,25 +1490,23 @@ void RunPageUI::RenderLivePlot() {
   ImGui::Separator();
   ImGui::Spacing();
 
-  // === INITIALIZE OR UPDATE PLOT ===
+  // === INITIALIZE PLOT IF NEEDED ===
   if (!m_liveDataPlot) {
     auto* plotManager = LiveDataPlotManager::GetInstance();
     auto* plot = plotManager->GetPlot("column3_main_plot");
 
     LiveDataPlot::Config config;
-    config.channelName = m_plotChannelName;  // Use selected channel
+    config.channelName = m_plotChannelName;
     config.timeWindow = 10.0f;
     config.historySize = 1000;
     config.autoScale = true;
     config.showCurrentValue = true;
-    config.enableChannelSelector = false;  // Disable built-in selector since we have our own
+    config.enableChannelSelector = false;  // We have our own selector
     config.showGrid = true;
     config.showLegend = true;
     config.lineColor = ImVec4(0.0f, 1.0f, 0.2f, 1.0f);
     config.lineThickness = 2.0f;
     config.yAxisLabel = "";
-
-    // Enable spec line if comparison is enabled
     config.enableSpec = m_specEnabled;
     config.specValue = m_specThreshold;
 
@@ -1491,7 +1517,7 @@ void RunPageUI::RenderLivePlot() {
     m_logger->LogInfo("LiveDataPlot initialized with channel: " + m_plotChannelName);
   }
 
-  // Update spec line in plot dynamically
+  // === UPDATE SPEC (safe to call every frame) ===
   if (m_liveDataPlot && m_plotInitialized) {
     m_liveDataPlot->SetSpec(m_specThreshold, m_specEnabled);
   }
@@ -1504,22 +1530,8 @@ void RunPageUI::RenderLivePlot() {
   else {
     ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Initializing plot...");
   }
-
-  // === QUICK CHANNEL BUTTONS (Optional) ===
-  ImGui::Spacing();
-  ImGui::Text("Quick Select:");
-
-  // Add buttons for commonly used channels
-  if (ImGui::Button("GPIB-Current", ImVec2(-1, 0))) {
-    ChangeChannel("GPIB-Current");
-  }
-  if (ImGui::Button("GPIB-Voltage", ImVec2(-1, 0))) {
-    ChangeChannel("GPIB-Voltage");
-  }
-  if (ImGui::Button("Temperature", ImVec2(-1, 0))) {
-    ChangeChannel("Temperature");
-  }
 }
+
 
 // Helper method to change channel
 void RunPageUI::ChangeChannel(const std::string& channelName) {

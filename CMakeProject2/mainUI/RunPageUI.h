@@ -280,8 +280,10 @@ private:
 
 
   std::string m_plotChannelName = "GPIB-Current";  // Current channel for plot
+  std::string m_pendingChannelName = "";           // Channel waiting to be set
+  bool m_channelChangeRequested = false;           // Flag for pending channel change
   std::vector<std::string> m_availableChannels;    // Cache of available channels
-  int m_selectedChannelIndex = 0;
+  int m_selectedChannelIndex = 0;                  // Index for combo box
 
   void ChangeChannel(const std::string& channelName);
 };
