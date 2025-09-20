@@ -1615,7 +1615,20 @@ void RunPageUI::RenderPanelContent(int panelNumber, const ImVec2& size) {
   case 1:
     // Camera content - use full available size
     if (m_embeddedCameraSubscriber && m_cameraSystemInitialized) {
+      // Store the canvas position BEFORE rendering the camera
+      ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+
+      // Render the camera feed
       RenderEmbeddedCameraFeed(size);
+
+      // Debug log to verify this code path is reached
+      if (m_showCrosshair) {
+        m_logger->LogInfo("RenderPanelContent: Rendering crosshair");
+        RenderCrosshairOverlay(canvasPos, size);
+      }
+      else {
+        m_logger->LogInfo("RenderPanelContent: NOT rendering crosshair (disabled)");
+      }
     }
     else {
       RenderCameraPlaceholder(size, "Camera not available");
@@ -1623,11 +1636,10 @@ void RunPageUI::RenderPanelContent(int panelNumber, const ImVec2& size) {
     break;
 
   case 2:
-    // Panel 2 content
+    // Panel 2 content (unchanged)
     ImGui::BeginChild("Panel2Content", size);
     ImGui::TextDisabled("Available for\nfuture content");
 
-    // Add some placeholder content when expanded
     if (m_panelState == PanelState::Panel2) {
       ImGui::Separator();
       ImGui::Text("Expanded view for Panel 2");
@@ -1639,7 +1651,7 @@ void RunPageUI::RenderPanelContent(int panelNumber, const ImVec2& size) {
     break;
 
   case 3:
-    // Panel 3 content
+    // Panel 3 content (unchanged)
     ImGui::BeginChild("Panel3Content", size);
     ImGui::TextDisabled("Available for\nfuture content");
 
@@ -1654,6 +1666,8 @@ void RunPageUI::RenderPanelContent(int panelNumber, const ImVec2& size) {
     break;
   }
 }
+
+
 
 // In RunPageUI constructor or initialization method
 void RunPageUI::InitializeCameraViewport() {
@@ -2323,113 +2337,32 @@ bool RunPageUI::HasDataValueChanged(const std::string& channel, float currentVal
 }
 
 
-// NEW: Crosshair overlay rendering method
 void RunPageUI::RenderCrosshairOverlay(const ImVec2& canvasPos, const ImVec2& canvasSize) {
   ImDrawList* drawList = ImGui::GetWindowDrawList();
 
   // Calculate center point
-  ImVec2 center = ImVec2(
-    canvasPos.x + canvasSize.x * 0.5f,
-    canvasPos.y + canvasSize.y * 0.5f
+  float centerX = canvasPos.x + canvasSize.x * 0.5f;
+  float centerY = canvasPos.y + canvasSize.y * 0.5f;
+
+  // Simple 1-pixel green lines spanning full width and height
+  const ImU32 color = IM_COL32(0, 255, 0, 200); // Green with transparency
+
+  // Horizontal line (full width)
+  drawList->AddLine(
+    ImVec2(canvasPos.x, centerY),
+    ImVec2(canvasPos.x + canvasSize.x, centerY),
+    color,
+    1.0f  // 1 pixel thickness
   );
 
-  // Crosshair parameters
-  const float crosshairLength = 20.0f;
-  const float crosshairThickness = 2.0f;
-  const ImU32 crosshairColor = IM_COL32(0, 255, 0, 200); // Green with transparency
-  const ImU32 crosshairOutlineColor = IM_COL32(0, 0, 0, 150); // Black outline
-
-  // Draw crosshair outline (black) for better visibility
-  // Horizontal line outline
+  // Vertical line (full height)
   drawList->AddLine(
-    ImVec2(center.x - crosshairLength - 1, center.y - 1),
-    ImVec2(center.x + crosshairLength + 1, center.y + 1),
-    crosshairOutlineColor,
-    crosshairThickness + 2.0f
-  );
-
-  // Vertical line outline
-  drawList->AddLine(
-    ImVec2(center.x - 1, center.y - crosshairLength - 1),
-    ImVec2(center.x + 1, center.y + crosshairLength + 1),
-    crosshairOutlineColor,
-    crosshairThickness + 2.0f
-  );
-
-  // Draw main crosshair (green)
-  // Horizontal line
-  drawList->AddLine(
-    ImVec2(center.x - crosshairLength, center.y),
-    ImVec2(center.x + crosshairLength, center.y),
-    crosshairColor,
-    crosshairThickness
-  );
-
-  // Vertical line
-  drawList->AddLine(
-    ImVec2(center.x, center.y - crosshairLength),
-    ImVec2(center.x, center.y + crosshairLength),
-    crosshairColor,
-    crosshairThickness
-  );
-
-  // Optional: Add center dot
-  drawList->AddCircleFilled(center, 2.0f, crosshairColor);
-
-  // Optional: Add corner markers for better visibility
-  const float cornerOffset = 40.0f;
-  const float cornerLength = 8.0f;
-  const ImU32 cornerColor = IM_COL32(255, 255, 0, 150); // Yellow corners
-
-  // Top-left corner
-  drawList->AddLine(
-    ImVec2(center.x - cornerOffset, center.y - cornerOffset),
-    ImVec2(center.x - cornerOffset + cornerLength, center.y - cornerOffset),
-    cornerColor, 1.5f
-  );
-  drawList->AddLine(
-    ImVec2(center.x - cornerOffset, center.y - cornerOffset),
-    ImVec2(center.x - cornerOffset, center.y - cornerOffset + cornerLength),
-    cornerColor, 1.5f
-  );
-
-  // Top-right corner
-  drawList->AddLine(
-    ImVec2(center.x + cornerOffset, center.y - cornerOffset),
-    ImVec2(center.x + cornerOffset - cornerLength, center.y - cornerOffset),
-    cornerColor, 1.5f
-  );
-  drawList->AddLine(
-    ImVec2(center.x + cornerOffset, center.y - cornerOffset),
-    ImVec2(center.x + cornerOffset, center.y - cornerOffset + cornerLength),
-    cornerColor, 1.5f
-  );
-
-  // Bottom-left corner
-  drawList->AddLine(
-    ImVec2(center.x - cornerOffset, center.y + cornerOffset),
-    ImVec2(center.x - cornerOffset + cornerLength, center.y + cornerOffset),
-    cornerColor, 1.5f
-  );
-  drawList->AddLine(
-    ImVec2(center.x - cornerOffset, center.y + cornerOffset),
-    ImVec2(center.x - cornerOffset, center.y + cornerOffset - cornerLength),
-    cornerColor, 1.5f
-  );
-
-  // Bottom-right corner
-  drawList->AddLine(
-    ImVec2(center.x + cornerOffset, center.y + cornerOffset),
-    ImVec2(center.x + cornerOffset - cornerLength, center.y + cornerOffset),
-    cornerColor, 1.5f
-  );
-  drawList->AddLine(
-    ImVec2(center.x + cornerOffset, center.y + cornerOffset),
-    ImVec2(center.x + cornerOffset, center.y + cornerOffset - cornerLength),
-    cornerColor, 1.5f
+    ImVec2(centerX, canvasPos.y),
+    ImVec2(centerX, canvasPos.y + canvasSize.y),
+    color,
+    1.0f  // 1 pixel thickness
   );
 }
-
 
 
 // ENHANCED SetCameraManager with debugging and forced grabbing start
@@ -3993,6 +3926,41 @@ void RunPageUI::RenderActionTab() {
     CaptureAllCameraFrames();
   }
 
+  // ADD CROSSHAIR TOGGLE BUTTON
+  ImGui::Spacing();
+  ImGui::Spacing();
+
+  // Center the crosshair toggle button
+  if (centerOffset > 0) {
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + centerOffset);
+  }
+
+  // Crosshair toggle button with color based on state
+  if (m_showCrosshair) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+  }
+  else {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+  }
+
+  const char* crosshairText = m_showCrosshair ?
+    reinterpret_cast<const char*>(u8"🎯 Crosshair ON") :
+    reinterpret_cast<const char*>(u8"🎯 Crosshair OFF");
+
+  if (ImGui::Button(crosshairText, ImVec2(buttonWidth, 35))) {
+    m_showCrosshair = !m_showCrosshair;
+    UpdateStatus(m_showCrosshair ? "Crosshair enabled" : "Crosshair disabled");
+
+    // Debug log to verify state change
+    m_logger->LogInfo("Crosshair toggled to: " + std::string(m_showCrosshair ? "ON" : "OFF"));
+
+
+  }
+
+  ImGui::PopStyleColor(2);
+
   // Show animated progress indicator when capturing
   if (m_captureInProgress) {
     ImGui::Spacing();
@@ -4038,6 +4006,9 @@ void RunPageUI::RenderActionTab() {
     ImGui::TextWrapped("%s", m_lastCaptureStatus.c_str());
   }
 }
+
+
+
 
 void RunPageUI::CaptureAllCameraFrames() {
   m_captureInProgress = true;
