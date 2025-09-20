@@ -134,6 +134,8 @@ private:
   VisionCameraExposureManager* visionExposureManager = nullptr;
 
 public:
+  void PrintModuleStatusReport() const;
+
   // === Singleton Access ===
   static AppContext& GetInstance() {
     static AppContext instance;
