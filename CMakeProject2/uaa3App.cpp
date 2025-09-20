@@ -2,6 +2,11 @@
 #include <SDL.h>
 #include <SDL_opengl.h>
 
+// Windows specific - include early
+#ifdef _WIN32
+#include "WinSockGuard.h"
+#endif
+
 // ImGui includes
 #include "imgui.h"
 #include "backends/imgui_impl_sdl2.h"
@@ -43,6 +48,7 @@
 #include "include/scanning/grid_volume_scanner_manager.h"
 #include "include/vision/VisionCameraExposureUI.h"
 #include "include/data/DUTDatabaseViewerUI.h"
+#include "SystemStatusUI.h"
 
 
 // Keep your debug function as-is
@@ -672,7 +678,9 @@ int main(int argc, char* argv[])
 	}
 
 
-
+	auto systemStatusUI = std::make_unique<SystemStatusUI>();
+	menuManager->RegisterUI("system_status", systemStatusUI.get(), "System");
+	logger->LogInfo("Registered System Status UI with menu system");
 
 	// ===========================================
 	// PHASE 4: MAIN RENDER LOOP
@@ -765,6 +773,11 @@ int main(int argc, char* argv[])
 			dutViewerUI->Render();
 		}
 
+		// In render loop, add:
+		if (systemStatusUI) {
+			systemStatusUI->Render();
+		}
+
 
 #pragma region rayLibwindow
 		// Update raylib with current machine data
@@ -783,111 +796,6 @@ int main(int argc, char* argv[])
 		}
 #pragma endregion
 
-#pragma region DebugMode
-		////debug mode smaller ops
-		//if (g_deugMode) {
-		//	// NEW: Add test window for MotionOps
-		//	static bool showMotionTest = true;
-		//	if (showMotionTest && operations.motion) {
-		//		ImGui::Begin("MotionOps Test", &showMotionTest);
-
-		//		ImGui::Text("Gantry Movement Test");
-		//		ImGui::Separator();
-
-		//		// Test buttons for gantry movement
-		//		if (ImGui::Button("Move X +1mm")) {
-		//			bool success = operations.motion->MoveRelative("gantry-main", "X", 1.0, true, "MainLoop_Test");
-		//			if (success) {
-		//				logger->LogInfo("Successfully moved gantry X +1mm");
-		//			}
-		//			else {
-		//				logger->LogError("Failed to move gantry X +1mm");
-		//			}
-		//		}
-
-		//		ImGui::SameLine();
-		//		if (ImGui::Button("Move X -1mm")) {
-		//			bool success = operations.motion->MoveRelative("gantry-main", "X", -1.0, true, "MainLoop_Test");
-		//			if (success) {
-		//				logger->LogInfo("Successfully moved gantry X -1mm");
-		//			}
-		//			else {
-		//				logger->LogError("Failed to move gantry X -1mm");
-		//			}
-		//		}
-
-		//		if (ImGui::Button("Move Y +1mm")) {
-		//			bool success = operations.motion->MoveRelative("gantry-main", "Y", 1.0, true, "MainLoop_Test");
-		//			if (success) {
-		//				logger->LogInfo("Successfully moved gantry Y +1mm");
-		//			}
-		//			else {
-		//				logger->LogError("Failed to move gantry Y +1mm");
-		//			}
-		//		}
-
-		//		ImGui::SameLine();
-		//		if (ImGui::Button("Move Y -1mm")) {
-		//			bool success = operations.motion->MoveRelative("gantry-main", "Y", -1.0, true, "MainLoop_Test");
-		//			if (success) {
-		//				logger->LogInfo("Successfully moved gantry Y -1mm");
-		//			}
-		//			else {
-		//				logger->LogError("Failed to move gantry Y -1mm");
-		//			}
-		//		}
-
-		//		if (ImGui::Button("Move Z +1mm")) {
-		//			bool success = operations.motion->MoveRelative("gantry-main", "Z", 1.0, true, "MainLoop_Test");
-		//			if (success) {
-		//				logger->LogInfo("Successfully moved gantry Z +1mm");
-		//			}
-		//			else {
-		//				logger->LogError("Failed to move gantry Z +1mm");
-		//			}
-		//		}
-
-		//		ImGui::SameLine();
-		//		if (ImGui::Button("Move Z -1mm")) {
-		//			bool success = operations.motion->MoveRelative("gantry-main", "Z", -1.0, true, "MainLoop_Test");
-		//			if (success) {
-		//				logger->LogInfo("Successfully moved gantry Z -1mm");
-		//			}
-		//			else {
-		//				logger->LogError("Failed to move gantry Z -1mm");
-		//			}
-		//		}
-
-		//		ImGui::Separator();
-		//		ImGui::Text("Device Status:");
-
-		//		if (operations.motion->IsDeviceConnected("gantry-main")) {
-		//			ImGui::TextColored(ImVec4(0, 1, 0, 1), "✓ Gantry Connected");
-		//		}
-		//		else {
-		//			ImGui::TextColored(ImVec4(1, 0, 0, 1), "✗ Gantry Disconnected");
-		//		}
-
-		//		if (operations.motion->IsDeviceMoving("gantry-main")) {
-		//			ImGui::TextColored(ImVec4(1, 1, 0, 1), "⚠ Gantry Moving");
-		//		}
-		//		else {
-		//			ImGui::TextColored(ImVec4(0, 1, 0, 1), "✓ Gantry Idle");
-		//		}
-
-		//		// Show current position if available
-		//		PositionStruct currentPos;
-		//		if (operations.motion->GetDeviceCurrentPosition("gantry-main", currentPos)) {
-		//			ImGui::Text("Current Position:");
-		//			ImGui::Text("  X: %.3f mm", currentPos.x);
-		//			ImGui::Text("  Y: %.3f mm", currentPos.y);
-		//			ImGui::Text("  Z: %.3f mm", currentPos.z);
-		//		}
-
-		//		ImGui::End();
-		//	}
-		//}
-#pragma endregion
 
 		// Optional: Log watchdog stats periodically
 		static auto lastWatchdogStats = std::chrono::steady_clock::now();

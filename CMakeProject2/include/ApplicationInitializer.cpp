@@ -838,6 +838,9 @@ bool ApplicationInitializer::RegisterWithContext(HardwareManagers& hw, Operation
   // Log final status
   context.LogInitializationStatus();
 
+  // At the end, replace LogInitializationStatus() with:
+  context.PrintModuleStatusReport();
+
   return true;
 }
 
