@@ -286,4 +286,16 @@ private:
   int m_selectedChannelIndex = 0;                  // Index for combo box
 
   void ChangeChannel(const std::string& channelName);
+
+
+  // Add these member variables
+  bool m_showActionTab = true;
+  bool m_captureInProgress = false;
+  std::string m_lastCaptureStatus = "";
+
+  // Method declarations
+  void RenderActionTab();
+  void CaptureAllCameraFrames();
+
+  bool RenderFancyCameraButton();  // Returns true if clicked
 };

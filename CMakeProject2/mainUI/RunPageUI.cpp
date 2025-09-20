@@ -72,6 +72,13 @@ RunPageUI::RunPageUI(MachineOperations& machineOps)
 
   m_logger->LogInfo("RunPageUI: Process configuration system initialized");
 
+
+  // Set custom directory for captured images (optional)
+  auto& context = AppContext::GetInstance();
+  auto* cameraManager = context.GetCameraManager();
+  if (cameraManager) {
+    cameraManager->SetImageOutputDirectory("captures");
+  }
 }
 
 RunPageUI::~RunPageUI() {
@@ -91,8 +98,8 @@ void RunPageUI::RenderUI() {
   ImVec2 contentRegion = ImGui::GetContentRegionAvail();
 
   // Calculate column widths (25%, 25%, 50%)
-  float col1Width = contentRegion.x * 0.25f;
-  float col2Width = contentRegion.x * 0.25f;
+  float col1Width = contentRegion.x * 0.20f;
+  float col2Width = contentRegion.x * 0.30f;
   float col3Width = contentRegion.x * 0.50f;
 
   // Begin 3-column layout
@@ -382,6 +389,13 @@ void RunPageUI::RenderColumn2() {
     // Tab 5: Global Jog (keep existing)
     if (ImGui::BeginTabItem("Jog")) {
       RenderJogControlTab();
+      ImGui::EndTabItem();
+    }
+
+
+    // NEW: Action tab
+    if (ImGui::BeginTabItem("Action")) {
+      RenderActionTab();
       ImGui::EndTabItem();
     }
 
@@ -1475,7 +1489,7 @@ void RunPageUI::RenderLivePlot() {
       items.push_back(channel.c_str());
     }
 
-    if (ImGui::Combo("##ChannelSelect", &m_selectedChannelIndex, items.data(), items.size())) {
+    if (ImGui::Combo("##ChannelSelect", &m_selectedChannelIndex, items.data(), static_cast<int>(items.size()))) {
       // Channel selected - request a change for next frame
       if (m_selectedChannelIndex >= 0 && m_selectedChannelIndex < m_availableChannels.size()) {
         m_pendingChannelName = m_availableChannels[m_selectedChannelIndex];
@@ -3958,3 +3972,168 @@ const char* RunPageUI::GetStatusText(float percentage) {
   return "Are you sure?";
 }
 
+void RunPageUI::RenderActionTab() {
+  // Camera Group
+  ImGui::Text("Camera Group");
+  ImGui::Separator();
+
+  ImGui::Spacing();
+
+  // Center the button
+  float buttonWidth = 160.0f;
+  float windowWidth = ImGui::GetContentRegionAvail().x;
+  float centerOffset = (windowWidth - buttonWidth) * 0.5f;
+
+  if (centerOffset > 0) {
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + centerOffset);
+  }
+
+  // Use the fancy button - it returns true when clicked
+  if (RenderFancyCameraButton()) {
+    CaptureAllCameraFrames();
+  }
+
+  // Show animated progress indicator when capturing
+  if (m_captureInProgress) {
+    ImGui::Spacing();
+
+    // Center progress bar
+    float progressWidth = 180.0f;
+    float progressOffset = (windowWidth - progressWidth) * 0.5f;
+    if (progressOffset > 0) {
+      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + progressOffset);
+    }
+
+    // Animated progress bar
+    static float progress = 0.0f;
+    progress += ImGui::GetIO().DeltaTime * 0.3f;
+    if (progress > 1.0f) progress = 0.0f;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
+    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
+    ImGui::ProgressBar(progress, ImVec2(progressWidth, 6));
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+  }
+
+  // Status message section
+  if (!m_lastCaptureStatus.empty()) {
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // Status with appropriate icon
+    if (m_lastCaptureStatus.find("Success") != std::string::npos) {
+      ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f),
+        reinterpret_cast<const char*>(u8"✅ Status"));
+    }
+    else if (m_lastCaptureStatus.find("Error") != std::string::npos) {
+      ImGui::TextColored(ImVec4(0.8f, 0.2f, 0.2f, 1.0f),
+        reinterpret_cast<const char*>(u8"❌ Status"));
+    }
+    else {
+      ImGui::Text(reinterpret_cast<const char*>(u8"ℹ️ Status"));
+    }
+
+    ImGui::TextWrapped("%s", m_lastCaptureStatus.c_str());
+  }
+}
+
+void RunPageUI::CaptureAllCameraFrames() {
+  m_captureInProgress = true;
+  m_lastCaptureStatus = "Capturing images from all cameras...";
+
+  // Get camera manager from AppContext
+  auto& context = AppContext::GetInstance();
+  auto* cameraManager = context.GetCameraManager();
+
+  if (!cameraManager) {
+    m_lastCaptureStatus = "Error: Camera manager not available";
+    m_captureInProgress = false;
+    return;
+  }
+
+  // Use the built-in CaptureImageAll method
+  bool success = cameraManager->CaptureImageAll();
+
+  if (success) {
+    // Get the count of cameras for status message
+    size_t cameraCount = cameraManager->GetCameraCount();
+    m_lastCaptureStatus = "Successfully captured images from " +
+      std::to_string(cameraCount) + " camera(s)";
+
+    // Optional: Show where images were saved
+    std::string outputDir = cameraManager->GetImageOutputDirectory();
+    m_lastCaptureStatus += "\nImages saved to: " + outputDir;
+  }
+  else {
+    m_lastCaptureStatus = "Failed to capture images from some cameras";
+  }
+
+  m_captureInProgress = false;
+
+  // Log the result
+  if (m_logger) {
+    m_logger->LogInfo(m_lastCaptureStatus);
+  }
+}
+
+
+bool RunPageUI::RenderFancyCameraButton() {
+  ImDrawList* drawList = ImGui::GetWindowDrawList();
+  ImVec2 pos = ImGui::GetCursorScreenPos();
+
+  float width = 160.0f;
+  float height = 40.0f;
+  float rounding = 15.0f;
+
+  // Button rectangle using ImVec2 for min and max
+  ImVec2 bb_min = pos;
+  ImVec2 bb_max = ImVec2(pos.x + width, pos.y + height);
+
+  // Check interaction
+  bool hovered = ImGui::IsMouseHoveringRect(bb_min, bb_max);
+  bool clicked = hovered && ImGui::IsMouseClicked(0);
+
+  // Colors
+  ImU32 col_bg = hovered ?
+    IM_COL32(51, 153, 255, 255) : // Hover: brighter blue
+    IM_COL32(41, 128, 230, 255);  // Normal: blue
+
+  if (m_captureInProgress) {
+    col_bg = IM_COL32(128, 128, 128, 255); // Gray when disabled
+    clicked = false; // Disable clicks when capturing
+  }
+
+  // Draw rounded rectangle
+  drawList->AddRectFilled(bb_min, bb_max, col_bg, rounding);
+
+  // Draw border
+  drawList->AddRect(bb_min, bb_max,
+    IM_COL32(255, 255, 255, 80), rounding, 0, 2.0f);
+
+  // Add subtle gradient effect (optional)
+  if (hovered && !m_captureInProgress) {
+    drawList->AddRectFilled(bb_min,
+      ImVec2(bb_max.x, bb_min.y + height * 0.5f),
+      IM_COL32(255, 255, 255, 20), rounding);
+  }
+
+  // Draw text centered
+  const char* text = m_captureInProgress ?
+    reinterpret_cast<const char*>(u8"📷 Capturing...") :
+    reinterpret_cast<const char*>(u8"📷 Take Photos");
+
+  ImVec2 textSize = ImGui::CalcTextSize(text);
+  ImVec2 textPos(
+    pos.x + (width - textSize.x) * 0.5f,
+    pos.y + (height - textSize.y) * 0.5f
+  );
+
+  drawList->AddText(textPos, IM_COL32(255, 255, 255, 255), text);
+
+  // Advance cursor
+  ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + height + 5));
+
+  return clicked;
+}
