@@ -11,8 +11,29 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 
 
+# Auto-detect which branch we're on
+execute_process(
+    COMMAND git rev-parse --abbrev-ref HEAD
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_BRANCH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
 
+message(STATUS "Detected Git branch: ${GIT_BRANCH}")
 
+# Auto-set based on branch name
+if(GIT_BRANCH STREQUAL "SAA_anello" OR GIT_BRANCH STREQUAL "SAA_ANELLO")
+    set(BUILD_SAA_ANELLO ON)
+    message(STATUS "Auto-configured: Building SAA_ANELLO version")
+else()
+    set(BUILD_SAA_ANELLO OFF)
+    message(STATUS "Auto-configured: Building standard test_services version")
+endif()
+
+# Define preprocessor macro for the C++ code
+if(BUILD_SAA_ANELLO)
+    add_compile_definitions(BRANCH_SAA_ANELLO)
+endif()
 
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141)
