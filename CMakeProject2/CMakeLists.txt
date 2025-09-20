@@ -22,7 +22,7 @@ execute_process(
 message(STATUS "Detected Git branch: ${GIT_BRANCH}")
 
 # Auto-set based on branch name
-if(GIT_BRANCH STREQUAL "SAA_anello" OR GIT_BRANCH STREQUAL "SAA_ANELLO")
+if(GIT_BRANCH STREQUAL "SAA_Anello" OR GIT_BRANCH STREQUAL "SAA_ANELLO")
     set(BUILD_SAA_ANELLO ON)
     message(STATUS "Auto-configured: Building SAA_ANELLO version")
 else()
@@ -320,6 +320,8 @@ set(INCL_Uaa3_PROCESSES "${CMAKE_CURRENT_SOURCE_DIR}/Processes/UAA3ProcessBuilde
 
 # Add PowerSupply module
 #add_subdirectory(include/PowerSupply)
+
+
 
 
 # Add source to this project's executable
@@ -761,19 +763,20 @@ add_executable(uaa3App
   "Processes/ProcessConfigBuilders.h"
   "Processes/ProcessConfigManager.h"
   "Processes/ProcessConfigUI.h"
-
-      "include/SiphogClient/SiPhOGClientDebugUI.h"
-      "include/SiphogClient/SiPhOGClientDebugUI.cpp"
-      "include/SiphogClient/SiPhOGDataProvider.h"
-      "include/SiphogClient/SiPhOGDataProvider.cpp"
-      "include/SiphogClient/SiPhOGManager.h"
-      "include/SiphogClient/SiPhOGManager.cpp"
-      "include/SiphogClient/SocketWrapper.cpp"
-      "include/SiphogClient/SocketWrapper.h"
-      "Processes/ProcessConfigUI.cpp" 
-      "mainUI/UIConfigVisualizerPositionSubscriber.h" 
-      "mainUI/UIConfigVisualizerPositionSubscriber.cpp"
-      )
+  "mainUI/SystemStatusUI.h"
+  "mainUI/SystemStatusUI.cpp"
+  "include/SiphogClient/SiPhOGClientDebugUI.h"
+  "include/SiphogClient/SiPhOGClientDebugUI.cpp"
+  "include/SiphogClient/SiPhOGDataProvider.h"
+  "include/SiphogClient/SiPhOGDataProvider.cpp"
+  "include/SiphogClient/SiPhOGManager.h"
+  "include/SiphogClient/SiPhOGManager.cpp"
+  "include/SiphogClient/SocketWrapper.cpp"
+  "include/SiphogClient/SocketWrapper.h"
+  "Processes/ProcessConfigUI.cpp" 
+  "mainUI/UIConfigVisualizerPositionSubscriber.h" 
+  "mainUI/UIConfigVisualizerPositionSubscriber.cpp"
+  )
 
 # Create resources directory in the build folder
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
