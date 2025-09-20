@@ -298,4 +298,6 @@ private:
   void CaptureAllCameraFrames();
 
   bool RenderFancyCameraButton();  // Returns true if clicked
+
+  float m_panel1ZoomLevel = 1.0f;  // 1.0 = 100%, 0.25 = 25%
 };

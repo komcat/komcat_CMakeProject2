@@ -3671,37 +3671,67 @@ void RunPageUI::ClearEmbeddedCameraFeed() {
 }
 
 void RunPageUI::RenderEmbeddedCameraFeed(const ImVec2& canvasSize) {
-  // Use the same texture update system as Live View
+  ImVec2 canvasPos = ImGui::GetCursorScreenPos();
   UpdateCameraTexture();
 
   if (m_textureInitialized && m_textureWidth > 0 && m_textureHeight > 0) {
-    // Calculate display size to exactly fill the canvas
+    // Calculate display size
     float aspectRatio = (float)m_textureWidth / (float)m_textureHeight;
-
-    // Try to fill width first
     float displayWidth = canvasSize.x;
     float displayHeight = displayWidth / aspectRatio;
 
-    // If height exceeds available, scale by height
     if (displayHeight > canvasSize.y) {
       displayHeight = canvasSize.y;
       displayWidth = displayHeight * aspectRatio;
-
-      // Center horizontally
-      float offsetX = (canvasSize.x - displayWidth) * 0.5f;
-      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
-    }
-    else {
-      // Center vertically if needed
-      float offsetY = (canvasSize.y - displayHeight) * 0.5f;
-      if (offsetY > 0) {
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offsetY);
-      }
     }
 
-    // Display the image
-    ImGui::Image((ImTextureID)(intptr_t)m_cameraTextureID,
-      ImVec2(displayWidth, displayHeight));
+    // Center the display
+    float offsetX = (canvasSize.x - displayWidth) * 0.5f;
+    float offsetY = (canvasSize.y - displayHeight) * 0.5f;
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offsetY);
+
+    // ZOOM IMPLEMENTATION: Calculate UV coordinates for cropping
+    float uvMinX = 0.0f, uvMinY = 0.0f, uvMaxX = 1.0f, uvMaxY = 1.0f;
+
+    if (m_panel1ZoomLevel < 1.0f) {
+      // Calculate crop region (centered)
+      float cropFactor = (1.0f - m_panel1ZoomLevel) / 2.0f;
+
+      uvMinX = cropFactor;
+      uvMinY = cropFactor;
+      uvMaxX = 1.0f - cropFactor;
+      uvMaxY = 1.0f - cropFactor;
+    }
+
+    // Use ImGui::Image with UV coordinates
+    ImGui::Image(
+      (ImTextureID)(intptr_t)m_cameraTextureID,
+      ImVec2(displayWidth, displayHeight),
+      ImVec2(uvMinX, uvMinY),  // UV min
+      ImVec2(uvMaxX, uvMaxY)   // UV max
+    );
+
+    // Optional: Show zoom indicator in corner
+    if (m_panel1ZoomLevel < 1.0f) {
+      ImDrawList* drawList = ImGui::GetForegroundDrawList();
+      ImVec2 textPos = ImVec2(canvasPos.x + 10, canvasPos.y + 10);
+      char zoomText[32];
+      snprintf(zoomText, sizeof(zoomText), "Zoom: %.0f%%", m_panel1ZoomLevel * 100);
+
+      // Draw background for text
+      ImVec2 textSize = ImGui::CalcTextSize(zoomText);
+      drawList->AddRectFilled(
+        ImVec2(textPos.x - 2, textPos.y - 2),
+        ImVec2(textPos.x + textSize.x + 2, textPos.y + textSize.y + 2),
+        IM_COL32(0, 0, 0, 180),
+        3.0f
+      );
+
+      // Draw text
+      drawList->AddText(textPos, IM_COL32(255, 255, 255, 255), zoomText);
+    }
   }
   else {
     // Show placeholder
@@ -3712,6 +3742,8 @@ void RunPageUI::RenderEmbeddedCameraFeed(const ImVec2& canvasSize) {
     RenderCameraPlaceholder(canvasSize, message);
   }
 }
+
+
 
 // Add this auto-recovery logic to your DebugCameraFrameFlow() method
 void RunPageUI::DebugCameraFrameFlow() {
@@ -3960,6 +3992,86 @@ void RunPageUI::RenderActionTab() {
   }
 
   ImGui::PopStyleColor(2);
+
+
+
+  // ADD ZOOM CONTROLS
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  ImGui::Text("Camera Zoom");
+  ImGui::Spacing();
+
+  // Create 4 zoom buttons in a 2x2 grid
+  float zoomButtonWidth = (buttonWidth - 5) / 2.0f;  // Two buttons per row with spacing
+
+  // Center the zoom controls
+  if (centerOffset > 0) {
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + centerOffset);
+  }
+
+  // First row: 25% and 50%
+  bool is25 = (m_panel1ZoomLevel == 0.25f);
+  if (is25) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
+  }
+  if (ImGui::Button("25%", ImVec2(zoomButtonWidth, 30))) {
+    m_panel1ZoomLevel = 0.25f;
+    UpdateStatus("Camera zoom: 25% (cropped to center)");
+  }
+  if (is25) ImGui::PopStyleColor();
+
+  ImGui::SameLine();
+
+  bool is50 = (m_panel1ZoomLevel == 0.50f);
+  if (is50) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
+  }
+  if (ImGui::Button("50%", ImVec2(zoomButtonWidth, 30))) {
+    m_panel1ZoomLevel = 0.50f;
+    UpdateStatus("Camera zoom: 50% (cropped to center)");
+  }
+  if (is50) ImGui::PopStyleColor();
+
+  // Second row: 75% and 100%
+  if (centerOffset > 0) {
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + centerOffset);
+  }
+
+  bool is75 = (m_panel1ZoomLevel == 0.75f);
+  if (is75) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
+  }
+  if (ImGui::Button("75%", ImVec2(zoomButtonWidth, 30))) {
+    m_panel1ZoomLevel = 0.75f;
+    UpdateStatus("Camera zoom: 75% (cropped to center)");
+  }
+  if (is75) ImGui::PopStyleColor();
+
+  ImGui::SameLine();
+
+  bool is100 = (m_panel1ZoomLevel == 1.0f);
+  if (is100) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 1.0f));  // Green for default
+  }
+  if (ImGui::Button("100%", ImVec2(zoomButtonWidth, 30))) {
+    m_panel1ZoomLevel = 1.0f;
+    UpdateStatus("Camera zoom: 100% (full frame)");
+  }
+  if (is100) ImGui::PopStyleColor();
+
+  // Show current zoom level
+  ImGui::Spacing();
+  if (centerOffset > 0) {
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + centerOffset);
+  }
+  ImGui::Text("Current: %.0f%%", m_panel1ZoomLevel * 100.0f);
+
+
+
+
+
 
   // Show animated progress indicator when capturing
   if (m_captureInProgress) {
