@@ -38,6 +38,11 @@
 #include "include/cld101x/cld101x_operations.h"
 #include "include/splashscreen/SimpleSplashScreen.h"
 #include "include/PowerSupply/SPDPowerSupplyManager.h"
+#include "include/PowerSupplyDevice/PowerSupplyManager.h"
+#include "include/PowerSupplyDevice/MockPowerSupplyDevice.h"
+#include "FileResultStorage.h"
+#include "include/PowerSupplyDevice/PowerSupplyTestUI.h"
+
 
 // Add these with your other includes
 #include "include/scanning/grid_scanner.h"
@@ -230,6 +235,85 @@ void TestSPDToGlobalDataStore() {
 	logger->LogInfo("=== TEST COMPLETE ===");
 	logger->LogInfo("Final SPD channels in GlobalDataStore: " + std::to_string(finalSpdCount));
 }
+
+
+
+void TestPowerSupplyManager() {
+	Logger* logger = Logger::GetInstance();
+	logger->LogInfo("=== POWER SUPPLY MANAGER TEST ===");
+
+	// Create manager and storage
+	auto psManager = std::make_shared<PowerSupplyManager>();
+	auto storage = std::make_shared<FileResultStorage>();
+
+	// Initialize storage
+	if (!storage->Initialize("./power_supply_test_data")) {
+		logger->LogError("Failed to initialize storage");
+		return;
+	}
+	psManager->SetResultStorage(storage);
+	logger->LogInfo("✓ Storage initialized");
+
+	// Add mock devices for testing
+	auto ps1 = std::make_shared<MockPowerSupplyDevice>("TestPS1", 1, "MOCK-1000");
+	auto ps2 = std::make_shared<MockPowerSupplyDevice>("TestPS2", 2, "MOCK-2000");
+
+	psManager->AddDevice(ps1, "PS1");
+	psManager->AddDevice(ps2, "PS2");
+	logger->LogInfo("✓ Added 2 mock devices");
+
+	// Connect devices
+	auto connectResult = psManager->ConnectAllDevices();
+	logger->LogInfo("✓ Connected " + std::to_string(connectResult.successCount) + " devices");
+
+	// Configure devices
+	psManager->SetModeConstantVoltage("PS1");
+	psManager->SetVoltage("PS1", 5.0f);
+	psManager->SetCurrent("PS1", 1.0f);
+	psManager->TurnOn("PS1");
+	logger->LogInfo("✓ PS1 configured: 5V, 1A limit, CV mode");
+
+	// Take measurement
+	auto measurement = psManager->ReadMeasurement("PS1");
+	logger->LogInfo("✓ Measurement: V=" + std::to_string(measurement.voltage) +
+		", I=" + std::to_string(measurement.current));
+
+	// Store measurement
+	psManager->StoreCurrentMeasurement("PS1", "test_measurement");
+	logger->LogInfo("✓ Measurement stored");
+
+	// Run a sweep
+	IPowerSupplyDevice::SweepConfig sweepConfig;
+	sweepConfig.mode = IPowerSupplyDevice::SweepConfig::Mode::CONSTANT_VOLTAGE;
+	sweepConfig.startValue = 0.0f;
+	sweepConfig.endValue = 3.0f;
+	sweepConfig.stepSize = 0.5f;
+	sweepConfig.delayMs = 100;
+
+	logger->LogInfo("Starting sweep...");
+	auto sweepResult = psManager->ExecuteSweepBlocking("PS1", sweepConfig);
+
+	if (sweepResult.completed) {
+		logger->LogInfo("✓ Sweep completed with " +
+			std::to_string(sweepResult.measurements.size()) + " points");
+		psManager->StoreSweepResults("PS1", "test_sweep");
+	}
+
+	// Query stored results
+	IResultStorage::QueryFilter filter;
+	filter.deviceType = "PowerSupply";
+	filter.maxResults = 10;
+
+	auto results = psManager->QueryStoredResults(filter);
+	logger->LogInfo("✓ Found " + std::to_string(results.size()) + " stored records");
+
+	// Cleanup
+	psManager->TurnOffAll();
+	psManager->DisconnectAllDevices();
+
+	logger->LogInfo("=== TEST COMPLETE ===");
+}
+
 
 // Call this function after your app starts up to test the flow
 // You can add a button in your UI to trigger it, or call it from main() after initialization
@@ -682,6 +766,16 @@ int main(int argc, char* argv[])
 	menuManager->RegisterUI("system_status", systemStatusUI.get(), "System");
 	logger->LogInfo("Registered System Status UI with menu system");
 
+	// After creating other UI components:
+	auto psTestUI = std::make_unique<PowerSupplyTestUI>();
+
+	// Register with menu (if your menu supports it):
+	if (menuManager) {
+		menuManager->RegisterUI("ps_test", psTestUI.get(), "Testing");
+	}
+
+
+
 	// ===========================================
 	// PHASE 4: MAIN RENDER LOOP
 	// ===========================================
@@ -777,6 +871,12 @@ int main(int argc, char* argv[])
 		if (systemStatusUI) {
 			systemStatusUI->Render();
 		}
+
+		if (psTestUI) {
+			psTestUI->Render();
+		}
+
+
 
 
 #pragma region rayLibwindow
