@@ -779,7 +779,10 @@ add_executable(uaa3App
   #"include/PowerSupplyDevice/test_PowerSupplySystem.cpp" 
   "include/PowerSupplyDevice/PowerSupplyTestUI.h" 
   "include/PowerSupplyDevice/PowerSupplyTestUI.cpp" 
-  )
+   "include/PowerSupplyDevice/Siglent/siglent_power_supply.h" 
+   "include/PowerSupplyDevice/Siglent/siglent_power_supply.cpp" 
+   #"test_siglent_power_supply.cpp"
+   )
 
 
 
@@ -787,10 +790,15 @@ add_executable(uaa3App
 # Power Supply System Test Executable
 # ============================================
 add_executable(test_power_supply 
-    "test_PowerSupplySystem.cpp"
+    #"test_PowerSupplySystem.cpp"
     "include/PowerSupplyDevice/PowerSupplyManager.cpp"
     "include/PowerSupplyDevice/MockPowerSupplyDevice.cpp"
     "include/FileResultStorage.cpp"
+    "include/PowerSupplyDevice/Siglent/siglent_power_supply.h" 
+    "include/PowerSupplyDevice/Siglent/siglent_power_supply.cpp" 
+    "test_siglent_power_supply.cpp"
+    "include/PowerSupply/SPDPowerSupply.h"
+    "include/PowerSupply/SPDPowerSupply.cpp"
 )
 
 # Include directories for test_power_supply
@@ -798,11 +806,13 @@ target_include_directories(test_power_supply PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include/PowerSupplyDevice
     ${INCL_DIR}
+    ${VISA_INCLUDE_DIR}
 )
 
 # Link libraries for test_power_supply
 target_link_libraries(test_power_supply PRIVATE
     nlohmann_json::nlohmann_json
+    ${VISA_LIBRARY}
 )
 
 # Set C++ standard for test_power_supply
