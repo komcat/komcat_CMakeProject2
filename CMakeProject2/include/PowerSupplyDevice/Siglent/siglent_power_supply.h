@@ -50,7 +50,7 @@ public:
   void SetResourceString(const std::string& resource);
   std::string GetResourceString() const;
   void SetDebugMode(bool enable);
-
+  bool IsOutputOn(int channel = 1) const;
 private:
   // The actual SPD power supply implementation
   std::unique_ptr<PowerSupply::SPDPowerSupply> m_spd;

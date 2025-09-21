@@ -163,6 +163,11 @@ bool SiglentPowerSupply::StartSweep(const SweepConfig& config) {
     return false;
   }
 
+  // ADD THIS BLOCK - Clean up any previous thread
+  if (m_sweepThread && m_sweepThread->joinable()) {
+    m_sweepThread->join();
+  }
+
   m_sweepRunning = true;
   m_sweepStopRequested = false;
   m_sweepProgress = 0.0f;
@@ -181,24 +186,33 @@ bool SiglentPowerSupply::StartSweep(const SweepConfig& config) {
 }
 
 bool SiglentPowerSupply::StopSweep() {
-  std::lock_guard<std::mutex> lock(m_sweepMutex);
+  // Set stop flag under lock
+  {
+    std::lock_guard<std::mutex> lock(m_sweepMutex);
 
-  if (!m_sweepRunning) {
-    return true;
+    if (!m_sweepRunning) {
+      return true;
+    }
+
+    m_sweepStopRequested = true;
   }
 
-  m_sweepStopRequested = true;
-
+  // Join thread WITHOUT lock to avoid deadlock
   if (m_sweepThread && m_sweepThread->joinable()) {
     m_sweepThread->join();
   }
 
-  m_sweepRunning = false;
-  m_currentSweepResult.completed = false;
-  m_currentSweepResult.errorMessage = "Sweep stopped by user";
+  // Update state under lock
+  {
+    std::lock_guard<std::mutex> lock(m_sweepMutex);
+    m_sweepRunning = false;
+    m_currentSweepResult.completed = false;
+    m_currentSweepResult.errorMessage = "Sweep stopped by user";
+  }
 
   return true;
 }
+
 
 bool SiglentPowerSupply::IsSweepRunning() const {
   return m_sweepRunning.load();
@@ -369,4 +383,13 @@ void SiglentPowerSupply::SetDebugMode(bool enable) {
   if (m_spd) {
     m_spd->SetDebug(enable);
   }
+}
+
+
+
+bool SiglentPowerSupply::IsOutputOn(int channel) const {
+  if (!IsConnected()) return false;
+
+  auto state = m_spd->getOutputState(channel);
+  return state.has_value() ? state.value() : false;
 }

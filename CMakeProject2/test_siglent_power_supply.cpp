@@ -113,32 +113,85 @@ private:
   }
 
   void TestVoltageControl() {
-    PrintTestHeader("Voltage Control Test");
+    PrintTestHeader("Voltage Control Test (with Load)");
 
-    // Test setting different voltages
-    std::vector<float> testVoltages = { 1.0f, 5.0f, 10.0f, 15.0f };
+    // When testing with a load, we need constant current mode
+    // The voltage will vary based on the load resistance at fixed current
+
+    const float testCurrent = 0.3f; // 300mA constant current
+    std::vector<float> testVoltages = { 3.1f, 3.2f, 3.3f, 6.5f };
+
+    std::cout << "\n  Setting up constant current mode at " << testCurrent << "A" << std::endl;
+
+    // First, ensure device is off
+    m_ps->TurnOff();
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    // Verify it's actually off
+    bool isOff = !m_ps->IsOutputOn();
+    PrintResult(isOff, "Output state verified: OFF");
+
+    // Set to constant current mode with 300mA
+    m_ps->SetCurrent(testCurrent);
+    m_ps->SetVoltage(10.0f); // Set a reasonable voltage limit
+    bool modeResult = m_ps->SetModeConstantCurrent();
+    PrintResult(modeResult, "Set constant current mode at 300mA");
 
     for (float voltage : testVoltages) {
-      bool result = m_ps->SetVoltage(voltage);
-      PrintResult(result, "Set voltage to " + std::to_string(voltage) + "V");
+      std::cout << "\n  Testing with voltage limit " << voltage << "V:" << std::endl;
 
-      if (result) {
-        // Give device time to settle
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      // Turn off before changing settings
+      bool offResult = m_ps->TurnOff();
+      PrintResult(offResult, "Turn OFF before setting");
+      std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-        // Read back voltage
-        float readVoltage = m_ps->ReadVoltage();
-        float tolerance = 0.1f; // 100mV tolerance
-        bool withinTolerance = std::abs(readVoltage - voltage) <= tolerance;
+      // Set voltage limit (in CC mode, this acts as voltage compliance)
+      bool voltResult = m_ps->SetVoltage(voltage);
+      PrintResult(voltResult, "Set voltage limit to " + std::to_string(voltage) + "V");
 
-        std::stringstream ss;
-        ss << "Read voltage: " << std::fixed << std::setprecision(3)
-          << readVoltage << "V (set: " << voltage << "V)";
-        PrintResult(withinTolerance, ss.str());
-      }
+      // Ensure current is still set to 300mA
+      bool currResult = m_ps->SetCurrent(testCurrent);
+      PrintResult(currResult, "Confirm current set to " + std::to_string(testCurrent) + "A");
+
+      // Turn on
+      bool onResult = m_ps->TurnOn();
+      PrintResult(onResult, "Turn ON output");
+
+      // Verify it's actually on
+      bool isOn = m_ps->IsOutputOn();
+      PrintResult(isOn, "Output state verified: ON");
+
+      // Wait for stabilization
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+      // Read voltage and current
+      float readVoltage = m_ps->ReadVoltage();
+      float readCurrent = m_ps->ReadCurrent();
+
+      // In CC mode with load, voltage should be at or below the limit
+      bool voltageOk = readVoltage <= voltage + 0.1f; // Allow small overshoot
+      std::stringstream ss;
+      ss << "Read voltage: " << std::fixed << std::setprecision(3)
+        << readVoltage << "V (limit: " << voltage << "V)";
+      PrintResult(voltageOk, ss.str());
+
+      // Current should be close to set value (within 10%)
+      float currentTolerance = testCurrent * 0.1f;
+      bool currentOk = std::abs(readCurrent - testCurrent) <= currentTolerance;
+      ss.str("");
+      ss << "Read current: " << std::fixed << std::setprecision(3)
+        << readCurrent << "A (set: " << testCurrent << "A)";
+      PrintResult(currentOk, ss.str());
+
+      // Turn off after test
+      m_ps->TurnOff();
+      std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+      // Verify it's actually off
+      bool isOff = !m_ps->IsOutputOn();
+      PrintResult(isOff, "Output state verified: OFF");
     }
   }
-
   void TestCurrentControl() {
     PrintTestHeader("Current Control Test");
 
