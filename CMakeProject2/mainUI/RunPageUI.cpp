@@ -1623,11 +1623,11 @@ void RunPageUI::RenderPanelContent(int panelNumber, const ImVec2& size) {
 
       // Debug log to verify this code path is reached
       if (m_showCrosshair) {
-        m_logger->LogInfo("RenderPanelContent: Rendering crosshair");
+       // m_logger->LogInfo("RenderPanelContent: Rendering crosshair");
         RenderCrosshairOverlay(canvasPos, size);
       }
       else {
-        m_logger->LogInfo("RenderPanelContent: NOT rendering crosshair (disabled)");
+        //m_logger->LogInfo("RenderPanelContent: NOT rendering crosshair (disabled)");
       }
     }
     else {
