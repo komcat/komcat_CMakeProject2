@@ -693,7 +693,7 @@ void EziIOManager::pollingThreadFunc() {
     // Adjust sleep based on connection status
     if (connectedCount == 0) {
       // No devices connected - sleep longer (1 second)
-      std::cout << "No devices connected, sleeping for 1000ms" << std::endl;
+      //std::cout << "No devices connected, sleeping for 1000ms" << std::endl;
       std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
     else {

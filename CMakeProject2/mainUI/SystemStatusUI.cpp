@@ -257,7 +257,7 @@ void SystemStatusUI::RenderSummarySection() {
       (float)m_lastReport.successCount / m_lastReport.totalCount : 0.0f;
     // FIXED: Correct ProgressBar usage
     char totalBuf[32];
-    sprintf(totalBuf, "%.0f%%", totalRate * 100.0f);
+    sprintf_s(totalBuf, sizeof(totalBuf), "%.0f%%", totalRate * 100.0f);
     ImGui::ProgressBar(totalRate, ImVec2(-1, 0), totalBuf);
 
     // Required row
@@ -271,7 +271,9 @@ void SystemStatusUI::RenderSummarySection() {
       (float)m_lastReport.requiredSuccess / m_lastReport.requiredCount : 0.0f;
     // FIXED: Correct ProgressBar usage
     char reqBuf[32];
-    sprintf(reqBuf, "%.0f%%", reqRate * 100.0f);
+
+    //example sprintf_s(totalBuf, sizeof(totalBuf), "%.0f%%", totalRate * 100.0f);
+    sprintf_s(reqBuf, sizeof(reqBuf), "%.0f%%", reqRate * 100.0f);
     ImGui::ProgressBar(reqRate, ImVec2(-1, 0), reqBuf);
 
     // Optional row
@@ -285,7 +287,7 @@ void SystemStatusUI::RenderSummarySection() {
       (float)m_lastReport.optionalSuccess / m_lastReport.optionalCount : 0.0f;
     // FIXED: Correct ProgressBar usage
     char optBuf[32];
-    sprintf(optBuf, "%.0f%%", optRate * 100.0f);
+    sprintf_s(optBuf,sizeof(optBuf), "%.0f%%", optRate * 100.0f);
     ImGui::ProgressBar(optRate, ImVec2(-1, 0), optBuf);
 
     ImGui::EndTable();

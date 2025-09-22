@@ -269,9 +269,9 @@ GlobalPosition GlobalMotionController::GetGlobalPosition(const std::string& devi
         // Get position from ACS controller
         // Adapt to your ACS API
         PositionStruct pos = controller->GetCurrentPosition();
-        deviceX = pos.x;
-        deviceY = pos.y;
-        deviceZ = pos.z;
+        deviceX = static_cast<float>(pos.x);
+        deviceY = static_cast<float>(pos.y);
+        deviceZ = static_cast<float>(pos.z);
       }
     }
   }
