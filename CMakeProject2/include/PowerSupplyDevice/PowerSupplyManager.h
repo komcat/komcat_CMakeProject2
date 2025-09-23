@@ -40,7 +40,7 @@ private:
     const IPowerSupplyDevice::SweepResult& result,
     const std::string& label);
 
-
+  bool RunQuickDeviceTest(const std::string& deviceId);
 
   // Add this helper method in private section:
   std::shared_ptr<IPowerSupplyDevice> CreateDeviceFromConfig(const nlohmann::json& deviceConfig);

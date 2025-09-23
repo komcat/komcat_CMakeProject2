@@ -750,7 +750,77 @@ std::vector<IResultStorage::Record> PowerSupplyManager::QueryStoredResults(
 
 // Add these methods to PowerSupplyManager.cpp:
 
-// Modified Initialize method
+
+
+bool PowerSupplyManager::RunQuickDeviceTest(const std::string& deviceId) {
+  auto entry = GetDeviceEntry(deviceId);
+  if (!entry || !entry->device->IsConnected()) {
+    LogMessage("WARNING", "Device " + deviceId + " not available for testing");
+    return false;
+  }
+
+  LogMessage("INFO", "Running quick test on " + deviceId + "...");
+
+  // Test parameters
+  const float testVoltage = 3.3f;
+  const float testCurrentLimit = 0.1f;
+  const int testChannel = 1;
+  const int stabilizationDelayMs = 1000;
+
+  // Set test parameters
+  if (!entry->device->SetVoltage(testVoltage, testChannel)) {
+    LogMessage("WARNING", "  Failed to set voltage");
+    return false;
+  }
+
+  if (!entry->device->SetCurrent(testCurrentLimit, testChannel)) {
+    LogMessage("WARNING", "  Failed to set current limit");
+    return false;
+  }
+
+  LogMessage("INFO", "  Test parameters: " + std::to_string(testVoltage) + "V, " +
+    std::to_string(testCurrentLimit * 1000) + "mA limit");
+
+  // Turn on output
+  if (!entry->device->TurnOn(testChannel)) {
+    LogMessage("WARNING", "  Failed to turn on output");
+    return false;
+  }
+
+  LogMessage("INFO", "  Output ON - waiting for stabilization...");
+
+  // Wait for stabilization
+  std::this_thread::sleep_for(std::chrono::milliseconds(stabilizationDelayMs));
+
+  // Read measurements
+  auto measurement = entry->device->ReadVoltageCurrent(testChannel);
+
+  // Format and log results
+  char buffer[256];
+  snprintf(buffer, sizeof(buffer), "  Measured: %.3f V, %.4f A",
+    measurement.voltage, measurement.current);
+  LogMessage("INFO", buffer);
+
+  // Verify voltage is within tolerance (±10%)
+  float tolerance = testVoltage * 0.1f;
+  bool voltageOk = std::abs(measurement.voltage - testVoltage) <= tolerance;
+
+  if (voltageOk) {
+    LogMessage("INFO", "  Voltage within tolerance ✓");
+  }
+  else {
+    LogMessage("WARNING", "  Voltage outside tolerance (expected " +
+      std::to_string(testVoltage) + "V ±10%)");
+  }
+
+  // Turn off output
+  entry->device->TurnOff(testChannel);
+  LogMessage("INFO", "  Output OFF - Test completed");
+
+  return voltageOk;
+}
+
+// Modified Initialize method using the refactored test:
 bool PowerSupplyManager::Initialize(const std::string& configFile) {
   // Clear any existing devices
   if (devices.size() > 0) {
@@ -780,13 +850,20 @@ bool PowerSupplyManager::Initialize(const std::string& configFile) {
   LogMessage("INFO", "PowerSupplyManager initialized with " +
     std::to_string(devices.size()) + " devices from: " + configFile);
 
-  // Auto-connect devices marked for auto-connect
+  // Auto-connect devices and test them
   int connectedCount = 0;
+  int testedCount = 0;
+
   for (const auto& [id, entry] : devices) {
     if (entry->autoConnect) {
       if (ConnectDevice(id)) {
         LogMessage("INFO", "Auto-connected to: " + entry->deviceName + " [" + id + "]");
         connectedCount++;
+
+        // Run quick test on connected device
+        if (RunQuickDeviceTest(id)) {
+          testedCount++;
+        }
       }
       else {
         LogMessage("WARNING", "Failed to auto-connect: " + entry->deviceName + " [" + id + "]");
@@ -794,14 +871,15 @@ bool PowerSupplyManager::Initialize(const std::string& configFile) {
     }
   }
 
+  // Summary
   if (connectedCount > 0) {
     LogMessage("INFO", "Successfully connected to " + std::to_string(connectedCount) + " devices");
+    LogMessage("INFO", std::to_string(testedCount) + "/" + std::to_string(connectedCount) +
+      " devices passed quick test");
   }
 
   return true;
 }
-
-
 
 bool PowerSupplyManager::LoadConfiguration(const std::string& configFile) {
   try {
