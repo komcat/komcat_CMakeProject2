@@ -82,6 +82,10 @@ public:
   float GetSweepProgress() const override;
   SweepResult GetSweepResults() const override;
   SweepResult ExecuteSweepBlocking(const SweepConfig& config) override;
+
+  // Add these new methods:
+  void SetDeviceName(const std::string& name) { deviceInfo.name = name; }
+  void SetMaxChannels(int maxChannels);
 };
 
 #endif // MOCKPOWERSUPPLYDEVICE_H

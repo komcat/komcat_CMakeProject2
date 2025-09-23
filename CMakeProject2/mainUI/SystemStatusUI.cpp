@@ -180,7 +180,7 @@ void SystemStatusUI::RunSystemCheck() {
   checkModule("Instruments", "CLD101x Laser", context.GetCLD101x());
   checkModule("Instruments", "Keithley 2400", context.GetKeithley());
   checkModule("Instruments", "Keithley 6482", context.GetKeithley6482());
-  checkModule("Instruments", "SPD Power Supply", context.GetSPDPowerSupply());
+  //checkModule("Instruments", "SPD Power Supply", context.GetSPDPowerSupply());
 
   checkModule("Data Services", "DataClient", context.GetDataClient());
   checkModule("Data Services", "Database", context.GetDatabaseManager());

@@ -1,6 +1,16 @@
-// PowerSupplyManager.cpp
+﻿// PowerSupplyManager.cpp
 #include "PowerSupplyManager.h"
+#include "../include/PowerSupplyDevice/Siglent/siglent_power_supply.h" 
+#include "../include/PowerSupplyDevice/MockPowerSupplyDevice.h"
 #include <chrono>
+#include "logger.h"
+#include <iostream>
+
+// Helper function to log messages (replace with your Logger when available)
+static void LogMessage(const std::string& level, const std::string& message) {
+  std::cout << "[" << level << "] " << message << std::endl;
+}
+
 
 PowerSupplyManager::~PowerSupplyManager() {
   // Disconnect all devices on destruction
@@ -735,4 +745,222 @@ std::vector<IResultStorage::Record> PowerSupplyManager::QueryStoredResults(
   }
 
   return storage->Query(filter);
+}
+
+
+// Add these methods to PowerSupplyManager.cpp:
+
+// Modified Initialize method
+bool PowerSupplyManager::Initialize(const std::string& configFile) {
+  // Clear any existing devices
+  if (devices.size() > 0) {
+    DisconnectAllDevices();
+    devices.clear();
+  }
+
+  // Check if config file exists
+  if (configFile.empty()) {
+    LogMessage("WARNING", "No config file specified for PowerSupplyManager");
+    return false;
+  }
+
+  std::ifstream file(configFile);
+  if (!file.is_open()) {
+    LogMessage("ERROR", "Power supply config file not found: " + configFile);
+    return false;
+  }
+  file.close();
+
+  // Load configuration
+  if (!LoadConfiguration(configFile)) {
+    LogMessage("ERROR", "Failed to load power supply configuration from: " + configFile);
+    return false;
+  }
+
+  LogMessage("INFO", "PowerSupplyManager initialized with " +
+    std::to_string(devices.size()) + " devices from: " + configFile);
+
+  // Auto-connect devices marked for auto-connect
+  int connectedCount = 0;
+  for (const auto& [id, entry] : devices) {
+    if (entry->autoConnect) {
+      if (ConnectDevice(id)) {
+        LogMessage("INFO", "Auto-connected to: " + entry->deviceName + " [" + id + "]");
+        connectedCount++;
+      }
+      else {
+        LogMessage("WARNING", "Failed to auto-connect: " + entry->deviceName + " [" + id + "]");
+      }
+    }
+  }
+
+  if (connectedCount > 0) {
+    LogMessage("INFO", "Successfully connected to " + std::to_string(connectedCount) + " devices");
+  }
+
+  return true;
+}
+
+
+
+bool PowerSupplyManager::LoadConfiguration(const std::string& configFile) {
+  try {
+    // Read config file
+    std::ifstream file(configFile);
+    if (!file.is_open()) {
+      return false;
+    }
+
+    json config;
+    file >> config;
+    file.close();
+
+    // Load default settings
+    if (config.contains("defaultSettings")) {
+      auto settings = config["defaultSettings"];
+
+      if (settings.contains("threadSafeMode")) {
+        SetThreadSafe(settings["threadSafeMode"].get<bool>());
+        LogMessage("DEBUG", "Thread-safe mode: " +
+          std::string(IsThreadSafe() ? "enabled" : "disabled"));
+      }
+
+      if (settings.contains("defaultTimeoutMs")) {
+        int timeout = settings["defaultTimeoutMs"].get<int>();
+        SetDefaultTimeout(timeout);
+        LogMessage("DEBUG", "Default timeout: " + std::to_string(timeout) + "ms");
+      }
+    }
+
+    // Load devices
+    if (!config.contains("devices")) {
+      LogMessage("WARNING", "No devices section in config file");
+      return false;
+    }
+
+    int successCount = 0;
+    int failCount = 0;
+
+    for (const auto& deviceConfig : config["devices"]) {
+      try {
+        std::string deviceId = deviceConfig["id"].get<std::string>();
+        std::string deviceName = deviceConfig["name"].get<std::string>();
+        std::string deviceType = deviceConfig["type"].get<std::string>();
+        bool autoConnect = deviceConfig.value("autoConnect", false);
+
+        LogMessage("DEBUG", "Processing device: " + deviceName +
+          " [Type: " + deviceType + ", ID: " + deviceId + "]");
+
+        // Create device using factory method
+        auto device = CreateDeviceFromConfig(deviceConfig);
+
+        if (device) {
+          // Create extended device entry
+          auto entry = std::make_unique<DeviceEntry>();
+          entry->device = device;
+          entry->status.deviceId = deviceId;
+          entry->status.connected = false;
+          entry->status.sweepRunning = false;
+          entry->status.sweepProgress = 0.0f;
+          entry->autoConnect = autoConnect;
+          entry->deviceName = deviceName;
+
+          // Add to manager
+          {
+            std::lock_guard<std::mutex> lock(managerMutex);
+            devices[deviceId] = std::move(entry);
+          }
+
+          LogMessage("INFO", "✓ Added device: " + deviceName + " [" + deviceId + "]");
+          successCount++;
+
+        }
+        else {
+          LogMessage("ERROR", "✗ Failed to create device: " + deviceName +
+            " (type: " + deviceType + " may not be supported)");
+          failCount++;
+        }
+
+      }
+      catch (const std::exception& e) {
+        LogMessage("ERROR", "Exception processing device: " + std::string(e.what()));
+        failCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      LogMessage("INFO", "Successfully loaded " + std::to_string(successCount) + " devices");
+    }
+
+    if (failCount > 0) {
+      LogMessage("WARNING", "Failed to load " + std::to_string(failCount) + " devices");
+    }
+
+    return successCount > 0;
+
+  }
+  catch (const std::exception& e) {
+    LogMessage("ERROR", "Failed to parse power supply config: " + std::string(e.what()));
+    lastError = e.what();
+    return false;
+  }
+}
+
+
+
+std::shared_ptr<IPowerSupplyDevice> PowerSupplyManager::CreateDeviceFromConfig(const json& deviceConfig) {
+  try {
+    std::string deviceType = deviceConfig["type"].get<std::string>();
+    std::string resourceString = deviceConfig.value("resourceString", "");
+
+    // Create device based on type
+    if (deviceType == "Siglent_SPD1305X" || deviceType == "Siglent_SPD3303X") {
+      // Create Siglent device
+      auto device = std::make_shared<SiglentPowerSupply>(resourceString);
+
+      if (deviceConfig.contains("debugMode")) {
+        device->SetDebugMode(deviceConfig["debugMode"].get<bool>());
+      }
+
+      LogMessage("INFO", "Created Siglent device: " + deviceConfig.value("name", "Unknown"));
+      return device;
+
+    }
+    else if (deviceType == "Mock" || deviceType == "Simulated") {
+      // Create mock device for testing
+      auto device = std::make_shared<MockPowerSupplyDevice>();
+
+      //if (deviceConfig.contains("name")) {
+      //  device->SetDeviceName(deviceConfig["name"].get<std::string>());
+      //}
+
+      //if (deviceConfig.contains("maxChannels")) {
+      //  device->SetMaxChannels(deviceConfig["maxChannels"].get<int>());
+      //}
+
+      LogMessage("INFO", "Created mock device: " + deviceConfig.value("name", "Unknown"));
+      return device;
+
+    }
+    else {
+      LogMessage("WARNING", "Unknown device type: " + deviceType);
+      return nullptr;
+    }
+
+  }
+  catch (const std::exception& e) {
+    LogMessage("ERROR", "Error creating device from config: " + std::string(e.what()));
+    return nullptr;
+  }
+}
+
+std::vector<std::string> PowerSupplyManager::GetDeviceNames() const {
+  std::vector<std::string> names;
+
+  std::lock_guard<std::mutex> lock(managerMutex);
+  for (const auto& [id, entry] : devices) {
+    names.push_back(id);
+  }
+
+  return names;
 }

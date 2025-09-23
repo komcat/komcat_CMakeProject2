@@ -308,3 +308,15 @@ bool MockPowerSupplyDevice::SetModeConstantCurrent(int channel) {
   channels[channel].constantVoltageMode = false;
   return true;
 }
+
+void MockPowerSupplyDevice::SetMaxChannels(int maxChannels) {
+  std::lock_guard<std::mutex> lock(channelMutex);
+
+  // Clear existing channels
+  channels.clear();
+
+  // Initialize new channels up to maxChannels
+  for (int i = 1; i <= maxChannels; ++i) {
+    channels[i] = ChannelState();
+  }
+}

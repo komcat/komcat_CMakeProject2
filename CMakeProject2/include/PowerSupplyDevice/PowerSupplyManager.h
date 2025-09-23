@@ -5,13 +5,20 @@
 #include "PowerSupplyDevice/IPowerSupplyManager.h"
 #include <mutex>
 #include <atomic>
+#include <nlohmann/json.hpp> // For JSON parsing
+using json = nlohmann::json;
 
 class PowerSupplyManager : public IPowerSupplyManager {
 private:
+  // Extended DeviceEntry to store metadata
   struct DeviceEntry {
     std::shared_ptr<IPowerSupplyDevice> device;
     DeviceStatus status;
-    mutable std::mutex deviceMutex;  // Per-device mutex for fine-grained locking
+    mutable std::mutex deviceMutex;
+
+    // Add these new fields:
+    bool autoConnect = false;
+    std::string deviceName;
   };
 
   std::map<std::string, std::unique_ptr<DeviceEntry>> devices;
@@ -33,9 +40,19 @@ private:
     const IPowerSupplyDevice::SweepResult& result,
     const std::string& label);
 
+
+
+  // Add this helper method in private section:
+  std::shared_ptr<IPowerSupplyDevice> CreateDeviceFromConfig(const nlohmann::json& deviceConfig);
 public:
   PowerSupplyManager() = default;
   virtual ~PowerSupplyManager();
+
+  // Initialization methods
+  bool Initialize(const std::string& configFile = "");
+  bool LoadConfiguration(const std::string& configFile);
+  std::vector<std::string> GetDeviceNames() const;
+
 
   // Device Management
   bool AddDevice(std::shared_ptr<IPowerSupplyDevice> device, const std::string& uniqueId) override;

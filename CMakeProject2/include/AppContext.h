@@ -44,6 +44,7 @@ class IOperations;
 class DUTDataRecorder;
 class Logger;
 class SPDPowerSupplyManager;
+class PowerSupplyManager;
 class VisionCameraExposureManager;
 
 
@@ -89,6 +90,7 @@ public:
   CLD101xManager* cld101xManager = nullptr;
   Keithley2400Manager* keithleyManager = nullptr;
   SPDPowerSupplyManager* spdPowerSupplyManager = nullptr;
+	PowerSupplyManager* powerSupplyManager = nullptr;
 	Keithley::Keithley6482Manager* keithley6482Manager = nullptr;
 
   // === High-Level Operations ===
@@ -124,6 +126,7 @@ private:
   CLD101xManager* m_cld101xPtr = nullptr;
   Keithley2400Manager* m_keithleyPtr = nullptr;
   SPDPowerSupplyManager* m_spdPowerSupplyManagerPtr = nullptr;
+	PowerSupplyManager* m_powerSupplyManagerPtr = nullptr;
   MachineOperations* m_machineOperationsPtr = nullptr;
   MotionOps* m_motionOpsPtr = nullptr;
   IOOps* m_ioOpsPtr = nullptr;
@@ -269,7 +272,12 @@ public:
   {
     spdPowerSupplyManager = service;
     m_spdPowerSupplyManagerPtr = service;
-  }
+	}
+  void RegisterExistingPowerSupplyManager(PowerSupplyManager* service)
+  {
+    powerSupplyManager = service;
+    m_powerSupplyManagerPtr = service;
+	}
 
   void RegisterExistingKeithley6482(Keithley::Keithley6482Manager* service) {
     keithley6482Manager = service;
@@ -355,6 +363,13 @@ public:
   {
     spdPowerSupplyManager = service;
   }
+
+  void RegisterPowerSupplyManager(PowerSupplyManager* service)
+  {
+    powerSupplyManager = service;
+  }
+
+
   void RegisterKeithley6482(Keithley::Keithley6482Manager* service) {
     keithley6482Manager = service;
 	}
@@ -462,6 +477,12 @@ public:
   {
     return spdPowerSupplyManager ? spdPowerSupplyManager : m_spdPowerSupplyManagerPtr;
   }
+
+  PowerSupplyManager* GetPowerSupply() const
+  {
+    return powerSupplyManager ? powerSupplyManager : m_powerSupplyManagerPtr;
+	}
+
   Keithley::Keithley6482Manager* GetKeithley6482() const {
     return keithley6482Manager ? keithley6482Manager : m_keithley6482Ptr;
   }
@@ -524,6 +545,12 @@ public:
   bool HasSPDPowerSupply() const {
     return spdPowerSupplyManager != nullptr;
   }
+
+  bool HasPowerSupplyManager() const {
+    return powerSupplyManager != nullptr;
+	}
+
+
   bool HasKeithley6482Managers() const {
     return keithley6482Manager != nullptr;
   }
@@ -584,6 +611,7 @@ public:
     log->LogInfo("  - CLD101x: " + std::string(GetCLD101x() ? "✓" : "✗"));
     log->LogInfo("  - Keithley: " + std::string(GetKeithley() ? "✓" : "✗"));
 		log->LogInfo("  - SPD Power Supply: " + std::string(GetSPDPowerSupply() ? "✓" : "✗")); 
+		log->LogInfo("  - Power Supply Manager: " + std::string(GetPowerSupply() ? "✓" : "✗"));
 		log->LogInfo("  - Keithley 6482: " + std::string(GetKeithley6482() ? "✓" : "✗"));
 
     log->LogInfo("High-Level Operations:");

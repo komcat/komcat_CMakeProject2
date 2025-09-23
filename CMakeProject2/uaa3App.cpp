@@ -63,256 +63,84 @@ bool g_deugMode = false; // Global debug mode flag
 
 
 
-// Add this function to test SPD -> GlobalDataStore flow manually
-void TestSPDToGlobalDataStore() {
-	Logger* logger = Logger::GetInstance();
-	logger->LogInfo("=== MANUAL SPD TEST START ===");
-
-	// Get managers
-	AppContext& context = AppContext::GetInstance();
-	auto* spdManager = context.GetSPDPowerSupply();
-	GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
-
-	if (!spdManager) {
-		logger->LogError("SPD Manager not available");
-		return;
-	}
-
-	if (!dataStore) {
-		logger->LogError("GlobalDataStore not available");
-		return;
-	}
-
-	// Check subscription
-	bool subscribed = dataStore->IsSPDSubscribed();
-	logger->LogInfo("GlobalDataStore SPD subscription: " + std::string(subscribed ? "ACTIVE" : "INACTIVE"));
-
-	// 1. Connect devices
-	logger->LogInfo("1. Connecting SPD devices...");
-	int connected = spdManager->ConnectAll();
-	logger->LogInfo("   Connected: " + std::to_string(connected) + " devices");
-
-	if (connected == 0) {
-		logger->LogWarning("No devices connected - test aborted");
-		return;
-	}
-
-	// 2. Set CV mode: 3.3V, 0.5A limit
-	logger->LogInfo("2. Setting CV mode: 3.3V, 0.5A limit...");
-	bool cvSet = spdManager->SetConstantVoltageMode(3.3, 0.5);
-	logger->LogInfo("   CV mode result: " + std::string(cvSet ? "SUCCESS" : "FAILED"));
-
-	// 3. Turn on outputs
-	logger->LogInfo("3. Turning on outputs...");
-	bool outputsOn = spdManager->SetAllOutputs(true);
-	logger->LogInfo("   Outputs enabled: " + std::string(outputsOn ? "SUCCESS" : "FAILED"));
-
-	// 4. Set up callback that updates GlobalDataStore (this will override any existing callback)
-	logger->LogInfo("4. Setting up direct callback...");
-	spdManager->SetStatusUpdateCallback(
-		[dataStore, logger](const std::string& deviceName, const std::string& status) {
-		static int callbackCount = 0;
-		callbackCount++;
-
-		if (callbackCount <= 5) {  // Log first 5 callbacks
-			std::cout << "[SPD CALLBACK #" << callbackCount << "] Device: " << deviceName
-				<< " Status: " << status << std::endl;
-		}
-
-		// Parse and store in GlobalDataStore
-		if (status.find("Status read failed") == std::string::npos &&
-			status.find("Disconnected") == std::string::npos) {
-
-			float voltage = 0.0f, current = 0.0f;
-			bool outputState = false;
-
-			// Parse voltage: "V: X.XXXV"
-			size_t vPos = status.find("V: ");
-			if (vPos != std::string::npos) {
-				size_t vEnd = status.find("V", vPos + 3);
-				if (vEnd != std::string::npos) {
-					try {
-						voltage = std::stof(status.substr(vPos + 3, vEnd - vPos - 3));
-					}
-					catch (...) {
-						std::cout << "[PARSE ERROR] Failed to parse voltage from: " << status << std::endl;
-					}
-				}
-			}
-
-			// Parse current: "I: X.XXXA"  
-			size_t iPos = status.find("I: ");
-			if (iPos != std::string::npos) {
-				size_t iEnd = status.find("A", iPos + 3);
-				if (iEnd != std::string::npos) {
-					try {
-						current = std::stof(status.substr(iPos + 3, iEnd - iPos - 3));
-					}
-					catch (...) {
-						std::cout << "[PARSE ERROR] Failed to parse current from: " << status << std::endl;
-					}
-				}
-			}
-
-			// Parse output state
-			outputState = status.find("Output: ON") != std::string::npos;
-
-			// Update GlobalDataStore
-			std::string voltageChannel = "SPD-" + deviceName + "-Voltage";
-			std::string currentChannel = "SPD-" + deviceName + "-Current";
-			std::string outputChannel = "SPD-" + deviceName + "-Output";
-			std::string powerChannel = "SPD-" + deviceName + "-Power";
-
-			dataStore->SetValue(voltageChannel, voltage);
-			dataStore->SetValue(currentChannel, current);
-			dataStore->SetValue(outputChannel, outputState ? 1.0f : 0.0f);
-			dataStore->SetValue(powerChannel, voltage * current);
-
-			if (callbackCount <= 3) {
-				std::cout << "[GLOBALDATA UPDATE] Created channels: V=" << voltage
-					<< "V, I=" << current << "A, Power=" << (voltage * current)
-					<< "W, Output=" << (outputState ? "ON" : "OFF") << std::endl;
-			}
-		}
-	}
-	);
-
-	// 5. Start polling
-	logger->LogInfo("5. Starting polling (1000ms interval)...");
-	spdManager->StartAllPolling(1000);
-
-	// 6. Wait and check data
-	logger->LogInfo("6. Waiting 3 seconds for data...");
-	std::this_thread::sleep_for(std::chrono::seconds(3));
-
-	// Check GlobalDataStore channels
-	auto channels = dataStore->GetAvailableChannels();
-	int spdChannelCount = 0;
-
-	logger->LogInfo("7. Checking GlobalDataStore channels:");
-	logger->LogInfo("   Total channels: " + std::to_string(channels.size()));
-
-	for (const auto& ch : channels) {
-		if (ch.find("SPD-") == 0) {
-			spdChannelCount++;
-			float value = dataStore->GetValue(ch);
-			logger->LogInfo("   FOUND: " + ch + " = " + std::to_string(value));
-		}
-	}
-
-	if (spdChannelCount > 0) {
-		logger->LogInfo("   SUCCESS: " + std::to_string(spdChannelCount) + " SPD channels active!");
-	}
-	else {
-		logger->LogError("   FAILED: No SPD channels found!");
-		logger->LogInfo("   All available channels:");
-		for (const auto& ch : channels) {
-			logger->LogInfo("     - " + ch);
-		}
-	}
-
-	// 8. Stop polling  
-	logger->LogInfo("8. Stopping polling...");
-	spdManager->StopAllPolling();
-
-	// 9. Turn off outputs
-	logger->LogInfo("9. Turning off outputs...");
-	spdManager->SetAllOutputs(false);
-
-	// 10. Final report
-	auto finalChannels = dataStore->GetAvailableChannels();
-	int finalSpdCount = 0;
-
-	logger->LogInfo("10. Final channel values (outputs OFF, devices connected):");
-	for (const auto& ch : finalChannels) {
-		if (ch.find("SPD-") == 0) {
-			finalSpdCount++;
-			float value = dataStore->GetValue(ch);
-			logger->LogInfo("    " + ch + ": " + std::to_string(value));
-		}
-	}
-
-	logger->LogInfo("=== TEST COMPLETE ===");
-	logger->LogInfo("Final SPD channels in GlobalDataStore: " + std::to_string(finalSpdCount));
-}
 
 
 
-void TestPowerSupplyManager() {
-	Logger* logger = Logger::GetInstance();
-	logger->LogInfo("=== POWER SUPPLY MANAGER TEST ===");
-
-	// Create manager and storage
-	auto psManager = std::make_shared<PowerSupplyManager>();
-	auto storage = std::make_shared<FileResultStorage>();
-
-	// Initialize storage
-	if (!storage->Initialize("./power_supply_test_data")) {
-		logger->LogError("Failed to initialize storage");
-		return;
-	}
-	psManager->SetResultStorage(storage);
-	logger->LogInfo("✓ Storage initialized");
-
-	// Add mock devices for testing
-	auto ps1 = std::make_shared<MockPowerSupplyDevice>("TestPS1", 1, "MOCK-1000");
-	auto ps2 = std::make_shared<MockPowerSupplyDevice>("TestPS2", 2, "MOCK-2000");
-
-	psManager->AddDevice(ps1, "PS1");
-	psManager->AddDevice(ps2, "PS2");
-	logger->LogInfo("✓ Added 2 mock devices");
-
-	// Connect devices
-	auto connectResult = psManager->ConnectAllDevices();
-	logger->LogInfo("✓ Connected " + std::to_string(connectResult.successCount) + " devices");
-
-	// Configure devices
-	psManager->SetModeConstantVoltage("PS1");
-	psManager->SetVoltage("PS1", 5.0f);
-	psManager->SetCurrent("PS1", 1.0f);
-	psManager->TurnOn("PS1");
-	logger->LogInfo("✓ PS1 configured: 5V, 1A limit, CV mode");
-
-	// Take measurement
-	auto measurement = psManager->ReadMeasurement("PS1");
-	logger->LogInfo("✓ Measurement: V=" + std::to_string(measurement.voltage) +
-		", I=" + std::to_string(measurement.current));
-
-	// Store measurement
-	psManager->StoreCurrentMeasurement("PS1", "test_measurement");
-	logger->LogInfo("✓ Measurement stored");
-
-	// Run a sweep
-	IPowerSupplyDevice::SweepConfig sweepConfig;
-	sweepConfig.mode = IPowerSupplyDevice::SweepConfig::Mode::CONSTANT_VOLTAGE;
-	sweepConfig.startValue = 0.0f;
-	sweepConfig.endValue = 3.0f;
-	sweepConfig.stepSize = 0.5f;
-	sweepConfig.delayMs = 100;
-
-	logger->LogInfo("Starting sweep...");
-	auto sweepResult = psManager->ExecuteSweepBlocking("PS1", sweepConfig);
-
-	if (sweepResult.completed) {
-		logger->LogInfo("✓ Sweep completed with " +
-			std::to_string(sweepResult.measurements.size()) + " points");
-		psManager->StoreSweepResults("PS1", "test_sweep");
-	}
-
-	// Query stored results
-	IResultStorage::QueryFilter filter;
-	filter.deviceType = "PowerSupply";
-	filter.maxResults = 10;
-
-	auto results = psManager->QueryStoredResults(filter);
-	logger->LogInfo("✓ Found " + std::to_string(results.size()) + " stored records");
-
-	// Cleanup
-	psManager->TurnOffAll();
-	psManager->DisconnectAllDevices();
-
-	logger->LogInfo("=== TEST COMPLETE ===");
-}
+//void TestPowerSupplyManager() {
+//	Logger* logger = Logger::GetInstance();
+//	logger->LogInfo("=== POWER SUPPLY MANAGER TEST ===");
+//
+//	// Create manager and storage
+//	auto psManager = std::make_shared<PowerSupplyManager>();
+//	auto storage = std::make_shared<FileResultStorage>();
+//
+//	// Initialize storage
+//	if (!storage->Initialize("./power_supply_test_data")) {
+//		logger->LogError("Failed to initialize storage");
+//		return;
+//	}
+//	psManager->SetResultStorage(storage);
+//	logger->LogInfo("✓ Storage initialized");
+//
+//	// Add mock devices for testing
+//	auto ps1 = std::make_shared<MockPowerSupplyDevice>("TestPS1", 1, "MOCK-1000");
+//	auto ps2 = std::make_shared<MockPowerSupplyDevice>("TestPS2", 2, "MOCK-2000");
+//
+//	psManager->AddDevice(ps1, "PS1");
+//	psManager->AddDevice(ps2, "PS2");
+//	logger->LogInfo("✓ Added 2 mock devices");
+//
+//	// Connect devices
+//	auto connectResult = psManager->ConnectAllDevices();
+//	logger->LogInfo("✓ Connected " + std::to_string(connectResult.successCount) + " devices");
+//
+//	// Configure devices
+//	psManager->SetModeConstantVoltage("PS1");
+//	psManager->SetVoltage("PS1", 5.0f);
+//	psManager->SetCurrent("PS1", 1.0f);
+//	psManager->TurnOn("PS1");
+//	logger->LogInfo("✓ PS1 configured: 5V, 1A limit, CV mode");
+//
+//	// Take measurement
+//	auto measurement = psManager->ReadMeasurement("PS1");
+//	logger->LogInfo("✓ Measurement: V=" + std::to_string(measurement.voltage) +
+//		", I=" + std::to_string(measurement.current));
+//
+//	// Store measurement
+//	psManager->StoreCurrentMeasurement("PS1", "test_measurement");
+//	logger->LogInfo("✓ Measurement stored");
+//
+//	// Run a sweep
+//	IPowerSupplyDevice::SweepConfig sweepConfig;
+//	sweepConfig.mode = IPowerSupplyDevice::SweepConfig::Mode::CONSTANT_VOLTAGE;
+//	sweepConfig.startValue = 0.0f;
+//	sweepConfig.endValue = 3.0f;
+//	sweepConfig.stepSize = 0.5f;
+//	sweepConfig.delayMs = 100;
+//
+//	logger->LogInfo("Starting sweep...");
+//	auto sweepResult = psManager->ExecuteSweepBlocking("PS1", sweepConfig);
+//
+//	if (sweepResult.completed) {
+//		logger->LogInfo("✓ Sweep completed with " +
+//			std::to_string(sweepResult.measurements.size()) + " points");
+//		psManager->StoreSweepResults("PS1", "test_sweep");
+//	}
+//
+//	// Query stored results
+//	IResultStorage::QueryFilter filter;
+//	filter.deviceType = "PowerSupply";
+//	filter.maxResults = 10;
+//
+//	auto results = psManager->QueryStoredResults(filter);
+//	logger->LogInfo("✓ Found " + std::to_string(results.size()) + " stored records");
+//
+//	// Cleanup
+//	psManager->TurnOffAll();
+//	psManager->DisconnectAllDevices();
+//
+//	logger->LogInfo("=== TEST COMPLETE ===");
+//}
 
 
 // Call this function after your app starts up to test the flow

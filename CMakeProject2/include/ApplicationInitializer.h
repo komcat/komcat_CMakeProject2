@@ -33,6 +33,7 @@ class ConfigFileWatchdog;
 class DUTDataRecorder;
 class GlobalDataStore;
 class SPDPowerSupplyManager;
+class PowerSupplyManager;
 class VisionCameraExposureManager;
 
 
@@ -81,6 +82,7 @@ public:
     std::unique_ptr<DUTDataRecorder> dutRecorder;
     std::unique_ptr<ConfigFileWatchdog> configWatchdog;
     std::unique_ptr<SPDPowerSupplyManager> spdPowerSupply;
+		std::unique_ptr<PowerSupplyManager> powerSupplyManager;
     std::unique_ptr<VisionCameraExposureManager> visionExposureManager;
 
   };
@@ -144,6 +146,7 @@ private:
   std::function<bool()> WrapRegisterWithContext(HardwareManagers& hw, Operations& ops);
   std::function<bool()> WrapInitConfigWatchdog(HardwareManagers& hw);
   std::function<bool()> WarpInitConfigSPDPowerSupply(HardwareManagers& hw);
+	std::function<bool()> WrapInitPowerSupplyManager(HardwareManagers& hw);
 
 
 
@@ -159,6 +162,7 @@ private:
   bool RegisterWithContext(HardwareManagers& hw, Operations& ops);
   bool InitConfigWatchdog(HardwareManagers& hw);
   bool InitConfigSPDPowerSupply(HardwareManagers& hw);
+	bool InitPowerSupplyManager(HardwareManagers& hw);
   
 
 

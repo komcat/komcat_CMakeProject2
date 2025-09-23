@@ -1,0 +1,19 @@
+{
+  "devices": [
+    {
+      "name": "Siglent-main",
+      "id": "SPD-001",
+      "type": "Siglent_SPD1305X",
+      "connectionType": "USB",
+      "resourceString": "USB0::0xF4EC::0x1410::SPD13DCQ7R0719::INSTR",
+      "maxChannels": 1,
+      "autoConnect": true,
+      "description": "Siglent SPD1305X single channel power supply"
+    }
+  ],
+  "defaultSettings": {
+    "threadSafeMode": true,
+    "defaultTimeoutMs": 5000,
+    "autoRefreshIntervalMs": 1000
+  }
+}

@@ -332,13 +332,7 @@ void MainUIManager::ConnectUIToServices() {
 		logger->LogInfo("MainUIManager: SMU Panel UI connected");
 	}
 
-	// ADD THIS - Create SPD UI when SPD manager is available
-	if (auto* spdManager = GetSPDManager()) {
-		if (!m_spdPowerSupplyUI) {
-			m_spdPowerSupplyUI = std::make_unique<SPDPowerSupplyUI>(spdManager);
-		}
-		logger->LogInfo("MainUIManager: SPD Power Supply UI connected");
-	}
+
 
 	// Connect RunPageUI using smart getter for MachineOperations
 	auto* machineOps = m_context ? m_context->GetMachineOperations() : m_machineOperations;
@@ -2130,12 +2124,12 @@ Keithley2400Manager* MainUIManager::GetKeithley() const {
 }
 
 // Add SPD manager getter method to MainUIManager (add to both .h and .cpp):
-SPDPowerSupplyManager* MainUIManager::GetSPDManager() const {
-	if (m_context) {
-		if (auto* spd = m_context->GetSPDPowerSupply()) return spd;
-	}
-	return nullptr;  // Add fallback member if you add it later
-}
+//SPDPowerSupplyManager* MainUIManager::GetSPDManager() const {
+//	if (m_context) {
+//		if (auto* spd = m_context->GetSPDPowerSupply()) return spd;
+//	}
+//	return nullptr;  // Add fallback member if you add it later
+//}
 
 CLD101xManager* MainUIManager::GetCLD101x() const {
 	if (m_context) {

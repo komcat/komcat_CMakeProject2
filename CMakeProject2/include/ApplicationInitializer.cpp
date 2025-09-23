@@ -20,7 +20,9 @@
 #include "include/SMU/keithley2400_manager.h"
 #include "include/SMU/keithley2400_operations.h"
     // Add this at the top of ApplicationInitializer.cpp if not already present
-
+#include "include/PowerSupplyDevice/PowerSupplyManager.h"
+#include "include/PowerSupplyDevice/Siglent/siglent_power_supply.h"
+#include "include/PowerSupplyDevice/MockPowerSupplyDevice.h"
 #include "include/PowerSupply/SPDPowerSupplyManager.h"
 #include "include/machine_operations.h"
 #include "include/ops/motion_ops.h"
@@ -265,6 +267,10 @@ std::function<bool()> ApplicationInitializer::WrapInitConfigWatchdog(HardwareMan
 
 std::function<bool()> ApplicationInitializer::WarpInitConfigSPDPowerSupply(HardwareManagers& hw) {
   return [this, &hw]() { return InitConfigSPDPowerSupply(hw); };
+}
+
+std::function<bool()> ApplicationInitializer::WrapInitPowerSupplyManager(HardwareManagers& hw) {
+  return [this, &hw]() { return InitPowerSupplyManager(hw); };
 }
 
 
@@ -608,7 +614,7 @@ bool ApplicationInitializer::InitInstruments(HardwareManagers& hw) {
 
   //Initialize SPDPowerSupply
   //InitConfigSPDPowerSupply(hw);
-
+	InitPowerSupplyManager(hw);
 
 
   return anySuccess;  // Return true if at least one instrument connected
@@ -880,6 +886,68 @@ bool ApplicationInitializer::InitConfigWatchdog(HardwareManagers& hw) {
   }
 }
 
+bool ApplicationInitializer::InitPowerSupplyManager(HardwareManagers& hw) {
+  hw.powerSupplyManager = std::make_unique<PowerSupplyManager>();
+
+  if (hw.powerSupplyManager->Initialize("power_supply_config.json")) {
+    logger->LogInfo("Power Supply Manager initialized from config file");
+  }
+  else {
+    logger->LogInfo("Power Supply config file not found, manually adding devices");
+    try {
+      // Manually add Siglent device
+      auto siglentDevice = std::make_shared<SiglentPowerSupply>("USB0::0xF4EC::0x1410::SPD13DCQ7R0719::INSTR");
+      siglentDevice->SetDebugMode(false);
+
+      // Add to manager with unique ID
+      if (hw.powerSupplyManager->AddDevice(siglentDevice, "SPD-001")) {
+        logger->LogInfo("Added Siglent SPD device manually");
+
+        // Try to connect to the device
+        if (hw.powerSupplyManager->ConnectDevice("SPD-001")) {
+          logger->LogInfo("Connected to Siglent SPD device");
+        }
+        else {
+          logger->LogWarning("Could not connect to Siglent SPD device");
+        }
+      }
+      else {
+        logger->LogWarning("Failed to add Siglent device to manager");
+      }
+
+      // Add a mock device for testing if no hardware available
+      auto mockDevice = std::make_shared<MockPowerSupplyDevice>();
+      mockDevice->SetDeviceName("Test Power Supply");
+      mockDevice->SetMaxChannels(2);
+
+      if (hw.powerSupplyManager->AddDevice(mockDevice, "MOCK-001")) {
+        logger->LogInfo("Added mock power supply device for testing");
+        hw.powerSupplyManager->ConnectDevice("MOCK-001");
+      }
+
+    }
+    catch (const std::exception& e) {
+      logger->LogError("Failed to manually configure Power Supply devices: " + std::string(e.what()));
+      // Don't fail initialization - just continue without power supply
+      hw.powerSupplyManager.reset();
+      return false;
+    }
+  }
+
+  // Log final status
+  auto deviceNames = hw.powerSupplyManager->GetDeviceNames();
+  logger->LogInfo("Power Supply Manager initialized, device count: " +
+    std::to_string(deviceNames.size()));
+
+  // Log each device status
+  for (const auto& deviceId : deviceNames) {
+    auto status = hw.powerSupplyManager->GetDeviceStatus(deviceId);
+    std::string connStatus = status.connected ? "connected" : "disconnected";
+    logger->LogInfo("  - " + deviceId + " (" + connStatus + ")");
+  }
+
+  return true;
+}
 
 bool ApplicationInitializer::InitConfigSPDPowerSupply(HardwareManagers& hw) {
   hw.spdPowerSupply = std::make_unique<SPDPowerSupplyManager>();

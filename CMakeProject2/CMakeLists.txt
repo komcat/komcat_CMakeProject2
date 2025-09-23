@@ -1194,6 +1194,7 @@ set(CONFIG_FILES
     "transformation_matrix.json"
     "camera_config.json"
     "keithley6482_devices_config.json"
+    "power_supply_config.json"
 )
 
 # Copy configuration files
