@@ -307,6 +307,7 @@ set(INCL_SMU "${CMAKE_CURRENT_SOURCE_DIR}/include/SMU")
 set(INCL_SCANNING "${CMAKE_CURRENT_SOURCE_DIR}/include/scanning")
 set(INCL_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/include/script")
 set(INCL_POWERSUPPLY "${CMAKE_CURRENT_SOURCE_DIR}/include/PowerSupply")
+set(INCL_POWERSUPPLYDEVICE "${CMAKE_CURRENT_SOURCE_DIR}/include/PowerSupplyDevice")
 set(INCL_UI "${CMAKE_CURRENT_SOURCE_DIR}/include/ui")
 set(INCLUDE_HALCON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/halcon")
 set(INCLUDE_VISION_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/vision")
@@ -782,7 +783,13 @@ add_executable(uaa3App
    "include/PowerSupplyDevice/Siglent/siglent_power_supply.h" 
    "include/PowerSupplyDevice/Siglent/siglent_power_supply.cpp" 
    #"test_siglent_power_supply.cpp"
-    "include/PowerSupplyDevice/KeysightE36103B/KeysightE36103B.h" "include/PowerSupplyDevice/KeysightE36103B/KeysightE36103B.cpp" "test_keysight_e36103b.cpp")
+    "include/PowerSupplyDevice/KeysightE36103B/KeysightE36103B.h"
+    "include/PowerSupplyDevice/KeysightE36103B/KeysightE36103B.cpp"
+    #"test_keysight_e36103b.cpp"
+    "include/PowerSupplyDevice/PowerSupplyOps.h"
+    "include/PowerSupplyDevice/PowerSupplyOps.cpp" 
+    "include/PowerSupplyDevice/PowerSupplyOperations.h"
+      "include/PowerSupplyDevice/PowerSupplyOperations.cpp")
 
 
 
@@ -950,6 +957,7 @@ target_include_directories(uaa3App PRIVATE
   ${INCL_SCANNING}
   ${INCL_SCRIPT}
   ${INCL_POWERSUPPLY}
+  ${INCL_POWERSUPPLYDEVICE}
   ${INCL_UI}
   ${INCL_PROCESSES}
   ${INCL_CLD101x}

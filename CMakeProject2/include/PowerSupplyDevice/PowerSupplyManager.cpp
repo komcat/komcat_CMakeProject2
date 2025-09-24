@@ -2,6 +2,7 @@
 #include "PowerSupplyManager.h"
 #include "../include/PowerSupplyDevice/Siglent/siglent_power_supply.h" 
 #include "../include/PowerSupplyDevice/MockPowerSupplyDevice.h"
+#include "../include/PowerSupplyDevice/KeysightE36103B/KeysightE36103B.h"
 #include <chrono>
 #include "logger.h"
 #include <iostream>
@@ -986,6 +987,9 @@ bool PowerSupplyManager::LoadConfiguration(const std::string& configFile) {
 
 
 
+
+// Replace the CreateDeviceFromConfig method in PowerSupplyManager.cpp with this updated version:
+
 std::shared_ptr<IPowerSupplyDevice> PowerSupplyManager::CreateDeviceFromConfig(const json& deviceConfig) {
   try {
     std::string deviceType = deviceConfig["type"].get<std::string>();
@@ -1004,17 +1008,21 @@ std::shared_ptr<IPowerSupplyDevice> PowerSupplyManager::CreateDeviceFromConfig(c
       return device;
 
     }
+    else if (deviceType == "Keysight_E36103B" || deviceType == "Keysight_E36100B") {
+      // Create Keysight E36103B device
+      auto device = std::make_shared<KeysightE36103B>(resourceString);
+
+      if (deviceConfig.contains("debugMode")) {
+        device->SetDebugMode(deviceConfig["debugMode"].get<bool>());
+      }
+
+      LogMessage("INFO", "Created Keysight E36103B device: " + deviceConfig.value("name", "Unknown"));
+      return device;
+
+    }
     else if (deviceType == "Mock" || deviceType == "Simulated") {
       // Create mock device for testing
       auto device = std::make_shared<MockPowerSupplyDevice>();
-
-      //if (deviceConfig.contains("name")) {
-      //  device->SetDeviceName(deviceConfig["name"].get<std::string>());
-      //}
-
-      //if (deviceConfig.contains("maxChannels")) {
-      //  device->SetMaxChannels(deviceConfig["maxChannels"].get<int>());
-      //}
 
       LogMessage("INFO", "Created mock device: " + deviceConfig.value("name", "Unknown"));
       return device;
@@ -1031,6 +1039,8 @@ std::shared_ptr<IPowerSupplyDevice> PowerSupplyManager::CreateDeviceFromConfig(c
     return nullptr;
   }
 }
+
+
 
 std::vector<std::string> PowerSupplyManager::GetDeviceNames() const {
   std::vector<std::string> names;

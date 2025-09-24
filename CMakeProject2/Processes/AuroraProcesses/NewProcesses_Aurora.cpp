@@ -7,6 +7,8 @@
 #include "SequenceStep.h"  // Has DUT operations
 #include "SPDOperations.h"
 #include "UserInputOperations.h"
+// Add this include at the top with the others
+#include "PowerSupplyOperations.h"
 #include <memory>
 #include <chrono>       // For timestamp
 #include <sstream>      // For stringstream
@@ -556,6 +558,69 @@ namespace AuroraProcesses {
   }
 
 
+  // Add this include at the top with the others
+#include "PowerSupplyOperations.h"
+
+// Add this new function in the namespace
+  std::unique_ptr<SequenceStep> BuildAuroraSimplePowerSupplyTest(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI) {
+
+    auto sequence = std::make_unique<SequenceStep>("Aurora Simple Power Supply Test", machineOps);
+
+    // 1. Start prompt
+    sequence->AddOperation(UserPromptOperation::CreateBasic(
+      "Simple Power Supply Test",
+      "Starting Simple Power Supply test.\n\n"
+      "This will:\n"
+      "• Turn on power supply\n"
+      "• Set voltage to 3.3V\n"
+      "• Read voltage and current\n"
+      "• Turn off power supply\n\n"
+      "Device: PS1\n"
+      "Click Yes to start.",
+      promptUI));
+
+    // 2. Set voltage to 3.3V with 0.5A current limit
+    sequence->AddOperation(std::make_shared<PS_SetVoltageOperation>(
+      3.3f, 0.5f, "KS-001", "Set_3V3"));
+
+    // 3. Turn on power supply
+    sequence->AddOperation(std::make_shared<PS_EnableOutputOperation>(
+      true, "KS-001", 1000));  // 1 second delay after turn on
+
+    // 4. Read measurements
+    sequence->AddOperation(std::make_shared<PS_ReadMeasurementOperation>(
+      "KS-001", true, "3V3_Measurement"));
+
+    // 5. Wait a bit with output on
+    sequence->AddOperation(std::make_shared<SMUWaitOperation>(2000, "Output stable at 3.3V"));
+
+    // 6. Read measurements again
+    sequence->AddOperation(std::make_shared<PS_ReadMeasurementOperation>(
+      "KS-001", true, "3V3_Stable_Measurement"));
+
+    // 7. Turn off power supply
+    sequence->AddOperation(std::make_shared<PS_EnableOutputOperation>(
+      false, "KS-001", 500));
+
+    // 8. Completion message
+    sequence->AddOperation(UserPromptOperation::CreateBasic(
+      "Simple Power Supply Test Complete",
+      "Simple Power Supply test completed!\n\n"
+      "✓ Power supply turned on\n"
+      "✓ Voltage set to 3.3V\n"
+      "✓ Measurements recorded\n"
+      "✓ Power supply turned off\n\n"
+      "Check logs for measurement values.",
+      promptUI));
+
+    return sequence;
+  }
+
+
+
+
   // ============================================================================
   // WRAPPER FUNCTIONS - Match ProcessRegistry signature
   // ============================================================================
@@ -583,6 +648,11 @@ namespace AuroraProcesses {
     MachineOperations& machineOps, UserPromptUI& promptUI) {
     return BuildSweepSPDTest(machineOps, promptUI);
 	}
+
+  std::unique_ptr<SequenceStep> WrapperAuroraSimplePowerSupply(
+    MachineOperations& machineOps, UserPromptUI& promptUI) {
+    return BuildAuroraSimplePowerSupplyTest(machineOps, promptUI);
+  }
 
   // ============================================================================
   // UPDATED REGISTRATION with Both Aurora Processes
@@ -629,6 +699,13 @@ namespace AuroraProcesses {
       "Aurora SPD sweep tests - voltage/current sweeps",
       true,
       WrapperSweepSPD
+    );
+    registry.RegisterProcess(
+      "Aurora_SimplePowerSupply",
+      "Aurora_Core",
+      "Aurora Simple Power Supply test - basic on/off/measure",
+      true,
+      WrapperAuroraSimplePowerSupply
     );
 
     printf("Aurora Processes: Successfully Register Processes\n");

@@ -354,6 +354,14 @@ public:
 		m_cameraManager = manager;
 	}
 
+	void SetPowerSupplyManager(PowerSupplyManager* manager) {
+		m_powerSupplyManager = manager;
+	}
+
+	PowerSupplyManager* GetPowerSupplyManager() {
+		return m_powerSupplyManager;
+	}
+
 	// Camera exposure control methods
 	bool ApplyCameraExposureForNode(const std::string& nodeId);
 	bool ApplyDefaultCameraExposure();
@@ -582,7 +590,7 @@ protected:
 	CameraManager* m_cameraManager;  // Optional camera manager
 	// Add these member variables
 	VisionCameraExposureManager* m_visionExposureManager = nullptr;
-
+	PowerSupplyManager* m_powerSupplyManager = nullptr;
 
 
 	// Helper methods

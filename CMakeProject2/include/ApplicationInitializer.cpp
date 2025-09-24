@@ -693,6 +693,16 @@ bool ApplicationInitializer::CreateMachineOps(HardwareManagers& hw, Operations& 
       ops.machine->SetCameraManager(hw.camera.get());
     }
 
+    if(hw.powerSupplyManager)
+    {
+      ops.machine->SetPowerSupplyManager(hw.powerSupplyManager.get());
+      logger->LogInfo("MachineOperations created WITH Power Supply support");
+    }
+    else
+    {
+      logger->LogInfo("MachineOperations created WITHOUT Power Supply support");
+		}
+
     return true;
   }
 
