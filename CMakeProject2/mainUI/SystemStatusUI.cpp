@@ -126,8 +126,8 @@ void SystemStatusUI::RunSystemCheck() {
       {"IOConfig", true},
       {"Pneumatic", true},
       {"MachineOps", true},
-      {"MotionOps", true},
-      {"IOOps", true}
+      {"MotionOps", false},
+      {"IOOps", false}
   };
 
   // Check Core Services
@@ -181,6 +181,7 @@ void SystemStatusUI::RunSystemCheck() {
   checkModule("Instruments", "Keithley 2400", context.GetKeithley());
   checkModule("Instruments", "Keithley 6482", context.GetKeithley6482());
   //checkModule("Instruments", "SPD Power Supply", context.GetSPDPowerSupply());
+	checkModule("Instruments", "Power Supply", context.GetPowerSupply());
 
   checkModule("Data Services", "DataClient", context.GetDataClient());
   checkModule("Data Services", "Database", context.GetDatabaseManager());

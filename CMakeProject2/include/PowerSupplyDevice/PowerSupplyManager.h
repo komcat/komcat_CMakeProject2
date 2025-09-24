@@ -44,6 +44,10 @@ private:
 
   // Add this helper method in private section:
   std::shared_ptr<IPowerSupplyDevice> CreateDeviceFromConfig(const nlohmann::json& deviceConfig);
+
+
+  void DebugPrintDevices() const;
+
 public:
   PowerSupplyManager() = default;
   virtual ~PowerSupplyManager();

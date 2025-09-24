@@ -27,6 +27,7 @@
 #include "DatumUI.h"  // ADD THIS LINE - Include new DatumUI class
 #include "ModuleAlignmentUI.h"
 #include "mainUI/SPDPowerSupplyUI.h"
+#include "include/PowerSupplyDevice/PowerSupplyUI.h"
 
 
 // Forward declarations
@@ -85,7 +86,8 @@ public:
     TCP_DATA_MANAGER,
     CLD101X_EQUIPMENT,    // RENAMED from CLD101X_TEC
     SMU_MANAGER,
-    SPD_POWER_SUPPLY  // ADD THIS
+    SPD_POWER_SUPPLY,  // ADD THIS
+    POWER_SUPPLY
   };
 
   enum class VisionSubPage {
@@ -202,6 +204,7 @@ private:
   std::unique_ptr<DatumUI> m_datumUI;
 	std::unique_ptr<CLD101xEquipmentUI> m_cld101xEquipmentUI;
   std::unique_ptr<SPDPowerSupplyUI> m_spdPowerSupplyUI;
+	std::unique_ptr<PowerSupplyUI> m_powerSupplyUI;
 
   // Utility members
   ImFont* m_imguiFont = nullptr;
@@ -256,5 +259,5 @@ private:
   void RenderGlobalJogWindow();
   void CreateIOControlPanel();
 
-
+	void RenderPowerSupplyUI();
 };

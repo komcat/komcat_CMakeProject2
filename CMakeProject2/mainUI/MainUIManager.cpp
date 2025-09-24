@@ -190,6 +190,12 @@ void MainUIManager::InitializeUIComponents() {
 		m_moduleAlignmentUI->SetProductReferenceManager(productReferenceManager);
 	}
 
+
+	// ADD THIS LINE - Create PowerSupplyUI
+	m_powerSupplyUI = std::make_unique<PowerSupplyUI>();
+	logger->LogInfo("MainUIManager: PowerSupplyUI created");
+
+
 	logger->LogInfo("MainUIManager: Base UI components created");
 }
 // MainUIManager.cpp - Complete methods to ADD or UPDATE
@@ -289,9 +295,9 @@ void MainUIManager::ConnectUIToServices() {
 			m_cameraPanelUI = std::make_unique<UICameraPanel>(*cameraManager);
 		}
 
-	
 
-		if(m_moduleAlignmentUI)
+
+		if (m_moduleAlignmentUI)
 			m_moduleAlignmentUI->SetCameraManager(cameraManager);
 
 		// Setup vision panel connections
@@ -355,6 +361,31 @@ void MainUIManager::ConnectUIToServices() {
 
 		}
 
+		// NOW THIS WILL ACTUALLY EXECUTE because m_powerSupplyUI exists!
+		if (m_powerSupplyUI) {
+			// Connect to MachineOperations' PowerSupplyManager
+			PowerSupplyManager* psManager = machineOps->GetPowerSupplyManager();
+			if (psManager) {
+				m_powerSupplyUI->SetPowerSupplyManager(psManager);
+
+				// Initialize with config if the manager needs it
+				// (only if not already initialized by MachineOperations)
+				//if (psManager->GetDeviceCount() == 0) {
+				//	// Try to initialize with config file
+				//	if (m_powerSupplyUI->Initialize("power_supply_config.json")) {
+				//		logger->LogInfo("PowerSupplyUI: Initialized with config file");
+				//	}
+				//	else {
+				//		logger->LogWarning("PowerSupplyUI: Failed to load config file");
+				//	}
+				//}
+
+				logger->LogInfo("PowerSupplyUI connected to MachineOperations");
+			}
+			else {
+				logger->LogWarning("PowerSupplyManager not available in MachineOperations");
+			}
+		}
 
 
 		logger->LogInfo("MainUIManager: Run Page UI connected");
@@ -367,7 +398,7 @@ void MainUIManager::ConnectUIToServices() {
 		}
 	}
 
-	if (machineOps)	{
+	if (machineOps) {
 		uiConfigVisualizer->SetMachineOperations(machineOps);
 		m_visionPanelUI->SetMachineOperations(machineOps);
 	}
@@ -436,6 +467,11 @@ void MainUIManager::RenderUI() {
 	if (m_promptUI) {
 		m_promptUI->Render();
 	}
+
+	//if(m_powerSupplyUI && m_powerSupplyUI->IsVisible()) // Render Power Supply UI if visible
+	//{
+	//	m_powerSupplyUI->Render();
+	//}
 }
 
 // Update RenderBackButton() to handle Data Instrument sub-pages
@@ -712,6 +748,9 @@ void MainUIManager::RenderBreadcrumbs() {
 			// Update RenderBreadcrumbs() - add SPD breadcrumb:
 		case DataInstrumentSubPage::SPD_POWER_SUPPLY:
 			breadcrumb += " > SPD Power Supply";
+			break;
+		case DataInstrumentSubPage::POWER_SUPPLY:
+			breadcrumb += " > Generic Power Supply";
 			break;
 		default:
 			break;
@@ -1234,6 +1273,10 @@ void MainUIManager::RenderDataInstrumentPage() {
 	if (ImGui::Button("5. SPD Power Supply", ImVec2(250, 50))) {
 		currentDataInstrumentSubPage = DataInstrumentSubPage::SPD_POWER_SUPPLY;
 	}
+
+	if(ImGui::Button("6. Generic Power Supply", ImVec2(250, 50))) {
+		currentDataInstrumentSubPage = DataInstrumentSubPage::POWER_SUPPLY;
+	}
 }
 
 
@@ -1265,6 +1308,8 @@ void MainUIManager::RenderDataInstrumentSubPage() {
 	case DataInstrumentSubPage::SPD_POWER_SUPPLY:  // ADD THIS
 		RenderSPDPowerSupplyPage();
 		break;
+	case DataInstrumentSubPage::POWER_SUPPLY:
+		RenderPowerSupplyUI();
 	default:
 		break;
 	}
@@ -2160,5 +2205,20 @@ void MainUIManager::RenderSPDPowerSupplyPage() {
 		ImGui::Spacing();
 		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "SPD UI not initialized");
 		ImGui::Text("SPD Power Supply Manager may not be available.");
+	}
+}
+
+void MainUIManager::RenderPowerSupplyUI() {
+	if (m_powerSupplyUI) {
+		m_powerSupplyUI->Show(); // Make sure window is shown!
+		m_powerSupplyUI->Render();
+	}
+	else {
+		ImGui::SetWindowFontScale(1.5f);
+		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Power Supply Control");
+		ImGui::SetWindowFontScale(1.0f);
+		ImGui::Spacing();
+		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Power Supply UI not initialized");
+		ImGui::Text("Power Supply Manager may not be available.");
 	}
 }

@@ -821,12 +821,19 @@ bool PowerSupplyManager::RunQuickDeviceTest(const std::string& deviceId) {
   return voltageOk;
 }
 
-// Modified Initialize method using the refactored test:
+
+// Also update Initialize to avoid duplicate loading:
 bool PowerSupplyManager::Initialize(const std::string& configFile) {
-  // Clear any existing devices
+  // Clear any existing devices FIRST
   if (devices.size() > 0) {
+    LogMessage("INFO", "Clearing existing devices before initialization");
     DisconnectAllDevices();
-    devices.clear();
+
+    // Clear the device map
+    {
+      std::lock_guard<std::mutex> lock(managerMutex);
+      devices.clear();
+    }
   }
 
   // Check if config file exists
@@ -842,7 +849,7 @@ bool PowerSupplyManager::Initialize(const std::string& configFile) {
   }
   file.close();
 
-  // Load configuration
+  // Load configuration (this adds devices)
   if (!LoadConfiguration(configFile)) {
     LogMessage("ERROR", "Failed to load power supply configuration from: " + configFile);
     return false;
@@ -872,7 +879,6 @@ bool PowerSupplyManager::Initialize(const std::string& configFile) {
     }
   }
 
-  // Summary
   if (connectedCount > 0) {
     LogMessage("INFO", "Successfully connected to " + std::to_string(connectedCount) + " devices");
     LogMessage("INFO", std::to_string(testedCount) + "/" + std::to_string(connectedCount) +
@@ -880,6 +886,21 @@ bool PowerSupplyManager::Initialize(const std::string& configFile) {
   }
 
   return true;
+}
+
+
+// Debug helper - add this method to PowerSupplyManager to check device list:
+void PowerSupplyManager::DebugPrintDevices() const {
+  std::lock_guard<std::mutex> lock(managerMutex);
+  LogMessage("DEBUG", "=== PowerSupplyManager Device List ===");
+  LogMessage("DEBUG", "Total devices: " + std::to_string(devices.size()));
+
+  for (const auto& [id, entry] : devices) {
+    LogMessage("DEBUG", "  Device ID: " + id +
+      ", Name: " + entry->deviceName +
+      ", Connected: " + (entry->status.connected ? "Yes" : "No"));
+  }
+  LogMessage("DEBUG", "=====================================");
 }
 
 bool PowerSupplyManager::LoadConfiguration(const std::string& configFile) {
@@ -897,17 +918,11 @@ bool PowerSupplyManager::LoadConfiguration(const std::string& configFile) {
     // Load default settings
     if (config.contains("defaultSettings")) {
       auto settings = config["defaultSettings"];
-
       if (settings.contains("threadSafeMode")) {
         SetThreadSafe(settings["threadSafeMode"].get<bool>());
-        LogMessage("DEBUG", "Thread-safe mode: " +
-          std::string(IsThreadSafe() ? "enabled" : "disabled"));
       }
-
       if (settings.contains("defaultTimeoutMs")) {
-        int timeout = settings["defaultTimeoutMs"].get<int>();
-        SetDefaultTimeout(timeout);
-        LogMessage("DEBUG", "Default timeout: " + std::to_string(timeout) + "ms");
+        SetDefaultTimeout(settings["defaultTimeoutMs"].get<int>());
       }
     }
 
@@ -923,6 +938,13 @@ bool PowerSupplyManager::LoadConfiguration(const std::string& configFile) {
     for (const auto& deviceConfig : config["devices"]) {
       try {
         std::string deviceId = deviceConfig["id"].get<std::string>();
+
+        // CHECK FOR DUPLICATE - Skip if device already exists
+        if (HasDevice(deviceId)) {
+          LogMessage("WARNING", "Device " + deviceId + " already exists, skipping duplicate");
+          continue;
+        }
+
         std::string deviceName = deviceConfig["name"].get<std::string>();
         std::string deviceType = deviceConfig["type"].get<std::string>();
         bool autoConnect = deviceConfig.value("autoConnect", false);
@@ -952,14 +974,11 @@ bool PowerSupplyManager::LoadConfiguration(const std::string& configFile) {
 
           LogMessage("INFO", "✓ Added device: " + deviceName + " [" + deviceId + "]");
           successCount++;
-
         }
         else {
-          LogMessage("ERROR", "✗ Failed to create device: " + deviceName +
-            " (type: " + deviceType + " may not be supported)");
+          LogMessage("ERROR", "✗ Failed to create device: " + deviceName);
           failCount++;
         }
-
       }
       catch (const std::exception& e) {
         LogMessage("ERROR", "Exception processing device: " + std::string(e.what()));
@@ -967,16 +986,12 @@ bool PowerSupplyManager::LoadConfiguration(const std::string& configFile) {
       }
     }
 
-    if (successCount > 0) {
-      LogMessage("INFO", "Successfully loaded " + std::to_string(successCount) + " devices");
-    }
-
+    LogMessage("INFO", "Successfully loaded " + std::to_string(successCount) + " devices");
     if (failCount > 0) {
       LogMessage("WARNING", "Failed to load " + std::to_string(failCount) + " devices");
     }
 
     return successCount > 0;
-
   }
   catch (const std::exception& e) {
     LogMessage("ERROR", "Failed to parse power supply config: " + std::string(e.what()));
@@ -984,7 +999,6 @@ bool PowerSupplyManager::LoadConfiguration(const std::string& configFile) {
     return false;
   }
 }
-
 
 
 
