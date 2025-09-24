@@ -1,14 +1,14 @@
 {
   "devices": [
     {
-      "name": "Siglent-main",
-      "id": "SPD-001",
-      "type": "Siglent_SPD1305X",
+      "name": "Keysight-E36103B",
+      "id": "KS-001",
+      "type": "Keysight_E36103B",
       "connectionType": "USB",
-      "resourceString": "USB0::0xF4EC::0x1410::SPD13DCQ7R0719::INSTR",
+      "resourceString": "USB0::0x2A8D::0x1602::MY58200108::INSTR",
       "maxChannels": 1,
       "autoConnect": true,
-      "description": "Siglent SPD1305X single channel power supply"
+      "description": "Keysight E36103B single channel power supply (20V, 2A, 40W)"
     }
   ],
   "defaultSettings": {

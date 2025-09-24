@@ -782,7 +782,7 @@ add_executable(uaa3App
    "include/PowerSupplyDevice/Siglent/siglent_power_supply.h" 
    "include/PowerSupplyDevice/Siglent/siglent_power_supply.cpp" 
    #"test_siglent_power_supply.cpp"
-   )
+    "include/PowerSupplyDevice/KeysightE36103B/KeysightE36103B.h" "include/PowerSupplyDevice/KeysightE36103B/KeysightE36103B.cpp" "test_keysight_e36103b.cpp")
 
 
 
@@ -799,6 +799,9 @@ add_executable(test_power_supply
     "test_siglent_power_supply.cpp"
     "include/PowerSupply/SPDPowerSupply.h"
     "include/PowerSupply/SPDPowerSupply.cpp"
+ "include/PowerSupplyDevice/KeysightE36103B/KeysightE36103B.h"
+ "include/PowerSupplyDevice/KeysightE36103B/KeysightE36103B.cpp"
+
 )
 
 # Include directories for test_power_supply
@@ -830,6 +833,48 @@ endif()
 
 
 
+  # ============================================
+# Power Supply System Keysight Test Executable
+# ============================================
+add_executable(test_power_supply_e36103b
+    "include/PowerSupplyDevice/PowerSupplyManager.cpp"
+    "include/PowerSupplyDevice/MockPowerSupplyDevice.cpp"
+    "include/FileResultStorage.cpp"
+    "include/PowerSupplyDevice/Siglent/siglent_power_supply.h" 
+    "include/PowerSupplyDevice/Siglent/siglent_power_supply.cpp" 
+    "include/PowerSupply/SPDPowerSupply.h"
+    "include/PowerSupply/SPDPowerSupply.cpp"
+    "include/PowerSupplyDevice/KeysightE36103B/KeysightE36103B.h"
+    "include/PowerSupplyDevice/KeysightE36103B/KeysightE36103B.cpp"
+    "test_keysight_e36103b.cpp"
+)
+
+# Include directories for test_power_supply
+target_include_directories(test_power_supply_e36103b PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/PowerSupplyDevice
+    ${INCL_DIR}
+    ${VISA_INCLUDE_DIR}
+)
+
+# Link libraries for test_power_supply
+target_link_libraries(test_power_supply_e36103b PRIVATE
+    nlohmann_json::nlohmann_json
+    ${VISA_LIBRARY}
+)
+
+# Set C++ standard for test_power_supply
+set_target_properties(test_power_supply_e36103b PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+)
+
+# For Windows, set console subsystem for the test executable
+if(WIN32 AND MSVC)
+    set_target_properties(test_power_supply_e36103b PROPERTIES
+        LINK_FLAGS "/SUBSYSTEM:CONSOLE"
+    )
+endif()
 
 
 
