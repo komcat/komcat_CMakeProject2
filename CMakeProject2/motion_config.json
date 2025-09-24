@@ -991,6 +991,21 @@
       "installAxes": "X Y Z",
       "typeController": "ACS"
     },
+    "xy-table": {
+      "Id": 4,
+      "IpAddress": "192.168.0.60",
+      "IsEnabled": true,
+      "Name": "xy-table",
+      "Port": 701,
+      "Positions": {
+        "home": {
+          "x": 0.0,
+          "y": 0.0
+        }
+      },
+      "installAxes": "X Y",
+      "typeController": "ACS"
+    },
     "hex-bottom": {
       "Id": 1,
       "IpAddress": "192.168.0.20",
