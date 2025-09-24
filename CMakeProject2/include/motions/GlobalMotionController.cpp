@@ -359,24 +359,65 @@ void GlobalMotionController::EmergencyStopGlobal() {
   }
 }
 
+// In GlobalMotionController.cpp
 std::vector<std::string> GlobalMotionController::GetAvailableDevices() const {
   std::vector<std::string> devices;
-  for (const auto& [deviceId, matrix] : m_transformMatrices) {
-    devices.push_back(deviceId);
+
+  // Get connected PI devices (hexapods)
+  if (m_piController) {
+    auto piDevices = m_piController->GetConnectedDeviceNames();
+    for (const auto& device : piDevices) {
+      // Only add if has transformation matrix
+      if (m_transformMatrices.find(device) != m_transformMatrices.end()) {
+        devices.push_back(device);
+      }
+    }
   }
+
+  // Get connected ACS devices (gantries)
+  if (m_acsController) {
+    auto acsDevices = m_acsController->GetConnectedDeviceNames();
+    for (const auto& device : acsDevices) {
+      // Only add if has transformation matrix
+      if (m_transformMatrices.find(device) != m_transformMatrices.end()) {
+        devices.push_back(device);
+      }
+    }
+  }
+
   return devices;
 }
 
 bool GlobalMotionController::IsDeviceAvailable(const std::string& deviceId) const {
-  return m_transformMatrices.find(deviceId) != m_transformMatrices.end();
+  // Check if device has transformation matrix
+  if (m_transformMatrices.find(deviceId) == m_transformMatrices.end()) {
+    return false;
+  }
+
+  // Check if device is connected via appropriate controller
+  if (IsPIDevice(deviceId) && m_piController) {
+    auto connectedDevices = m_piController->GetConnectedDeviceNames();
+    return std::find(connectedDevices.begin(), connectedDevices.end(), deviceId) != connectedDevices.end();
+  }
+  else if (IsACSDevice(deviceId) && m_acsController) {
+    auto connectedDevices = m_acsController->GetConnectedDeviceNames();
+    return std::find(connectedDevices.begin(), connectedDevices.end(), deviceId) != connectedDevices.end();
+  }
+
+  return false;
 }
+
+
 
 bool GlobalMotionController::IsPIDevice(const std::string& deviceId) const {
   return deviceId.find("hex") != std::string::npos;
 }
 
+//use keyword gantry and table for ACS devices.
+
 bool GlobalMotionController::IsACSDevice(const std::string& deviceId) const {
-  return deviceId.find("gantry") != std::string::npos;
+  return (deviceId.find("gantry") != std::string::npos) ||
+    (deviceId.find("table") != std::string::npos);
 }
 
 void GlobalMotionController::LogStatus(const std::string& message) const {

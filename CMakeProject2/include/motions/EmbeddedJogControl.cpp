@@ -119,26 +119,28 @@ void EmbeddedJogControl::Render(const std::string& title) {
 
 
 void EmbeddedJogControl::RenderDeviceSelector() {
-  const char* devices[] = { "Hex-Left", "Hex-Right", "Hex-Bottom", "Gantry" };
+  // Get actual connected devices
+  auto availableDevices = m_motionController.GetAvailableDevices();
 
-  ImGui::Text("Device:");
-  ImGui::SameLine();
-  ImGui::SetNextItemWidth(m_compactMode ? 100 : 150);
+  if (availableDevices.empty()) {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No devices connected");
+    return;
+  }
 
-  if (ImGui::Combo("##Device", &m_jogState.selectedDevice, devices, 4)) {
-    m_jogState.activeDeviceId = GetDeviceIdFromSelection(m_jogState.selectedDevice);
+  // Build device name array for combo box
+  std::vector<const char*> deviceNames;
+  for (const auto& device : availableDevices) {
+    deviceNames.push_back(device.c_str());
+  }
+
+  // Combo box with actual devices
+  if (ImGui::Combo("##Device", &m_jogState.selectedDevice,
+    deviceNames.data(), deviceNames.size())) {
+    m_jogState.activeDeviceId = availableDevices[m_jogState.selectedDevice];
     UpdateStatus("Switched to " + m_jogState.activeDeviceId);
   }
-
-  // Show device status
-  ImGui::SameLine();
-  if (m_motionController.IsDeviceAvailable(m_jogState.activeDeviceId)) {
-    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Ready");
-  }
-  else {
-    ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.2f, 1.0f), "Offline");
-  }
 }
+
 
 void EmbeddedJogControl::RenderStepControls() {
   ImGui::Text("Step Size:");

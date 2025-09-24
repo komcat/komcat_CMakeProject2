@@ -85,6 +85,26 @@ public:
   bool acsc_StopAllBuffers(const std::string& deviceName);
   bool acsc_IsBufferRunning(const std::string& deviceName, int bufferNumber);
 
+
+  // Add to acs_controller_manager.h
+  std::vector<std::string> GetDeviceNames() const {
+    std::vector<std::string> names;
+    for (const auto& [name, controller] : m_controllers) {
+      names.push_back(name);
+    }
+    return names;
+  }
+
+  std::vector<std::string> GetConnectedDeviceNames() const {
+    std::vector<std::string> names;
+    for (const auto& [name, controller] : m_controllers) {
+      if (controller && controller->IsConnected()) {
+        names.push_back(name);
+      }
+    }
+    return names;
+  }
+
 private:
   MotionConfigManager& m_configManager;
   std::map<std::string, std::unique_ptr<ACSController>> m_controllers;
