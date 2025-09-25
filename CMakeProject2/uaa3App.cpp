@@ -54,7 +54,7 @@
 #include "include/vision/VisionCameraExposureUI.h"
 #include "include/data/DUTDatabaseViewerUI.h"
 #include "SystemStatusUI.h"
-
+#include "JsonEditorUI.h"
 
 // Keep your debug function as-is
 bool g_deugMode = false; // Global debug mode flag
@@ -603,6 +603,9 @@ int main(int argc, char* argv[])
 	}
 
 
+	auto jsoneditorUI = std::make_unique<JsonEditorUI>();
+	menuManager->RegisterUI("json_editor", jsoneditorUI.get(), "System");
+
 
 	// ===========================================
 	// PHASE 4: MAIN RENDER LOOP
@@ -702,6 +705,10 @@ int main(int argc, char* argv[])
 
 		if (psTestUI) {
 			psTestUI->Render();
+		}
+
+		if(jsoneditorUI){
+			jsoneditorUI->Render();
 		}
 
 
