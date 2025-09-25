@@ -1,16 +1,16 @@
-// JsonEditorUI.cpp
+﻿// JsonEditorUI.cpp
 #include "JsonEditorUI.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>
 #include <algorithm>
+#include <set>
 
 namespace fs = std::filesystem;
 
 JsonEditorUI::JsonEditorUI() {
   ScanForJsonFiles();
 }
-
 
 void JsonEditorUI::Render() {
   if (!m_visible) return;
@@ -62,7 +62,6 @@ void JsonEditorUI::Render() {
   }
   ImGui::End();
 }
-
 
 void JsonEditorUI::RenderFileList() {
   ImGui::Text("JSON Files");
@@ -118,10 +117,21 @@ void JsonEditorUI::RenderEditor() {
   if (m_contentModified) {
     ImGui::SameLine();
     ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "(Modified)");
+    if (!m_modifiedLines.empty()) {
+      ImGui::SameLine();
+      ImGui::Text("- %zu lines changed", m_modifiedLines.size());
+    }
   }
+
+  // Options
+  ImGui::SameLine(ImGui::GetWindowWidth() - 300);
+  ImGui::Checkbox("Line Numbers", &m_showLineNumbers);
+  ImGui::SameLine();
+  ImGui::Checkbox("Highlight Changes", &m_highlightChanges);
+
   ImGui::Separator();
 
-  // Text editor
+  // Text editor with line numbers
   static char editBuffer[1024 * 64]; // 64KB buffer
 
   // Copy content to buffer on file load (one-time)
@@ -132,13 +142,78 @@ void JsonEditorUI::RenderEditor() {
     lastSelectedIndex = m_selectedFileIndex;
   }
 
-  // Multi-line text input
+  // Push monospace font if available for better code editing
+  ImFont* monoFont = nullptr;
+  if (m_monospacedFont) {
+    monoFont = m_monospacedFont;
+    ImGui::PushFont(monoFont);
+  }
+
   ImVec2 availSize = ImGui::GetContentRegionAvail();
+
+  // Create a child window for the editor area
+  ImGui::BeginChild("EditorArea", availSize, false, ImGuiWindowFlags_HorizontalScrollbar);
+
+  if (m_showLineNumbers) {
+    // Split current content into lines for display
+    m_currentLines = SplitIntoLines(editBuffer);
+
+    // Calculate line number column width
+    int maxLineNum = (std::max)(50, static_cast<int>(m_currentLines.size()));
+    float lineNumWidth = (std::max)(70.0f, ImGui::CalcTextSize(std::to_string(maxLineNum).c_str()).x + 35);
+
+    // Line numbers column
+    ImGui::BeginChild("LineNumbers", ImVec2(lineNumWidth, -1), false);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+
+    // Get scroll position from main editor
+    float scrollY = ImGui::GetScrollY();
+    ImGui::SetScrollY(scrollY);
+
+    for (size_t i = 0; i < m_currentLines.size(); ++i) {
+      bool isModified = m_modifiedLines.find(static_cast<int>(i)) != m_modifiedLines.end();
+
+      if (isModified && m_highlightChanges) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.0f, 1.0f)); // Yellow for modified
+        ImGui::Text("%3zu %s", i + 1, reinterpret_cast<const char*>(u8"🔥")); // UTF-8 bullet
+        ImGui::PopStyleColor();
+      }
+      else {
+        ImGui::Text("%3zu  ", i + 1);
+      }
+    }
+
+    ImGui::PopStyleColor();
+    ImGui::EndChild();
+
+    ImGui::SameLine();
+
+    // Vertical separator
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+    ImGui::BeginChild("VSep", ImVec2(1, -1), true);
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+
+    ImGui::SameLine();
+
+    // Calculate remaining width for editor
+    availSize.x = availSize.x - lineNumWidth - 10;
+  }
+
+  // Main text editor
   if (ImGui::InputTextMultiline("##editor", editBuffer, sizeof(editBuffer),
     availSize,
     ImGuiInputTextFlags_AllowTabInput)) {
     m_editorContent = editBuffer;
     m_contentModified = true;
+    UpdateLineTracking();  // Update which lines have changed
+  }
+
+  ImGui::EndChild(); // EditorArea
+
+  // Pop font if we pushed one
+  if (monoFont) {
+    ImGui::PopFont();
   }
 }
 
@@ -220,8 +295,14 @@ void JsonEditorUI::LoadJsonFile(const std::string& filepath) {
     std::stringstream buffer;
     buffer << file.rdbuf();
     m_editorContent = buffer.str();
+    m_originalContent = m_editorContent;  // Store original for change tracking
     m_currentFilePath = filepath;
     m_contentModified = false;
+
+    // Reset line tracking
+    m_originalLines = SplitIntoLines(m_originalContent);
+    m_currentLines = m_originalLines;
+    m_modifiedLines.clear();
 
     SetStatusMessage("Loaded: " + filepath);
 
@@ -248,6 +329,10 @@ void JsonEditorUI::SaveJsonFile() {
     file.close();
 
     m_contentModified = false;
+    m_originalContent = m_editorContent;  // Update original after save
+    m_originalLines = SplitIntoLines(m_originalContent);
+    m_modifiedLines.clear();  // Clear modified lines after save
+
     SetStatusMessage("Saved: " + m_currentFilePath);
 
   }
@@ -292,9 +377,15 @@ void JsonEditorUI::SaveJsonFileAs() {
 void JsonEditorUI::CreateNewFile() {
   // Reset editor with default JSON content
   m_editorContent = "{\n    \"name\": \"value\"\n}";
+  m_originalContent = m_editorContent;
   m_currentFilePath = "";
   m_contentModified = true;
   m_selectedFileIndex = -1;
+
+  // Reset line tracking
+  m_originalLines = SplitIntoLines(m_originalContent);
+  m_currentLines = m_originalLines;
+  m_modifiedLines.clear();
 
   SetStatusMessage("New file created - use Save As to save");
 }
@@ -302,4 +393,56 @@ void JsonEditorUI::CreateNewFile() {
 void JsonEditorUI::SetStatusMessage(const std::string& msg) {
   m_statusMessage = msg;
   m_statusMessageTimer = 3.0f; // Show for 3 seconds
+}
+
+// Add these new helper methods
+std::vector<std::string> JsonEditorUI::SplitIntoLines(const std::string& text) {
+  std::vector<std::string> lines;
+  std::stringstream ss(text);
+  std::string line;
+
+  while (std::getline(ss, line)) {
+    lines.push_back(line);
+  }
+
+  // If text ends with newline, getline won't add an empty line at the end
+  if (!text.empty() && text.back() == '\n') {
+    lines.push_back("");
+  }
+
+  // Ensure at least one line
+  if (lines.empty()) {
+    lines.push_back("");
+  }
+
+  return lines;
+}
+
+void JsonEditorUI::UpdateLineTracking() {
+  m_currentLines = SplitIntoLines(m_editorContent);
+  m_modifiedLines.clear();
+
+  // Compare current lines with original lines
+  size_t maxLines = (std::max)(m_currentLines.size(), m_originalLines.size());
+
+  for (size_t i = 0; i < maxLines; ++i) {
+    bool modified = false;
+
+    if (i >= m_originalLines.size()) {
+      // New line added
+      modified = true;
+    }
+    else if (i >= m_currentLines.size()) {
+      // Line deleted (we'd need more sophisticated tracking for this)
+      modified = true;
+    }
+    else if (m_currentLines[i] != m_originalLines[i]) {
+      // Line content changed
+      modified = true;
+    }
+
+    if (modified) {
+      m_modifiedLines.insert(static_cast<int>(i));
+    }
+  }
 }

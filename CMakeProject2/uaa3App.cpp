@@ -271,14 +271,17 @@ int main(int argc, char* argv[])
 	bool emojiLoaded = false;
 
 	// Load main font (try project font, fallback to default)
-	if (std::filesystem::exists("assets/fonts/NotoSans-Regular.ttf")) {
-		mainFont = io.Fonts->AddFontFromFileTTF("assets/fonts/NotoSans-Regular.ttf", 20.0f);
+	if (std::filesystem::exists("assets/fonts/SUSEMono-Regular.ttf")) {
+		mainFont = io.Fonts->AddFontFromFileTTF("assets/fonts/SUSEMono-Regular.ttf", 20.0f);
 		std::cout << "✅ Loaded NotoSans-Regular" << std::endl;
 	}
 	else {
 		mainFont = io.Fonts->AddFontDefault();
 		std::cout << "📝 Using default font" << std::endl;
 	}
+
+	ImFont* monoFont = io.Fonts->AddFontFromFileTTF("assets/fonts/JetBrainsMono-Regular.ttf", 24.0f);
+
 
 	// Try to merge emoji font
 	static ImFontConfig emojiConfig;
@@ -605,7 +608,7 @@ int main(int argc, char* argv[])
 
 	auto jsoneditorUI = std::make_unique<JsonEditorUI>();
 	menuManager->RegisterUI("json_editor", jsoneditorUI.get(), "System");
-
+	jsoneditorUI->SetMonospacedFont(monoFont);
 
 	// ===========================================
 	// PHASE 4: MAIN RENDER LOOP

@@ -1225,6 +1225,9 @@ add_custom_command(TARGET uaa3App POST_BUILD
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/JuliaMono-Regular.ttf"
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/NotoSans-Regular.ttf"
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/NotoColorEmoji.ttf"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/JetBrainsMono-Regular.ttf"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/SUSEMono-Regular.ttf"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/SUSEMono-Medium.ttf"
     #"${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Roboto-Regular.ttf"
     $<TARGET_FILE_DIR:uaa3App>/assets/fonts/
     COMMENT "Copying font files to build directory"

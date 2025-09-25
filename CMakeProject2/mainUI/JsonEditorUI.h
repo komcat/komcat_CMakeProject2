@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <set>
 #include <filesystem>
 #include "../mainUI/MenuManager_uaa3.h"
 #include "imgui.h"
@@ -20,10 +21,16 @@ public:
   const std::string& GetName() const override { return m_name; }
   void Toggle() override { m_visible = !m_visible; }
 
+  // Font setting
+  void SetMonospacedFont(ImFont* font) { m_monospacedFont = font; }
+
 private:
   // UI state
   bool m_visible = false;
   std::string m_name = "JSON Editor";
+
+  // Font
+  ImFont* m_monospacedFont = nullptr;
 
   // File management
   std::vector<std::string> m_jsonFiles;
@@ -32,10 +39,18 @@ private:
 
   // Editor content
   std::string m_editorContent;
+  std::string m_originalContent;  // Store original content to track changes
   bool m_contentModified = false;
+
+  // Line tracking
+  std::vector<std::string> m_currentLines;
+  std::vector<std::string> m_originalLines;
+  std::set<int> m_modifiedLines;  // Track which lines have changed
 
   // UI layout
   float m_leftPanelWidth = 250.0f;
+  bool m_showLineNumbers = true;
+  bool m_highlightChanges = true;
 
   // Helper methods
   void ScanForJsonFiles();
@@ -43,6 +58,8 @@ private:
   void SaveJsonFile();
   void SaveJsonFileAs();
   void CreateNewFile();
+  void UpdateLineTracking();
+  std::vector<std::string> SplitIntoLines(const std::string& text);
 
   // UI rendering methods
   void RenderFileList();
