@@ -10,6 +10,17 @@
       "Port": 55555,
       "Unit": "A",
       "displayUnitSuffix": true
+    },
+    {
+      "AutoConnect": true,
+      "Description": "Keithley2400 smu",
+      "Host": "127.0.0.55",
+      "Id": "smu1-A",
+      "LogData": true,
+      "Name": "Current reading",
+      "Port": 55555,
+      "Unit": "A",
+      "displayUnitSuffix": true
     }
   ],
   "Settings": {
