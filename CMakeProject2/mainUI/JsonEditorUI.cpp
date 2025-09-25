@@ -160,7 +160,7 @@ void JsonEditorUI::RenderEditor() {
 
     // Calculate line number column width
     int maxLineNum = (std::max)(50, static_cast<int>(m_currentLines.size()));
-    float lineNumWidth = (std::max)(70.0f, ImGui::CalcTextSize(std::to_string(maxLineNum).c_str()).x + 35);
+    float lineNumWidth = (std::max)(70.0f, ImGui::CalcTextSize(std::to_string(maxLineNum).c_str()).x + 100);
 
     // Line numbers column
     ImGui::BeginChild("LineNumbers", ImVec2(lineNumWidth, -1), false);
