@@ -132,12 +132,12 @@ void RealtimeChartPage::Render() {
   // Render buttons
   renderButtons();
 
-  // Render chart (bottom 40%)
+  // Render chart with integrated channel list (bottom 40%)
   renderChart();
 
-  // MOVED: Render channel selector LAST so it appears on top
-  renderChannelSelector();
+  // REMOVED: renderChannelSelector() - now integrated into renderChart()
 }
+
 
 void RealtimeChartPage::updateData() {
   if (!m_dataStore) {
@@ -220,43 +220,54 @@ void RealtimeChartPage::renderDigitalDisplay() {
   int screenHeight = GetScreenHeight();
   int topSectionHeight = (int)(screenHeight * 0.6f);
 
-  // Background for digital display area
+  // Background for entire top section
   DrawRectangle(0, 70, screenWidth, topSectionHeight - 70, Color{ 30, 30, 40, 255 });
-  DrawRectangleLines(0, 70, screenWidth, topSectionHeight - 70, DARKGRAY);
 
-  // Channel name
-  int channelFontSize = 24;
+  // Calculate column widths
+  int leftColWidth = (int)(screenWidth * 0.15f);
+  int middleColWidth = (int)(screenWidth * 0.70f);
+  int rightColWidth = (int)(screenWidth * 0.15f);
+
+  int leftColX = 0;
+  int middleColX = leftColWidth;
+  int rightColX = leftColWidth + middleColWidth;
+
+  // Font setup
   Font font = m_fontLoaded ? m_customFont : GetFontDefault();
 
+  // === LEFT COLUMN (15%) - Left Hex Buttons ===
+  Rectangle leftColumn = { (float)leftColX, 70, (float)leftColWidth, (float)(topSectionHeight - 70) };
+  DrawRectangleLinesEx(leftColumn, 1, Color{ 50, 50, 60, 255 });
+
+  // === MIDDLE COLUMN (70%) - Value Display ===
+  Rectangle middleColumn = { (float)middleColX, 70, (float)middleColWidth, (float)(topSectionHeight - 70) };
+  DrawRectangleLinesEx(middleColumn, 1, Color{ 50, 50, 60, 255 });
+
+  // Channel name at top of middle column
+  int channelFontSize = 24;
   Vector2 channelTextSize = MeasureTextEx(font, m_dataChannel.c_str(), channelFontSize, 2);
-  int channelX = screenWidth / 2 - (int)channelTextSize.x / 2;
+  int channelX = middleColX + middleColWidth / 2 - (int)channelTextSize.x / 2;
   DrawTextEx(font, m_dataChannel.c_str(), Vector2{ (float)channelX, 100 }, channelFontSize, 2, LIGHTGRAY);
 
-  // Digital value display - FIXED DECIMAL POINT POSITION
+  // Large digital value display
   int valueFontSize = 120;
   int valueY = topSectionHeight / 2 - valueFontSize / 2;
 
-  // Format with FIXED width: always ± + 3 characters before decimal (spaces instead of leading zeros)
+  // Format value
   char signChar = (m_scaledValue >= 0) ? '+' : '-';
   float absScaledValue = std::abs(m_scaledValue);
-
-  // Format whole and fractional parts
   int wholePart = (int)std::floor(absScaledValue);
   int fracPart = (int)std::round((absScaledValue - std::floor(absScaledValue)) * 1000);
 
-  // Create fixed-width display: sign + 3 characters (right-aligned with spaces)
   char valueText[64];
   snprintf(valueText, sizeof(valueText), "%c%3d.%03d %s",
     signChar, wholePart, fracPart, m_displayUnit.c_str());
 
-  // Calculate position to center the decimal point
-  // The decimal is always at position 4: ± + 3 chars + .
-  char beforeDecimal[8] = "+   ";  // Fixed width: sign + 3 spaces (worst case)
+  // Center the decimal point in middle column
+  char beforeDecimal[8] = "+   ";
   beforeDecimal[0] = signChar;
   Vector2 beforeDecimalSize = MeasureTextEx(font, beforeDecimal, valueFontSize, 2);
-
-  // Position text so decimal point is at screen center
-  int decimalCenterX = screenWidth / 2;
+  int decimalCenterX = middleColX + middleColWidth / 2;
   int valueX = decimalCenterX - (int)beforeDecimalSize.x;
 
   // Value color based on magnitude
@@ -270,114 +281,120 @@ void RealtimeChartPage::renderDigitalDisplay() {
 
   DrawTextEx(font, valueText, Vector2{ (float)valueX, (float)valueY }, valueFontSize, 2, valueColor);
 
-  // Data points info
+  // === RIGHT COLUMN (15%) - Right Hex Buttons ===
+  Rectangle rightColumn = { (float)rightColX, 70, (float)rightColWidth, (float)(topSectionHeight - 70) };
+  DrawRectangleLinesEx(rightColumn, 1, Color{ 50, 50, 60, 255 });
+
+  // Data points info at bottom of middle column
   char infoText[32];
   snprintf(infoText, sizeof(infoText), "Points: %zu", m_dataBuffer.size());
-  DrawText(infoText, 20, topSectionHeight - 30, 16, DARKGRAY);
+  DrawText(infoText, middleColX + 20, topSectionHeight - 30, 16, DARKGRAY);
 }
-
 
 
 // Add this debug version to RealtimeChartPage.cpp - add at the start of renderButtons method:
 
+
 void RealtimeChartPage::renderButtons() {
-    int screenWidth = GetScreenWidth();
-    int screenHeight = GetScreenHeight();
-    int topSectionHeight = (int)(screenHeight * 0.6f);
+  int screenWidth = GetScreenWidth();
+  int screenHeight = GetScreenHeight();
+  int topSectionHeight = (int)(screenHeight * 0.6f);
 
-    // Debug screen dimensions
-    static bool dimensionsLogged = false;
-    if (!dimensionsLogged) {
-        std::cout << "[DEBUG] Screen dimensions: " << screenWidth << "x" << screenHeight << std::endl;
-        std::cout << "[DEBUG] Top section height: " << topSectionHeight << std::endl;
-        if (m_logger) {
-            m_logger->LogInfo("Screen: " + std::to_string(screenWidth) + "x" + std::to_string(screenHeight) +
-                ", TopSection: " + std::to_string(topSectionHeight));
-        }
-        dimensionsLogged = true;
-    }
+  // Calculate column dimensions
+  int leftColWidth = (int)(screenWidth * 0.15f);
+  int middleColWidth = (int)(screenWidth * 0.70f);
+  int rightColWidth = (int)(screenWidth * 0.15f);
 
-    // Button dimensions
-    int buttonWidth = 120;
-    int buttonHeight = 50;
-    int buttonSpacing = 20;
+  int leftColX = 0;
+  int middleColX = leftColWidth;
+  int rightColX = leftColWidth + middleColWidth;
 
-    // Left side buttons
-    int leftX = 30;
-    int leftCoarseY = 300;
-    int leftFineY = leftCoarseY + buttonHeight + buttonSpacing;
+  // Button dimensions - make them fit nicely in columns
+  int buttonWidth = leftColWidth - 40;  // Leave margin on sides
+  int buttonHeight = 60;
+  int buttonSpacing = 20;
 
-    Rectangle leftCoarseBtn = { (float)leftX, (float)leftCoarseY, (float)buttonWidth, (float)buttonHeight };
-    Rectangle leftFineBtn = { (float)leftX, (float)leftFineY, (float)buttonWidth, (float)buttonHeight };
+  // Calculate vertical centering for buttons
+  int totalButtonHeight = (buttonHeight * 2) + buttonSpacing;
+  int buttonStartY = 70 + ((topSectionHeight - 70) / 2) - (totalButtonHeight / 2);
 
-    // Right side buttons  
-    int rightX = screenWidth - buttonWidth - 30;
-    int rightCoarseY = 300;
-    int rightFineY = rightCoarseY + buttonHeight + buttonSpacing;
+  // === LEFT COLUMN BUTTONS ===
+  int leftButtonX = leftColX + 20;  // 20px margin from edge
 
-    Rectangle rightCoarseBtn = { (float)rightX, (float)rightCoarseY, (float)buttonWidth, (float)buttonHeight };
-    Rectangle rightFineBtn = { (float)rightX, (float)rightFineY, (float)buttonWidth, (float)buttonHeight };
+  Rectangle leftCoarseBtn = {
+      (float)leftButtonX,
+      (float)buttonStartY,
+      (float)buttonWidth,
+      (float)buttonHeight
+  };
 
-    // Debug button coordinates
-    static bool coordsLogged = false;
-    if (!coordsLogged) {
-        std::cout << "[DEBUG] Button coordinates:" << std::endl;
-        std::cout << "  Left Coarse: " << leftCoarseBtn.x << "," << leftCoarseBtn.y << " " << leftCoarseBtn.width << "x" << leftCoarseBtn.height << std::endl;
-        std::cout << "  Right Coarse: " << rightCoarseBtn.x << "," << rightCoarseBtn.y << " " << rightCoarseBtn.width << "x" << rightCoarseBtn.height << std::endl;
-        std::cout << "  Left Fine: " << leftFineBtn.x << "," << leftFineBtn.y << " " << leftFineBtn.width << "x" << leftFineBtn.height << std::endl;
-        std::cout << "  Right Fine: " << rightFineBtn.x << "," << rightFineBtn.y << " " << rightFineBtn.width << "x" << rightFineBtn.height << std::endl;
+  Rectangle leftFineBtn = {
+      (float)leftButtonX,
+      (float)(buttonStartY + buttonHeight + buttonSpacing),
+      (float)buttonWidth,
+      (float)buttonHeight
+  };
 
-        if (m_logger) {
-            m_logger->LogInfo("Button coords - LeftCoarse: " + std::to_string(leftCoarseBtn.x) + "," + std::to_string(leftCoarseBtn.y));
-            m_logger->LogInfo("Button coords - RightCoarse: " + std::to_string(rightCoarseBtn.x) + "," + std::to_string(rightCoarseBtn.y));
-        }
-        coordsLogged = true;
-    }
+  // === RIGHT COLUMN BUTTONS ===
+  int rightButtonX = rightColX + 20;  // 20px margin from edge
 
-    // Stop button (center, below value display)
-    int stopWidth = 100;
-    int stopHeight = 40;
-    int stopX = screenWidth / 2 - stopWidth / 2;
-    int stopY = topSectionHeight - 80;
+  Rectangle rightCoarseBtn = {
+      (float)rightButtonX,
+      (float)buttonStartY,
+      (float)buttonWidth,
+      (float)buttonHeight
+  };
 
-    Rectangle stopBtn = { (float)stopX, (float)stopY, (float)stopWidth, (float)stopHeight };
+  Rectangle rightFineBtn = {
+      (float)rightButtonX,
+      (float)(buttonStartY + buttonHeight + buttonSpacing),
+      (float)buttonWidth,
+      (float)buttonHeight
+  };
 
-    // Draw buttons
-    drawButton(leftCoarseBtn, "Left Coarse", m_leftCoarseState);
-    drawButton(leftFineBtn, "Left Fine", m_leftFineState);
-    drawButton(rightCoarseBtn, "Right Coarse", m_rightCoarseState);
-    drawButton(rightFineBtn, "Right Fine", m_rightFineState);
+  // === MIDDLE COLUMN - STOP BUTTON ===
+  int stopWidth = 140;
+  int stopHeight = 50;
+  int stopX = middleColX + (middleColWidth / 2) - (stopWidth / 2);
+  int stopY = topSectionHeight - 100;  // Position near bottom of middle section
 
-    // Stop button (always red when any scanning is active)
-    bool anyScanning = (m_leftCoarseState == ScanState::SCANNING ||
-        m_leftFineState == ScanState::SCANNING ||
-        m_rightCoarseState == ScanState::SCANNING ||
-        m_rightFineState == ScanState::SCANNING);
+  Rectangle stopBtn = { (float)stopX, (float)stopY, (float)stopWidth, (float)stopHeight };
 
-    Color stopColor = anyScanning ? RED : DARKGRAY;
-    Vector2 mousePos = GetMousePosition();
-    bool stopHovered = CheckCollisionPointRec(mousePos, stopBtn);
+  // Draw all buttons
+  drawButton(leftCoarseBtn, "Left Coarse", m_leftCoarseState);
+  drawButton(leftFineBtn, "Left Fine", m_leftFineState);
+  drawButton(rightCoarseBtn, "Right Coarse", m_rightCoarseState);
+  drawButton(rightFineBtn, "Right Fine", m_rightFineState);
 
-    if (stopHovered && anyScanning) {
-        stopColor = MAROON; // Darker red when hovered
-    }
+  // Stop button
+  bool anyScanning = (m_leftCoarseState == ScanState::SCANNING ||
+    m_leftFineState == ScanState::SCANNING ||
+    m_rightCoarseState == ScanState::SCANNING ||
+    m_rightFineState == ScanState::SCANNING);
 
-    DrawRectangleRec(stopBtn, stopColor);
-    DrawRectangleLinesEx(stopBtn, 2, BLACK);
+  Color stopColor = anyScanning ? RED : DARKGRAY;
+  Vector2 mousePos = GetMousePosition();
+  bool stopHovered = CheckCollisionPointRec(mousePos, stopBtn);
 
-    // Draw stop button text with custom font
-    Font font = m_fontLoaded ? m_customFont : GetFontDefault();
-    const char* stopText = "STOP";
-    int fontSize = 16;
-    Vector2 stopTextSize = MeasureTextEx(font, stopText, fontSize, 2);
-    Vector2 stopTextPos = {
-        stopBtn.x + stopBtn.width / 2 - stopTextSize.x / 2,
-        stopBtn.y + stopBtn.height / 2 - stopTextSize.y / 2
-    };
+  if (stopHovered && anyScanning) {
+    stopColor = MAROON;
+  }
 
-    DrawTextEx(font, stopText, stopTextPos, fontSize, 2, WHITE);
+  DrawRectangleRec(stopBtn, stopColor);
+  DrawRectangleLinesEx(stopBtn, 2, BLACK);
+
+  // Stop button text
+  Font font = m_fontLoaded ? m_customFont : GetFontDefault();
+  const char* stopText = "STOP";
+  int fontSize = 20;
+  Vector2 stopTextSize = MeasureTextEx(font, stopText, fontSize, 2);
+  Vector2 stopTextPos = {
+      stopBtn.x + stopBtn.width / 2 - stopTextSize.x / 2,
+      stopBtn.y + stopBtn.height / 2 - stopTextSize.y / 2
+  };
+
+  DrawTextEx(font, stopText, stopTextPos, fontSize, 2, WHITE);
 }
-
 
 
 bool RealtimeChartPage::drawButton(Rectangle rect, const char* text, ScanState state) {
@@ -418,139 +435,79 @@ bool RealtimeChartPage::drawButton(Rectangle rect, const char* text, ScanState s
 
 // Add this debug version to RealtimeChartPage.cpp - replace the handleButtonClicks method:
 
+
 void RealtimeChartPage::handleButtonClicks() {
-    // Add general debug at the start
-    static int clickCheckCount = 0;
-    clickCheckCount++;
+  int screenWidth = GetScreenWidth();
+  int screenHeight = GetScreenHeight();
+  int topSectionHeight = (int)(screenHeight * 0.6f);
 
-    if (clickCheckCount % 300 == 0) { // Every 5 seconds at 60fps
-        std::cout << "[DEBUG] handleButtonClicks called " << clickCheckCount << " times" << std::endl;
-        if (m_logger) {
-            m_logger->LogInfo("handleButtonClicks called " + std::to_string(clickCheckCount) + " times");
-        }
+  // Calculate column dimensions (same as renderButtons)
+  int leftColWidth = (int)(screenWidth * 0.15f);
+  int middleColWidth = (int)(screenWidth * 0.70f);
+  int rightColWidth = (int)(screenWidth * 0.15f);
+
+  int leftColX = 0;
+  int middleColX = leftColWidth;
+  int rightColX = leftColWidth + middleColWidth;
+
+  // Button dimensions (same as renderButtons)
+  int buttonWidth = leftColWidth - 40;
+  int buttonHeight = 60;
+  int buttonSpacing = 20;
+
+  int totalButtonHeight = (buttonHeight * 2) + buttonSpacing;
+  int buttonStartY = 70 + ((topSectionHeight - 70) / 2) - (totalButtonHeight / 2);
+
+  // Left column buttons
+  int leftButtonX = leftColX + 20;
+  Rectangle leftCoarseBtn = { (float)leftButtonX, (float)buttonStartY, (float)buttonWidth, (float)buttonHeight };
+  Rectangle leftFineBtn = { (float)leftButtonX, (float)(buttonStartY + buttonHeight + buttonSpacing), (float)buttonWidth, (float)buttonHeight };
+
+  // Right column buttons
+  int rightButtonX = rightColX + 20;
+  Rectangle rightCoarseBtn = { (float)rightButtonX, (float)buttonStartY, (float)buttonWidth, (float)buttonHeight };
+  Rectangle rightFineBtn = { (float)rightButtonX, (float)(buttonStartY + buttonHeight + buttonSpacing), (float)buttonWidth, (float)buttonHeight };
+
+  // Stop button
+  int stopWidth = 140;
+  int stopHeight = 50;
+  int stopX = middleColX + (middleColWidth / 2) - (stopWidth / 2);
+  int stopY = topSectionHeight - 100;
+  Rectangle stopBtn = { (float)stopX, (float)stopY, (float)stopWidth, (float)stopHeight };
+
+  Vector2 mousePos = GetMousePosition();
+
+  // Check button clicks
+  if (drawButton(leftCoarseBtn, "Left Coarse", m_leftCoarseState)) {
+    if (m_leftCoarseState == ScanState::IDLE) {
+      startHexLeftCoarseScan();
     }
+  }
 
-    int screenWidth = GetScreenWidth();
-    int screenHeight = GetScreenHeight();
-    int topSectionHeight = (int)(screenHeight * 0.6f);
-
-    // Button dimensions (same as in renderButtons)
-    int buttonWidth = 120;
-    int buttonHeight = 50;
-    int buttonSpacing = 20;
-
-    // Left side buttons
-    int leftX = 30;
-    int leftCoarseY = 300;  // Make sure this matches renderButtons
-    int leftFineY = leftCoarseY + buttonHeight + buttonSpacing;
-
-    Rectangle leftCoarseBtn = { (float)leftX, (float)leftCoarseY, (float)buttonWidth, (float)buttonHeight };
-    Rectangle leftFineBtn = { (float)leftX, (float)leftFineY, (float)buttonWidth, (float)buttonHeight };
-
-    // Right side buttons  
-    int rightX = screenWidth - buttonWidth - 30;
-    int rightCoarseY = 300;  // Make sure this matches renderButtons
-    int rightFineY = rightCoarseY + buttonHeight + buttonSpacing;
-
-    Rectangle rightCoarseBtn = { (float)rightX, (float)rightCoarseY, (float)buttonWidth, (float)buttonHeight };
-    Rectangle rightFineBtn = { (float)rightX, (float)rightFineY, (float)buttonWidth, (float)buttonHeight };
-
-    // Stop button
-    int stopWidth = 100;
-    int stopHeight = 40;
-    int stopX = screenWidth / 2 - stopWidth / 2;
-    int stopY = topSectionHeight - 80;
-
-    Rectangle stopBtn = { (float)stopX, (float)stopY, (float)stopWidth, (float)stopHeight };
-
-    // Debug mouse position
-    Vector2 mousePos = GetMousePosition();
-    static Vector2 lastMousePos = { -1, -1 };
-
-    if (mousePos.x != lastMousePos.x || mousePos.y != lastMousePos.y) {
-        if (clickCheckCount % 60 == 0) { // Every second
-            std::cout << "[DEBUG] Mouse position: " << mousePos.x << ", " << mousePos.y << std::endl;
-        }
-        lastMousePos = mousePos;
+  if (drawButton(leftFineBtn, "Left Fine", m_leftFineState)) {
+    if (m_leftFineState == ScanState::IDLE) {
+      startHexLeftFineScan();
     }
+  }
 
-    // Debug mouse clicks
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        std::cout << "[DEBUG] MOUSE CLICK DETECTED at: " << mousePos.x << ", " << mousePos.y << std::endl;
-        if (m_logger) {
-            m_logger->LogInfo("Mouse click detected at: " + std::to_string(mousePos.x) + ", " + std::to_string(mousePos.y));
-        }
+  if (drawButton(rightCoarseBtn, "Right Coarse", m_rightCoarseState)) {
+    if (m_rightCoarseState == ScanState::IDLE) {
+      startHexRightCoarseScan();
     }
+  }
 
-    // Check button clicks with detailed debug
-    if (drawButton(leftCoarseBtn, "Left Coarse", m_leftCoarseState)) {
-        std::cout << "[DEBUG] LEFT COARSE BUTTON CLICKED!" << std::endl;
-        if (m_logger) {
-            m_logger->LogInfo("LEFT COARSE BUTTON CLICKED!");
-        }
-        if (m_leftCoarseState == ScanState::IDLE) {
-            startHexLeftCoarseScan();
-        }
+  if (drawButton(rightFineBtn, "Right Fine", m_rightFineState)) {
+    if (m_rightFineState == ScanState::IDLE) {
+      startHexRightFineScan();
     }
+  }
 
-    if (drawButton(leftFineBtn, "Left Fine", m_leftFineState)) {
-        std::cout << "[DEBUG] LEFT FINE BUTTON CLICKED!" << std::endl;
-        if (m_logger) {
-            m_logger->LogInfo("LEFT FINE BUTTON CLICKED!");
-        }
-        if (m_leftFineState == ScanState::IDLE) {
-            startHexLeftFineScan();
-        }
-    }
-
-    if (drawButton(rightCoarseBtn, "Right Coarse", m_rightCoarseState)) {
-        std::cout << "[DEBUG] RIGHT COARSE BUTTON CLICKED!" << std::endl;
-        if (m_logger) {
-            m_logger->LogInfo("RIGHT COARSE BUTTON CLICKED!");
-        }
-        if (m_rightCoarseState == ScanState::IDLE) {
-            startHexRightCoarseScan();
-        }
-    }
-
-    if (drawButton(rightFineBtn, "Right Fine", m_rightFineState)) {
-        std::cout << "[DEBUG] RIGHT FINE BUTTON CLICKED!" << std::endl;
-        if (m_logger) {
-            m_logger->LogInfo("RIGHT FINE BUTTON CLICKED!");
-        }
-        if (m_rightFineState == ScanState::IDLE) {
-            startHexRightFineScan();
-        }
-    }
-
-    // Stop button click
-    bool stopHovered = CheckCollisionPointRec(mousePos, stopBtn);
-    if (stopHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        std::cout << "[DEBUG] STOP BUTTON CLICKED!" << std::endl;
-        if (m_logger) {
-            m_logger->LogInfo("STOP BUTTON CLICKED!");
-        }
-        stopAllScanning();
-    }
-
-    // Debug button hover states
-    static bool lastLeftCoarseHover = false;
-    static bool lastRightCoarseHover = false;
-
-    bool leftCoarseHover = CheckCollisionPointRec(mousePos, leftCoarseBtn);
-    bool rightCoarseHover = CheckCollisionPointRec(mousePos, rightCoarseBtn);
-
-    if (leftCoarseHover != lastLeftCoarseHover) {
-        std::cout << "[DEBUG] Left Coarse hover: " << (leftCoarseHover ? "IN" : "OUT") << std::endl;
-        lastLeftCoarseHover = leftCoarseHover;
-    }
-
-    if (rightCoarseHover != lastRightCoarseHover) {
-        std::cout << "[DEBUG] Right Coarse hover: " << (rightCoarseHover ? "IN" : "OUT") << std::endl;
-        lastRightCoarseHover = rightCoarseHover;
-    }
+  // Stop button click
+  bool stopHovered = CheckCollisionPointRec(mousePos, stopBtn);
+  if (stopHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    stopAllScanning();
+  }
 }
-
 
 void RealtimeChartPage::startHexLeftCoarseScan() {
   if (m_logger) {
@@ -666,50 +623,164 @@ void RealtimeChartPage::updateButtonStatesFromScanning() {
 }
 
 void RealtimeChartPage::renderChart() {
-  if (m_dataBuffer.empty()) return;
   int screenWidth = GetScreenWidth();
   int screenHeight = GetScreenHeight();
   int topSectionHeight = (int)(screenHeight * 0.6f);
   int chartY = topSectionHeight;
   int chartHeight = screenHeight - topSectionHeight;
-  // Chart area background
-  Rectangle chartArea = { 20, (float)chartY + 20, (float)screenWidth - 40, (float)chartHeight - 40 };
-  DrawRectangleRec(chartArea, Color{ 20, 20, 30, 255 });
-  DrawRectangleLinesEx(chartArea, 2, DARKGRAY);
 
-  // Chart title with custom font
+  // Calculate split areas
+  int leftPanelWidth = (int)(screenWidth * 0.25f);  // 25% for channel list
+  int rightPanelWidth = screenWidth - leftPanelWidth;  // 75% for chart
+
+  // LEFT PANEL - Channel List (25%)
+  Rectangle leftPanel = { 10, (float)chartY + 10, (float)leftPanelWidth - 20, (float)chartHeight - 20 };
+  DrawRectangleRec(leftPanel, Color{ 25, 25, 35, 255 });
+  DrawRectangleLinesEx(leftPanel, 2, DARKGRAY);
+
+  // Title for channel list
   Font font = m_fontLoaded ? m_customFont : GetFontDefault();
+  DrawTextEx(font, "Channels", Vector2{ leftPanel.x + 10, leftPanel.y + 10 }, 16, 2, WHITE);
+  DrawLineEx(Vector2{ leftPanel.x + 5, leftPanel.y + 35 },
+    Vector2{ leftPanel.x + leftPanel.width - 5, leftPanel.y + 35 }, 1, GRAY);
+
+  // Render channel list
+  float listY = leftPanel.y + 45;
+  int itemHeight = 30;
+  Vector2 mousePos = GetMousePosition();
+
+  for (size_t i = 0; i < m_availableChannels.size(); ++i) {
+    Rectangle channelRect = { leftPanel.x + 5, listY, leftPanel.width - 10, (float)itemHeight };
+
+    // Check if this is the selected channel
+    bool isSelected = (m_dataChannel == m_availableChannels[i]);
+    bool isHovered = CheckCollisionPointRec(mousePos, channelRect);
+
+    // Background color based on state
+    Color bgColor = isSelected ? Color{ 60, 90, 120, 255 } :
+      (isHovered ? Color{ 50, 50, 60, 255 } : Color{ 35, 35, 45, 255 });
+
+    DrawRectangleRec(channelRect, bgColor);
+    if (isSelected) {
+      DrawRectangleLinesEx(channelRect, 2, Color{ 100, 150, 200, 255 });
+    }
+
+    // Channel name
+    DrawTextEx(font, m_availableChannels[i].c_str(),
+      Vector2{ channelRect.x + 10, channelRect.y + 8 },
+      14, 2, isSelected ? WHITE : LIGHTGRAY);
+
+    // Handle click
+    if (isHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+      m_dataChannel = m_availableChannels[i];
+      m_selectedChannelIndex = i;
+      m_dataBuffer.clear();  // Clear data when switching channels
+
+      if (m_logger) {
+        m_logger->LogInfo("Channel selected: " + m_dataChannel);
+      }
+    }
+
+    listY += itemHeight + 2;
+
+    // Stop if we exceed panel bounds
+    if (listY + itemHeight > leftPanel.y + leftPanel.height - 10) {
+      break;
+    }
+  }
+
+  // Show channel count at bottom
+  char channelCount[32];
+  snprintf(channelCount, sizeof(channelCount), "%zu channels", m_availableChannels.size());
+  DrawTextEx(font, channelCount,
+    Vector2{ leftPanel.x + 10, leftPanel.y + leftPanel.height - 25 },
+    12, 2, GRAY);
+
+  // RIGHT PANEL - Chart (75%)
+  Rectangle rightPanel = { (float)leftPanelWidth + 10, (float)chartY + 10,
+                          (float)rightPanelWidth - 30, (float)chartHeight - 20 };
+  DrawRectangleRec(rightPanel, Color{ 20, 20, 30, 255 });
+  DrawRectangleLinesEx(rightPanel, 2, DARKGRAY);
+
+  // Chart title
   const char* titleText = "10 Second History";
-  int titleFontSize = 16;
-  DrawTextEx(font, titleText, Vector2{ 30, (float)chartY + 5 }, titleFontSize, 2, WHITE);
+  DrawTextEx(font, titleText, Vector2{ rightPanel.x + 10, rightPanel.y + 10 }, 16, 2, WHITE);
+
+  // Chart area (with margins for axes)
+  Rectangle chartArea = { rightPanel.x + 50, rightPanel.y + 40,
+                         rightPanel.width - 70, rightPanel.height - 60 };
+
+  // Draw grid
+  int gridLinesX = 10;
+  int gridLinesY = 5;
+
+  for (int i = 0; i <= gridLinesX; i++) {
+    float x = chartArea.x + (chartArea.width / gridLinesX) * i;
+    DrawLineEx(Vector2{ x, chartArea.y },
+      Vector2{ x, chartArea.y + chartArea.height },
+      1, Color{ 50, 50, 60, 100 });
+  }
+
+  for (int i = 0; i <= gridLinesY; i++) {
+    float y = chartArea.y + (chartArea.height / gridLinesY) * i;
+    DrawLineEx(Vector2{ chartArea.x, y },
+      Vector2{ chartArea.x + chartArea.width, y },
+      1, Color{ 50, 50, 60, 100 });
+  }
+
+  // Draw axes
+  DrawLineEx(Vector2{ chartArea.x, chartArea.y + chartArea.height },
+    Vector2{ chartArea.x + chartArea.width, chartArea.y + chartArea.height },
+    2, WHITE);
+  DrawLineEx(Vector2{ chartArea.x, chartArea.y },
+    Vector2{ chartArea.x, chartArea.y + chartArea.height },
+    2, WHITE);
+
+  if (m_dataBuffer.empty()) {
+    // Show "No Data" message
+    const char* noDataText = "No data available";
+    Vector2 textSize = MeasureTextEx(font, noDataText, 20, 2);
+    DrawTextEx(font, noDataText,
+      Vector2{ chartArea.x + chartArea.width / 2 - textSize.x / 2,
+              chartArea.y + chartArea.height / 2 - textSize.y / 2 },
+      20, 2, GRAY);
+    return;
+  }
 
   if (m_dataBuffer.size() < 2) return;
+
   // Find data range
   auto minMaxValue = std::minmax_element(m_dataBuffer.begin(), m_dataBuffer.end(),
     [](const DataPoint& a, const DataPoint& b) { return a.value < b.value; });
   float minValue = minMaxValue.first->value;
   float maxValue = minMaxValue.second->value;
-  // Add some padding to the range
+
+  // Add padding to range
   float range = maxValue - minValue;
-  if (range < 1e-12f) range = 1e-12f; // Prevent division by zero
+  if (range < 1e-12f) range = 1e-12f;
   minValue -= range * 0.1f;
   maxValue += range * 0.1f;
+
   // Get time range
   double minTime = m_dataBuffer.front().timestamp;
   double maxTime = m_dataBuffer.back().timestamp;
   double timeRange = maxTime - minTime;
-  if (timeRange < 0.1) timeRange = 0.1; // Minimum time range
-  // Draw chart lines
+  if (timeRange < 0.1) timeRange = 0.1;
+
+  // Draw the data line
   for (size_t i = 1; i < m_dataBuffer.size(); ++i) {
     const auto& prev = m_dataBuffer[i - 1];
     const auto& curr = m_dataBuffer[i];
-    // Map to screen coordinates
+
+    // Map to chart coordinates
     float x1 = chartArea.x + ((prev.timestamp - minTime) / timeRange) * chartArea.width;
     float y1 = chartArea.y + chartArea.height - ((prev.value - minValue) / (maxValue - minValue)) * chartArea.height;
     float x2 = chartArea.x + ((curr.timestamp - minTime) / timeRange) * chartArea.width;
     float y2 = chartArea.y + chartArea.height - ((curr.value - minValue) / (maxValue - minValue)) * chartArea.height;
+
     DrawLineEx(Vector2{ x1, y1 }, Vector2{ x2, y2 }, 2.0f, LIME);
   }
+
   // Draw current value point
   if (!m_dataBuffer.empty()) {
     const auto& last = m_dataBuffer.back();
@@ -718,18 +789,25 @@ void RealtimeChartPage::renderChart() {
     DrawCircle((int)x, (int)y, 4, RED);
   }
 
-  // Y-axis labels with custom font
+  // Y-axis labels
   auto [scaledMin, unitMin] = getScaledUnit(std::abs(minValue));
   auto [scaledMax, unitMax] = getScaledUnit(std::abs(maxValue));
   char minLabel[32], maxLabel[32];
   snprintf(minLabel, sizeof(minLabel), "%.2f%s", (minValue >= 0) ? scaledMin : -scaledMin, unitMin.c_str());
   snprintf(maxLabel, sizeof(maxLabel), "%.2f%s", (maxValue >= 0) ? scaledMax : -scaledMax, unitMax.c_str());
 
-  int labelFontSize = 12;
-  DrawTextEx(font, maxLabel, Vector2{ 25, (float)chartArea.y + 5 }, labelFontSize, 2, LIGHTGRAY);
-  DrawTextEx(font, minLabel, Vector2{ 25, (float)(chartArea.y + chartArea.height - 15) }, labelFontSize, 2, LIGHTGRAY);
-}
+  DrawTextEx(font, maxLabel, Vector2{ chartArea.x - 45, chartArea.y }, 12, 2, LIGHTGRAY);
+  DrawTextEx(font, minLabel, Vector2{ chartArea.x - 45, chartArea.y + chartArea.height - 15 }, 12, 2, LIGHTGRAY);
 
+  // X-axis time labels
+  DrawTextEx(font, "0s", Vector2{ chartArea.x, chartArea.y + chartArea.height + 5 }, 12, 2, LIGHTGRAY);
+  DrawTextEx(font, "10s", Vector2{ chartArea.x + chartArea.width - 20, chartArea.y + chartArea.height + 5 }, 12, 2, LIGHTGRAY);
+
+  // Data points counter
+  char pointsText[32];
+  snprintf(pointsText, sizeof(pointsText), "Points: %zu", m_dataBuffer.size());
+  DrawTextEx(font, pointsText, Vector2{ rightPanel.x + rightPanel.width - 100, rightPanel.y + 10 }, 12, 2, GRAY);
+}
 
 void RealtimeChartPage::executeRunScanOperation(const std::string& device,
     const std::vector<double>& stepSizes) {
