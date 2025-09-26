@@ -5,6 +5,8 @@
 #include "NewProcesses_SAA3.h"
 #include "ProcessRegistry.h"
 #include "uaa3_process_builders.h"
+#include "ManualAdjustmentOperation.h"
+
 
 namespace SAA3Processes {
 
@@ -136,10 +138,34 @@ namespace SAA3Processes {
         sequence->AddOperation(std::make_shared<ExtendSlideOperation>(
             "Dispenser_Head"));
 
-        sequence->AddOperation(UserPromptOperation::CreateBasic(
-            "Please manual jog to dispense position",
-            "Continue click Yes?",
-            promptUI));
+
+
+        // 8. Wait for dispenser to extend
+        sequence->AddOperation(std::make_shared<WaitOperation>(500));
+
+        // 6. REPLACED WITH ManualAdjustmentOperation
+        auto needleAdjustment = std::make_shared<ManualAdjustmentOperation>(
+          "gantry-main",
+          "Nozzle Position Adjustment",
+          "Use the jog controls to adjust the needle tip to touch the surface.\n"
+          "Be careful not to apply too much pressure.",
+          promptUI,
+          true, true, true  // Only Z axis enabled
+        );
+        needleAdjustment->WithStepSize(0.01)
+          .WithShowPosition(true)
+          .WithChecklist({
+              "Needle is at front of facet",
+              "Needle is at middle of the facet FAU",
+              "Needle doesnot touch the wires"
+            });
+        sequence->AddOperation(needleAdjustment);
+
+
+        //sequence->AddOperation(UserPromptOperation::CreateBasic(
+        //    "Please manual jog to dispense position",
+        //    "Continue click Yes?",
+        //    promptUI));
 
         sequence->AddOperation(std::make_shared<MoveRelativeOperation>(
             "hex-right", "Z", -0.1)); // --> to the left
