@@ -44,6 +44,9 @@ class Keithley2400Server:
         self.consecutive_errors = 0
         self.max_errors = 10
         
+        # Thread tracking
+        self.read_thread = None
+        
         # Setup UI
         self.setup_ui()
         
@@ -254,8 +257,15 @@ class Keithley2400Server:
                             
                             with self.clients_lock:
                                 self.client_sockets.append(client_socket)
+                                client_count = len(self.client_sockets)
                             
-                            print(f"Client connected from {address}")
+                            print(f"[DEBUG] Client connected from {address}. Total clients: {client_count}")
+                            
+                            # Check collection status
+                            with self.collecting_lock:
+                                if self.collecting:
+                                    print(f"[DEBUG] New client connected during active collection")
+                            
                             self.update_client_count()
                             
                         except socket.error as e:
@@ -288,10 +298,15 @@ class Keithley2400Server:
                 try:
                     self.client_sockets.remove(sock)
                     sock.close()
-                    print("Client disconnected")
+                    print(f"[DEBUG] Client disconnected. Remaining clients: {len(self.client_sockets) - 1}")
                     self.update_client_count()
-                except:
-                    pass
+                    
+                    # Check collection status
+                    with self.collecting_lock:
+                        if self.collecting:
+                            print(f"[DEBUG] Collection still active after client disconnect")
+                except Exception as e:
+                    print(f"[DEBUG] Error removing client: {e}")
     
     def update_client_count(self):
         """Update client count display (thread-safe)"""
@@ -369,13 +384,47 @@ class Keithley2400Server:
         self.queue_ui_update(lambda: self.status_label.config(text="Reconnecting..."))
         self.connect_instrument()
     
+    def reset_ui_state(self):
+        """Reset UI to proper state after collection stops"""
+        self.queue_ui_update(lambda: (
+            self.start_btn.config(state='normal'),
+            self.stop_btn.config(state='disabled'),
+            self.status_label.config(text="Stopped - Output OFF"),
+            self.rate_label.config(text="0.0 Hz"),
+            self.rate_status.config(text="(Not collecting)", fg='gray'),
+            self.error_count_label.config(text="0", fg='green')
+        ))
+    
     def start_collection(self):
         """Start data collection with error handling"""
+        print(f"[DEBUG] Start collection requested")
+        
+        # First ensure any previous collection is fully stopped
+        with self.collecting_lock:
+            if self.collecting:
+                print("[DEBUG] Collection already running, ignoring start request")
+                return
+        
+        # Wait for previous thread to finish if it exists
+        if self.read_thread and self.read_thread.is_alive():
+            print("[DEBUG] Previous read thread still alive, waiting for it to finish...")
+            self.read_thread.join(timeout=2.0)
+            if self.read_thread.is_alive():
+                print("[DEBUG] ERROR: Previous thread still running after timeout, cannot start new collection")
+                self.queue_ui_update(lambda: messagebox.showerror(
+                    "Error", "Previous collection still active. Please wait and try again."))
+                return
+            else:
+                print("[DEBUG] Previous thread finished successfully")
+        
         with self.smu_lock:
             if not self.smu:
+                print("[DEBUG] ERROR: SMU not connected")
                 self.queue_ui_update(lambda: messagebox.showerror(
                     "Error", "Keithley not connected. Please reconnect."))
                 return
+        
+        print(f"[DEBUG] Configuring instrument for collection...")
         
         try:
             with self.smu_lock:
@@ -415,35 +464,60 @@ class Keithley2400Server:
             # Start reading thread
             self.read_thread = threading.Thread(target=self.read_current_loop, daemon=True)
             self.read_thread.start()
+            print(f"[DEBUG] Collection started successfully. Thread ID: {self.read_thread.ident}")
             
         except Exception as e:
+            print(f"[DEBUG] ERROR starting collection: {e}")
             self.queue_ui_update(lambda e=e: (
                 self.status_label.config(text=f"Start Error: {str(e)}", fg='red'),
                 messagebox.showerror("Error", f"Failed to start collection: {str(e)}")
             ))
             with self.collecting_lock:
                 self.collecting = False
+            self.reset_ui_state()
     
     def stop_collection(self):
         """Stop data collection safely"""
-        with self.collecting_lock:
-            self.collecting = False
+        print(f"[DEBUG] Stop collection requested")
         
+        # Set flag to stop collection
+        with self.collecting_lock:
+            was_collecting = self.collecting
+            self.collecting = False
+            print(f"[DEBUG] Collection flag set to False (was: {was_collecting})")
+        
+        if not was_collecting:
+            print("[DEBUG] Collection was not running, just resetting UI")
+            self.reset_ui_state()
+            return
+        
+        # Wait for thread to finish with timeout
+        if self.read_thread and self.read_thread.is_alive():
+            thread_id = self.read_thread.ident
+            print(f"[DEBUG] Waiting for read thread {thread_id} to stop...")
+            self.read_thread.join(timeout=2.0)
+            if self.read_thread.is_alive():
+                print(f"[DEBUG] WARNING: Read thread {thread_id} did not stop in time!")
+            else:
+                print(f"[DEBUG] Read thread {thread_id} stopped successfully")
+        else:
+            print("[DEBUG] Read thread was not alive")
+        
+        # Stop instrument output
+        print("[DEBUG] Turning off instrument output...")
         try:
             with self.smu_lock:
                 if self.smu:
                     self.smu.write(':OUTP OFF')
                     self.smu.write(':SOUR:VOLT:LEV 0')  # Set voltage back to 0V
+                    print("[DEBUG] Instrument output turned OFF successfully")
         except Exception as e:
-            print(f"Error stopping collection: {e}")
+            print(f"[DEBUG] ERROR stopping instrument: {e}")
         
-        self.queue_ui_update(lambda: (
-            self.start_btn.config(state='normal'),
-            self.stop_btn.config(state='disabled'),
-            self.status_label.config(text="Stopped - Output OFF"),
-            self.rate_label.config(text="0.0 Hz"),
-            self.rate_status.config(text="(Not collecting)", fg='gray')
-        ))
+        # Reset UI state
+        print("[DEBUG] Resetting UI state")
+        self.reset_ui_state()
+        print("[DEBUG] Stop collection completed")
     
     def update_rate_display(self):
         """Calculate and display the data acquisition rate (thread-safe)"""
@@ -459,92 +533,124 @@ class Keithley2400Server:
     
     def read_current_loop(self):
         """Read current values with comprehensive error handling"""
-        while True:
-            with self.collecting_lock:
-                if not self.collecting:
-                    break
-            
-            try:
-                with self.smu_lock:
-                    if not self.smu:
-                        raise Exception("Instrument disconnected")
-                    
-                    # Read measurement
-                    reading = self.smu.query(':READ?')
-                
-                # Parse reading
-                try:
-                    current = float(reading.strip())
-                except:
-                    # If still getting full format, parse it
-                    values = reading.strip().split(',')
-                    current = float(values[1] if len(values) > 1 else values[0])
-                
-                # Reset error counter on successful read
-                self.consecutive_errors = 0
-                self.queue_ui_update(lambda: self.error_count_label.config(text="0", fg='green'))
-                
-                # Broadcast to TCP clients
-                self.broadcast_value(current)
-                
-                # Format for display
-                value_str, unit = self.format_current(current)
-                
-                # Update UI
-                self.queue_ui_update(lambda v=value_str, u=unit: (
-                    self.current_label.config(text=v),
-                    self.unit_label.config(text=u)
-                ))
-                
-                # Update rate
-                with self.rate_lock:
-                    self.read_count += 1
-                self.update_rate_display()
-                
-                time.sleep(0.001)  # 1ms delay for ~1000Hz max
-                
-            except pyvisa.errors.VisaIOError as e:
-                # VISA communication error
-                self.consecutive_errors += 1
-                self.queue_ui_update(lambda c=self.consecutive_errors: 
-                    self.error_count_label.config(text=str(c), fg='red'))
-                
-                if self.consecutive_errors >= self.max_errors:
-                    error_msg = f"Too many errors ({self.consecutive_errors}). Stopping collection."
-                    print(f"VISA Error: {e}")
-                    self.queue_ui_update(lambda msg=error_msg: (
-                        self.status_label.config(text=msg, fg='red'),
-                        messagebox.showerror("Communication Error", 
-                            "Lost connection to Keithley. Please check connection and restart.")
-                    ))
-                    break
-                
-                time.sleep(0.1)  # Brief pause before retry
-                
-            except Exception as e:
-                # Other errors
-                print(f"Read error: {e}")
-                traceback.print_exc()
-                self.consecutive_errors += 1
-                
-                if self.consecutive_errors >= self.max_errors:
-                    self.queue_ui_update(lambda: self.status_label.config(
-                        text=f"Read Error: {str(e)}", fg='red'))
-                    break
-                
-                time.sleep(0.1)
+        thread_id = threading.current_thread().ident
+        print(f"[DEBUG] Read thread {thread_id} started")
         
-        # Clean up when loop exits
-        with self.collecting_lock:
-            self.collecting = False
-        self.queue_ui_update(self.stop_collection)
+        try:
+            loop_count = 0
+            while True:
+                # Check if we should stop
+                with self.collecting_lock:
+                    if not self.collecting:
+                        print(f"[DEBUG] Read thread {thread_id}: Collection flag is False, stopping read loop")
+                        break
+                
+                loop_count += 1
+                if loop_count % 1000 == 0:  # Log every 1000 iterations
+                    with self.clients_lock:
+                        client_count = len(self.client_sockets)
+                    print(f"[DEBUG] Read thread {thread_id}: Loop iteration {loop_count}, {client_count} clients connected")
+                
+                try:
+                    with self.smu_lock:
+                        if not self.smu:
+                            raise Exception("Instrument disconnected")
+                        
+                        # Read measurement
+                        reading = self.smu.query(':READ?')
+                    
+                    # Parse reading
+                    try:
+                        current = float(reading.strip())
+                    except:
+                        # If still getting full format, parse it
+                        values = reading.strip().split(',')
+                        current = float(values[1] if len(values) > 1 else values[0])
+                    
+                    # Reset error counter on successful read
+                    self.consecutive_errors = 0
+                    self.queue_ui_update(lambda: self.error_count_label.config(text="0", fg='green'))
+                    
+                    # Broadcast to TCP clients (with error handling)
+                    try:
+                        self.broadcast_value(current)
+                    except Exception as e:
+                        print(f"[DEBUG] Broadcast error (non-fatal): {e}")
+                        # Don't stop collection on broadcast errors
+                    
+                    # Format for display
+                    value_str, unit = self.format_current(current)
+                    
+                    # Update UI
+                    self.queue_ui_update(lambda v=value_str, u=unit: (
+                        self.current_label.config(text=v),
+                        self.unit_label.config(text=u)
+                    ))
+                    
+                    # Update rate
+                    with self.rate_lock:
+                        self.read_count += 1
+                    self.update_rate_display()
+                    
+                    time.sleep(0.001)  # 1ms delay for ~1000Hz max
+                    
+                except pyvisa.errors.VisaIOError as e:
+                    # VISA communication error
+                    self.consecutive_errors += 1
+                    self.queue_ui_update(lambda c=self.consecutive_errors: 
+                        self.error_count_label.config(text=str(c), fg='red'))
+                    
+                    if self.consecutive_errors >= self.max_errors:
+                        error_msg = f"Too many VISA errors ({self.consecutive_errors}). Stopping collection."
+                        print(f"[DEBUG] {error_msg}")
+                        print(f"[DEBUG] VISA Error details: {e}")
+                        self.queue_ui_update(lambda msg=error_msg: (
+                            self.status_label.config(text=msg, fg='red'),
+                            messagebox.showerror("Communication Error", 
+                                "Lost connection to Keithley. Please check connection and restart.")
+                        ))
+                        break
+                    
+                    time.sleep(0.1)  # Brief pause before retry
+                    
+                except Exception as e:
+                    # Other errors
+                    if self.consecutive_errors == 0:  # Only log first occurrence
+                        print(f"[DEBUG] Read error (attempt {self.consecutive_errors + 1}/{self.max_errors}): {e}")
+                        traceback.print_exc()
+                    self.consecutive_errors += 1
+                    
+                    if self.consecutive_errors >= self.max_errors:
+                        print(f"[DEBUG] Too many read errors ({self.consecutive_errors}), stopping collection")
+                        self.queue_ui_update(lambda: self.status_label.config(
+                            text=f"Read Error: {str(e)}", fg='red'))
+                        break
+                    
+                    time.sleep(0.1)
+        finally:
+            # Ensure clean exit
+            print(f"[DEBUG] Read thread {thread_id} exiting...")
+            with self.collecting_lock:
+                self.collecting = False
+                print(f"[DEBUG] Read thread {thread_id}: Collection flag set to False on exit")
+            
+            # Ensure UI is reset
+            print(f"[DEBUG] Read thread {thread_id}: Requesting UI reset")
+            self.queue_ui_update(self.reset_ui_state)
+            print(f"[DEBUG] Read thread {thread_id} fully terminated")
     
     def cleanup(self):
         """Clean up resources on exit"""
+        print("Cleaning up...")
         self.server_running = False
         
+        # Stop collection
         with self.collecting_lock:
             self.collecting = False
+        
+        # Wait for read thread to finish
+        if self.read_thread and self.read_thread.is_alive():
+            self.read_thread.join(timeout=2.0)
         
         # Close all client connections
         with self.clients_lock:
