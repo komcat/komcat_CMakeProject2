@@ -780,23 +780,25 @@ add_executable(uaa3App
   #"include/PowerSupplyDevice/test_PowerSupplySystem.cpp" 
   "include/PowerSupplyDevice/PowerSupplyTestUI.h" 
   "include/PowerSupplyDevice/PowerSupplyTestUI.cpp" 
-   "include/PowerSupplyDevice/Siglent/siglent_power_supply.h" 
-   "include/PowerSupplyDevice/Siglent/siglent_power_supply.cpp" 
-   #"test_siglent_power_supply.cpp"
-    "include/PowerSupplyDevice/KeysightE36103B/KeysightE36103B.h"
-    "include/PowerSupplyDevice/KeysightE36103B/KeysightE36103B.cpp"
-    #"test_keysight_e36103b.cpp"
-    "include/PowerSupplyDevice/PowerSupplyOps.h"
-    "include/PowerSupplyDevice/PowerSupplyOps.cpp" 
-    "include/PowerSupplyDevice/PowerSupplyOperations.h"
-      "include/PowerSupplyDevice/PowerSupplyOperations.cpp"
-      "include/PowerSupplyDevice/PowerSupplyUI.h" 
-      "include/PowerSupplyDevice/PowerSupplyUI.cpp" 
-      "mainUI/JsonEditorUI.h" 
-      "mainUI/JsonEditorUI.cpp" 
-      "include/AppSettings.h"
-       "include/AppSettings.cpp"
-       "mainUI/IImguiWindowUI.h" "mainUI/SettingsEditorUI.h" "mainUI/SettingsEditorUI.cpp")
+  "include/PowerSupplyDevice/Siglent/siglent_power_supply.h" 
+  "include/PowerSupplyDevice/Siglent/siglent_power_supply.cpp" 
+  #"test_siglent_power_supply.cpp"
+  "include/PowerSupplyDevice/KeysightE36103B/KeysightE36103B.h"
+  "include/PowerSupplyDevice/KeysightE36103B/KeysightE36103B.cpp"
+  #"test_keysight_e36103b.cpp"
+  "include/PowerSupplyDevice/PowerSupplyOps.h"
+  "include/PowerSupplyDevice/PowerSupplyOps.cpp" 
+  "include/PowerSupplyDevice/PowerSupplyOperations.h"
+  "include/PowerSupplyDevice/PowerSupplyOperations.cpp"
+  "include/PowerSupplyDevice/PowerSupplyUI.h"
+  "include/PowerSupplyDevice/PowerSupplyUI.cpp"
+  "mainUI/JsonEditorUI.h" 
+  "mainUI/JsonEditorUI.cpp"
+  "include/AppSettings.h"
+  "include/AppSettings.cpp"
+  "mainUI/SettingsEditorUI.h"
+  "mainUI/SettingsEditorUI.cpp"
+)
 
 
 
@@ -1239,6 +1241,22 @@ add_custom_command(TARGET uaa3App POST_BUILD
     $<TARGET_FILE_DIR:uaa3App>/assets/fonts/
     COMMENT "Copying font files to build directory"
 )
+
+# Copy icons directory to build output
+add_custom_command(TARGET uaa3App POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory 
+    $<TARGET_FILE_DIR:uaa3App>/assets/icons
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/data.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/default.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/manual.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/manual.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/run.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/vision.png"
+    $<TARGET_FILE_DIR:uaa3App>/assets/icons/
+    COMMENT "Copying icons files to build directory"
+)
+
 
 # Define configuration files to copy
 set(CONFIG_FILES
