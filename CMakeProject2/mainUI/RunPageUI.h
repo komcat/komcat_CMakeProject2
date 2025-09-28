@@ -1,6 +1,6 @@
 // RunPageUI.h - Add Live View camera support
 #pragma once
-
+#include "AppSettings.h"
 #include "ProcessBuilders.h"
 #include "uaa3_process_builders.h"
 #include "machine_operations.h"
@@ -300,4 +300,11 @@ private:
   bool RenderFancyCameraButton();  // Returns true if clicked
 
   float m_panel1ZoomLevel = 1.0f;  // 1.0 = 100%, 0.25 = 25%
+
+
+
+  
+
+	void LoadSpecFromDatabase();
+	void SaveSpecToDatabase();  
 };

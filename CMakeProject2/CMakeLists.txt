@@ -789,7 +789,14 @@ add_executable(uaa3App
     "include/PowerSupplyDevice/PowerSupplyOps.h"
     "include/PowerSupplyDevice/PowerSupplyOps.cpp" 
     "include/PowerSupplyDevice/PowerSupplyOperations.h"
-      "include/PowerSupplyDevice/PowerSupplyOperations.cpp" "include/PowerSupplyDevice/PowerSupplyUI.h" "include/PowerSupplyDevice/PowerSupplyUI.cpp" "mainUI/JsonEditorUI.h" "mainUI/JsonEditorUI.cpp" "include/ops/UserPromptOperation.h")
+      "include/PowerSupplyDevice/PowerSupplyOperations.cpp"
+      "include/PowerSupplyDevice/PowerSupplyUI.h" 
+      "include/PowerSupplyDevice/PowerSupplyUI.cpp" 
+      "mainUI/JsonEditorUI.h" 
+      "mainUI/JsonEditorUI.cpp" 
+
+      "include/AppSettings.h"
+       "include/AppSettings.cpp" "mainUI/RunPageSpecConfig.h")
 
 
 

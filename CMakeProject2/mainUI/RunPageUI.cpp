@@ -25,6 +25,11 @@ RunPageUI::RunPageUI(MachineOperations& machineOps)
 {
   m_logger = Logger::GetInstance();
 
+  // Initialize spec value from database
+  LoadSpecFromDatabase();
+
+  m_logger->LogInfo("RunPageUI: Spec value loaded from database");
+
   // Initialize filter manager
   m_filterManager = std::make_unique<ProcessFilterManager>();
 
@@ -1360,6 +1365,40 @@ void RunPageUI::RenderSpecControl() {
   if (ImGui::Combo("##Unit", &currentUnit, units, IM_ARRAYSIZE(units))) {
     m_specUnit = units[currentUnit];
     UpdateSpecThreshold();
+  }
+
+  // NEW: Save button
+  ImGui::SameLine();
+  if (ImGui::Button("Save", ImVec2(40, 0))) {
+    SaveSpecToDatabase();
+  }
+
+  // NEW: Show save status
+  if (!m_lastCaptureStatus.empty() && m_lastCaptureStatus.find("Spec") != std::string::npos) {
+    ImGui::Spacing();
+    if (m_lastCaptureStatus.find("Error") != std::string::npos) {
+      ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", m_lastCaptureStatus.c_str());
+    }
+    else {
+      ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "%s", m_lastCaptureStatus.c_str());
+    }
+
+    // Clear the status after 3 seconds
+    static auto statusTime = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    static bool statusShown = false;
+
+    if (!statusShown && m_lastCaptureStatus.find("Spec") != std::string::npos) {
+      statusTime = now;
+      statusShown = true;
+    }
+
+    if (statusShown && std::chrono::duration_cast<std::chrono::seconds>(now - statusTime).count() > 3) {
+      if (m_lastCaptureStatus.find("Spec") != std::string::npos) {
+        m_lastCaptureStatus.clear();
+        statusShown = false;
+      }
+    }
   }
 }
 
@@ -4219,4 +4258,94 @@ bool RunPageUI::RenderFancyCameraButton() {
   ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + height + 5));
 
   return clicked;
+}
+
+void RunPageUI::LoadSpecFromDatabase() {
+  auto& settings = AppSettings::getInstance();
+
+  // Create the spec variable if it doesn't exist (default 800uA)
+  if (!settings.exists("ui_settings", "spec_threshold_ua")) {
+    bool created = settings.createFloat("ui_settings", "spec_threshold_ua", 800.0f);
+    if (created) {
+      m_logger->LogInfo("Created default spec threshold: 800uA");
+    }
+    else {
+      m_logger->LogError("Failed to create default spec threshold");
+      // Use hardcoded defaults
+      m_specThreshold = 800e-6f;
+      strcpy_s(m_specInputBuffer, sizeof(m_specInputBuffer), "800");
+      m_specUnit = "uA";
+      return;
+    }
+  }
+
+  // Load the value
+  auto specValue = settings.getFloat("ui_settings", "spec_threshold_ua");
+  if (specValue.has_value()) {
+    // Convert from uA to Amps
+    m_specThreshold = specValue.value() * 1e-6f;
+
+    // Update input buffer to show the loaded value
+    snprintf(m_specInputBuffer, sizeof(m_specInputBuffer), "%.0f", specValue.value());
+    m_specUnit = "uA";
+
+    m_logger->LogInfo("Loaded spec threshold: " + std::to_string(specValue.value()) + "uA");
+  }
+  else {
+    m_logger->LogWarning("Failed to load spec threshold, using default 800uA");
+    m_specThreshold = 800e-6f;
+    strcpy_s(m_specInputBuffer, sizeof(m_specInputBuffer), "800");
+    m_specUnit = "uA";
+  }
+}
+
+
+
+void RunPageUI::SaveSpecToDatabase() {
+  auto& settings = AppSettings::getInstance();
+
+  float specInUA = m_specThreshold * 1e6f;
+  m_logger->LogInfo("SaveSpecToDatabase: Attempting to save " + std::to_string(specInUA) + "uA");
+
+  // Check if variable exists
+  if (settings.exists("ui_settings", "spec_threshold_ua")) {
+    // Try to read as float to check type compatibility
+    auto currentValue = settings.getFloat("ui_settings", "spec_threshold_ua");
+    if (!currentValue.has_value()) {
+      // Variable exists but wrong type - delete and recreate
+      m_logger->LogInfo("SaveSpecToDatabase: Variable has wrong type (BLOB), deleting and recreating as float");
+      settings.deleteVariable("ui_settings", "spec_threshold_ua");
+
+      bool created = settings.createFloat("ui_settings", "spec_threshold_ua", specInUA);
+      if (created) {
+        m_lastCaptureStatus = "Spec threshold saved: " + std::to_string((int)specInUA) + "uA";
+        m_logger->LogInfo("SaveSpecToDatabase: Successfully recreated as float type");
+      }
+      else {
+        m_lastCaptureStatus = "Error: Failed to recreate spec threshold";
+        m_logger->LogError("SaveSpecToDatabase: Failed to recreate as float");
+      }
+      return;
+    }
+  }
+
+  // Variable either doesn't exist or is correct type
+  bool success = false;
+  if (!settings.exists("ui_settings", "spec_threshold_ua")) {
+    success = settings.createFloat("ui_settings", "spec_threshold_ua", specInUA);
+    m_logger->LogInfo("SaveSpecToDatabase: Created new float variable");
+  }
+  else {
+    success = settings.setFloat("ui_settings", "spec_threshold_ua", specInUA);
+    m_logger->LogInfo("SaveSpecToDatabase: Updated existing float variable");
+  }
+
+  if (success) {
+    m_lastCaptureStatus = "Spec threshold saved: " + std::to_string((int)specInUA) + "uA";
+    m_logger->LogInfo("Saved spec threshold: " + std::to_string(specInUA) + "uA");
+  }
+  else {
+    m_lastCaptureStatus = "Error: Failed to save spec threshold";
+    m_logger->LogError("SaveSpecToDatabase: Operation failed");
+  }
 }
