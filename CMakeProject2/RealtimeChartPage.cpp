@@ -245,9 +245,9 @@ void RealtimeChartPage::renderDigitalDisplay() {
 
   // Channel name at top of middle column
   int channelFontSize = 24;
-  Vector2 channelTextSize = MeasureTextEx(font, m_dataChannel.c_str(), channelFontSize, 2);
+  Vector2 channelTextSize = MeasureTextEx(font, m_dataChannel.c_str(), static_cast<float>(channelFontSize), 2);
   int channelX = middleColX + middleColWidth / 2 - (int)channelTextSize.x / 2;
-  DrawTextEx(font, m_dataChannel.c_str(), Vector2{ (float)channelX, 100 }, channelFontSize, 2, LIGHTGRAY);
+  DrawTextEx(font, m_dataChannel.c_str(), Vector2{ (float)channelX, 100 }, static_cast<float>(channelFontSize), 2, LIGHTGRAY);
 
   // Large digital value display
   int valueFontSize = 120;
@@ -266,7 +266,7 @@ void RealtimeChartPage::renderDigitalDisplay() {
   // Center the decimal point in middle column
   char beforeDecimal[8] = "+   ";
   beforeDecimal[0] = signChar;
-  Vector2 beforeDecimalSize = MeasureTextEx(font, beforeDecimal, valueFontSize, 2);
+  Vector2 beforeDecimalSize = MeasureTextEx(font, beforeDecimal, static_cast<float>(valueFontSize), 2);
   int decimalCenterX = middleColX + middleColWidth / 2;
   int valueX = decimalCenterX - (int)beforeDecimalSize.x;
 
@@ -279,7 +279,7 @@ void RealtimeChartPage::renderDigitalDisplay() {
     valueColor = ORANGE;
   }
 
-  DrawTextEx(font, valueText, Vector2{ (float)valueX, (float)valueY }, valueFontSize, 2, valueColor);
+  DrawTextEx(font, valueText, Vector2{ (float)valueX, (float)valueY }, static_cast<float> (valueFontSize), 2, valueColor);
 
   // === RIGHT COLUMN (15%) - Right Hex Buttons ===
   Rectangle rightColumn = { (float)rightColX, 70, (float)rightColWidth, (float)(topSectionHeight - 70) };
@@ -387,13 +387,13 @@ void RealtimeChartPage::renderButtons() {
   Font font = m_fontLoaded ? m_customFont : GetFontDefault();
   const char* stopText = "STOP";
   int fontSize = 20;
-  Vector2 stopTextSize = MeasureTextEx(font, stopText, fontSize, 2);
+  Vector2 stopTextSize = MeasureTextEx(font, stopText, static_cast<float>(fontSize), 2);
   Vector2 stopTextPos = {
       stopBtn.x + stopBtn.width / 2 - stopTextSize.x / 2,
       stopBtn.y + stopBtn.height / 2 - stopTextSize.y / 2
   };
 
-  DrawTextEx(font, stopText, stopTextPos, fontSize, 2, WHITE);
+  DrawTextEx(font, stopText, stopTextPos, static_cast<float>(fontSize), 2, WHITE);
 }
 
 
@@ -421,13 +421,13 @@ bool RealtimeChartPage::drawButton(Rectangle rect, const char* text, ScanState s
   // Draw button text with custom font
   Font font = m_fontLoaded ? m_customFont : GetFontDefault();
   int fontSize = 16;
-  Vector2 textSize = MeasureTextEx(font, text, fontSize, 2);
+  Vector2 textSize = MeasureTextEx(font, text, static_cast<float>(fontSize), 2);
   Vector2 textPos = {
     rect.x + rect.width / 2 - textSize.x / 2,
     rect.y + rect.height / 2 - textSize.y / 2
   };
 
-  DrawTextEx(font, text, textPos, fontSize, 2, textColor);
+  DrawTextEx(font, text, textPos, static_cast<float>(fontSize), 2, textColor);
 
   // Return if button was clicked
   return isHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
@@ -622,6 +622,7 @@ void RealtimeChartPage::updateButtonStatesFromScanning() {
   }
 }
 
+
 void RealtimeChartPage::renderChart() {
   int screenWidth = GetScreenWidth();
   int screenHeight = GetScreenHeight();
@@ -630,184 +631,31 @@ void RealtimeChartPage::renderChart() {
   int chartHeight = screenHeight - topSectionHeight;
 
   // Calculate split areas
-  int leftPanelWidth = (int)(screenWidth * 0.25f);  // 25% for channel list
-  int rightPanelWidth = screenWidth - leftPanelWidth;  // 75% for chart
+  int leftPanelWidth = (int)(screenWidth * 0.25f);
+  int rightPanelWidth = screenWidth - leftPanelWidth;
 
-  // LEFT PANEL - Channel List (25%)
+  // LEFT PANEL - Channel List with Scrolling
   Rectangle leftPanel = { 10, (float)chartY + 10, (float)leftPanelWidth - 20, (float)chartHeight - 20 };
   DrawRectangleRec(leftPanel, Color{ 25, 25, 35, 255 });
   DrawRectangleLinesEx(leftPanel, 2, DARKGRAY);
 
-  // Title for channel list
   Font font = m_fontLoaded ? m_customFont : GetFontDefault();
+
+  // Title
   DrawTextEx(font, "Channels", Vector2{ leftPanel.x + 10, leftPanel.y + 10 }, 16, 2, WHITE);
   DrawLineEx(Vector2{ leftPanel.x + 5, leftPanel.y + 35 },
     Vector2{ leftPanel.x + leftPanel.width - 5, leftPanel.y + 35 }, 1, GRAY);
 
-  // Render channel list
-  float listY = leftPanel.y + 45;
-  int itemHeight = 30;
-  Vector2 mousePos = GetMousePosition();
+  // Render scrollable channel list
+  renderChannelList(leftPanel, font);
 
-  for (size_t i = 0; i < m_availableChannels.size(); ++i) {
-    Rectangle channelRect = { leftPanel.x + 5, listY, leftPanel.width - 10, (float)itemHeight };
-
-    // Check if this is the selected channel
-    bool isSelected = (m_dataChannel == m_availableChannels[i]);
-    bool isHovered = CheckCollisionPointRec(mousePos, channelRect);
-
-    // Background color based on state
-    Color bgColor = isSelected ? Color{ 60, 90, 120, 255 } :
-      (isHovered ? Color{ 50, 50, 60, 255 } : Color{ 35, 35, 45, 255 });
-
-    DrawRectangleRec(channelRect, bgColor);
-    if (isSelected) {
-      DrawRectangleLinesEx(channelRect, 2, Color{ 100, 150, 200, 255 });
-    }
-
-    // Channel name
-    DrawTextEx(font, m_availableChannels[i].c_str(),
-      Vector2{ channelRect.x + 10, channelRect.y + 8 },
-      14, 2, isSelected ? WHITE : LIGHTGRAY);
-
-    // Handle click
-    if (isHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-      m_dataChannel = m_availableChannels[i];
-      m_selectedChannelIndex = i;
-      m_dataBuffer.clear();  // Clear data when switching channels
-
-      if (m_logger) {
-        m_logger->LogInfo("Channel selected: " + m_dataChannel);
-      }
-    }
-
-    listY += itemHeight + 2;
-
-    // Stop if we exceed panel bounds
-    if (listY + itemHeight > leftPanel.y + leftPanel.height - 10) {
-      break;
-    }
-  }
-
-  // Show channel count at bottom
-  char channelCount[32];
-  snprintf(channelCount, sizeof(channelCount), "%zu channels", m_availableChannels.size());
-  DrawTextEx(font, channelCount,
-    Vector2{ leftPanel.x + 10, leftPanel.y + leftPanel.height - 25 },
-    12, 2, GRAY);
-
-  // RIGHT PANEL - Chart (75%)
+  // RIGHT PANEL - Chart
   Rectangle rightPanel = { (float)leftPanelWidth + 10, (float)chartY + 10,
                           (float)rightPanelWidth - 30, (float)chartHeight - 20 };
-  DrawRectangleRec(rightPanel, Color{ 20, 20, 30, 255 });
-  DrawRectangleLinesEx(rightPanel, 2, DARKGRAY);
-
-  // Chart title
-  const char* titleText = "10 Second History";
-  DrawTextEx(font, titleText, Vector2{ rightPanel.x + 10, rightPanel.y + 10 }, 16, 2, WHITE);
-
-  // Chart area (with margins for axes)
-  Rectangle chartArea = { rightPanel.x + 50, rightPanel.y + 40,
-                         rightPanel.width - 70, rightPanel.height - 60 };
-
-  // Draw grid
-  int gridLinesX = 10;
-  int gridLinesY = 5;
-
-  for (int i = 0; i <= gridLinesX; i++) {
-    float x = chartArea.x + (chartArea.width / gridLinesX) * i;
-    DrawLineEx(Vector2{ x, chartArea.y },
-      Vector2{ x, chartArea.y + chartArea.height },
-      1, Color{ 50, 50, 60, 100 });
-  }
-
-  for (int i = 0; i <= gridLinesY; i++) {
-    float y = chartArea.y + (chartArea.height / gridLinesY) * i;
-    DrawLineEx(Vector2{ chartArea.x, y },
-      Vector2{ chartArea.x + chartArea.width, y },
-      1, Color{ 50, 50, 60, 100 });
-  }
-
-  // Draw axes
-  DrawLineEx(Vector2{ chartArea.x, chartArea.y + chartArea.height },
-    Vector2{ chartArea.x + chartArea.width, chartArea.y + chartArea.height },
-    2, WHITE);
-  DrawLineEx(Vector2{ chartArea.x, chartArea.y },
-    Vector2{ chartArea.x, chartArea.y + chartArea.height },
-    2, WHITE);
-
-  if (m_dataBuffer.empty()) {
-    // Show "No Data" message
-    const char* noDataText = "No data available";
-    Vector2 textSize = MeasureTextEx(font, noDataText, 20, 2);
-    DrawTextEx(font, noDataText,
-      Vector2{ chartArea.x + chartArea.width / 2 - textSize.x / 2,
-              chartArea.y + chartArea.height / 2 - textSize.y / 2 },
-      20, 2, GRAY);
-    return;
-  }
-
-  if (m_dataBuffer.size() < 2) return;
-
-  // Find data range
-  auto minMaxValue = std::minmax_element(m_dataBuffer.begin(), m_dataBuffer.end(),
-    [](const DataPoint& a, const DataPoint& b) { return a.value < b.value; });
-  float minValue = minMaxValue.first->value;
-  float maxValue = minMaxValue.second->value;
-
-  // Add padding to range
-  float range = maxValue - minValue;
-  if (range < 1e-12f) range = 1e-12f;
-  minValue -= range * 0.1f;
-  maxValue += range * 0.1f;
-
-  // Get time range
-  double minTime = m_dataBuffer.front().timestamp;
-  double maxTime = m_dataBuffer.back().timestamp;
-  double timeRange = maxTime - minTime;
-  if (timeRange < 0.1) timeRange = 0.1;
-
-  // Draw the data line
-  for (size_t i = 1; i < m_dataBuffer.size(); ++i) {
-    const auto& prev = m_dataBuffer[i - 1];
-    const auto& curr = m_dataBuffer[i];
-
-    // Map to chart coordinates
-    float x1 = chartArea.x + ((prev.timestamp - minTime) / timeRange) * chartArea.width;
-    float y1 = chartArea.y + chartArea.height - ((prev.value - minValue) / (maxValue - minValue)) * chartArea.height;
-    float x2 = chartArea.x + ((curr.timestamp - minTime) / timeRange) * chartArea.width;
-    float y2 = chartArea.y + chartArea.height - ((curr.value - minValue) / (maxValue - minValue)) * chartArea.height;
-
-    DrawLineEx(Vector2{ x1, y1 }, Vector2{ x2, y2 }, 2.0f, LIME);
-  }
-
-  // Draw current value point
-  if (!m_dataBuffer.empty()) {
-    const auto& last = m_dataBuffer.back();
-    float x = chartArea.x + ((last.timestamp - minTime) / timeRange) * chartArea.width;
-    float y = chartArea.y + chartArea.height - ((last.value - minValue) / (maxValue - minValue)) * chartArea.height;
-    DrawCircle((int)x, (int)y, 4, RED);
-  }
-
-  // Y-axis labels
-  auto [scaledMin, unitMin] = getScaledUnit(std::abs(minValue));
-  auto [scaledMax, unitMax] = getScaledUnit(std::abs(maxValue));
-  char minLabel[32], maxLabel[32];
-  snprintf(minLabel, sizeof(minLabel), "%.2f%s", (minValue >= 0) ? scaledMin : -scaledMin, unitMin.c_str());
-  snprintf(maxLabel, sizeof(maxLabel), "%.2f%s", (maxValue >= 0) ? scaledMax : -scaledMax, unitMax.c_str());
-
-  DrawTextEx(font, maxLabel, Vector2{ chartArea.x - 45, chartArea.y }, 12, 2, LIGHTGRAY);
-  DrawTextEx(font, minLabel, Vector2{ chartArea.x - 45, chartArea.y + chartArea.height - 15 }, 12, 2, LIGHTGRAY);
-
-  // X-axis time labels
-  DrawTextEx(font, "0s", Vector2{ chartArea.x, chartArea.y + chartArea.height + 5 }, 12, 2, LIGHTGRAY);
-  DrawTextEx(font, "10s", Vector2{ chartArea.x + chartArea.width - 20, chartArea.y + chartArea.height + 5 }, 12, 2, LIGHTGRAY);
-
-  // Data points counter
-  char pointsText[32];
-  snprintf(pointsText, sizeof(pointsText), "Points: %zu", m_dataBuffer.size());
-  DrawTextEx(font, pointsText, Vector2{ rightPanel.x + rightPanel.width - 100, rightPanel.y + 10 }, 12, 2, GRAY);
+  renderChartPanel(rightPanel, font);
 }
+
+
 
 void RealtimeChartPage::executeRunScanOperation(const std::string& device,
     const std::vector<double>& stepSizes) {
@@ -984,4 +832,435 @@ void RealtimeChartPage::renderChannelSelector() {
   snprintf(channelInfo, sizeof(channelInfo), "%d/%d",
     m_selectedChannelIndex + 1, (int)m_availableChannels.size());
   DrawTextEx(font, channelInfo, Vector2{ (float)selectorX + selectorWidth + 10, (float)selectorY + 8 }, 12, 2, LIGHTGRAY);
+}
+
+
+
+
+void RealtimeChartPage::renderChannelList(Rectangle panel, Font font) {
+  // Setup scrollable area
+  float listStartY = panel.y + 45;
+  float filterButtonsHeight = 35;  // Space for filter buttons
+  float listHeight = panel.height - 70 - filterButtonsHeight;  // Adjusted for filter buttons
+
+  // Render filter buttons
+  renderFilterButtons(panel, font);
+
+  // Update filtered list based on active filter
+  updateFilteredChannels();
+
+  // Use filtered channels for display
+  std::vector<std::string>& displayChannels = m_activeFilter.empty() ?
+    m_availableChannels : m_filteredChannels;
+
+  int itemHeight = 30;
+  int itemSpacing = 2;
+  int totalItemsHeight = static_cast<int>(displayChannels.size()) * (itemHeight + itemSpacing);
+
+  // Handle mouse wheel scrolling
+  Rectangle scrollArea = { panel.x, listStartY + filterButtonsHeight, panel.width, listHeight };
+  if (CheckCollisionPointRec(GetMousePosition(), scrollArea)) {
+    float wheel = GetMouseWheelMove();
+    if (wheel != 0) {
+      m_channelListScrollOffset -= wheel * 30;
+
+      // Clamp scroll bounds
+      float maxScroll = std::max(0.0f, totalItemsHeight - listHeight);
+      m_channelListScrollOffset = std::max(0.0f, std::min(m_channelListScrollOffset, maxScroll));
+    }
+  }
+
+  // Setup clipping rectangle for list items
+  Rectangle listArea = { panel.x + 5, listStartY + filterButtonsHeight,
+                        panel.width - 25, listHeight };
+  BeginScissorMode((int)listArea.x, (int)listArea.y, (int)listArea.width, (int)listArea.height);
+
+  // Render visible channel items
+  float currentY = listArea.y - m_channelListScrollOffset;
+  Vector2 mousePos = GetMousePosition();
+
+  for (size_t i = 0; i < displayChannels.size(); ++i) {
+    Rectangle itemRect = { listArea.x, currentY, listArea.width, (float)itemHeight };
+
+    // Only render if visible
+    if (currentY + itemHeight >= listArea.y && currentY <= listArea.y + listHeight) {
+      renderChannelItem(itemRect, displayChannels[i], i, mousePos, font);
+    }
+
+    currentY += itemHeight + itemSpacing;
+  }
+
+  EndScissorMode();
+
+  // Draw scrollbar if needed
+  if (totalItemsHeight > listHeight) {
+    renderScrollbar(panel, listArea.y, listHeight, static_cast<float>(totalItemsHeight));
+  }
+
+  // Show channel count at bottom
+  char channelInfo[64];
+  if (m_activeFilter.empty()) {
+    snprintf(channelInfo, sizeof(channelInfo), "%d/%zu channels",
+      m_selectedChannelIndex + 1, displayChannels.size());
+  }
+  else {
+    snprintf(channelInfo, sizeof(channelInfo), "%zu filtered (%s)",
+      displayChannels.size(), m_activeFilter.c_str());
+  }
+  DrawTextEx(font, channelInfo,
+    Vector2{ panel.x + 10, panel.y + panel.height - 25 },
+    12, 2, GRAY);
+}
+
+
+void RealtimeChartPage::renderFilterButtons(Rectangle panel, Font font) {
+  float buttonY = panel.y + 45;
+  float buttonHeight = 28;
+  float buttonSpacing = 5;
+  float buttonWidth = (panel.width - 20 - buttonSpacing * 3) / 4;  // 4 buttons: All, Gantry, Hex, Table
+
+  std::vector<std::string> filters = { "All", "Gantry", "Hex", "Table" };
+  Vector2 mousePos = GetMousePosition();
+
+  for (size_t i = 0; i < filters.size(); ++i) {
+    float buttonX = panel.x + 5 + (buttonWidth + buttonSpacing) * i;
+    Rectangle buttonRect = { buttonX, buttonY, buttonWidth, buttonHeight };
+
+    // Check if this filter is active
+    bool isActive = (i == 0 && m_activeFilter.empty()) ||
+      (i > 0 && m_activeFilter == filters[i]);
+    bool isHovered = CheckCollisionPointRec(mousePos, buttonRect);
+
+    // Button colors
+    Color bgColor = isActive ? Color{ 80, 120, 160, 255 } :
+      (isHovered ? Color{ 60, 60, 70, 255 } : Color{ 45, 45, 55, 255 });
+    Color borderColor = isActive ? Color{ 100, 150, 200, 255 } : DARKGRAY;
+    Color textColor = isActive ? WHITE : LIGHTGRAY;
+
+    // Draw button
+    DrawRectangleRec(buttonRect, bgColor);
+    DrawRectangleLinesEx(buttonRect, static_cast<float>(isActive ? 2 : 1), borderColor);
+
+    // Draw text (smaller font for filter buttons)
+    const char* filterText = filters[i].c_str();
+    Vector2 textSize = MeasureTextEx(font, filterText, 12, 1);
+    Vector2 textPos = {
+        buttonRect.x + buttonRect.width / 2 - textSize.x / 2,
+        buttonRect.y + buttonRect.height / 2 - textSize.y / 2
+    };
+    DrawTextEx(font, filterText, textPos, 12, 1, textColor);
+
+    // Handle click
+    if (isHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+      if (i == 0) {
+        m_activeFilter = "";  // Show all
+      }
+      else {
+        m_activeFilter = filters[i];
+      }
+      m_channelListScrollOffset = 0;  // Reset scroll when changing filter
+
+      if (m_logger) {
+        m_logger->LogInfo("Channel filter changed to: " +
+          (m_activeFilter.empty() ? "All" : m_activeFilter));
+      }
+    }
+  }
+}
+
+
+void RealtimeChartPage::updateFilteredChannels() {
+  if (m_activeFilter.empty()) {
+    return;  // No filtering needed
+  }
+
+  m_filteredChannels.clear();
+  std::string filterLower = m_activeFilter;
+  std::transform(filterLower.begin(), filterLower.end(), filterLower.begin(), ::tolower);
+
+  for (const auto& channel : m_availableChannels) {
+    std::string channelLower = channel;
+    std::transform(channelLower.begin(), channelLower.end(), channelLower.begin(), ::tolower);
+
+    // Check if channel contains the filter keyword
+    if (channelLower.find(filterLower) != std::string::npos) {
+      m_filteredChannels.push_back(channel);
+    }
+  }
+}
+
+
+
+void RealtimeChartPage::renderChannelItem(Rectangle rect, const std::string& channelName,
+  size_t index, Vector2 mousePos, Font font) {
+  bool isSelected = (m_dataChannel == channelName);
+  bool isHovered = CheckCollisionPointRec(mousePos, rect);
+
+  // Background color
+  Color bgColor = isSelected ? Color{ 60, 90, 120, 255 } :
+    (isHovered ? Color{ 50, 50, 60, 255 } : Color{ 35, 35, 45, 255 });
+
+  DrawRectangleRec(rect, bgColor);
+  if (isSelected) {
+    DrawRectangleLinesEx(rect, 2, Color{ 100, 150, 200, 255 });
+  }
+
+  // Truncate long channel names
+  std::string displayName = channelName;
+  if (displayName.length() > 22) {
+    displayName = displayName.substr(0, 19) + "...";
+  }
+
+  // Highlight the filter keyword if active
+  if (!m_activeFilter.empty() && m_activeFilter != "All") {
+    // Draw channel name with highlighted keyword
+    std::string lowerChannel = channelName;
+    std::string lowerFilter = m_activeFilter;
+    std::transform(lowerChannel.begin(), lowerChannel.end(), lowerChannel.begin(), ::tolower);
+    std::transform(lowerFilter.begin(), lowerFilter.end(), lowerFilter.begin(), ::tolower);
+
+    size_t pos = lowerChannel.find(lowerFilter);
+    if (pos != std::string::npos) {
+      // Draw prefix
+      if (pos > 0) {
+        std::string prefix = displayName.substr(0, pos);
+        DrawTextEx(font, prefix.c_str(),
+          Vector2{ rect.x + 10, rect.y + 8 },
+          14, 2, isSelected ? WHITE : LIGHTGRAY);
+
+        Vector2 prefixSize = MeasureTextEx(font, prefix.c_str(), 14, 2);
+
+        // Draw highlighted part
+        std::string highlighted = displayName.substr(pos, m_activeFilter.length());
+        DrawTextEx(font, highlighted.c_str(),
+          Vector2{ rect.x + 10 + prefixSize.x, rect.y + 8 },
+          14, 2, isSelected ? YELLOW : Color{ 255, 200, 100, 255 });
+
+        Vector2 highlightSize = MeasureTextEx(font, highlighted.c_str(), 14, 2);
+
+        // Draw suffix
+        if (pos + m_activeFilter.length() < displayName.length()) {
+          std::string suffix = displayName.substr(pos + m_activeFilter.length());
+          DrawTextEx(font, suffix.c_str(),
+            Vector2{ rect.x + 10 + prefixSize.x + highlightSize.x, rect.y + 8 },
+            14, 2, isSelected ? WHITE : LIGHTGRAY);
+        }
+      }
+    }
+    else {
+      // Normal draw if keyword not found
+      DrawTextEx(font, displayName.c_str(),
+        Vector2{ rect.x + 10, rect.y + 8 },
+        14, 2, isSelected ? WHITE : LIGHTGRAY);
+    }
+  }
+  else {
+    // Normal draw without highlighting
+    DrawTextEx(font, displayName.c_str(),
+      Vector2{ rect.x + 10, rect.y + 8 },
+      14, 2, isSelected ? WHITE : LIGHTGRAY);
+  }
+
+  // Handle click
+  if (isHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    m_dataChannel = channelName;
+
+    // Find the actual index in the full list
+    auto it = std::find(m_availableChannels.begin(), m_availableChannels.end(), channelName);
+    if (it != m_availableChannels.end()) {
+      m_selectedChannelIndex = std::distance(m_availableChannels.begin(), it);
+    }
+
+    m_dataBuffer.clear();
+
+    if (m_logger) {
+      m_logger->LogInfo("Channel selected: " + m_dataChannel);
+    }
+  }
+}
+
+
+
+void RealtimeChartPage::renderScrollbar(Rectangle panel, float listStartY,
+  float listHeight, float totalHeight) {
+  // Calculate scrollbar dimensions
+  float scrollbarWidth = 12;
+  float scrollbarX = panel.x + panel.width - scrollbarWidth - 5;
+  float scrollRatio = listHeight / totalHeight;
+  float scrollbarHeight = std::max(20.0f, listHeight * scrollRatio);
+  float scrollProgress = m_channelListScrollOffset / (totalHeight - listHeight);
+  float scrollbarY = listStartY + scrollProgress * (listHeight - scrollbarHeight);
+
+  // Draw scrollbar track
+  DrawRectangle(static_cast<int>(scrollbarX), static_cast<int>(listStartY), static_cast<int>(scrollbarWidth), static_cast<int>(listHeight),
+    Color{ 40, 40, 45, 255 });
+
+  // Draw scrollbar thumb
+  Rectangle scrollThumb = { scrollbarX, scrollbarY, scrollbarWidth, scrollbarHeight };
+  DrawRectangleRec(scrollThumb, Color{ 100, 100, 120, 200 });
+
+  // Draw scroll indicators
+  if (m_channelListScrollOffset > 0) {
+    DrawTriangle(
+      Vector2{ scrollbarX + scrollbarWidth / 2, listStartY - 8 },
+      Vector2{ scrollbarX + 2, listStartY - 2 },
+      Vector2{ scrollbarX + scrollbarWidth - 2, listStartY - 2 },
+      GRAY
+    );
+  }
+
+  if (m_channelListScrollOffset < totalHeight - listHeight - 1) {
+    DrawTriangle(
+      Vector2{ scrollbarX + 2, listStartY + listHeight + 2 },
+      Vector2{ scrollbarX + scrollbarWidth - 2, listStartY + listHeight + 2 },
+      Vector2{ scrollbarX + scrollbarWidth / 2, listStartY + listHeight + 8 },
+      GRAY
+    );
+  }
+}
+
+void RealtimeChartPage::renderChartPanel(Rectangle panel, Font font) {
+  DrawRectangleRec(panel, Color{ 20, 20, 30, 255 });
+  DrawRectangleLinesEx(panel, 2, DARKGRAY);
+
+  // Chart title and info
+  DrawTextEx(font, "10 Second History", Vector2{ panel.x + 10, panel.y + 10 }, 16, 2, WHITE);
+
+  char pointsText[32];
+  snprintf(pointsText, sizeof(pointsText), "Points: %zu", m_dataBuffer.size());
+  DrawTextEx(font, pointsText, Vector2{ panel.x + panel.width - 100, panel.y + 10 }, 12, 2, GRAY);
+
+  // Chart area with margins
+  Rectangle chartArea = { panel.x + 50, panel.y + 40,
+                         panel.width - 70, panel.height - 60 };
+
+  // Draw grid
+  drawChartGrid(chartArea);
+
+  // Draw axes
+  drawChartAxes(chartArea);
+
+  // Check if we have data
+  if (m_dataBuffer.empty()) {
+    const char* noDataText = "No data available";
+    Vector2 textSize = MeasureTextEx(font, noDataText, 20, 2);
+    DrawTextEx(font, noDataText,
+      Vector2{ chartArea.x + chartArea.width / 2 - textSize.x / 2,
+              chartArea.y + chartArea.height / 2 - textSize.y / 2 },
+      20, 2, GRAY);
+    return;
+  }
+
+  if (m_dataBuffer.size() < 2) return;
+
+  // Calculate data ranges
+  auto [minValue, maxValue] = calculateDataRange();
+  auto [minTime, maxTime] = calculateTimeRange();
+
+  // Draw data line
+  drawDataLine(chartArea, minValue, maxValue, minTime, maxTime);
+
+  // Draw axis labels
+  drawAxisLabels(chartArea, minValue, maxValue, font);
+}
+
+void RealtimeChartPage::drawChartGrid(Rectangle chartArea) {
+  int gridLinesX = 10;
+  int gridLinesY = 5;
+
+  for (int i = 0; i <= gridLinesX; i++) {
+    float x = chartArea.x + (chartArea.width / gridLinesX) * i;
+    DrawLineEx(Vector2{ x, chartArea.y },
+      Vector2{ x, chartArea.y + chartArea.height },
+      1, Color{ 50, 50, 60, 100 });
+  }
+
+  for (int i = 0; i <= gridLinesY; i++) {
+    float y = chartArea.y + (chartArea.height / gridLinesY) * i;
+    DrawLineEx(Vector2{ chartArea.x, y },
+      Vector2{ chartArea.x + chartArea.width, y },
+      1, Color{ 50, 50, 60, 100 });
+  }
+}
+
+void RealtimeChartPage::drawChartAxes(Rectangle chartArea) {
+  // X-axis
+  DrawLineEx(Vector2{ chartArea.x, chartArea.y + chartArea.height },
+    Vector2{ chartArea.x + chartArea.width, chartArea.y + chartArea.height },
+    2, WHITE);
+  // Y-axis
+  DrawLineEx(Vector2{ chartArea.x, chartArea.y },
+    Vector2{ chartArea.x, chartArea.y + chartArea.height },
+    2, WHITE);
+}
+
+std::pair<float, float> RealtimeChartPage::calculateDataRange() {
+  auto minMaxValue = std::minmax_element(m_dataBuffer.begin(), m_dataBuffer.end(),
+    [](const DataPoint& a, const DataPoint& b) { return a.value < b.value; });
+
+  float minValue = minMaxValue.first->value;
+  float maxValue = minMaxValue.second->value;
+
+  float range = maxValue - minValue;
+  if (range < 1e-12f) range = 1e-12f;
+
+  minValue -= range * 0.1f;
+  maxValue += range * 0.1f;
+
+  return { minValue, maxValue };
+}
+
+std::pair<double, double> RealtimeChartPage::calculateTimeRange() {
+  double minTime = m_dataBuffer.front().timestamp;
+  double maxTime = m_dataBuffer.back().timestamp;
+  double timeRange = maxTime - minTime;
+
+  if (timeRange < 0.1) timeRange = 0.1;
+
+  return { minTime, maxTime };
+}
+
+void RealtimeChartPage::drawDataLine(Rectangle chartArea, float minValue, float maxValue,
+  double minTime, double maxTime) {
+  double timeRange = maxTime - minTime;
+  float valueRange = maxValue - minValue;
+
+  for (size_t i = 1; i < m_dataBuffer.size(); ++i) {
+    const auto& prev = m_dataBuffer[i - 1];
+    const auto& curr = m_dataBuffer[i];
+
+    float x1 = static_cast<double>(chartArea.x + ((prev.timestamp - minTime) / timeRange) * chartArea.width);
+    float y1 = static_cast<double>(chartArea.y + chartArea.height - ((prev.value - minValue) / valueRange) * chartArea.height);
+    float x2 = static_cast<double>(chartArea.x + ((curr.timestamp - minTime) / timeRange) * chartArea.width);
+    float y2 = static_cast<double>(chartArea.y + chartArea.height - ((curr.value - minValue) / valueRange) * chartArea.height);
+
+    DrawLineEx(Vector2{ x1, y1 }, Vector2{ x2, y2 }, 2.0f, LIME);
+  }
+
+  // Draw current value point
+  if (!m_dataBuffer.empty()) {
+    const auto& last = m_dataBuffer.back();
+    float x = chartArea.x + ((last.timestamp - minTime) / timeRange) * chartArea.width;
+    float y = chartArea.y + chartArea.height - ((last.value - minValue) / valueRange) * chartArea.height;
+    DrawCircle((int)x, (int)y, 4, RED);
+  }
+}
+
+void RealtimeChartPage::drawAxisLabels(Rectangle chartArea, float minValue, float maxValue, Font font) {
+  // Y-axis labels
+  auto [scaledMin, unitMin] = getScaledUnit(std::abs(minValue));
+  auto [scaledMax, unitMax] = getScaledUnit(std::abs(maxValue));
+
+  char minLabel[32], maxLabel[32];
+  snprintf(minLabel, sizeof(minLabel), "%.2f%s",
+    (minValue >= 0) ? scaledMin : -scaledMin, unitMin.c_str());
+  snprintf(maxLabel, sizeof(maxLabel), "%.2f%s",
+    (maxValue >= 0) ? scaledMax : -scaledMax, unitMax.c_str());
+
+  DrawTextEx(font, maxLabel, Vector2{ chartArea.x - 45, chartArea.y }, 12, 2, LIGHTGRAY);
+  DrawTextEx(font, minLabel, Vector2{ chartArea.x - 45, chartArea.y + chartArea.height - 15 }, 12, 2, LIGHTGRAY);
+
+  // X-axis labels
+  DrawTextEx(font, "0s", Vector2{ chartArea.x, chartArea.y + chartArea.height + 5 }, 12, 2, LIGHTGRAY);
+  DrawTextEx(font, "10s", Vector2{ chartArea.x + chartArea.width - 20, chartArea.y + chartArea.height + 5 }, 12, 2, LIGHTGRAY);
 }
