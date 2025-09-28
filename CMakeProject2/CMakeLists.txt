@@ -794,9 +794,9 @@ add_executable(uaa3App
       "include/PowerSupplyDevice/PowerSupplyUI.cpp" 
       "mainUI/JsonEditorUI.h" 
       "mainUI/JsonEditorUI.cpp" 
-
       "include/AppSettings.h"
-       "include/AppSettings.cpp" "mainUI/RunPageSpecConfig.h")
+       "include/AppSettings.cpp"
+       "mainUI/IImguiWindowUI.h" "mainUI/SettingsEditorUI.h" "mainUI/SettingsEditorUI.cpp")
 
 
 

@@ -30,6 +30,13 @@ RunPageUI::RunPageUI(MachineOperations& machineOps)
 
   m_logger->LogInfo("RunPageUI: Spec value loaded from database");
 
+  // Initialize settings editor with callback
+  m_settingsEditor = std::make_unique<SettingsEditorUI>();
+  m_settingsEditor->SetOnSettingsChangedCallback([this]() {
+    RefreshSettingsFromDatabase();
+  });
+  m_logger->LogInfo("RunPageUI: Settings editor callback configured");
+
   // Initialize filter manager
   m_filterManager = std::make_unique<ProcessFilterManager>();
 
@@ -84,6 +91,8 @@ RunPageUI::RunPageUI(MachineOperations& machineOps)
   if (cameraManager) {
     cameraManager->SetImageOutputDirectory("captures");
   }
+
+  m_settingsEditor = std::make_unique<SettingsEditorUI>();
 }
 
 RunPageUI::~RunPageUI() {
@@ -97,7 +106,10 @@ RunPageUI::~RunPageUI() {
 
 void RunPageUI::RenderUI() {
   // Add this line at the beginning of RenderUI to monitor frame flow
-  DebugCameraFrameFlow();
+  //DebugCameraFrameFlow();
+  if (m_settingsEditor && m_settingsEditor->IsVisible()) {
+    m_settingsEditor->Render();
+  }
 
   // Get available content region
   ImVec2 contentRegion = ImGui::GetContentRegionAvail();
@@ -134,9 +146,15 @@ void RunPageUI::RenderUI() {
 
 // In RunPageUI.cpp, update RenderColumn1:
 void RunPageUI::RenderColumn1() {
-  ImGui::Text(reinterpret_cast<const char*>(u8"🔧 Process Control"));
   ImGui::Separator();
+  if (ImGui::Button("Edit Me", ImVec2(-1, 30))) {
+    m_settingsEditor->Show();
+    UpdateStatus("Opened " + m_settingsEditor->GetName());
+  }
+  ImGui::Text(reinterpret_cast<const char*>(u8"🔧 Process Control"));
 
+
+  ImGui::Separator();
   // Render control buttons at the top
   RenderControlButtons();
 
@@ -166,6 +184,8 @@ void RunPageUI::RenderColumn1() {
 
   // NEW: Render process tree view instead of buttons
   RenderProcessTreeView();
+
+
 }
 
 
@@ -1244,25 +1264,21 @@ void RunPageUI::RenderColumn3() {
 }
 // RunPageUI.cpp - Add this new method
 
-// Helper: Get color based on percentage using Viridis color scheme
 ImVec4 RunPageUI::GetPercentageColor(float percentage) {
-  // Viridis-inspired color mapping
-  // Maps percentage to a scientific color scale from purple/blue (low) to yellow/green (high)
-
-  if (percentage >= m_thresholds.excellent) {
-    // Bright yellow-green for excellent (Viridis high end)
+  if (percentage >= m_exceptionalThreshold) {
+    // Bright yellow-green for exceptional
     return ImVec4(0.99f, 0.91f, 0.15f, 1.0f);
   }
-  else if (percentage >= m_thresholds.pass) {
-    // Green for pass (Viridis mid-high)
+  else if (percentage >= m_passThreshold) {
+    // Green for pass
     return ImVec4(0.13f, 0.82f, 0.52f, 1.0f);
   }
-  else if (percentage >= m_thresholds.needWork) {
-    // Teal for needs work (Viridis mid)
+  else if (percentage >= m_failThreshold) {
+    // Teal for above fail threshold
     return ImVec4(0.12f, 0.65f, 0.61f, 1.0f);
   }
   else {
-    // Dark purple-blue for low values (Viridis low end)
+    // Dark purple-blue for below fail threshold
     return ImVec4(0.27f, 0.0f, 0.33f, 1.0f);
   }
 }
@@ -3966,15 +3982,7 @@ void RunPageUI::FormatCurrentValue(float value, char* buffer, size_t bufferSize)
 }
 
 
-// ============================================================================
-// Helper: Get status text based on percentage
-// ============================================================================
-const char* RunPageUI::GetStatusText(float percentage) {
-  if (percentage >= m_thresholds.excellent) return "Excellent";
-  if (percentage >= m_thresholds.pass) return "Pass";
-  if (percentage >= m_thresholds.needWork) return "Need more work";
-  return "Are you sure?";
-}
+
 
 void RunPageUI::RenderActionTab() {
   // Camera Group
@@ -4263,7 +4271,7 @@ bool RunPageUI::RenderFancyCameraButton() {
 void RunPageUI::LoadSpecFromDatabase() {
   auto& settings = AppSettings::getInstance();
 
-  // Create the spec variable if it doesn't exist (default 800uA)
+  // === LOAD SPEC THRESHOLD ===
   if (!settings.exists("ui_settings", "spec_threshold_ua")) {
     bool created = settings.createFloat("ui_settings", "spec_threshold_ua", 800.0f);
     if (created) {
@@ -4271,7 +4279,6 @@ void RunPageUI::LoadSpecFromDatabase() {
     }
     else {
       m_logger->LogError("Failed to create default spec threshold");
-      // Use hardcoded defaults
       m_specThreshold = 800e-6f;
       strcpy_s(m_specInputBuffer, sizeof(m_specInputBuffer), "800");
       m_specUnit = "uA";
@@ -4279,26 +4286,55 @@ void RunPageUI::LoadSpecFromDatabase() {
     }
   }
 
-  // Load the value
   auto specValue = settings.getFloat("ui_settings", "spec_threshold_ua");
   if (specValue.has_value()) {
-    // Convert from uA to Amps
     m_specThreshold = specValue.value() * 1e-6f;
-
-    // Update input buffer to show the loaded value
     snprintf(m_specInputBuffer, sizeof(m_specInputBuffer), "%.0f", specValue.value());
-    m_specUnit = "uA";
-
     m_logger->LogInfo("Loaded spec threshold: " + std::to_string(specValue.value()) + "uA");
   }
-  else {
-    m_logger->LogWarning("Failed to load spec threshold, using default 800uA");
-    m_specThreshold = 800e-6f;
-    strcpy_s(m_specInputBuffer, sizeof(m_specInputBuffer), "800");
-    m_specUnit = "uA";
-  }
-}
 
+  // === LOAD SPEC UNIT ===
+  if (!settings.exists("ui_settings", "spec_unit")) {
+    settings.createString("ui_settings", "spec_unit", "uA");
+    m_logger->LogInfo("Created default spec unit: uA");
+  }
+
+  auto unitValue = settings.getString("ui_settings", "spec_unit");
+  if (unitValue.has_value()) {
+    m_specUnit = unitValue.value();
+    m_logger->LogInfo("Loaded spec unit: " + m_specUnit);
+  }
+
+  // === LOAD THRESHOLDS ===
+  if (!settings.exists("ui_settings", "pass_threshold")) {
+    settings.createFloat("ui_settings", "pass_threshold", 100.0f);
+  }
+  auto passValue = settings.getFloat("ui_settings", "pass_threshold");
+  if (passValue.has_value()) {
+    m_thresholds.pass = passValue.value();
+    m_logger->LogInfo("Loaded pass threshold: " + std::to_string(m_thresholds.pass) + "%");
+  }
+
+  if (!settings.exists("ui_settings", "fail_threshold")) {
+    settings.createFloat("ui_settings", "fail_threshold", 95.0f);
+  }
+  auto failValue = settings.getFloat("ui_settings", "fail_threshold");
+  if (failValue.has_value()) {
+    m_thresholds.needWork = failValue.value();
+    m_logger->LogInfo("Loaded fail threshold: " + std::to_string(m_thresholds.needWork) + "%");
+  }
+
+  if (!settings.exists("ui_settings", "exceptional_threshold")) {
+    settings.createFloat("ui_settings", "exceptional_threshold", 110.0f);
+  }
+  auto exceptionalValue = settings.getFloat("ui_settings", "exceptional_threshold");
+  if (exceptionalValue.has_value()) {
+    m_thresholds.excellent = exceptionalValue.value();
+    m_logger->LogInfo("Loaded exceptional threshold: " + std::to_string(m_thresholds.excellent) + "%");
+  }
+
+  m_logger->LogInfo("All spec settings loaded/refreshed from database");
+}
 
 
 void RunPageUI::SaveSpecToDatabase() {
@@ -4348,4 +4384,70 @@ void RunPageUI::SaveSpecToDatabase() {
     m_lastCaptureStatus = "Error: Failed to save spec threshold";
     m_logger->LogError("SaveSpecToDatabase: Operation failed");
   }
+}
+
+void RunPageUI::SaveAllSpecSettingsToDatabase() {
+  auto& settings = AppSettings::getInstance();
+  bool allSuccess = true;
+
+  // Save spec threshold
+  float specInUA = m_specThreshold * 1e6f;
+  if (!settings.setFloat("ui_settings", "spec_threshold_ua", specInUA)) {
+    allSuccess = false;
+    m_logger->LogError("Failed to save spec threshold");
+  }
+
+  // Save spec unit
+  if (!settings.setString("ui_settings", "spec_unit", m_specUnit)) {
+    allSuccess = false;
+    m_logger->LogError("Failed to save spec unit");
+  }
+
+  // Save pass threshold
+  if (!settings.setFloat("ui_settings", "pass_threshold", m_passThreshold)) {
+    allSuccess = false;
+    m_logger->LogError("Failed to save pass threshold");
+  }
+
+  // Save fail threshold
+  if (!settings.setFloat("ui_settings", "fail_threshold", m_failThreshold)) {
+    allSuccess = false;
+    m_logger->LogError("Failed to save fail threshold");
+  }
+
+  // Save exceptional threshold
+  if (!settings.setFloat("ui_settings", "exceptional_threshold", m_exceptionalThreshold)) {
+    allSuccess = false;
+    m_logger->LogError("Failed to save exceptional threshold");
+  }
+
+  if (allSuccess) {
+    m_lastCaptureStatus = "All spec settings saved successfully";
+    m_logger->LogInfo("Saved all spec settings: " + std::to_string((int)specInUA) +
+      m_specUnit + ", Pass:" + std::to_string(m_passThreshold) +
+      "%, Fail:" + std::to_string(m_failThreshold) +
+      "%, Exceptional:" + std::to_string(m_exceptionalThreshold) + "%");
+  }
+  else {
+    m_lastCaptureStatus = "Error: Failed to save some spec settings";
+    m_logger->LogError("Failed to save some spec settings");
+  }
+}
+
+const char* RunPageUI::GetStatusText(float percentage) {
+  if (percentage >= m_exceptionalThreshold) return "Exceptional";
+  if (percentage >= m_passThreshold) return "Pass";
+  if (percentage >= m_failThreshold) return "Needs Work";
+  return "Fail";
+}
+
+// Add this method
+void RunPageUI::RefreshSettingsFromDatabase() {
+  // Reload all spec settings from database
+  LoadSpecFromDatabase();
+
+  // Update any UI elements that depend on these settings
+  UpdateStatus("Settings refreshed from database");
+
+  m_logger->LogInfo("RunPageUI: Refreshed settings from SettingsEditor changes");
 }

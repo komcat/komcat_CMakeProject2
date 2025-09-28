@@ -17,6 +17,8 @@
 #include "ProcessConfiguration.h"
 #include "ProcessConfigBuilders.h"
 #include "ProcessConfigUI.h"
+#include "EmbeddedJogControl.h"
+#include "SettingsEditorUI.h"
 #include <string>
 #include <vector>
 #include <thread>
@@ -25,7 +27,8 @@
 #include <memory>
 #include <chrono>
 #include <SDL_opengl.h>  // NEW: For OpenGL texture management
-#include "EmbeddedJogControl.h"
+
+
 
 using namespace UAA3ProcessBuilders;
 
@@ -307,4 +310,15 @@ private:
 
 	void LoadSpecFromDatabase();
 	void SaveSpecToDatabase();  
+  void SaveAllSpecSettingsToDatabase();
+
+  // === ADD THESE NEW SPEC CONFIGURATION MEMBERS ===
+  //std::string m_specUnit = "A";           // Default unit (A, mA, uA, etc.)
+  float m_passThreshold = 100.0f;         // Pass threshold percentage
+  float m_failThreshold = 90.0f;          // Fail threshold percentage  
+  float m_exceptionalThreshold = 135.0f;  // Exceptional threshold percentage
+
+  std::unique_ptr<SettingsEditorUI> m_settingsEditor;
+
+  void RefreshSettingsFromDatabase();
 };
