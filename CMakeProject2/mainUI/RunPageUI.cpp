@@ -1530,7 +1530,7 @@ void RunPageUI::RenderLivePlot() {
       // Find current channel index
       auto it = std::find(m_availableChannels.begin(), m_availableChannels.end(), m_plotChannelName);
       if (it != m_availableChannels.end()) {
-        m_selectedChannelIndex = std::distance(m_availableChannels.begin(), it);
+        m_selectedChannelIndex = static_cast<int>(std::distance(m_availableChannels.begin(), it));
       }
     }
   }
@@ -1609,7 +1609,7 @@ void RunPageUI::ChangeChannel(const std::string& channelName) {
   // Update index
   auto it = std::find(m_availableChannels.begin(), m_availableChannels.end(), channelName);
   if (it != m_availableChannels.end()) {
-    m_selectedChannelIndex = std::distance(m_availableChannels.begin(), it);
+    m_selectedChannelIndex = static_cast<int>(std::distance(m_availableChannels.begin(), it));
   }
 
   // Update the plot

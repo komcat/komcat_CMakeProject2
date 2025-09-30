@@ -223,6 +223,7 @@ private:
 };
 
 
+
 // Enhanced ExtendSlideOperation with complete tracking
 class ExtendSlideOperation : public SequenceOperation {
 public:

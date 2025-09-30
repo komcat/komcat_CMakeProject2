@@ -15,6 +15,14 @@ namespace UAA3ProcessRegistration {
   void RegisterExistingUAA3Processes() {
     auto& registry = ProcessRegistry::GetInstance();
 
+    registry.RegisterProcess(
+      "uaa3 dev mock up",
+      "Core",
+      "just do something",
+      true,
+      UAA3ProcessBuilders::BuildDevSequence_uaa3
+    );
+
     // ========================================================================
     // CORE PROCESSES
     // ========================================================================
