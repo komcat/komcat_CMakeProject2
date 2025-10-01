@@ -118,8 +118,8 @@ void EmbeddedJogControl::Render(const std::string& title) {
 }
 
 
+// Add these color definitions at the top of RenderDeviceSelector()
 void EmbeddedJogControl::RenderDeviceSelector() {
-  // Get actual connected devices
   auto availableDevices = m_motionController.GetAvailableDevices();
 
   if (availableDevices.empty()) {
@@ -127,38 +127,79 @@ void EmbeddedJogControl::RenderDeviceSelector() {
     return;
   }
 
-  // Build device name array for combo box
-  std::vector<const char*> deviceNames;
-  for (const auto& device : availableDevices) {
-    deviceNames.push_back(device.c_str());
-  }
+  ImGui::Text("Device:");
 
-  // Combo box with actual devices
-  if (ImGui::Combo("##Device", &m_jogState.selectedDevice,
-    deviceNames.data(), deviceNames.size())) {
-    m_jogState.activeDeviceId = availableDevices[m_jogState.selectedDevice];
-    UpdateStatus("Switched to " + m_jogState.activeDeviceId);
+  // Define colors for active/inactive states
+  ImVec4 activeColor = ImVec4(0.2f, 0.6f, 0.2f, 1.0f);
+  ImVec4 activeHoverColor = ImVec4(0.3f, 0.7f, 0.3f, 1.0f);
+
+  // Render device buttons in a row
+  for (size_t i = 0; i < availableDevices.size(); i++) {
+    bool isActive = (m_jogState.selectedDevice == static_cast<int>(i));
+
+    // Push active color if this is the selected device
+    if (isActive) {
+      ImGui::PushStyleColor(ImGuiCol_Button, activeColor);
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, activeHoverColor);
+    }
+
+    if (ImGui::Button(availableDevices[i].c_str(), ImVec2(80, 0))) {
+      m_jogState.selectedDevice = static_cast<int>(i);
+      m_jogState.activeDeviceId = availableDevices[i];
+      UpdateStatus("Switched to " + m_jogState.activeDeviceId);
+    }
+
+    if (isActive) {
+      ImGui::PopStyleColor(2);
+    }
+
+    // Add SameLine for all but last button
+    if (i < availableDevices.size() - 1) {
+      ImGui::SameLine();
+    }
   }
 }
 
-
 void EmbeddedJogControl::RenderStepControls() {
   ImGui::Text("Step Size:");
-  ImGui::SameLine();
 
-  // Quick preset buttons
-  if (ImGui::Button("1um")) m_jogState.stepSize = 0.001f;
-  ImGui::SameLine();
-  if (ImGui::Button("2um")) m_jogState.stepSize = 0.002f;
-  //ImGui::SameLine();
-  if (ImGui::Button("5um")) m_jogState.stepSize = 0.005f;
-  ImGui::SameLine();
-  if (ImGui::Button("10um")) m_jogState.stepSize = 0.01f;
-  if (ImGui::Button("20um")) m_jogState.stepSize = 0.02f;  
-  ImGui::SameLine();
-  if (ImGui::Button("50um")) m_jogState.stepSize = 0.05f;
-  //ImGui::SameLine();
+  // Define colors for active state
+  ImVec4 activeColor = ImVec4(0.2f, 0.6f, 0.2f, 1.0f);
+  ImVec4 activeHoverColor = ImVec4(0.3f, 0.7f, 0.3f, 1.0f);
 
+  // Helper lambda to render step button with active state
+  auto renderStepButton = [&](const char* label, float value, bool sameLine = true) {
+    bool isActive = (std::abs(m_jogState.stepSize - value) < 0.0001f);
+
+    if (isActive) {
+      ImGui::PushStyleColor(ImGuiCol_Button, activeColor);
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, activeHoverColor);
+    }
+
+    if (ImGui::Button(label)) {
+      m_jogState.stepSize = value;
+    }
+
+    if (isActive) {
+      ImGui::PopStyleColor(2);
+    }
+
+    if (sameLine) {
+      ImGui::SameLine();
+    }
+  };
+
+  // Row 1: 1um, 2um, 5um, 10um
+  renderStepButton("1um", 0.001f);
+  renderStepButton("2um", 0.002f);
+  renderStepButton("5um", 0.005f);
+  renderStepButton("10um", 0.01f, false);
+
+  // Row 2: 20um, 50um
+  renderStepButton("20um", 0.02f);
+  renderStepButton("50um", 0.05f, false);
+
+  // Custom input field
   ImGui::SetNextItemWidth(80);
   ImGui::InputFloat("##Step_mm", &m_jogState.stepSize, 0, 0, "%.3f");
   ImGui::SameLine();
@@ -173,6 +214,7 @@ void EmbeddedJogControl::RenderStepControls() {
     ImGui::Text("mm/s");
   }
 }
+
 
 // Update RenderJogButtons to show key hints when keyboard is enabled
 void EmbeddedJogControl::RenderJogButtons() {
