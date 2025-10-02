@@ -1,6 +1,7 @@
 #include "../uaa3_process_builders.h"
 #include "SequenceStepMockup.h"
 #include "PickAndPlaceParam.h"  // Include your parameter class
+#include "CoreSequenceStep.h"
 #include <iostream>
 
 namespace UAA3ProcessBuilders {
@@ -86,6 +87,48 @@ namespace UAA3ProcessBuilders {
     sequence->AddOperation(std::make_shared<PickAndPlaceMockup>(param_right));
 
     sequence->AddOperation(std::make_shared<DoSomethingA>("Final Quality Check"));
+
+    return sequence;
+  }
+
+
+  std::unique_ptr<SequenceStep> CorePickPlace(
+    MachineOperations& machineOps, UserPromptUI& promptUI) {
+
+    auto sequence = std::make_unique<SequenceStep>("Core Pick & Place Sequence", machineOps);
+
+
+
+
+    // High precision operation
+    sequence->AddOperation(std::make_shared<::CorePickPlace>(
+      "Precision_Manipulator",   // device name
+      50.0,                      // slower speed for precision
+      "Precision_Pick_Point",    // pick node
+      "Final_Assembly",          // place node
+      true,                      // enable camera view
+      "gantry-main",             // camera gantry device
+      "Precision_View_Point"     // camera view node
+    ));
+
+    return sequence;
+  }
+
+  std::unique_ptr<SequenceStep> CorePlaceOnly(
+    MachineOperations& machineOps, UserPromptUI& promptUI) {
+
+    auto sequence = std::make_unique<SequenceStep>("Core Place Only Sequence", machineOps);
+
+
+    // Place with camera verification
+    sequence->AddOperation(std::make_shared<::CorePlace>(
+      "Quality_Robot",           // device name
+      60.0,                      // speed
+      "QC_Station",              // place node
+      true,                      // enable camera view
+      "gantry-main",             // camera gantry device
+      "QC_Camera_Position"       // camera view node
+    ));
 
     return sequence;
   }

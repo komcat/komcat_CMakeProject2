@@ -802,7 +802,7 @@ add_executable(uaa3App
   "include/SequenceStepMockup.h" 
   "Processes/PickAndPlaceParam.h"
   "Processes/ParameterLoader.h" 
- "mainUI/RecipePageUI.h" "mainUI/RecipePageUI.cpp")
+ "mainUI/RecipePageUI.h" "mainUI/RecipePageUI.cpp" "Processes/CoreSequenceStep.h" "Processes/ProcessParameterSchema.h" "Processes/ProcessParameterFactory.h" "Processes/CoreProcessParameterRegistration.cpp" "Processes/ProcessInstance.h" "Processes/ProcessParameterFactory.cpp" "Processes/ProcessParameterSchema.cpp" "Processes/CoreProcessParameterRegistration.h")
 
 
 

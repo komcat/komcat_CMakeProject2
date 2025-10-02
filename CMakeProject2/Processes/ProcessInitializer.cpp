@@ -211,10 +211,35 @@ namespace UAA3ProcessRegistration {
       registry.GetProcessCount());
   }
 
+  void RegisterCoreProcesses() {
+    auto& registry = ProcessRegistry::GetInstance();
+
+    registry.RegisterProcess(
+      "Core_PickPlace",
+      "Core",
+      "High precision pick and place with camera view",
+      true,
+      [](MachineOperations& machineOps, UserPromptUI& promptUI) {
+      return UAA3ProcessBuilders::CorePickPlace(machineOps, promptUI);
+    }
+    );
+
+    registry.RegisterProcess(
+      "Core_PlaceOnly",
+      "Core",
+      "Quality place operation with camera verification",
+      true,
+      [](MachineOperations& machineOps, UserPromptUI& promptUI) {
+      return UAA3ProcessBuilders::CorePlaceOnly(machineOps, promptUI);
+    }
+    );
+  }
+
   // Auto-register on startup using static initialization
   static struct UAA3AutoRegister {
     UAA3AutoRegister() {
       RegisterExistingUAA3Processes();
+      RegisterCoreProcesses();
     }
   } g_uaa3AutoRegister;
 

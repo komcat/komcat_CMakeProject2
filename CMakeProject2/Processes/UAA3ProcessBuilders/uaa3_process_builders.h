@@ -19,7 +19,11 @@ namespace UAA3ProcessBuilders {
   std::unique_ptr<SequenceStep> BuildDevSequence_uaa3(
     MachineOperations& machineOps, UserPromptUI& promptUI);
 
+  std::unique_ptr<SequenceStep> CorePickPlace(
+		MachineOperations& machineOps, UserPromptUI& promptUI);
 
+	std::unique_ptr<SequenceStep> CorePlaceOnly(
+		MachineOperations& machineOps, UserPromptUI& promptUI);
 
   // ============================================================================
   // CORE PROCESSES
@@ -156,6 +160,9 @@ namespace UAA3ProcessBuilders {
 
   std::unique_ptr<SequenceStep> BuildExtendedSystemTestSequence(
     MachineOperations& machineOps, UserPromptUI& promptUI);
+
+
+
 
 
   /// <summary>
