@@ -33,7 +33,7 @@ ImGui::Text(reinterpret_cast<const char*>(u8"?? Process Control"));
 #define VERSION_MAJOR 2
 #define VERSION_MINOR 4
 #define VERSION_PATCH 3
-#define VERSION_BUILD 624
+#define VERSION_BUILD 626
 
 // Build information
 #define BUILD_DATE __DATE__

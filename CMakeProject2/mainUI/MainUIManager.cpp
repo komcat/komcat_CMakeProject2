@@ -19,7 +19,7 @@
 #include "UISMUPanel.h"
 #include "RunPageUI.h"            // NEW: Add this include
 #include "Programming/UserPromptUI.h"  // NEW: Add this include
-
+#include "RecipePageUI.h"
 #include "include/data/global_data_store.h" // Add this with your other includes
 #include "include/machine_operations.h"  // Add this include at the top
 #include "AppContext.h"
@@ -65,6 +65,7 @@ MainUIManager::MainUIManager(MotionConfigManager& configMgr)
 	// STEP 4: Initialize MacroPanelUI and connect prompt UI
 	m_macroPanelUI = std::make_unique<MacroPanelUI>();
 	m_macroPanelUI->SetPromptUI(m_promptUI.get()); // NOW THIS WORKS!
+
 
 	// Connect MacroManager to MachineBlockUI
 	if (m_macroManager && m_machineBlockUI) {
@@ -159,7 +160,9 @@ void MainUIManager::InitializeUIComponents() {
 	m_moduleAlignmentUI = std::make_unique<ModuleAlignmentUI>();
 	m_tcpDataManagerUI = std::make_unique<TCPDataManagerUI>();
 	m_globalDataStoreViewerUI = std::make_unique<GlobalDataStoreViewerUI>();
-
+	// ADD THIS LINE - Create RecipePageUI
+	m_recipePageUI = std::make_unique<RecipePageUI>();
+	logger->LogInfo("MainUIManager: RecipePageUI created");
 	// Programming UI components - CREATE ONLY ONE UserPromptUI
 	m_promptUI = std::make_unique<UserPromptUI>();
 	// m_userPromptUI will be created separately if needed for backward compatibility
@@ -948,25 +951,25 @@ void MainUIManager::RenderMainContent() {
 
 
 void MainUIManager::RenderMainPage() {
-	ImGui::SetWindowFontScale(2.0f);
+	
 	ImGui::Text("Welcome to uaa3App");
-	ImGui::SetWindowFontScale(1.0f);
+	
 
-	ImGui::Spacing();
-	ImGui::Text("Select a category from the menu above to begin:");
-	ImGui::BulletText("Manual - Direct control of hardware components");
-	ImGui::BulletText("Data & Instrument - Data monitoring and instruments");
-	ImGui::BulletText("Run Program - Execute automated sequences");
-	ImGui::BulletText("Config - System configuration and settings");
-	ImGui::BulletText("Vision - Image processing and computer vision");
-	ImGui::BulletText("Programming - Visual and macro programming tools");
-	ImGui::BulletText("Recipe - Recipe management and templates");
-	ImGui::BulletText("System - System management and diagnostics");
+	//ImGui::Spacing();
+	//ImGui::Text("Select a category from the menu above to begin:");
+	//ImGui::BulletText("Manual - Direct control of hardware components");
+	//ImGui::BulletText("Data & Instrument - Data monitoring and instruments");
+	//ImGui::BulletText("Run Program - Execute automated sequences");
+	//ImGui::BulletText("Config - System configuration and settings");
+	//ImGui::BulletText("Vision - Image processing and computer vision");
+	//ImGui::BulletText("Programming - Visual and macro programming tools");
+	//ImGui::BulletText("Recipe - Recipe management and templates");
+	//ImGui::BulletText("System - System management and diagnostics");
 
 
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
+	//ImGui::Spacing();
+	//ImGui::Separator();
+	//ImGui::Spacing();
 
 	// Show jog status
 	if (m_uiJogWindow) {
@@ -985,80 +988,80 @@ void MainUIManager::RenderMainPage() {
 		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "○ Quick IO Control: Waiting for IO manager");
 	}
 
-	ImGui::Spacing();
-	ImGui::Text("All systems operational. You can use the Config Editor to manage motion settings");
-	ImGui::Text("and the Node Visualizer to view and edit motion graphs interactively.");
+	//ImGui::Spacing();
+	//ImGui::Text("All systems operational. You can use the Config Editor to manage motion settings");
+	//ImGui::Text("and the Node Visualizer to view and edit motion graphs interactively.");
 
-	// Add this to your MainUIManager render method (like RenderMainPage)
-	ImGuiIO& io = ImGui::GetIO();
+	//// Add this to your MainUIManager render method (like RenderMainPage)
+	//ImGuiIO& io = ImGui::GetIO();
 
-	ImGui::Text("=== FONT SIZE CONTROLS ===");
+	//ImGui::Text("=== FONT SIZE CONTROLS ===");
 
-	// High res button - scale up font
-	if (ImGui::Button("High Res (1.5x)")) {
-		io.FontGlobalScale = 1.8f;  // Scale up existing font
-	}
-	ImGui::SameLine();
+	//// High res button - scale up font
+	//if (ImGui::Button("High Res (1.5x)")) {
+	//	io.FontGlobalScale = 1.8f;  // Scale up existing font
+	//}
+	//ImGui::SameLine();
 
-	// Normal res button - default scale
-	if (ImGui::Button("Normal (1.0x)")) {
-		io.FontGlobalScale = 1.0f;  // Default scale
-	}
-	ImGui::SameLine();
+	//// Normal res button - default scale
+	//if (ImGui::Button("Normal (1.0x)")) {
+	//	io.FontGlobalScale = 1.0f;  // Default scale
+	//}
+	//ImGui::SameLine();
 
-	// Low res button - scale down font
-	if (ImGui::Button("Low Res (0.75x)")) {
-		io.FontGlobalScale = 0.65f;  // Scale down existing font
-	}
+	//// Low res button - scale down font
+	//if (ImGui::Button("Low Res (0.75x)")) {
+	//	io.FontGlobalScale = 0.65f;  // Scale down existing font
+	//}
 
-	// Show current scaling info
-	ImGui::Text("Font global scale: %.2fx", io.FontGlobalScale);
-	ImGui::Text("Current DPI: %.0f x %.0f",
-		96.0f * io.DisplayFramebufferScale.x,
-		96.0f * io.DisplayFramebufferScale.y);
-
-
+	//// Show current scaling info
+	//ImGui::Text("Font global scale: %.2fx", io.FontGlobalScale);
+	//ImGui::Text("Current DPI: %.0f x %.0f",
+	//	96.0f * io.DisplayFramebufferScale.x,
+	//	96.0f * io.DisplayFramebufferScale.y);
 
 
-	// In any MainUIManager render method
-	ImFont* currentFont = ImGui::GetFont();
-	if (currentFont) {
-		ImGui::Text("Current font size: %.1f", currentFont->FontSize);
-		ImGui::Text("Font pointer: %p", (void*)currentFont);
-		if (m_imguiFont) {  // Use the stored font from SetImguiFont
-			ImGui::Text("Stored font pointer: %p", (void*)m_imguiFont);
-			ImGui::Text("Using correct font: %s", (currentFont == m_imguiFont) ? "YES" : "NO");
-		}
-	}
 
 
-	ImGui::Text("=== FONT SCALING DEBUG ===");
-	ImGui::Text("Font global scale: %.3f", io.FontGlobalScale);
-	ImGui::Text("Display scale X: %.3f", io.DisplayFramebufferScale.x);
-	ImGui::Text("Display scale Y: %.3f", io.DisplayFramebufferScale.y);
-
-	if (currentFont) {
-		ImGui::Text("Current font size: %.1f", currentFont->FontSize);
-		ImGui::Text("Font scale: %.3f", currentFont->Scale);
-
-		// Calculate what the actual rendered size should be
-		float actualSize = currentFont->FontSize * io.FontGlobalScale * currentFont->Scale;
-		ImGui::Text("Calculated actual size: %.1f", actualSize);
-	}
+	//// In any MainUIManager render method
+	//ImFont* currentFont = ImGui::GetFont();
+	//if (currentFont) {
+	//	ImGui::Text("Current font size: %.1f", currentFont->FontSize);
+	//	ImGui::Text("Font pointer: %p", (void*)currentFont);
+	//	if (m_imguiFont) {  // Use the stored font from SetImguiFont
+	//		ImGui::Text("Stored font pointer: %p", (void*)m_imguiFont);
+	//		ImGui::Text("Using correct font: %s", (currentFont == m_imguiFont) ? "YES" : "NO");
+	//	}
+	//}
 
 
-	ImGui::Text("=== RESOLUTION DEBUG ===");
-	ImGui::Text("Display size: %.0fx%.0f", io.DisplaySize.x, io.DisplaySize.y);
-	ImGui::Text("Framebuffer size: %.0fx%.0f",
-		io.DisplaySize.x * io.DisplayFramebufferScale.x,
-		io.DisplaySize.y * io.DisplayFramebufferScale.y);
-	// Calculate DPI from framebuffer scale (assuming 96 base DPI)
-	float dpiX = 96.0f * io.DisplayFramebufferScale.x;
-	float dpiY = 96.0f * io.DisplayFramebufferScale.y;
-	ImGui::Text("Estimated DPI: %.0f x %.0f", dpiX, dpiY);
-	if (io.DisplayFramebufferScale.x != 1.0f || io.DisplayFramebufferScale.y != 1.0f) {
-		ImGui::Text("High DPI detected: %.0f%% scaling", io.DisplayFramebufferScale.x * 100.0f);
-	}
+	//ImGui::Text("=== FONT SCALING DEBUG ===");
+	//ImGui::Text("Font global scale: %.3f", io.FontGlobalScale);
+	//ImGui::Text("Display scale X: %.3f", io.DisplayFramebufferScale.x);
+	//ImGui::Text("Display scale Y: %.3f", io.DisplayFramebufferScale.y);
+
+	//if (currentFont) {
+	//	ImGui::Text("Current font size: %.1f", currentFont->FontSize);
+	//	ImGui::Text("Font scale: %.3f", currentFont->Scale);
+
+	//	// Calculate what the actual rendered size should be
+	//	float actualSize = currentFont->FontSize * io.FontGlobalScale * currentFont->Scale;
+	//	ImGui::Text("Calculated actual size: %.1f", actualSize);
+	//}
+
+
+	//ImGui::Text("=== RESOLUTION DEBUG ===");
+	//ImGui::Text("Display size: %.0fx%.0f", io.DisplaySize.x, io.DisplaySize.y);
+	//ImGui::Text("Framebuffer size: %.0fx%.0f",
+	//	io.DisplaySize.x * io.DisplayFramebufferScale.x,
+	//	io.DisplaySize.y * io.DisplayFramebufferScale.y);
+	//// Calculate DPI from framebuffer scale (assuming 96 base DPI)
+	//float dpiX = 96.0f * io.DisplayFramebufferScale.x;
+	//float dpiY = 96.0f * io.DisplayFramebufferScale.y;
+	//ImGui::Text("Estimated DPI: %.0f x %.0f", dpiX, dpiY);
+	//if (io.DisplayFramebufferScale.x != 1.0f || io.DisplayFramebufferScale.y != 1.0f) {
+	//	ImGui::Text("High DPI detected: %.0f%% scaling", io.DisplayFramebufferScale.x * 100.0f);
+	//}
 }
 
 
@@ -2319,27 +2322,12 @@ void MainUIManager::RenderPowerSupplyUI() {
 }
 
 void MainUIManager::RenderRecipePage() {
-	ImGui::SetWindowFontScale(1.5f);
-	ImGui::Text("Recipe Management");
-	ImGui::SetWindowFontScale(1.0f);
-
-	ImGui::Spacing();
-	ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.0f, 1.0f), "Recipe system coming soon...");
-	ImGui::Spacing();
-
-	ImGui::Text("This page will contain:");
-	ImGui::BulletText("Recipe creation and editing");
-	ImGui::BulletText("Recipe parameter management");
-	ImGui::BulletText("Recipe validation and testing");
-	ImGui::BulletText("Recipe library and version control");
-	ImGui::BulletText("Recipe execution templates");
-
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
-
-	ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
-		"Placeholder implementation - functionality will be added in future releases.");
+	if (m_recipePageUI) {
+		m_recipePageUI->RenderUI();
+	}
+	else {
+		ImGui::Text("Recipe UI not available");
+	}
 }
 
 void MainUIManager::RenderSystemPage() {

@@ -28,6 +28,7 @@
 #include "ModuleAlignmentUI.h"
 #include "mainUI/SPDPowerSupplyUI.h"
 #include "include/PowerSupplyDevice/PowerSupplyUI.h"
+#include "RecipePageUI.h"
 
 
 // Forward declarations
@@ -218,6 +219,7 @@ private:
 	std::unique_ptr<CLD101xEquipmentUI> m_cld101xEquipmentUI;
   std::unique_ptr<SPDPowerSupplyUI> m_spdPowerSupplyUI;
 	std::unique_ptr<PowerSupplyUI> m_powerSupplyUI;
+  std::unique_ptr<RecipePageUI> m_recipePageUI;
 
   // Utility members
   ImFont* m_imguiFont = nullptr;
