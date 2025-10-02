@@ -54,7 +54,9 @@ public:
     RUN_PROGRAM,
     CONFIG,
     VISION,
-    PROGRAMMING    // Add this new page
+    PROGRAMMING,    // Add this new page
+    RECIPE,        // NEW
+    SYSTEM         // NEW
   };
 
   // Add new enum for Programming sub-pages:
@@ -95,6 +97,15 @@ public:
     FIDUCIAL,
     DATUM_REFERENCE,
     MODULE_ALIGNMENT
+  };
+
+  // Add new sub-page enums for the placeholders:
+  enum class RecipeSubPage {
+    NONE
+  };
+
+  enum class SystemSubPage {
+    NONE
   };
 
 public:
@@ -146,6 +157,8 @@ private:
   DataInstrumentSubPage currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
   ProgrammingSubPage currentProgrammingSubPage = ProgrammingSubPage::NONE;
   VisionSubPage currentVisionSubPage = VisionSubPage::NONE;
+  RecipeSubPage currentRecipeSubPage = RecipeSubPage::NONE;     // NEW
+  SystemSubPage currentSystemSubPage = SystemSubPage::NONE;     // NEW
 
   // DUAL APPROACH MEMBERS
   // Reference to MotionConfigManager (always required)
@@ -260,4 +273,8 @@ private:
   void CreateIOControlPanel();
 
 	void RenderPowerSupplyUI();
+
+  // Add these method declarations:
+  void RenderRecipePage();
+  void RenderSystemPage();
 };

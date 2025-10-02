@@ -477,7 +477,6 @@ void MainUIManager::RenderUI() {
 // Update RenderBackButton() to handle Data Instrument sub-pages
 
 
-// Update RenderBackButton() to handle Programming sub-pages:
 void MainUIManager::RenderBackButton() {
 	// Add 10 pixels of vertical spacing at the top
 	ImGui::Dummy(ImVec2(0.0f, 15.0f));
@@ -497,11 +496,17 @@ void MainUIManager::RenderBackButton() {
 			currentConfigSubPage = ConfigSubPage::NONE;
 		}
 		else if (currentProgrammingSubPage != ProgrammingSubPage::NONE) {
-			currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Handle programming sub-pages
+			currentProgrammingSubPage = ProgrammingSubPage::NONE;
 		}
-		else if (currentVisionSubPage != VisionSubPage::NONE) {  // ADD THIS LINE
-			currentVisionSubPage = VisionSubPage::NONE;           // ADD THIS LINE
-		}                                                         // ADD THIS LINE
+		else if (currentVisionSubPage != VisionSubPage::NONE) {
+			currentVisionSubPage = VisionSubPage::NONE;
+		}
+		else if (currentRecipeSubPage != RecipeSubPage::NONE) {    // NEW
+			currentRecipeSubPage = RecipeSubPage::NONE;
+		}
+		else if (currentSystemSubPage != SystemSubPage::NONE) {    // NEW
+			currentSystemSubPage = SystemSubPage::NONE;
+		}
 		else {
 			currentMainPage = MainPage::MAIN;
 		}
@@ -511,65 +516,136 @@ void MainUIManager::RenderBackButton() {
 	ImGui::PopStyleVar();
 }
 
-// Update RenderTopMenuBar() to add 10px spacing at the top:
+
+
 void MainUIManager::RenderTopMenuBar() {
 	// Add 10 pixels of vertical spacing at the top
 	ImGui::Dummy(ImVec2(0.0f, 12.0f));
 
-	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(20, 10));
+	// Calculate center position for 2-column layout
+	float windowWidth = ImGui::GetWindowWidth();
+	float buttonWidth = 250.0f;
+	float buttonHeight = 100.0f;
+	float spacingX = 20.0f;
+	float spacingY = 15.0f;
+
+	// Total width of 2 columns
+	float totalWidth = (buttonWidth * 2) + spacingX;
+	float startX = (windowWidth - totalWidth) * 0.5f;
+
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(20, 15));
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.3f, 0.8f, 1.0f));
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.4f, 0.9f, 1.0f));
-	if (ImGui::Button("Manual", ImVec2(120, 40))) {
+
+	// Row 1
+	ImGui::SetCursorPosX(startX);
+	if (ImGui::Button("Manual", ImVec2(buttonWidth, buttonHeight))) {
 		currentMainPage = MainPage::MANUAL;
+		// Reset all sub-pages
 		currentManualSubPage = ManualSubPage::NONE;
 		currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
 		currentConfigSubPage = ConfigSubPage::NONE;
-		currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
+		currentProgrammingSubPage = ProgrammingSubPage::NONE;
+		currentVisionSubPage = VisionSubPage::NONE;
+		currentRecipeSubPage = RecipeSubPage::NONE;
+		currentSystemSubPage = SystemSubPage::NONE;
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Data & Instrument", ImVec2(150, 40))) {
+	ImGui::SetCursorPosX(startX + buttonWidth + spacingX);
+	if (ImGui::Button("Data & Instrument", ImVec2(buttonWidth, buttonHeight))) {
 		currentMainPage = MainPage::DATA_INSTRUMENT;
 		currentManualSubPage = ManualSubPage::NONE;
 		currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
 		currentConfigSubPage = ConfigSubPage::NONE;
-		currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
+		currentProgrammingSubPage = ProgrammingSubPage::NONE;
+		currentVisionSubPage = VisionSubPage::NONE;
+		currentRecipeSubPage = RecipeSubPage::NONE;
+		currentSystemSubPage = SystemSubPage::NONE;
 	}
-	ImGui::SameLine();
-	if (ImGui::Button("Run Program", ImVec2(120, 40))) {
+
+	// Row 2
+	ImGui::Dummy(ImVec2(0.0f, spacingY));
+	ImGui::SetCursorPosX(startX);
+	if (ImGui::Button("Run Program", ImVec2(buttonWidth, buttonHeight))) {
 		currentMainPage = MainPage::RUN_PROGRAM;
 		currentManualSubPage = ManualSubPage::NONE;
 		currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
 		currentConfigSubPage = ConfigSubPage::NONE;
-		currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
+		currentProgrammingSubPage = ProgrammingSubPage::NONE;
+		currentVisionSubPage = VisionSubPage::NONE;
+		currentRecipeSubPage = RecipeSubPage::NONE;
+		currentSystemSubPage = SystemSubPage::NONE;
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Config", ImVec2(120, 40))) {
+	ImGui::SetCursorPosX(startX + buttonWidth + spacingX);
+	if (ImGui::Button("Config", ImVec2(buttonWidth, buttonHeight))) {
 		currentMainPage = MainPage::CONFIG;
 		currentManualSubPage = ManualSubPage::NONE;
 		currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
 		currentConfigSubPage = ConfigSubPage::NONE;
-		currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
+		currentProgrammingSubPage = ProgrammingSubPage::NONE;
+		currentVisionSubPage = VisionSubPage::NONE;
+		currentRecipeSubPage = RecipeSubPage::NONE;
+		currentSystemSubPage = SystemSubPage::NONE;
 	}
-	ImGui::SameLine();
-	if (ImGui::Button("Vision", ImVec2(120, 40))) {
+
+	// Row 3
+	ImGui::Dummy(ImVec2(0.0f, spacingY));
+	ImGui::SetCursorPosX(startX);
+	if (ImGui::Button("Vision", ImVec2(buttonWidth, buttonHeight))) {
 		currentMainPage = MainPage::VISION;
 		currentManualSubPage = ManualSubPage::NONE;
 		currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
 		currentConfigSubPage = ConfigSubPage::NONE;
 		currentProgrammingSubPage = ProgrammingSubPage::NONE;
-		currentVisionSubPage = VisionSubPage::NONE;  // ADD THIS LINE
+		currentVisionSubPage = VisionSubPage::NONE;
+		currentRecipeSubPage = RecipeSubPage::NONE;
+		currentSystemSubPage = SystemSubPage::NONE;
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Programming", ImVec2(130, 40))) {
+	ImGui::SetCursorPosX(startX + buttonWidth + spacingX);
+	if (ImGui::Button("Programming", ImVec2(buttonWidth, buttonHeight))) {
 		currentMainPage = MainPage::PROGRAMMING;
 		currentManualSubPage = ManualSubPage::NONE;
 		currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
 		currentConfigSubPage = ConfigSubPage::NONE;
-		currentProgrammingSubPage = ProgrammingSubPage::NONE;  // Reset programming sub-page
+		currentProgrammingSubPage = ProgrammingSubPage::NONE;
+		currentVisionSubPage = VisionSubPage::NONE;
+		currentRecipeSubPage = RecipeSubPage::NONE;
+		currentSystemSubPage = SystemSubPage::NONE;
 	}
+
+	// Row 4 - NEW BUTTONS
+	ImGui::Dummy(ImVec2(0.0f, spacingY));
+	ImGui::SetCursorPosX(startX);
+	if (ImGui::Button("Recipe", ImVec2(buttonWidth, buttonHeight))) {
+		currentMainPage = MainPage::RECIPE;
+		currentManualSubPage = ManualSubPage::NONE;
+		currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
+		currentConfigSubPage = ConfigSubPage::NONE;
+		currentProgrammingSubPage = ProgrammingSubPage::NONE;
+		currentVisionSubPage = VisionSubPage::NONE;
+		currentRecipeSubPage = RecipeSubPage::NONE;
+		currentSystemSubPage = SystemSubPage::NONE;
+	}
+	ImGui::SameLine();
+	ImGui::SetCursorPosX(startX + buttonWidth + spacingX);
+	if (ImGui::Button("System", ImVec2(buttonWidth, buttonHeight))) {
+		currentMainPage = MainPage::SYSTEM;
+		currentManualSubPage = ManualSubPage::NONE;
+		currentDataInstrumentSubPage = DataInstrumentSubPage::NONE;
+		currentConfigSubPage = ConfigSubPage::NONE;
+		currentProgrammingSubPage = ProgrammingSubPage::NONE;
+		currentVisionSubPage = VisionSubPage::NONE;
+		currentRecipeSubPage = RecipeSubPage::NONE;
+		currentSystemSubPage = SystemSubPage::NONE;
+	}
+
 	ImGui::PopStyleColor(2);
 	ImGui::PopStyleVar();
 }
+
+
 
 void MainUIManager::RenderDateTime() {
 	// Get date/time strings
@@ -724,11 +800,20 @@ void MainUIManager::RenderBreadcrumbs() {
 		case ManualSubPage::CAMERA:
 			breadcrumb += " > Camera";
 			break;
+
 		default:
 			break;
 		}
 		break;
-
+		// Add these cases to the switch statement in RenderBreadcrumbs():
+	case MainPage::RECIPE:
+		breadcrumb += " > Recipe";
+		// Add sub-page handling when you implement them
+		break;
+	case MainPage::SYSTEM:
+		breadcrumb += " > System";
+		// Add sub-page handling when you implement them
+		break;
 		// 3. UPDATE RenderBreadcrumbs() - Change enum and breadcrumb text:
 	case MainPage::DATA_INSTRUMENT:
 		breadcrumb += " > Data & Instrument";
@@ -844,6 +929,12 @@ void MainUIManager::RenderMainContent() {
 			RenderProgrammingSubPage();
 		}
 	}
+	else if (currentMainPage == MainPage::RECIPE) {        // NEW
+		RenderRecipePage();
+	}
+	else if (currentMainPage == MainPage::SYSTEM) {        // NEW
+		RenderSystemPage();
+	}
 
 	// Update TCP Data Manager if on that page
 	if (currentMainPage == MainPage::DATA_INSTRUMENT &&
@@ -862,12 +953,16 @@ void MainUIManager::RenderMainPage() {
 	ImGui::SetWindowFontScale(1.0f);
 
 	ImGui::Spacing();
-	ImGui::Text("Select a category from the top menu to begin:");
+	ImGui::Text("Select a category from the menu above to begin:");
 	ImGui::BulletText("Manual - Direct control of hardware components");
 	ImGui::BulletText("Data & Instrument - Data monitoring and instruments");
 	ImGui::BulletText("Run Program - Execute automated sequences");
 	ImGui::BulletText("Config - System configuration and settings");
 	ImGui::BulletText("Vision - Image processing and computer vision");
+	ImGui::BulletText("Programming - Visual and macro programming tools");
+	ImGui::BulletText("Recipe - Recipe management and templates");
+	ImGui::BulletText("System - System management and diagnostics");
+
 
 	ImGui::Spacing();
 	ImGui::Separator();
@@ -2221,4 +2316,53 @@ void MainUIManager::RenderPowerSupplyUI() {
 		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Power Supply UI not initialized");
 		ImGui::Text("Power Supply Manager may not be available.");
 	}
+}
+
+void MainUIManager::RenderRecipePage() {
+	ImGui::SetWindowFontScale(1.5f);
+	ImGui::Text("Recipe Management");
+	ImGui::SetWindowFontScale(1.0f);
+
+	ImGui::Spacing();
+	ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.0f, 1.0f), "Recipe system coming soon...");
+	ImGui::Spacing();
+
+	ImGui::Text("This page will contain:");
+	ImGui::BulletText("Recipe creation and editing");
+	ImGui::BulletText("Recipe parameter management");
+	ImGui::BulletText("Recipe validation and testing");
+	ImGui::BulletText("Recipe library and version control");
+	ImGui::BulletText("Recipe execution templates");
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+		"Placeholder implementation - functionality will be added in future releases.");
+}
+
+void MainUIManager::RenderSystemPage() {
+	ImGui::SetWindowFontScale(1.5f);
+	ImGui::Text("System Management");
+	ImGui::SetWindowFontScale(1.0f);
+
+	ImGui::Spacing();
+	ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.0f, 1.0f), "System management coming soon...");
+	ImGui::Spacing();
+
+	ImGui::Text("This page will contain:");
+	ImGui::BulletText("System diagnostics and health monitoring");
+	ImGui::BulletText("User management and permissions");
+	ImGui::BulletText("System logs and audit trails");
+	ImGui::BulletText("Backup and restore functionality");
+	ImGui::BulletText("System maintenance and updates");
+	ImGui::BulletText("Network and communication settings");
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+		"Placeholder implementation - functionality will be added in future releases.");
 }

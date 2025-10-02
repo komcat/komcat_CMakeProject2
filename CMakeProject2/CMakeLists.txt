@@ -798,7 +798,11 @@ add_executable(uaa3App
   "include/AppSettings.cpp"
   "mainUI/SettingsEditorUI.h"
   "mainUI/SettingsEditorUI.cpp"
- "Processes/UAA3ProcessBuilders/Core/uaa3_dev_sequence.cpp" "include/SequenceStepMockup.h" "Processes/PickAndPlaceParam.h" "Processes/ParameterLoader.h")
+  "Processes/UAA3ProcessBuilders/Core/uaa3_dev_sequence.cpp" 
+  "include/SequenceStepMockup.h" 
+  "Processes/PickAndPlaceParam.h"
+  "Processes/ParameterLoader.h" 
+)
 
 
 
