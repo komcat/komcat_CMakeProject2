@@ -109,4 +109,7 @@ private:
 
   // Add method declaration
   void RenderNicknameEditor(ProcessInstance& instance);
+
+  bool m_showLoadDialog = false;
+  std::string m_selectedRecipeToLoad = "";
 };

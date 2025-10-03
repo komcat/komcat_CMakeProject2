@@ -65,6 +65,8 @@ void RecipePageUI::RenderUI() {
 
     ImGui::EndTable();
   }
+
+  ShowLoadRecipeDialog();
 }
 
 void RecipePageUI::RenderLeftColumn() {
@@ -861,61 +863,95 @@ void RecipePageUI::OnSaveRecipeClicked() {
 }
 
 // Fixed Load dialog implementation
-void RecipePageUI::ShowLoadRecipeDialog() {
-  static bool showDialog = false;  // Changed to false
-  static std::string selectedRecipe = "";
 
-  // This will open the dialog when called
-  if (!showDialog) {
-    showDialog = true;
+void RecipePageUI::ShowLoadRecipeDialog() {
+  if (m_showLoadDialog) {
     ImGui::OpenPopup("Load Recipe");
+    m_showLoadDialog = false; // Only open once
   }
 
-  if (ImGui::BeginPopupModal("Load Recipe", &showDialog, ImGuiWindowFlags_AlwaysAutoResize)) {
+  // Use a pointer to keep the popup open
+  bool* p_open = nullptr; // Don't pass the close button, we'll handle it manually
+
+  if (ImGui::BeginPopupModal("Load Recipe", p_open, ImGuiWindowFlags_AlwaysAutoResize)) {
     ImGui::Text("Select a recipe to load:");
     ImGui::Separator();
 
     auto availableRecipes = GetAvailableRecipes();
 
     if (availableRecipes.empty()) {
-      ImGui::Text("No saved recipes found.");
+      ImGui::Text("No saved recipes found in recipes/ directory.");
     }
     else {
-      for (const auto& recipe : availableRecipes) {
-        if (ImGui::Selectable(recipe.c_str(), selectedRecipe == recipe)) {
-          selectedRecipe = recipe;
+      // Use a different approach - list with radio buttons instead of selectables
+      for (size_t i = 0; i < availableRecipes.size(); i++) {
+        const auto& recipe = availableRecipes[i];
+
+        // Use radio button instead of selectable
+        bool isSelected = (m_selectedRecipeToLoad == recipe);
+        if (ImGui::RadioButton(recipe.c_str(), isSelected)) {
+          m_selectedRecipeToLoad = recipe;
         }
       }
     }
 
     ImGui::Separator();
 
-    bool canLoad = !selectedRecipe.empty();
-    if (!canLoad) {
+    bool canLoad = !m_selectedRecipeToLoad.empty();
+
+    // Style the Load button
+    if (canLoad) {
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+    }
+    else {
       ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
     }
 
-    if (ImGui::Button("Load") && canLoad) {
-      if (LoadRecipeFromFile(selectedRecipe)) {
-        showDialog = false;
-        selectedRecipe = "";  // Reset selection
+    if (ImGui::Button("Load", ImVec2(80, 30)) && canLoad) {
+      std::cout << "Loading recipe: " << m_selectedRecipeToLoad << std::endl;
+      if (LoadRecipeFromFile(m_selectedRecipeToLoad)) {
+        std::cout << "Recipe loaded successfully!" << std::endl;
+        ImGui::CloseCurrentPopup();
+      }
+      else {
+        std::cout << "Failed to load recipe!" << std::endl;
       }
     }
 
-    if (!canLoad) {
+    if (canLoad) {
+      ImGui::PopStyleColor(2);
+    }
+    else {
       ImGui::PopStyleVar();
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("Cancel")) {
-      showDialog = false;
-      selectedRecipe = "";  // Reset selection
+
+    // Cancel button
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.2f, 0.2f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.7f, 0.3f, 0.3f, 1.0f));
+
+    if (ImGui::Button("Cancel", ImVec2(80, 30))) {
+      m_selectedRecipeToLoad = ""; // Clear selection
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::PopStyleColor(2);
+
+    // Show selected recipe at bottom
+    if (!m_selectedRecipeToLoad.empty()) {
+      ImGui::Separator();
+      ImGui::Text("Selected: %s", m_selectedRecipeToLoad.c_str());
     }
 
     ImGui::EndPopup();
   }
 }
+
 // Updated load method
 void RecipePageUI::OnLoadRecipeClicked() {
-  ShowLoadRecipeDialog();
+  std::cout << "Load Recipe button clicked" << std::endl;
+  m_showLoadDialog = true;
+  m_selectedRecipeToLoad = "";
 }
