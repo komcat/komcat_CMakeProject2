@@ -134,7 +134,10 @@ void RunPageUI::RenderUI() {
   RenderColumn3();
   ImGui::EndChild();
 
-  // NEW: Render filter configuration window
+  // NEW: Recipe load dialog
+  ShowRecipeLoadDialog();
+
+
   if (m_showFilterWindow) {
     m_filterManager->RenderFilterWindow(&m_showFilterWindow);
   }
@@ -145,35 +148,52 @@ void RunPageUI::RenderUI() {
 
 
 // In RunPageUI.cpp, update RenderColumn1:
+// In RunPageUI.cpp - Update RenderColumn1()
 void RunPageUI::RenderColumn1() {
   ImGui::Separator();
+
+  // === NEW: Recipe Mode Indicator ===
+  if (m_usingRecipe) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.5f, 1.0f));
+    ImGui::Text("Recipe Mode: %s", m_loadedRecipe.name.c_str());
+    ImGui::PopStyleColor();
+
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Clear")) {
+      m_usingRecipe = false;
+      m_selectedProcess = "";
+      UpdateStatus("Switched to registry mode");
+    }
+    ImGui::Separator();
+  }
+
+  // === NEW: Recipe Load Button ===
+  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.4f, 0.0f, 1.0f));
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.5f, 0.1f, 1.0f));
+  if (ImGui::Button("Load Recipe", ImVec2(-1, 30))) {
+    m_showRecipeLoadDialog = true;
+  }
+  ImGui::PopStyleColor(2);
+
+  ImGui::Separator();
+
+  // Existing buttons...
   if (ImGui::Button("Edit Me", ImVec2(-1, 30))) {
     m_settingsEditor->Show();
     UpdateStatus("Opened " + m_settingsEditor->GetName());
   }
+
   ImGui::Text(reinterpret_cast<const char*>(u8"🔧 Process Control"));
-
-
   ImGui::Separator();
-  // Render control buttons at the top
+
+  // Rest of existing code...
   RenderControlButtons();
-
   ImGui::Spacing();
   ImGui::Separator();
-
-  // Single-line running status with large font and dark green background
   RenderRunningStatus();
-
   ImGui::Spacing();
   ImGui::Separator();
 
-  // Progress bar
-  //RenderProgressBar();
-
-  ImGui::Spacing();
-  ImGui::Separator();
-
-  // NEW: Auto-start checkbox
   ImGui::Checkbox("Automatic Start", &m_autoStartOnSelect);
   if (ImGui::IsItemHovered()) {
     ImGui::SetTooltip("When checked, selecting a process will automatically start it");
@@ -182,11 +202,9 @@ void RunPageUI::RenderColumn1() {
   ImGui::Separator();
   ImGui::Spacing();
 
-  // NEW: Render process tree view instead of buttons
   RenderProcessTreeView();
-
-
 }
+
 
 
 // Add this method to RunPageUI.cpp
@@ -384,41 +402,35 @@ void RunPageUI::RenderColumn2() {
   ImGui::Text(reinterpret_cast<const char*>(u8"📊 Status & Controls"));
   ImGui::Separator();
 
-  // Add tab bar for the second column
   if (ImGui::BeginTabBar("Column2Tabs")) {
-
-    // Tab 1: Sequence Breakdown (keep existing)
     if (ImGui::BeginTabItem("Sequence")) {
       RenderSequenceBreakdownTab();
       ImGui::EndTabItem();
     }
 
-    // Tab 2: Process Config (keep existing)
     if (ImGui::BeginTabItem("Config")) {
       RenderProcessConfigTab();
       ImGui::EndTabItem();
     }
 
-    // Tab 3: NEW - Configurable Process tab
+    // REMOVE or comment out this tab - no longer needed
+    /*
     if (ImGui::BeginTabItem("Configurable")) {
       RenderConfigurableTab();
       ImGui::EndTabItem();
     }
+    */
 
-    // Tab 4: Status & History (keep existing)
     if (ImGui::BeginTabItem("Status")) {
       RenderStatusTabCol2();
       ImGui::EndTabItem();
     }
 
-    // Tab 5: Global Jog (keep existing)
     if (ImGui::BeginTabItem("Jog")) {
       RenderJogControlTab();
       ImGui::EndTabItem();
     }
 
-
-    // NEW: Action tab
     if (ImGui::BeginTabItem("Action")) {
       RenderActionTab();
       ImGui::EndTabItem();
@@ -427,7 +439,6 @@ void RunPageUI::RenderColumn2() {
     ImGui::EndTabBar();
   }
 }
-
 
 
 // Update RenderSequenceBreakdownTab() in RunPageUI.cpp:
@@ -864,38 +875,45 @@ void RunPageUI::ClearCompletedSteps() {
 
 
 
-// KEEP: GetCurrentProcessList method unchanged (for backward compatibility)
+// Replace the existing GetCurrentProcessList() method
 std::vector<std::string> RunPageUI::GetCurrentProcessList() const {
-    // Get all processes from registry
-    auto allProcesses = ProcessRegistry::GetInstance().GetAllProcessNames();
+  // NEW: If using recipe, return recipe instances
+  if (m_usingRecipe) {
+    return GetRecipeInstanceDisplayNames();
+  }
 
-    // Apply filters if filter manager is available
-    if (m_filterManager) {
-        std::vector<std::string> filtered;
-        filtered.reserve(allProcesses.size());
+  // Original filter-based logic
+  auto allProcesses = ProcessRegistry::GetInstance().GetAllProcessNames();
 
-        for (const auto& process : allProcesses) {
-            if (m_filterManager->IsProcessVisible(process)) {
-                filtered.push_back(process);
-            }
-        }
-        return filtered;
+  if (m_filterManager) {
+    std::vector<std::string> filtered;
+    filtered.reserve(allProcesses.size());
+
+    for (const auto& process : allProcesses) {
+      if (m_filterManager->IsProcessVisible(process)) {
+        filtered.push_back(process);
+      }
     }
+    return filtered;
+  }
 
-    // If no filter manager, return all processes
-    return allProcesses;
+  return allProcesses;
 }
 
 
-
-// UPDATED: GetSortedProcessList method - NEW method for sorted buttons
+// Update GetSortedProcessList() to handle recipes
 std::vector<std::string> RunPageUI::GetSortedProcessList() const {
-    if (m_filterManager) {
-        return m_filterManager->GetSortedFilteredProcessList();  // NEW: Use sorted method
-    }
+  // NEW: If using recipe, return instances in recipe order
+  if (m_usingRecipe) {
+    return GetRecipeInstanceDisplayNames();
+  }
 
-    // Fallback: return all processes from registry if no filter manager
-    return ProcessRegistry::GetInstance().GetAllProcessNames();
+  // Original filter manager logic
+  if (m_filterManager) {
+    return m_filterManager->GetSortedFilteredProcessList();
+  }
+
+  return ProcessRegistry::GetInstance().GetAllProcessNames();
 }
 
 
@@ -3539,84 +3557,20 @@ void RunPageUI::UpdateStatus(const std::string& message, bool isError) {
 }
 
 
-// RunPageUI::BuildSelectedProcess() - Thread-safe version
-
 std::unique_ptr<SequenceStep> RunPageUI::BuildSelectedProcess() {
-  // Check if this is a configurable process
-  bool isConfigurable = (m_selectedProcess.find("_Configurable") != std::string::npos);
-
-  if (isConfigurable) {
-    // CRITICAL: Create a local copy to avoid thread conflicts
-    ProcessConfiguration localConfig;
-
-    // Safely get config from UI under mutex protection
-    {
-      std::lock_guard<std::mutex> lock(m_mutex);
-
-      if (m_processConfigUI) {
-        // Get a copy, not a reference
-        localConfig = m_processConfigUI->getConfig();
-        m_logger->LogInfo("Using configuration from ProcessConfigUI for: " + m_selectedProcess);
-      }
-      else {
-        // Create appropriate default config based on process name
-        if (m_selectedProcess.find("PickPlace") != std::string::npos) {
-          localConfig = ProcessConfigBuilders::createPickPlaceConfig();
-        }
-        else if (m_selectedProcess.find("UVCuring") != std::string::npos) {
-          localConfig = ProcessConfigBuilders::createUVCuringConfig();
-        }
-        else if (m_selectedProcess.find("Reject") != std::string::npos) {
-          localConfig = ProcessConfigBuilders::createRejectConfig();
-        }
-        else if (m_selectedProcess.find("Probing") != std::string::npos) {
-          localConfig = ProcessConfigBuilders::createProbingConfig();
-        }
-        else {
-          localConfig = ProcessConfigBuilders::createPickPlaceConfig();
-          m_logger->LogWarning("Could not determine config type for " + m_selectedProcess + ", using default PickPlace config");
-        }
-
-        // Try to load saved config
-        std::string configFile = "last_" + m_selectedProcess + "_config.json";
-        if (std::filesystem::exists(configFile)) {
-          localConfig.loadFromFile(configFile);
-          m_logger->LogInfo("Loaded saved config from: " + configFile);
-        }
-      }
-    }
-
-    // Save configuration outside of mutex
-    localConfig.saveToFile("last_" + m_selectedProcess + "_config.json");
-    m_logger->LogInfo("Saved configuration for process execution");
-
-    // Check if UserPromptUI is available
-    if (!m_promptUI) {
-      UpdateStatus("UserPromptUI not available for configurable process", true);
+  // NEW: Recipe-based building
+  if (m_usingRecipe) {
+    ProcessInstance* instance = GetSelectedRecipeInstance();
+    if (!instance) {
+      UpdateStatus("Selected recipe instance not found", true);
+      m_logger->LogError("Could not find recipe instance: " + m_selectedProcess);
       return nullptr;
     }
 
-    // Build the appropriate configurable process using local copy
-    if (m_selectedProcess == "UAA3_PickPlaceLeftLens_Configurable") {
-      return UAA3ProcessBuilders::BuildPickPlaceLeftLensSequence_uaa3_Configurable(
-        m_machineOps, *m_promptUI, localConfig);
-    }
-    else if (m_selectedProcess == "UAA3_PickPlaceRightLens_Configurable") {
-      return UAA3ProcessBuilders::BuildPickPlaceRightLensSequence_uaa3_Configurable(
-        m_machineOps, *m_promptUI, localConfig);
-    }
-    else if (m_selectedProcess == "UAA3_UVCuring_Configurable") {
-      return UAA3ProcessBuilders::BuildUVCuringSequence_uaa3_Configurable(
-        m_machineOps, *m_promptUI, localConfig);
-    }
-
-    // If unknown configurable process
-    UpdateStatus("Unknown configurable process: " + m_selectedProcess, true);
-    m_logger->LogError("Unknown configurable process: " + m_selectedProcess);
-    return nullptr;
+    return BuildFromRecipeInstance(instance);
   }
 
-  // Non-configurable process - use registry (existing code)
+  // Original registry-based process building (non-configurable)
   if (ProcessRegistry::GetInstance().HasProcess(m_selectedProcess)) {
     if (m_promptUI) {
       auto process = ProcessRegistry::GetInstance().BuildProcess(
@@ -3642,7 +3596,6 @@ std::unique_ptr<SequenceStep> RunPageUI::BuildSelectedProcess() {
     }
   }
 
-  // Process not found in registry
   UpdateStatus("Unknown process selected: " + m_selectedProcess, true);
   return nullptr;
 }
@@ -4450,4 +4403,252 @@ void RunPageUI::RefreshSettingsFromDatabase() {
   UpdateStatus("Settings refreshed from database");
 
   m_logger->LogInfo("RunPageUI: Refreshed settings from SettingsEditor changes");
+}
+
+
+// Add to RunPageUI.cpp
+
+void RunPageUI::ShowRecipeLoadDialog() {
+  if (m_showRecipeLoadDialog) {
+    ImGui::OpenPopup("Load Recipe");
+    m_showRecipeLoadDialog = false;
+  }
+
+  if (ImGui::BeginPopupModal("Load Recipe", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Select a recipe to load for execution:");
+    ImGui::Separator();
+
+    auto availableRecipes = GetAvailableRecipeFiles();
+
+    if (availableRecipes.empty()) {
+      ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+        "No recipes found in recipes/ directory.");
+      ImGui::Spacing();
+      ImGui::Text("Create recipes in the Recipe Management page.");
+    }
+    else {
+      ImGui::BeginChild("RecipeList", ImVec2(300, 200), true);
+
+      for (const auto& recipe : availableRecipes) {
+        bool isSelected = (m_selectedRecipeFile == recipe);
+        if (ImGui::RadioButton(recipe.c_str(), isSelected)) {
+          m_selectedRecipeFile = recipe;
+        }
+      }
+
+      ImGui::EndChild();
+    }
+
+    ImGui::Separator();
+
+    bool canLoad = !m_selectedRecipeFile.empty();
+
+    if (canLoad) {
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+    }
+    else {
+      ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
+    }
+
+    if (ImGui::Button("Load", ImVec2(80, 30)) && canLoad) {
+      if (LoadRecipeFromFile(m_selectedRecipeFile)) {
+        UpdateStatus("Loaded recipe: " + m_loadedRecipe.name);
+        ImGui::CloseCurrentPopup();
+      }
+      else {
+        UpdateStatus("Failed to load recipe: " + m_selectedRecipeFile, true);
+      }
+    }
+
+    if (canLoad) {
+      ImGui::PopStyleColor(2);
+    }
+    else {
+      ImGui::PopStyleVar();
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Cancel", ImVec2(80, 30))) {
+      m_selectedRecipeFile = "";
+      ImGui::CloseCurrentPopup();
+    }
+
+    if (!m_selectedRecipeFile.empty()) {
+      ImGui::Separator();
+      ImGui::Text("Selected: %s", m_selectedRecipeFile.c_str());
+    }
+
+    ImGui::EndPopup();
+  }
+}
+
+std::vector<std::string> RunPageUI::GetAvailableRecipeFiles() const {
+  std::vector<std::string> recipes;
+
+  if (!std::filesystem::exists(m_recipesDirectory)) {
+    return recipes;
+  }
+
+  for (const auto& entry : std::filesystem::directory_iterator(m_recipesDirectory)) {
+    if (entry.is_regular_file() && entry.path().extension() == ".json") {
+      std::string filename = entry.path().stem().string();
+      recipes.push_back(filename);
+    }
+  }
+
+  std::sort(recipes.begin(), recipes.end());
+  return recipes;
+}
+
+bool RunPageUI::LoadRecipeFromFile(const std::string& filename) {
+  try {
+    std::string filepath = m_recipesDirectory + filename + ".json";
+
+    if (!std::filesystem::exists(filepath)) {
+      m_logger->LogError("Recipe file not found: " + filepath);
+      return false;
+    }
+
+    std::ifstream file(filepath);
+    if (!file.is_open()) {
+      m_logger->LogError("Failed to open recipe file: " + filepath);
+      return false;
+    }
+
+    nlohmann::json recipeJson;
+    file >> recipeJson;
+    file.close();
+
+    if (DeserializeRecipe(recipeJson)) {
+      m_loadedRecipe.filename = filename;
+      m_loadedRecipe.loadedTime = std::time(nullptr);
+      m_usingRecipe = true;
+
+      // Auto-select first instance if available
+      if (!m_loadedRecipe.instances.empty()) {
+        m_selectedProcess = m_loadedRecipe.instances[0].GetUIDisplayName();
+        ExtractSelectedProcessOperations();
+      }
+
+      m_logger->LogInfo("Loaded recipe: " + m_loadedRecipe.name +
+        " with " + std::to_string(m_loadedRecipe.instances.size()) +
+        " instances");
+      return true;
+    }
+
+    return false;
+
+  }
+  catch (const std::exception& e) {
+    m_logger->LogError("Error loading recipe: " + std::string(e.what()));
+    return false;
+  }
+}
+
+bool RunPageUI::DeserializeRecipe(const nlohmann::json& recipeJson) {
+  try {
+    // Clear current recipe
+    m_loadedRecipe.instances.clear();
+
+    // Load recipe name
+    if (recipeJson.contains("name")) {
+      m_loadedRecipe.name = recipeJson["name"];
+    }
+
+    // Load process instances
+    if (recipeJson.contains("processInstances") && recipeJson["processInstances"].is_array()) {
+      for (const auto& instanceJson : recipeJson["processInstances"]) {
+        ProcessInstance instance(
+          instanceJson["instanceId"],
+          instanceJson["processType"]
+        );
+
+        // Load display name
+        if (instanceJson.contains("displayName")) {
+          instance.displayName = instanceJson["displayName"];
+        }
+
+        // Load nickname
+        if (instanceJson.contains("nickname")) {
+          instance.nickname = instanceJson["nickname"];
+        }
+
+        // Load parameters
+        if (instanceJson.contains("parameters") && !instanceJson["parameters"].is_null()) {
+          for (const auto& param : instanceJson["parameters"].items()) {
+            instance.parameters[param.key()] = param.value();
+          }
+        }
+
+        m_loadedRecipe.instances.push_back(instance);
+      }
+    }
+
+    return true;
+
+  }
+  catch (const std::exception& e) {
+    m_logger->LogError("Error deserializing recipe: " + std::string(e.what()));
+    return false;
+  }
+}
+
+std::vector<std::string> RunPageUI::GetRecipeInstanceDisplayNames() const {
+  std::vector<std::string> names;
+  names.reserve(m_loadedRecipe.instances.size());
+
+  for (const auto& instance : m_loadedRecipe.instances) {
+    names.push_back(instance.GetUIDisplayName());
+  }
+
+  return names;
+}
+
+ProcessInstance* RunPageUI::GetSelectedRecipeInstance() {
+  for (auto& instance : m_loadedRecipe.instances) {
+    if (instance.GetUIDisplayName() == m_selectedProcess) {
+      return &instance;
+    }
+  }
+  return nullptr;
+}
+
+std::unique_ptr<SequenceStep> RunPageUI::BuildFromRecipeInstance(ProcessInstance* instance) {
+  if (!instance) {
+    return nullptr;
+  }
+
+  m_logger->LogInfo("Building process from recipe instance: " + instance->GetUIDisplayName() +
+    " (Type: " + instance->processType + ")");
+
+  // For recipe-based execution, we build directly from ProcessRegistry
+  // The registry builders should use the parameters from the instance
+
+  if (!ProcessRegistry::GetInstance().HasProcess(instance->processType)) {
+    UpdateStatus("Process type not found in registry: " + instance->processType, true);
+    m_logger->LogError("Recipe references unknown process type: " + instance->processType);
+    return nullptr;
+  }
+
+  // Build from registry
+  if (m_promptUI) {
+    auto process = ProcessRegistry::GetInstance().BuildProcess(
+      instance->processType, m_machineOps, *m_promptUI);
+
+    if (process) {
+      UpdateStatus("Built process: " + instance->GetUIDisplayName());
+      m_logger->LogInfo("Successfully built: " + instance->processType);
+      return process;
+    }
+    else {
+      UpdateStatus("Failed to build process: " + instance->processType, true);
+      return nullptr;
+    }
+  }
+  else {
+    UpdateStatus("UserPromptUI not available", true);
+    return nullptr;
+  }
 }

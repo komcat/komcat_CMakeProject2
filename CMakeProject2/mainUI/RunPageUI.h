@@ -27,6 +27,11 @@
 #include <memory>
 #include <chrono>
 #include <SDL_opengl.h>  // NEW: For OpenGL texture management
+// Add these includes at the top
+#include "ProcessInstance.h"
+#include <nlohmann/json.hpp>
+#include <fstream>
+#include <filesystem>
 
 
 
@@ -321,4 +326,29 @@ private:
   std::unique_ptr<SettingsEditorUI> m_settingsEditor;
 
   void RefreshSettingsFromDatabase();
+
+
+  // Recipe execution support
+  struct LoadedRecipe {
+    std::string name;
+    std::string filename;
+    std::vector<ProcessInstance> instances;
+    std::time_t loadedTime;
+  };
+
+  LoadedRecipe m_loadedRecipe;
+  bool m_usingRecipe = false;
+  bool m_showRecipeLoadDialog = false;
+  std::string m_selectedRecipeFile = "";
+  std::string m_recipesDirectory = "recipes/";
+
+  // Recipe management methods
+  void ShowRecipeLoadDialog();
+  bool LoadRecipeFromFile(const std::string& filename);
+  bool DeserializeRecipe(const nlohmann::json& recipeJson);
+  std::vector<std::string> GetAvailableRecipeFiles() const;
+  std::vector<std::string> GetRecipeInstanceDisplayNames() const;
+  ProcessInstance* GetSelectedRecipeInstance();
+  std::unique_ptr<SequenceStep> BuildFromRecipeInstance(ProcessInstance* instance);
+
 };
