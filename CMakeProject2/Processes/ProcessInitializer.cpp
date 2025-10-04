@@ -214,36 +214,170 @@ namespace UAA3ProcessRegistration {
   void RegisterCoreProcesses() {
     auto& registry = ProcessRegistry::GetInstance();
 
-    registry.RegisterProcess(
+    // ========================================================================
+// Core_PickPlace - PARAMETERIZED VERSION
+// ========================================================================
+    registry.RegisterProcessWithParams(
       "Core_PickPlace",
       "Core",
       "High precision pick and place with camera view",
       true,
-      [](MachineOperations& machineOps, UserPromptUI& promptUI) {
-      return UAA3ProcessBuilders::CorePickPlace(machineOps, promptUI);
+      [](MachineOperations& ops, UserPromptUI& ui,
+        const std::map<std::string, std::string>& params) -> std::unique_ptr<SequenceStep> {
+
+      // Helper functions
+      auto getParam = [&params](const std::string& key, const std::string& defaultValue) {
+        auto it = params.find(key);
+        return (it != params.end()) ? it->second : defaultValue;
+      };
+
+      auto getFloatParam = [&params](const std::string& key, float defaultValue) {
+        auto it = params.find(key);
+        if (it != params.end()) {
+          try { return std::stof(it->second); }
+          catch (...) { return defaultValue; }
+        }
+        return defaultValue;
+      };
+
+      auto getBoolParam = [&params](const std::string& key, bool defaultValue) {
+        auto it = params.find(key);
+        if (it != params.end()) {
+          return (it->second == "true" || it->second == "1");
+        }
+        return defaultValue;
+      };
+
+      // Extract ALL parameters
+      std::string deviceName = getParam("deviceName", "hex-right");
+      std::string graphName = getParam("graphName", "Process_Flow");
+      std::string pickNode = getParam("pickNode", "node_5245");
+      std::string placeNode = getParam("placeNode", "node_5263");
+      std::string cameraGantry = getParam("cameraGantryDevice", "gantry-main");
+      std::string cameraViewPickNode = getParam("cameraViewPickNode", "node_4209");
+      std::string cameraViewPlaceNode = getParam("cameraViewPlaceNode", "node_4209");
+      std::string gripperOutputDevice = getParam("gripperOutputDevice", "IOBottom");
+      std::string gripperPinName = getParam("gripperPinName", "gripper-right");  // NEW: pin name
+      float gripperHoldDelay = getFloatParam("gripperHoldDelay", 1.5f);
+      float speed = getFloatParam("speed", 10.0f);
+      bool enableCameraView = getBoolParam("enableCameraView", true);
+
+      // Call builder with ALL parameters including pin name
+      return UAA3ProcessBuilders::createCorePickPlace(
+        ops, ui,
+        deviceName,
+        graphName,
+        pickNode,
+        placeNode,
+        cameraGantry,
+        cameraViewPickNode,
+        cameraViewPlaceNode,
+        gripperOutputDevice,
+        gripperPinName,         // Pin name instead of pin number
+        gripperHoldDelay,
+        speed,
+        enableCameraView
+      );
     }
     );
 
-    registry.RegisterProcess(
+    // ========================================================================
+    // Core_PickOnly - PARAMETERIZED VERSION
+    // ========================================================================
+    registry.RegisterProcessWithParams(
       "Core_PickOnly",
       "Core",
       "Quality pick operation with camera verification",
       true,
-      [](MachineOperations& machineOps, UserPromptUI& promptUI) {
-      return UAA3ProcessBuilders::CorePickOnly(machineOps, promptUI);
-    }
-		);
+      [](MachineOperations& ops, UserPromptUI& ui,
+        const std::map<std::string, std::string>& params) -> std::unique_ptr<SequenceStep> {
 
-    registry.RegisterProcess(
+      auto getParam = [&params](const std::string& key, const std::string& defaultValue) {
+        auto it = params.find(key);
+        return (it != params.end()) ? it->second : defaultValue;
+      };
+
+      auto getFloatParam = [&params](const std::string& key, float defaultValue) {
+        auto it = params.find(key);
+        if (it != params.end()) {
+          try { return std::stof(it->second); }
+          catch (...) { return defaultValue; }
+        }
+        return defaultValue;
+      };
+
+      auto getBoolParam = [&params](const std::string& key, bool defaultValue) {
+        auto it = params.find(key);
+        if (it != params.end()) {
+          return (it->second == "true" || it->second == "1");
+        }
+        return defaultValue;
+      };
+
+      std::string deviceName = getParam("deviceName", "Precision_Manipulator");
+      std::string pickNode = getParam("pickNode", "Precision_Pick_Point");
+      std::string cameraGantry = getParam("cameraGantryDevice", "gantry-main");
+      std::string cameraViewNode = getParam("cameraViewNode", "Precision_View_Point");
+      float speed = getFloatParam("speed", 50.0f);
+      bool enableCameraView = getBoolParam("enableCameraView", true);
+
+      return UAA3ProcessBuilders::createCorePickOnly(
+        ops, ui, deviceName, pickNode,
+        cameraGantry, cameraViewNode, speed, enableCameraView
+      );
+    }
+    );
+
+    // ========================================================================
+    // Core_PlaceOnly - PARAMETERIZED VERSION
+    // ========================================================================
+    registry.RegisterProcessWithParams(
       "Core_PlaceOnly",
       "Core",
       "Quality place operation with camera verification",
       true,
-      [](MachineOperations& machineOps, UserPromptUI& promptUI) {
-      return UAA3ProcessBuilders::CorePlaceOnly(machineOps, promptUI);
+      [](MachineOperations& ops, UserPromptUI& ui,
+        const std::map<std::string, std::string>& params) -> std::unique_ptr<SequenceStep> {
+
+      auto getParam = [&params](const std::string& key, const std::string& defaultValue) {
+        auto it = params.find(key);
+        return (it != params.end()) ? it->second : defaultValue;
+      };
+
+      auto getFloatParam = [&params](const std::string& key, float defaultValue) {
+        auto it = params.find(key);
+        if (it != params.end()) {
+          try { return std::stof(it->second); }
+          catch (...) { return defaultValue; }
+        }
+        return defaultValue;
+      };
+
+      auto getBoolParam = [&params](const std::string& key, bool defaultValue) {
+        auto it = params.find(key);
+        if (it != params.end()) {
+          return (it->second == "true" || it->second == "1");
+        }
+        return defaultValue;
+      };
+
+      std::string deviceName = getParam("deviceName", "hex-right");
+      std::string placeNode = getParam("placeNode", "node_5263");
+      std::string cameraGantry = getParam("cameraGantryDevice", "gantry-main");
+      std::string cameraViewNode = getParam("cameraViewNode", "QC_Camera_Position");
+      float speed = getFloatParam("speed", 50.0f);
+      bool enableCameraView = getBoolParam("enableCameraView", true);
+
+      return UAA3ProcessBuilders::createCorePlaceOnly(
+        ops, ui, deviceName, placeNode,
+        cameraGantry, cameraViewNode, speed, enableCameraView
+      );
     }
     );
+
+    printf("RegisterCoreProcesses: Registered 3 parameterized core processes\n");
   }
+
 
   // Auto-register on startup using static initialization
   static struct UAA3AutoRegister {

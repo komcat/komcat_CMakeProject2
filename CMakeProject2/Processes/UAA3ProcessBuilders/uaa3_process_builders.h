@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "SequenceStep.h"
 #include "machine_operations.h"
@@ -27,6 +27,48 @@ namespace UAA3ProcessBuilders {
 
 	std::unique_ptr<SequenceStep> CorePlaceOnly(
 		MachineOperations& machineOps, UserPromptUI& promptUI);
+
+
+  // NEW: Parameterized builder functions for Core operations
+  std::unique_ptr<SequenceStep> createCorePickPlace(
+    MachineOperations& machineOps,        // 1
+    UserPromptUI& promptUI,               // 2
+    const std::string& deviceName,        // 3
+    const std::string& graphName,         // 4
+    const std::string& pickNode,          // 5
+    const std::string& placeNode,         // 6
+    const std::string& cameraGantry,      // 7
+    const std::string& cameraViewPickNode,// 8
+    const std::string& cameraViewPlaceNode,// 9
+    const std::string& gripperOutputDevice,// 10
+    const std::string& gripperPinName,    // 11
+    float gripperHoldDelay,               // 12
+    float speed,                          // 13
+    bool enableCameraView                 // 14 ← ADD THIS
+  );
+
+  std::unique_ptr<SequenceStep> createCorePickOnly(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI,
+    const std::string& deviceName,
+    const std::string& pickNode,
+    const std::string& cameraGantry,
+    const std::string& cameraViewNode,
+    float speed,
+    bool enableCameraView
+  );
+
+  std::unique_ptr<SequenceStep> createCorePlaceOnly(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI,
+    const std::string& deviceName,
+    const std::string& placeNode,
+    const std::string& cameraGantry,
+    const std::string& cameraViewNode,
+    float speed,
+    bool enableCameraView
+  );
+
 
   // ============================================================================
   // CORE PROCESSES

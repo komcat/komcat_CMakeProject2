@@ -27,13 +27,26 @@ ImGui::Text("?? Process Control");
 // ? This works properly:
 ImGui::Text(reinterpret_cast<const char*>(u8"?? Process Control"));
 - add freetype support for font rendering
+
+version
+2.5.0.637
+#define VERSION_MAJOR 2
+#define VERSION_MINOR 5
+#define VERSION_PATCH 0
+#define VERSION_BUILD 637
+
+- Recipe system
+- have CorePickPlace method with parameeterize system
+- fix a lot of bugs
 */
+
+
 
 // Version information - manually set for now
 #define VERSION_MAJOR 2
-#define VERSION_MINOR 4
-#define VERSION_PATCH 3
-#define VERSION_BUILD 636
+#define VERSION_MINOR 5
+#define VERSION_PATCH 5
+#define VERSION_BUILD 637
 
 // Build information
 #define BUILD_DATE __DATE__

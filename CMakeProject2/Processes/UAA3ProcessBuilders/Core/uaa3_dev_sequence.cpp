@@ -1,4 +1,4 @@
-#include "../uaa3_process_builders.h"
+﻿#include "../uaa3_process_builders.h"
 #include "SequenceStepMockup.h"
 #include "PickAndPlaceParam.h"  // Include your parameter class
 #include "CoreSequenceStep.h"
@@ -124,17 +124,6 @@ namespace UAA3ProcessBuilders {
 
 
 
-    // High precision operation
-    sequence->AddOperation(std::make_shared<::CorePickPlace>(
-      "Precision_Manipulator",   // device name
-      50.0,                      // slower speed for precision
-      "Precision_Pick_Point",    // pick node
-      "Final_Assembly",          // place node
-      true,                      // enable camera view
-      "gantry-main",             // camera gantry device
-      "Precision_View_Point"     // camera view node
-    ));
-
     return sequence;
   }
 
@@ -144,15 +133,6 @@ namespace UAA3ProcessBuilders {
     auto sequence = std::make_unique<SequenceStep>("Core Place Only Sequence", machineOps);
 
 
-    // Place with camera verification
-    sequence->AddOperation(std::make_shared<::CorePlace>(
-      "Quality_Robot",           // device name
-      60.0,                      // speed
-      "QC_Station",              // place node
-      true,                      // enable camera view
-      "gantry-main",             // camera gantry device
-      "QC_Camera_Position"       // camera view node
-    ));
 
     return sequence;
   }
@@ -164,18 +144,130 @@ namespace UAA3ProcessBuilders {
     auto sequence = std::make_unique<SequenceStep>("Core Pick Only Sequence", machineOps);
 
 
-    sequence->AddOperation(std::make_shared<::CorePick>(
-      "hex-right",   // device name
-      5.0,                      // speed
-      "node_5245",    // pick node
-      true,                      // enable camera view
-      "gantry-main",             // camera gantry device
-      "node_4209"     // camera view node
+
+
+
+
+    return sequence;
+  }
+
+
+
+  /*
+
+  hex-right
+  pick
+    node_5245
+  see pick
+    node_4209
+
+    gripper right  "IOBottom", 2
+
+  place
+    node_5263
+  see place
+   node_4209
+
+
+
+  */
+
+
+  std::unique_ptr<SequenceStep> createCorePickPlace(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI,
+    const std::string& deviceName,
+    const std::string& graphName,
+    const std::string& pickNode,
+    const std::string& placeNode,
+    const std::string& cameraGantry,
+    const std::string& cameraViewPickNode,
+    const std::string& cameraViewPlaceNode,
+    const std::string& gripperOutputDevice,
+    const std::string& gripperPinName,
+    float gripperHoldDelay,
+    float speed,
+    bool enableCameraView)              // ← ADD THIS
+  {
+    auto sequence = std::make_unique<SequenceStep>(
+      "Core Pick & Place Sequence",
+      machineOps
+    );
+
+    sequence->AddOperation(std::make_shared<::CorePickPlace>(
+      deviceName,
+      speed,
+      pickNode,
+      placeNode,
+      enableCameraView,
+      cameraGantry,
+      cameraViewPickNode,
+      cameraViewPlaceNode,
+      graphName,
+      gripperOutputDevice,
+      gripperPinName,
+      gripperHoldDelay
     ));
 
+    return sequence;
+  }
 
+  // ========================================================================
+  // Parameterized builder for Core_PickOnly
+  // ========================================================================
+  std::unique_ptr<SequenceStep> createCorePickOnly(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI,
+    const std::string& deviceName,
+    const std::string& pickNode,
+    const std::string& cameraGantry,
+    const std::string& cameraViewNode,
+    float speed,
+    bool enableCameraView)
+  {
+    auto sequence = std::make_unique<SequenceStep>(
+      "Core Pick Only Sequence",
+      machineOps
+    );
 
+    sequence->AddOperation(std::make_shared<::CorePick>(
+      deviceName,
+      speed,
+      pickNode,
+      enableCameraView,
+      cameraGantry,
+      cameraViewNode
+    ));
 
+    return sequence;
+  }
+
+  // ========================================================================
+  // Parameterized builder for Core_PlaceOnly
+  // ========================================================================
+  std::unique_ptr<SequenceStep> createCorePlaceOnly(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI,
+    const std::string& deviceName,
+    const std::string& placeNode,
+    const std::string& cameraGantry,
+    const std::string& cameraViewNode,
+    float speed,
+    bool enableCameraView)
+  {
+    auto sequence = std::make_unique<SequenceStep>(
+      "Core Place Only Sequence",
+      machineOps
+    );
+
+    sequence->AddOperation(std::make_shared<::CorePlace>(
+      deviceName,
+      speed,
+      placeNode,
+      enableCameraView,
+      cameraGantry,
+      cameraViewNode
+    ));
 
     return sequence;
   }

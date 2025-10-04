@@ -5,25 +5,33 @@
 
 void RegisterCoreProcessParameters() {
 
-  // === Core_PickPlace Parameters ===
   ProcessParameterSchema::RegisterProcessSchema("Core_PickPlace", {
       ParameterDefinition("deviceName", ParameterType::DEVICE_SELECTION,
-                        "Precision_Manipulator", "Name of the pick and place device"),
+                        "Precision_Manipulator", "Pick and place device"),
+      ParameterDefinition("graphName", ParameterType::STRING,
+                        "Process_Flow", "Graph for motion planning"),
       ParameterDefinition("speed", ParameterType::DOUBLE,
                         "10.0", "Movement speed (mm/s)"),
       ParameterDefinition("pickNode", ParameterType::NODE_SELECTION,
-                        "Precision_Pick_Point", "Node for picking operation"),
+                        "node_5245", "Pick position node"),
       ParameterDefinition("placeNode", ParameterType::NODE_SELECTION,
-                        "Final_Assembly", "Node for placing operation"),
+                        "node_5263", "Place position node"),
       ParameterDefinition("enableCameraView", ParameterType::BOOLEAN,
-                        "true", "Enable camera view during operation"),
+                        "true", "Enable camera view"),
       ParameterDefinition("cameraGantryDevice", ParameterType::DEVICE_SELECTION,
-                        "gantry-main", "Camera gantry device name"),
-      ParameterDefinition("cameraViewNode", ParameterType::NODE_SELECTION,
-                        "Precision_View_Point", "Camera view position node")
+                        "gantry-main", "Camera gantry device"),
+      ParameterDefinition("cameraViewPickNode", ParameterType::NODE_SELECTION,
+                        "node_4209", "Camera view for pick"),
+      ParameterDefinition("cameraViewPlaceNode", ParameterType::NODE_SELECTION,
+                        "node_4209", "Camera view for place"),
+      ParameterDefinition("gripperOutputDevice", ParameterType::DEVICE_SELECTION,
+                        "IOBottom", "Gripper output device"),
+      ParameterDefinition("gripperPinName", ParameterType::STRING,       // Changed
+                        "gripper-right", "Gripper pin name (e.g., gripper-left, gripper-right)"),
+      ParameterDefinition("gripperHoldDelay", ParameterType::DOUBLE,
+                        "1.5", "Gripper hold delay in seconds")
     });
 
-  // Fix: Explicitly cast lambda to ParameterInitializer
   ProcessParameterFactory::RegisterParameterInitializer("Core_PickPlace",
     static_cast<ParameterInitializer>([](ProcessInstance& instance) {
     auto schema = ProcessParameterSchema::GetParametersForProcess("Core_PickPlace");

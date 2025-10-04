@@ -599,7 +599,14 @@ void RunPageUI::RenderStatusTabCol2() {
   ImGui::Text("Completed Processes:");
   ImGui::SameLine(ImGui::GetWindowWidth() - clearButtonWidth - 15);
   if (ImGui::SmallButton("Clear")) {
-    ClearCompletedSteps();
+    //ClearCompletedSteps();
+    std::cout << "Clear completed steps button clicked" << std::endl;
+    {
+      std::lock_guard<std::mutex> lock(m_mutex);
+      m_completedSteps.clear();
+		}
+
+
   }
 
   ImGui::Separator();
@@ -4620,35 +4627,40 @@ std::unique_ptr<SequenceStep> RunPageUI::BuildFromRecipeInstance(ProcessInstance
     return nullptr;
   }
 
-  m_logger->LogInfo("Building process from recipe instance: " + instance->GetUIDisplayName() +
+  m_logger->LogInfo("Building from recipe: " + instance->GetUIDisplayName() +
     " (Type: " + instance->processType + ")");
 
-  // For recipe-based execution, we build directly from ProcessRegistry
-  // The registry builders should use the parameters from the instance
+  // Log parameters for debugging
+  m_logger->LogInfo("Recipe parameters (" + std::to_string(instance->parameters.size()) + "):");
+  for (const auto& [key, value] : instance->parameters) {
+    m_logger->LogInfo("  " + key + " = " + value);
+  }
 
   if (!ProcessRegistry::GetInstance().HasProcess(instance->processType)) {
-    UpdateStatus("Process type not found in registry: " + instance->processType, true);
-    m_logger->LogError("Recipe references unknown process type: " + instance->processType);
+    UpdateStatus("Process type not found: " + instance->processType, true);
     return nullptr;
   }
 
-  // Build from registry
-  if (m_promptUI) {
-    auto process = ProcessRegistry::GetInstance().BuildProcess(
-      instance->processType, m_machineOps, *m_promptUI);
+  if (!m_promptUI) {
+    UpdateStatus("UserPromptUI not available", true);
+    return nullptr;
+  }
 
-    if (process) {
-      UpdateStatus("Built process: " + instance->GetUIDisplayName());
-      m_logger->LogInfo("Successfully built: " + instance->processType);
-      return process;
-    }
-    else {
-      UpdateStatus("Failed to build process: " + instance->processType, true);
-      return nullptr;
-    }
+  // THIS IS THE KEY CHANGE - use BuildProcessWithParameters
+  auto process = ProcessRegistry::GetInstance().BuildProcessWithParameters(
+    instance->processType,
+    m_machineOps,
+    *m_promptUI,
+    instance->parameters  // Pass the recipe parameters!
+  );
+
+  if (process) {
+    UpdateStatus("Built: " + instance->GetUIDisplayName());
+    m_logger->LogInfo("Successfully built with recipe parameters");
+    return process;
   }
   else {
-    UpdateStatus("UserPromptUI not available", true);
+    UpdateStatus("Failed to build: " + instance->processType, true);
     return nullptr;
   }
 }

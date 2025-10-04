@@ -143,6 +143,11 @@ public:
 		const std::string& targetNodeId, bool blocking = true,
 		const std::string& callerContext = "");  // NEW parameter
 
+	bool MoveToNode(const std::string& deviceName, const std::string& graphName,
+		const std::string& targetNodeId, bool blocking,
+		const std::string& callerContext = "");  // NEW parameter
+
+
 	bool MoveToPointName(const std::string& deviceName, const std::string& positionName,
 		bool blocking = true, const std::string& callerContext = "");
 
@@ -194,6 +199,14 @@ public:
 	// Add this public method
 	int GetPinNumberFromName(const std::string& deviceName,
 		const std::string& pinName);
+
+	// NEW: Set output using pin name instead of number
+	bool SetOutputByName(const std::string& deviceName,
+		const std::string& pinName,
+		bool state,
+		const std::string& callerContext = "");
+
+
 
 	// ReadInput methods - ADD callerContext parameter
 	bool ReadInput(const std::string& deviceName, int inputPin, bool& state,

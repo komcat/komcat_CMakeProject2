@@ -331,7 +331,9 @@ bool MachineOperations::MoveDeviceToPosition(const std::string& deviceName,
 }
 
 
-// machine_operations.cpp - REPLACE your MoveDeviceToNode method with this:
+
+
+
 
 bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
   const std::string& graphName,
@@ -527,6 +529,16 @@ bool MachineOperations::MoveDeviceToNode(const std::string& deviceName,
   }
 
   return success;
+}
+
+
+bool MachineOperations::MoveToNode(const std::string& deviceName,
+  const std::string& graphName,
+  const std::string& targetNodeId, 
+  bool blocking,
+  const std::string& callerContext) {
+
+  return MoveDeviceToNode(deviceName, graphName, targetNodeId, blocking, callerContext);
 }
 
 
@@ -1003,6 +1015,25 @@ int MachineOperations::GetPinNumberFromName(const std::string& deviceName,
   }
 
   return pinNumber;
+}
+
+bool MachineOperations::SetOutputByName(
+  const std::string& deviceName,
+  const std::string& pinName,
+  bool state,
+  const std::string& callerContext)
+{
+  // Resolve pin name to number
+  int pinNumber = GetPinNumberFromName(deviceName, pinName);
+
+  if (pinNumber < 0) {
+    LogError("Failed to resolve pin name '" + pinName +
+      "' for device '" + deviceName + "'");
+    return false;
+  }
+
+  // Call existing SetOutput with resolved pin number
+  return SetOutput(deviceName, pinNumber, state, callerContext);
 }
 
 // Read input state by device name
