@@ -981,6 +981,30 @@ bool MachineOperations::SetOutput(int deviceId, int outputPin, bool state) {
   return m_ioManager.setOutput(deviceId, outputPin, state) == EziIOError::SUCCESS;
 }
 
+int MachineOperations::GetPinNumberFromName(const std::string& deviceName,
+  const std::string& pinName) {
+  EziIODevice* device = m_ioManager.getDeviceByName(deviceName);
+  if (!device) {
+    m_logger->LogError("MachineOperations: Device not found: " + deviceName);
+    return -1;
+  }
+
+  // Try output pins first (most common for operations)
+  int pinNumber = device->GetOutputPinNumberFromName(pinName);
+
+  // If not found in outputs, try inputs
+  if (pinNumber < 0) {
+    pinNumber = device->GetInputPinNumberFromName(pinName);
+  }
+
+  if (pinNumber < 0) {
+    m_logger->LogError("MachineOperations: Pin name '" + pinName +
+      "' not found on device " + deviceName);
+  }
+
+  return pinNumber;
+}
+
 // Read input state by device name
 // UPDATED ReadInput method with tracking
 bool MachineOperations::ReadInput(const std::string& deviceName, int inputPin, bool& state,

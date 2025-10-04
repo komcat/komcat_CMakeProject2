@@ -92,6 +92,30 @@ namespace UAA3ProcessBuilders {
   }
 
 
+  // Utility function to setup default parameters for first-time use
+  void SetupDefaultPickAndPlaceParams() {
+    // This will create default parameters in the database if they don't exist
+    PickAndPlaceParam left_defaults("Robot_Left");
+    left_defaults.setDeviceName("Left Assembly Robot");
+    left_defaults.setSpeed(100.0);
+    left_defaults.setNodePick("PickStation_Left");
+    left_defaults.setNodePlace("PlaceStation_Left");
+    left_defaults.setEnabled(true);
+
+    PickAndPlaceParam right_defaults("Robot_Right");
+    right_defaults.setDeviceName("Right Assembly Robot");
+    right_defaults.setSpeed(100.0);
+    right_defaults.setNodePick("PickStation_Right");
+    right_defaults.setNodePlace("PlaceStation_Right");
+    right_defaults.setEnabled(true);
+
+    std::cout << "Default pick and place parameters setup complete." << std::endl;
+  }
+
+
+
+
+
   std::unique_ptr<SequenceStep> CorePickPlace(
     MachineOperations& machineOps, UserPromptUI& promptUI) {
 
@@ -133,24 +157,28 @@ namespace UAA3ProcessBuilders {
     return sequence;
   }
 
-  // Utility function to setup default parameters for first-time use
-  void SetupDefaultPickAndPlaceParams() {
-    // This will create default parameters in the database if they don't exist
-    PickAndPlaceParam left_defaults("Robot_Left");
-    left_defaults.setDeviceName("Left Assembly Robot");
-    left_defaults.setSpeed(100.0);
-    left_defaults.setNodePick("PickStation_Left");
-    left_defaults.setNodePlace("PlaceStation_Left");
-    left_defaults.setEnabled(true);
 
-    PickAndPlaceParam right_defaults("Robot_Right");
-    right_defaults.setDeviceName("Right Assembly Robot");
-    right_defaults.setSpeed(100.0);
-    right_defaults.setNodePick("PickStation_Right");
-    right_defaults.setNodePlace("PlaceStation_Right");
-    right_defaults.setEnabled(true);
+  std::unique_ptr<SequenceStep> CorePickOnly(
+    MachineOperations& machineOps, UserPromptUI& promptUI) {
 
-    std::cout << "Default pick and place parameters setup complete." << std::endl;
+    auto sequence = std::make_unique<SequenceStep>("Core Pick Only Sequence", machineOps);
+
+
+    sequence->AddOperation(std::make_shared<::CorePick>(
+      "hex-right",   // device name
+      5.0,                      // speed
+      "node_5245",    // pick node
+      true,                      // enable camera view
+      "gantry-main",             // camera gantry device
+      "node_4209"     // camera view node
+    ));
+
+
+
+
+
+    return sequence;
   }
+
 
 }

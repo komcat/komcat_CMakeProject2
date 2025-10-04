@@ -742,3 +742,25 @@ void EziIOManager::setChangeDetectionEnabled(bool enabled) {
     device->setChangeDetectionEnabled(enabled);
   }
 }
+
+void EziIODevice::MapInputPinName(const std::string& pinName, int pinNumber) {
+  if (pinNumber >= 0 && pinNumber < m_inputCount) {
+    m_inputPinNameMap[pinName] = pinNumber;
+  }
+}
+
+void EziIODevice::MapOutputPinName(const std::string& pinName, int pinNumber) {
+  if (pinNumber >= 0 && pinNumber < m_outputCount) {
+    m_outputPinNameMap[pinName] = pinNumber;
+  }
+}
+
+int EziIODevice::GetInputPinNumberFromName(const std::string& pinName) const {
+  auto it = m_inputPinNameMap.find(pinName);
+  return (it != m_inputPinNameMap.end()) ? it->second : -1;
+}
+
+int EziIODevice::GetOutputPinNumberFromName(const std::string& pinName) const {
+  auto it = m_outputPinNameMap.find(pinName);
+  return (it != m_outputPinNameMap.end()) ? it->second : -1;
+}

@@ -191,6 +191,10 @@ public:
 	bool SetOutput(const std::string& deviceName, int outputPin, bool state,
 		const std::string& callerContext = "");  // NEW parameter
 	bool SetOutput(int deviceId, int outputPin, bool state);
+	// Add this public method
+	int GetPinNumberFromName(const std::string& deviceName,
+		const std::string& pinName);
+
 	// ReadInput methods - ADD callerContext parameter
 	bool ReadInput(const std::string& deviceName, int inputPin, bool& state,
 		const std::string& callerContext = "");  // NEW parameter

@@ -50,11 +50,17 @@ public:
   void setChangeDetectionEnabled(bool enabled) { m_changeDetectionEnabled = enabled; }
   bool isChangeDetectionEnabled() const { return m_changeDetectionEnabled; }
 
+   void MapInputPinName(const std::string& pinName, int pinNumber);
+  void MapOutputPinName(const std::string& pinName, int pinNumber);
+  int GetInputPinNumberFromName(const std::string& pinName) const;
+  int GetOutputPinNumberFromName(const std::string& pinName) const;
+
 private:
   // Device specific pin masks based on output pin count
   static const uint32_t OUTPUT_PIN_MASKS_16[16];
   static const uint32_t OUTPUT_PIN_MASKS_8[8];
-
+  std::map<std::string, int> m_inputPinNameMap;   // Input pin names
+  std::map<std::string, int> m_outputPinNameMap;  // Output pin names
   uint32_t getOutputPinMask(int pin) const;
 
   int m_deviceId;

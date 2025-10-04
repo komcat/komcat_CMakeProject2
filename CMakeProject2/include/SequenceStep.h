@@ -131,6 +131,89 @@ private:
   int m_delayMs;
 };
 
+
+// Set output by pin name - looks up pin number from name
+class SetOutputOperationByPinName : public SequenceOperation {
+public:
+  SetOutputOperationByPinName(const std::string& deviceName, 
+                               const std::string& pinName, 
+                               bool state, 
+                               int delayMs = 200)
+    : m_deviceName(deviceName), m_pinName(pinName), 
+      m_state(state), m_delayMs(delayMs) {
+  }
+  
+  bool Execute(MachineOperations& ops) override {
+    // Lookup pin number from pin name
+    int pinNumber = ops.GetPinNumberFromName(m_deviceName, m_pinName);
+    if (pinNumber < 0) {
+      // Pin name not found
+      return false;
+    }
+    
+    // Generate caller context
+    std::string callerContext = "SetOutputByPinName_" + m_deviceName + 
+                                "_" + m_pinName + "_" + (m_state ? "ON" : "OFF");
+    
+    bool result = ops.SetOutput(m_deviceName, pinNumber, m_state, callerContext);
+    
+    if (result && m_delayMs > 0) {
+      ops.Wait(m_delayMs);
+    }
+    return result;
+  }
+  
+  std::string GetDescription() const override {
+    return "Set output " + m_deviceName + " pin '" + m_pinName + 
+           "' to " + (m_state ? "ON" : "OFF") +
+           " (delay: " + std::to_string(m_delayMs) + "ms)";
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_pinName;
+  bool m_state;
+  int m_delayMs;
+};
+
+// Clear output by pin name
+class ClearOutputOperationByPinName : public SequenceOperation {
+public:
+  ClearOutputOperationByPinName(const std::string& deviceName, 
+                                 const std::string& pinName, 
+                                 int delayMs = 200)
+    : m_deviceName(deviceName), m_pinName(pinName), m_delayMs(delayMs) {
+  }
+  
+  bool Execute(MachineOperations& ops) override {
+    // Lookup pin number from pin name
+    int pinNumber = ops.GetPinNumberFromName(m_deviceName, m_pinName);
+    if (pinNumber < 0) {
+      return false;
+    }
+    
+    std::string callerContext = "ClearOutputByPinName_" + m_deviceName + 
+                                "_" + m_pinName;
+    
+    bool result = ops.SetOutput(m_deviceName, pinNumber, false, callerContext);
+    
+    if (result && m_delayMs > 0) {
+      ops.Wait(m_delayMs);
+    }
+    return result;
+  }
+  
+  std::string GetDescription() const override {
+    return "Clear output " + m_deviceName + " pin '" + m_pinName + 
+           "' (delay: " + std::to_string(m_delayMs) + "ms)";
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_pinName;
+  int m_delayMs;
+};
+
 // Alternative: Dedicated ClearOutput method approach
 // If you prefer a separate method instead of using SetOutput(false)
 

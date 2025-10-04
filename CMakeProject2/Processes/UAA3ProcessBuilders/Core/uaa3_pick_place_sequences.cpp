@@ -142,6 +142,27 @@ namespace UAA3ProcessBuilders {
 
 
 
+
+    /*
+    
+    hex-right
+    pick
+      node_5245
+    see pick
+      node_4209
+
+      gripper right  "IOBottom", 2
+
+    place
+			node_5263
+    see place
+     node_4209
+
+    
+    
+    */
+
+
     // Move hex-right to pick lens position (verify this is correct for RIGHT lens)
     sequence->AddOperation(std::make_shared<MoveToNodeOperation>(
       "hex-right", "Process_Flow", "node_5245"));
@@ -162,9 +183,14 @@ namespace UAA3ProcessBuilders {
 
 
 
+
     // Release and re-grip cycle for the RIGHT lens
     sequence->AddOperation(std::make_shared<SetOutputOperation>(
       "IOBottom", 2, false));  // Release RIGHT gripper
+
+
+
+
     sequence->AddOperation(std::make_shared<WaitOperation>(1500));
 
     sequence->AddOperation(std::make_shared<SetOutputOperation>(

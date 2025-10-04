@@ -225,6 +225,16 @@ namespace UAA3ProcessRegistration {
     );
 
     registry.RegisterProcess(
+      "Core_PickOnly",
+      "Core",
+      "Quality pick operation with camera verification",
+      true,
+      [](MachineOperations& machineOps, UserPromptUI& promptUI) {
+      return UAA3ProcessBuilders::CorePickOnly(machineOps, promptUI);
+    }
+		);
+
+    registry.RegisterProcess(
       "Core_PlaceOnly",
       "Core",
       "Quality place operation with camera verification",

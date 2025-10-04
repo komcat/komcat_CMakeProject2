@@ -351,3 +351,37 @@ void IOConfigManager::updateLastModified()
   ss << std::put_time(&timeinfo, "%Y-%m-%dT%H:%M:%SZ");
   m_metadata.lastUpdated = ss.str();
 }
+
+std::map<std::string, int> IOConfigManager::getInputPinMappings(const std::string& deviceName) const {
+  std::map<std::string, int> mappings;
+
+  // Find the device in the loaded configuration
+  for (const auto& device : m_eziioDevices) {
+    if (device.name == deviceName) {
+      // Extract input pin mappings
+      for (const auto& pin : device.ioConfig.inputs) {
+        mappings[pin.name] = pin.pin;
+      }
+      break;
+    }
+  }
+
+  return mappings;
+}
+
+std::map<std::string, int> IOConfigManager::getOutputPinMappings(const std::string& deviceName) const {
+  std::map<std::string, int> mappings;
+
+  // Find the device in the loaded configuration
+  for (const auto& device : m_eziioDevices) {
+    if (device.name == deviceName) {
+      // Extract output pin mappings
+      for (const auto& pin : device.ioConfig.outputs) {
+        mappings[pin.name] = pin.pin;
+      }
+      break;
+    }
+  }
+
+  return mappings;
+}

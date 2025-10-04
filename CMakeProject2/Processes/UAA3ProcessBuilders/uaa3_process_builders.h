@@ -22,6 +22,9 @@ namespace UAA3ProcessBuilders {
   std::unique_ptr<SequenceStep> CorePickPlace(
 		MachineOperations& machineOps, UserPromptUI& promptUI);
 
+  std::unique_ptr<SequenceStep> CorePickOnly(
+    MachineOperations& machineOps, UserPromptUI& promptUI);
+
 	std::unique_ptr<SequenceStep> CorePlaceOnly(
 		MachineOperations& machineOps, UserPromptUI& promptUI);
 

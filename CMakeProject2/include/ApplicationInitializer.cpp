@@ -447,6 +447,37 @@ bool ApplicationInitializer::InitIOSystems(HardwareManagers& hw) {
   {
     //Load IO passed.
     hw.ioConfig->initializeIOManager(*hw.ioManager);
+
+
+    // ⭐ ADD THIS SECTION - Map pin names after devices are initialized
+    logger->LogInfo("Mapping pin names from IOConfig...");
+
+    // Get all devices and map their pin names
+    const auto& devices = hw.ioManager->getDevices();
+    for (const auto& devicePtr : devices) {
+      if (!devicePtr) continue;
+
+      std::string deviceName = devicePtr->getName();
+      logger->LogInfo("  Mapping pins for device: " + deviceName);
+
+      // Get pin mappings from IOConfig for this device
+      auto inputMappings = hw.ioConfig->getInputPinMappings(deviceName);
+      auto outputMappings = hw.ioConfig->getOutputPinMappings(deviceName);
+
+      // Map input pins
+      for (const auto& [pinName, pinNumber] : inputMappings) {
+        devicePtr->MapInputPinName(pinName, pinNumber);
+        logger->LogInfo("    Input: " + pinName + " -> pin " + std::to_string(pinNumber));
+      }
+
+      // Map output pins
+      for (const auto& [pinName, pinNumber] : outputMappings) {
+        devicePtr->MapOutputPinName(pinName, pinNumber);
+        logger->LogInfo("    Output: " + pinName + " -> pin " + std::to_string(pinNumber));
+      }
+    }
+
+    logger->LogInfo("Pin name mapping completed");
   }
 
 

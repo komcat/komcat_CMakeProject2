@@ -82,6 +82,10 @@ public:
   bool updatePneumaticSlide(const PneumaticSlideConfig& slideConfig);
 
   void updateLastModified();
+
+  // Add these public methods
+  std::map<std::string, int> getInputPinMappings(const std::string& deviceName) const;
+  std::map<std::string, int> getOutputPinMappings(const std::string& deviceName) const;
 private:
   // Loaded configuration
   std::vector<EziIODeviceConfig> m_eziioDevices;

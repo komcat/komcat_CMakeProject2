@@ -10,7 +10,7 @@ void RegisterCoreProcessParameters() {
       ParameterDefinition("deviceName", ParameterType::DEVICE_SELECTION,
                         "Precision_Manipulator", "Name of the pick and place device"),
       ParameterDefinition("speed", ParameterType::DOUBLE,
-                        "50.0", "Movement speed (mm/s)"),
+                        "10.0", "Movement speed (mm/s)"),
       ParameterDefinition("pickNode", ParameterType::NODE_SELECTION,
                         "Precision_Pick_Point", "Node for picking operation"),
       ParameterDefinition("placeNode", ParameterType::NODE_SELECTION,
@@ -56,6 +56,55 @@ void RegisterCoreProcessParameters() {
       instance.parameters[param.name] = param.defaultValue;
     }
   }));
+
+  // === Core_PickOnly Parameters ===
+  ProcessParameterSchema::RegisterProcessSchema("Core_PickOnly", {
+      ParameterDefinition("deviceName", ParameterType::DEVICE_SELECTION,
+                        "Precision_Manipulator", "Name of the pick device"),
+      ParameterDefinition("speed", ParameterType::DOUBLE,
+                        "10.0", "Movement speed (mm/s)"),
+      ParameterDefinition("pickNode", ParameterType::NODE_SELECTION,
+                        "Precision_Pick_Point", "Node for picking operation"),
+      ParameterDefinition("enableCameraView", ParameterType::BOOLEAN,
+                        "true", "Enable camera view during operation"),
+      ParameterDefinition("cameraGantryDevice", ParameterType::DEVICE_SELECTION,
+                        "gantry-main", "Camera gantry device name"),
+      ParameterDefinition("cameraViewNode", ParameterType::NODE_SELECTION,
+                        "Precision_View_Point", "Camera view position node")
+    });
+
+  ProcessParameterFactory::RegisterParameterInitializer("Core_PickOnly",
+    static_cast<ParameterInitializer>([](ProcessInstance& instance) {
+    auto schema = ProcessParameterSchema::GetParametersForProcess("Core_PickOnly");
+    for (const auto& param : schema) {
+      instance.parameters[param.name] = param.defaultValue;
+    }
+  }));
+
+  // === Core_PlaceOnly Parameters ===
+  ProcessParameterSchema::RegisterProcessSchema("Core_PlaceOnly", {
+      ParameterDefinition("deviceName", ParameterType::DEVICE_SELECTION,
+                        "hex-right", "Name of the place device"),
+      ParameterDefinition("speed", ParameterType::DOUBLE,
+                        "10.0", "Movement speed (mm/s)"),
+      ParameterDefinition("placeNode", ParameterType::NODE_SELECTION,
+                        "node_5263", "Node for placing operation"),
+      ParameterDefinition("enableCameraView", ParameterType::BOOLEAN,
+                        "true", "Enable camera view during operation"),
+      ParameterDefinition("cameraGantryDevice", ParameterType::DEVICE_SELECTION,
+                        "gantry-main", "Camera gantry device name"),
+      ParameterDefinition("cameraViewNode", ParameterType::NODE_SELECTION,
+                        "QC_Camera_Position", "Camera view position node")
+    });
+
+  ProcessParameterFactory::RegisterParameterInitializer("Core_PlaceOnly",
+    static_cast<ParameterInitializer>([](ProcessInstance& instance) {
+    auto schema = ProcessParameterSchema::GetParametersForProcess("Core_PlaceOnly");
+    for (const auto& param : schema) {
+      instance.parameters[param.name] = param.defaultValue;
+    }
+  }));
+
 
   std::cout << "Core process parameters registered successfully" << std::endl;
 }
