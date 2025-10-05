@@ -199,6 +199,36 @@ void RunPageUI::RenderColumn1() {
     ImGui::SetTooltip("When checked, selecting a process will automatically start it");
   }
 
+  // NEW: Group auto-execute control (only shown in recipe mode)
+  if (m_usingRecipe) {
+    ImGui::Checkbox("Auto-execute Group", &m_autoExecuteGroup);
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "When checked, starting a grouped process will automatically\n"
+        "execute all processes in that group sequentially.\n"
+        "Stops immediately on any failure.");
+    }
+
+    ImGui::Spacing();
+
+    // NEW: Run Entire Recipe button (placeholder for future)
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.3f, 0.8f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.7f, 0.4f, 0.9f, 1.0f));
+
+    // Disable button for now
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
+    ImGui::Button("Run Entire Recipe", ImVec2(-1, 35));
+    ImGui::PopStyleVar();
+
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "Future Feature: Execute all groups sequentially\n"
+        "Currently disabled - use individual process execution");
+    }
+
+    ImGui::PopStyleColor(2);
+  }
+
   ImGui::Separator();
   ImGui::Spacing();
 
@@ -225,8 +255,6 @@ void RunPageUI::RenderProgressBar() {
 
 
 
-// 1. Update RenderProcessTreeView() method to sync config when selecting a configurable process:
-
 void RunPageUI::RenderProcessTreeView() {
   ImGui::Text("Process Steps");
   ImGui::Separator();
@@ -235,59 +263,66 @@ void RunPageUI::RenderProcessTreeView() {
   ImGui::BeginChild("ProcessTree", ImVec2(0, 0), true,
     ImGuiWindowFlags_HorizontalScrollbar);
 
-  auto sortedList = GetSortedProcessList();
+  if (!m_usingRecipe) {
+    // ORIGINAL REGISTRY MODE (unchanged)
+    auto sortedList = GetSortedProcessList();
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 10));
+    ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
 
-  // Make items taller
-  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 10));
-  ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
+    for (const auto& process : sortedList) {
+      std::string displayName = process;
+      if (m_filterManager) {
+        int sortNum = m_filterManager->GetProcessSortNumber(process);
+        if (sortNum > 0) {
+          displayName = std::to_string(sortNum) + ". " + process;
+        }
+      }
 
-  for (const auto& process : sortedList) {
-    std::string displayName = process;
-    if (m_filterManager) {
-      int sortNum = m_filterManager->GetProcessSortNumber(process);
-      if (sortNum > 0) {
-        displayName = std::to_string(sortNum) + ". " + process;
+      bool isSelected = (m_selectedProcess == process);
+      bool isRunning = (m_processRunning && m_selectedProcess == process);
+
+      if (isRunning) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+      }
+
+      if (ImGui::Selectable(displayName.c_str(), isSelected, 0, ImVec2(0, 35))) {
+        m_selectedProcess = process;
+        UpdateStatus("Selected: " + process);
+        ExtractSelectedProcessOperations();
+
+        if (process.find("_Configurable") != std::string::npos && m_processConfigUI) {
+          m_processConfigUI->setCurrentProcess(process);
+          m_logger->LogInfo("Synced ProcessConfigUI with: " + process);
+        }
+
+        if (m_autoStartOnSelect && !m_processRunning) {
+          StartProcess(process);
+        }
+      }
+
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Click to select: %s\n%s",
+          process.c_str(),
+          m_autoStartOnSelect ? "Will auto-start" : "Use START button to run");
+      }
+
+      if (isRunning) {
+        ImGui::PopStyleColor();
       }
     }
 
-    bool isSelected = (m_selectedProcess == process);
-    bool isRunning = (m_processRunning && m_selectedProcess == process);
-
-    if (isRunning) {
-      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-    }
-
-    // Use Selectable with custom height
-    if (ImGui::Selectable(displayName.c_str(), isSelected, 0, ImVec2(0, 35))) {
-      m_selectedProcess = process;
-      UpdateStatus("Selected: " + process);
-      ExtractSelectedProcessOperations();
-
-      // NEW: Sync with ProcessConfigUI if it's a configurable process
-      if (process.find("_Configurable") != std::string::npos && m_processConfigUI) {
-        m_processConfigUI->setCurrentProcess(process);
-        m_logger->LogInfo("Synced ProcessConfigUI with: " + process);
-      }
-
-      if (m_autoStartOnSelect && !m_processRunning) {
-        StartProcess(process);
-      }
-    }
-
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Click to select: %s\n%s",
-        process.c_str(),
-        m_autoStartOnSelect ? "Will auto-start" : "Use START button to run");
-    }
-
-    if (isRunning) {
-      ImGui::PopStyleColor();
-    }
+    ImGui::PopStyleVar(2);
+  }
+  else {
+    // NEW: RECIPE MODE WITH GROUPS
+    RenderGroupedRecipeInstances();
   }
 
-  ImGui::PopStyleVar(2);
   ImGui::EndChild();
 }
+
+
+
 
 // NEW: Render single-line running status with progress bar
 void RunPageUI::RenderRunningStatus() {
@@ -318,7 +353,11 @@ void RunPageUI::RenderRunningStatus() {
 
   std::string statusText;
   if (m_processRunning) {
-    if (m_processPaused) {
+    if (m_runningGroupExecution) {
+      // NEW: Show group execution status
+      statusText = "RUNNING GROUP: " + m_currentGroupId;
+    }
+    else if (m_processPaused) {
       statusText = "PAUSED: " + m_selectedProcess;
     }
     else {
@@ -930,7 +969,8 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
   m_processStartTime = std::chrono::steady_clock::now();
   std::string idleTimeStr = "00:00.000";
   if (m_hasLastProcessEndTime) {
-    auto idleDuration = std::chrono::duration_cast<std::chrono::milliseconds>(m_processStartTime - m_lastProcessEndTime);
+    auto idleDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+      m_processStartTime - m_lastProcessEndTime);
     auto totalMs = idleDuration.count();
     auto minutes = totalMs / 60000;
     auto seconds = (totalMs % 60000) / 1000;
@@ -941,7 +981,7 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
     idleTimeStr = std::string(idleStr);
   }
 
-  // NEW: Reset operation tracking
+  // Reset operation tracking
   {
     std::lock_guard<std::mutex> lock(m_operationMutex);
     m_currentOperationIndex = 0;
@@ -949,103 +989,208 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
   }
 
   try {
-    auto sequence = BuildSelectedProcess();
-    if (!sequence) {
-      UpdateStatus("Failed to build process sequence", true);
-      m_processRunning = false;
-      return;
-    }
+    // NEW: Check if this is a grouped process and auto-execute is enabled
+    if (m_usingRecipe && m_autoExecuteGroup) {
+      ProcessInstance* startInstance = GetSelectedRecipeInstance();
 
-    // NEW: Set up operation tracking callback
-    sequence->SetOperationCallback([this](size_t index, const std::string& description, bool starting) {
-      std::lock_guard<std::mutex> lock(m_operationMutex);
-      if (starting) {
-        m_currentOperationIndex = index;
-        m_operationInProgress = true;
-
-        // Update progress based on operation index
-        if (!m_selectedProcessOperations.empty()) {
-          m_progress = static_cast<float>(index) / static_cast<float>(m_selectedProcessOperations.size());
-        }
+      if (startInstance && startInstance->IsGrouped()) {
+        // GROUP EXECUTION MODE
+        ExecuteProcessGroup(startInstance->groupId, idleTimeStr);
+        return;
       }
-    });
-
-    UpdateStatus("Starting process: " + processName);
-    // Call the sequence's Execute method - it handles fallbacks internally
-    bool processSuccess = sequence->Execute();
-
-
-    //// Reset operation tracking after completion - IMPORTANT FIX
-    //{
-    //  std::lock_guard<std::mutex> lock(m_operationMutex);
-    //  m_operationInProgress = false;
-    //  // Don't leave m_currentOperationIndex at 0 when done
-    //  if (processSuccess) {
-    //    m_currentOperationIndex = m_selectedProcessOperations.size(); // Set to end
-    //  }
-    //}
-
-    // NEW: Reset operation tracking after completion
-    {
-      std::lock_guard<std::mutex> lock(m_operationMutex);
-      m_operationInProgress = false;
     }
 
-    // Calculate final duration
-    auto endTime = std::chrono::steady_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - m_processStartTime);
-    // Format duration as mm:ss.xxx
-    auto totalMs = duration.count();
-    auto minutes = totalMs / 60000;
-    auto seconds = (totalMs % 60000) / 1000;
-    auto ms = totalMs % 1000;
-    char durationStr[32];
-    sprintf_s(durationStr, sizeof(durationStr), "%02d:%02d.%03d",
-      static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
-    if (m_stopRequested) {
-      UpdateStatus("Process stopped by user");
-      AddCompletedStep(processName, std::string(durationStr), idleTimeStr, false);
-    }
-    else if (processSuccess) {
-      m_progress = 1.0f;  // NEW: Set to 100% on success
-      UpdateStatus("Process completed successfully");
-      AddCompletedStep(processName, std::string(durationStr), idleTimeStr, true);
-    }
-    else {
-      UpdateStatus("Process failed", true);
-      AddCompletedStep(processName, std::string(durationStr), idleTimeStr, false);
-    }
-    // Always record end time for next idle calculation
-    m_lastProcessEndTime = endTime;
-    m_hasLastProcessEndTime = true;
+    // SINGLE PROCESS EXECUTION (original behavior)
+    ExecuteSingleProcess(processName, idleTimeStr);
+
   }
   catch (const std::exception& e) {
     // Reset operation tracking on exception
     {
       std::lock_guard<std::mutex> lock(m_operationMutex);
       m_operationInProgress = false;
-      m_currentOperationIndex = 0; // Reset on error
+      m_currentOperationIndex = 0;
     }
 
     UpdateStatus("Process error: " + std::string(e.what()), true);
-    // Track exception as failed process
+
     auto endTime = std::chrono::steady_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - m_processStartTime);
-    auto totalMs = duration.count();
-    auto minutes = totalMs / 60000;
-    auto seconds = (totalMs % 60000) / 1000;
-    auto ms = totalMs % 1000;
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+      endTime - m_processStartTime);
     char durationStr[32];
-    sprintf_s(durationStr, sizeof(durationStr), "%02d:%02d.%03d",
-      static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
+    FormatDuration(duration.count(), durationStr, sizeof(durationStr));
+
     AddCompletedStep(processName, std::string(durationStr), idleTimeStr, false);
     m_lastProcessEndTime = endTime;
     m_hasLastProcessEndTime = true;
   }
+
   m_processRunning = false;
   m_processPaused = false;
   m_progress = 0.0f;
+  m_runningGroupExecution = false;
+  m_currentGroupId = "";
 }
+
+
+
+// NEW: Helper method for group execution
+void RunPageUI::ExecuteProcessGroup(const std::string& groupId,
+  const std::string& initialIdleTime) {
+  m_runningGroupExecution = true;
+  m_currentGroupId = groupId;
+
+  UpdateStatus("Starting group execution: " + groupId);
+
+  // Collect all processes in this group
+  std::vector<ProcessInstance*> groupProcesses;
+  for (auto& inst : m_loadedRecipe.instances) {
+    if (inst.groupId == groupId) {
+      groupProcesses.push_back(&inst);
+    }
+  }
+
+  // Sort by execution order
+  std::sort(groupProcesses.begin(), groupProcesses.end(),
+    [](ProcessInstance* a, ProcessInstance* b) {
+    return a->executionOrder < b->executionOrder;
+  });
+
+  m_logger->LogInfo("Executing group: " + groupId +
+    " with " + std::to_string(groupProcesses.size()) + " processes");
+
+  // Execute each process in sequence
+  for (size_t i = 0; i < groupProcesses.size(); i++) {
+    ProcessInstance* instance = groupProcesses[i];
+
+    // Check for stop request
+    if (m_stopRequested) {
+      UpdateStatus("Group execution stopped by user at: " +
+        instance->GetUIDisplayName());
+      break;
+    }
+
+    // Update status with progress
+    UpdateStatus("Group [" + std::to_string(i + 1) + "/" +
+      std::to_string(groupProcesses.size()) + "]: " +
+      instance->GetUIDisplayName());
+
+    // Build and execute this process
+    auto sequence = BuildFromRecipeInstance(instance);
+    if (!sequence) {
+      UpdateStatus("Failed to build process: " + instance->GetUIDisplayName(), true);
+      AddCompletedStep(instance->GetUIDisplayName(), "N/A",
+        i == 0 ? initialIdleTime : "00:00.000", false);
+      // STOP IMMEDIATELY ON FAILURE
+      break;
+    }
+
+    // Set up operation callback
+    sequence->SetOperationCallback([this](size_t index, const std::string& desc, bool starting) {
+      std::lock_guard<std::mutex> lock(m_operationMutex);
+      if (starting) {
+        m_currentOperationIndex = index;
+        m_operationInProgress = true;
+      }
+    });
+
+    // Execute
+    auto stepStartTime = std::chrono::steady_clock::now();
+    bool success = sequence->Execute();
+    auto stepEndTime = std::chrono::steady_clock::now();
+
+    // Calculate duration for this step
+    auto stepDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
+      stepEndTime - stepStartTime);
+    char durationStr[32];
+    FormatDuration(stepDuration.count(), durationStr, sizeof(durationStr));
+
+    // Add to completed steps
+    AddCompletedStep(instance->GetUIDisplayName(), std::string(durationStr),
+      i == 0 ? initialIdleTime : "00:00.000", success);
+
+    if (!success) {
+      UpdateStatus("Group execution failed at: " + instance->GetUIDisplayName(), true);
+      // STOP IMMEDIATELY ON FAILURE
+      break;
+    }
+
+    // Update last end time for next process
+    m_lastProcessEndTime = stepEndTime;
+    m_hasLastProcessEndTime = true;
+  }
+
+  UpdateStatus("Group execution completed: " + groupId);
+  m_logger->LogInfo("Group execution finished: " + groupId);
+}
+
+// NEW: Helper method for single process execution (extracted from original code)
+void RunPageUI::ExecuteSingleProcess(const std::string& processName,
+  const std::string& idleTimeStr) {
+  auto sequence = BuildSelectedProcess();
+  if (!sequence) {
+    UpdateStatus("Failed to build process sequence", true);
+    m_processRunning = false;
+    return;
+  }
+
+  // Set up operation tracking callback
+  sequence->SetOperationCallback([this](size_t index, const std::string& description, bool starting) {
+    std::lock_guard<std::mutex> lock(m_operationMutex);
+    if (starting) {
+      m_currentOperationIndex = index;
+      m_operationInProgress = true;
+      if (!m_selectedProcessOperations.empty()) {
+        m_progress = static_cast<float>(index) /
+          static_cast<float>(m_selectedProcessOperations.size());
+      }
+    }
+  });
+
+  UpdateStatus("Starting process: " + processName);
+  bool processSuccess = sequence->Execute();
+
+  // Reset operation tracking
+  {
+    std::lock_guard<std::mutex> lock(m_operationMutex);
+    m_operationInProgress = false;
+  }
+
+  // Calculate final duration
+  auto endTime = std::chrono::steady_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+    endTime - m_processStartTime);
+
+  char durationStr[32];
+  FormatDuration(duration.count(), durationStr, sizeof(durationStr));
+
+  if (m_stopRequested) {
+    UpdateStatus("Process stopped by user");
+    AddCompletedStep(processName, std::string(durationStr), idleTimeStr, false);
+  }
+  else if (processSuccess) {
+    m_progress = 1.0f;
+    UpdateStatus("Process completed successfully");
+    AddCompletedStep(processName, std::string(durationStr), idleTimeStr, true);
+  }
+  else {
+    UpdateStatus("Process failed", true);
+    AddCompletedStep(processName, std::string(durationStr), idleTimeStr, false);
+  }
+
+  m_lastProcessEndTime = endTime;
+  m_hasLastProcessEndTime = true;
+}
+
+// NEW: Helper to format duration consistently
+void RunPageUI::FormatDuration(int64_t totalMs, char* buffer, size_t bufferSize) {
+  auto minutes = totalMs / 60000;
+  auto seconds = (totalMs % 60000) / 1000;
+  auto ms = totalMs % 1000;
+  sprintf_s(buffer, bufferSize, "%02d:%02d.%03d",
+    static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(ms));
+}
+
 
 
 // UPDATED: OnFilterChanged to handle sorted list changes
@@ -4558,10 +4703,20 @@ bool RunPageUI::DeserializeRecipe(const nlohmann::json& recipeJson) {
   try {
     // Clear current recipe
     m_loadedRecipe.instances.clear();
+    m_loadedRecipe.groups.clear();
 
     // Load recipe name
     if (recipeJson.contains("name")) {
       m_loadedRecipe.name = recipeJson["name"];
+    }
+
+    // Load groups map
+    if (recipeJson.contains("groups") && recipeJson["groups"].is_object()) {
+      for (const auto& group : recipeJson["groups"].items()) {
+        m_loadedRecipe.groups[group.key()] = group.value();
+        m_logger->LogInfo("Loaded group: " + group.key() + " -> " +
+          std::string(group.value()));
+      }
     }
 
     // Load process instances
@@ -4580,6 +4735,15 @@ bool RunPageUI::DeserializeRecipe(const nlohmann::json& recipeJson) {
         // Load nickname
         if (instanceJson.contains("nickname")) {
           instance.nickname = instanceJson["nickname"];
+        }
+
+        // ADD THESE TWO BLOCKS - Load groupId and executionOrder
+        if (instanceJson.contains("groupId")) {
+          instance.groupId = instanceJson["groupId"];
+        }
+
+        if (instanceJson.contains("executionOrder")) {
+          instance.executionOrder = instanceJson["executionOrder"];
         }
 
         // Load parameters
@@ -4601,6 +4765,7 @@ bool RunPageUI::DeserializeRecipe(const nlohmann::json& recipeJson) {
     return false;
   }
 }
+
 
 std::vector<std::string> RunPageUI::GetRecipeInstanceDisplayNames() const {
   std::vector<std::string> names;
@@ -4662,5 +4827,131 @@ std::unique_ptr<SequenceStep> RunPageUI::BuildFromRecipeInstance(ProcessInstance
   else {
     UpdateStatus("Failed to build: " + instance->processType, true);
     return nullptr;
+  }
+}
+
+
+void RunPageUI::RenderGroupedRecipeInstances() {
+  // Organize by group
+  std::map<std::string, std::vector<ProcessInstance*>> groupedInstances;
+
+  for (auto& instance : m_loadedRecipe.instances) {
+    std::string groupKey = instance.IsGrouped() ? instance.groupId : "_ungrouped";
+    groupedInstances[groupKey].push_back(&instance);
+  }
+
+  // Sort within groups by executionOrder
+  for (auto& [groupId, instances] : groupedInstances) {
+    std::sort(instances.begin(), instances.end(),
+      [](ProcessInstance* a, ProcessInstance* b) {
+      return a->executionOrder < b->executionOrder;
+    });
+  }
+
+  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 8));
+
+  // Render groups first (non-ungrouped)
+  for (const auto& [groupId, instances] : groupedInstances) {
+    if (groupId == "_ungrouped") continue;
+
+    // REPLACE THIS SECTION - Get friendly group name
+    std::string groupDisplayName;
+    if (m_loadedRecipe.groups.count(groupId) > 0) {
+      groupDisplayName = m_loadedRecipe.groups.at(groupId);  // Use friendly name
+    }
+    else {
+      groupDisplayName = groupId;  // Fallback to ID if not found
+    }
+
+    // Group header - collapsible TreeNode
+    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.2f, 0.4f, 0.6f, 0.8f));
+    bool isOpen = ImGui::TreeNodeEx(
+      (groupDisplayName + "##" + groupId).c_str(),
+      ImGuiTreeNodeFlags_DefaultOpen
+    );
+    ImGui::PopStyleColor();
+
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "(%zu)", instances.size());
+
+    if (isOpen) {
+      for (auto* instance : instances) {
+        RenderRecipeInstanceButton(instance, 1);  // indent level 1
+      }
+      ImGui::TreePop();
+    }
+
+    ImGui::Spacing();
+  }
+
+  // Render ungrouped instances at bottom (UNCHANGED)
+  auto ungroupedIt = groupedInstances.find("_ungrouped");
+  if (ungroupedIt != groupedInstances.end() && !ungroupedIt->second.empty()) {
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Ungrouped:");
+    for (auto* instance : ungroupedIt->second) {
+      RenderRecipeInstanceButton(instance, 0);  // no indent
+    }
+  }
+
+  ImGui::PopStyleVar();
+}
+
+
+
+void RunPageUI::RenderRecipeInstanceButton(ProcessInstance* instance, int indentLevel) {
+  if (indentLevel > 0) {
+    ImGui::Indent(20.0f * indentLevel);
+  }
+
+  std::string displayText = instance->IsGrouped()
+    ? std::to_string(instance->executionOrder) + ". " + instance->GetUIDisplayName()
+    : instance->GetUIDisplayName();
+
+  bool isSelected = (m_selectedProcess == instance->GetUIDisplayName());
+  bool isRunning = (m_processRunning && m_selectedProcess == instance->GetUIDisplayName());
+
+  if (isSelected) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.7f, 0.2f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.0f, 0.8f, 0.3f, 1.0f));
+  }
+  else {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+  }
+
+  if (isRunning) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+  }
+
+  if (ImGui::Button(displayText.c_str(), ImVec2(-1, 35))) {
+    m_selectedProcess = instance->GetUIDisplayName();
+    ExtractSelectedProcessOperations();
+    UpdateStatus("Selected: " + instance->GetUIDisplayName());
+
+    if (!m_processRunning && m_autoStartOnSelect) {
+      StartProcess(m_selectedProcess);
+    }
+  }
+
+  if (isRunning) {
+    ImGui::PopStyleColor();  // Pop text color
+  }
+
+  ImGui::PopStyleColor(2);  // Pop button colors
+
+  // Tooltip
+  if (ImGui::IsItemHovered()) {
+    ImGui::BeginTooltip();
+    ImGui::Text("Instance: %s", instance->GetUIDisplayName().c_str());
+    ImGui::Text("Type: %s", instance->processType.c_str());
+    if (instance->IsGrouped()) {
+      ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f),
+        "Group Order: %d", instance->executionOrder);
+    }
+    ImGui::EndTooltip();
+  }
+
+  if (indentLevel > 0) {
+    ImGui::Unindent(20.0f * indentLevel);
   }
 }

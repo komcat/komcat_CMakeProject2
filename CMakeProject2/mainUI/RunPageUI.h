@@ -333,6 +333,7 @@ private:
     std::string name;
     std::string filename;
     std::vector<ProcessInstance> instances;
+    std::map<std::string, std::string> groups;  // ADD THIS LINE
     std::time_t loadedTime;
   };
 
@@ -350,5 +351,17 @@ private:
   std::vector<std::string> GetRecipeInstanceDisplayNames() const;
   ProcessInstance* GetSelectedRecipeInstance();
   std::unique_ptr<SequenceStep> BuildFromRecipeInstance(ProcessInstance* instance);
+
+  bool m_autoExecuteGroup = false;  // NEW: Control group auto-execution
+  bool m_runningGroupExecution = false;  // NEW: Track if executing a group
+  std::string m_currentGroupId = "";  // NEW: Track current group being executed
+
+  void ExecuteProcessGroup(const std::string& groupId, const std::string& initialIdleTime);
+  void ExecuteSingleProcess(const std::string& processName, const std::string& idleTimeStr);
+  void FormatDuration(int64_t totalMs, char* buffer, size_t bufferSize);
+
+
+  void RenderGroupedRecipeInstances();
+  void RenderRecipeInstanceButton(ProcessInstance* instance, int indentLevel);
 
 };

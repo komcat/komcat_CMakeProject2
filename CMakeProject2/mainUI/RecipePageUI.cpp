@@ -147,6 +147,20 @@ void RecipePageUI::RenderCenterColumn() {
     }
 
     ImGui::Spacing();
+    // ===== ADD THIS NEW SECTION =====
+// Manage Groups Button
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.7f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 0.8f, 1.0f));
+
+    if (ImGui::Button("Manage Groups", ImVec2(-1, 30))) {
+      m_showGroupEditor = true;
+    }
+
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar();
+    ImGui::Spacing();
+    // ===== END NEW SECTION =====
 
     // Add Process Instances Button
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
@@ -163,7 +177,9 @@ void RecipePageUI::RenderCenterColumn() {
     ImGui::Spacing();
 
     // Show process instances list
-    RenderInstanceList();
+    //RenderInstanceList();
+        // NEW: Show grouped instance list instead of flat list
+    RenderGroupedInstanceList();
 
     ImGui::Spacing();
 
@@ -191,6 +207,298 @@ void RecipePageUI::RenderCenterColumn() {
     ImGui::Spacing();
     ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No recipe loaded");
   }
+
+  // NEW: Render group editor popup
+  if (m_showGroupEditor) {
+    RenderGroupEditor();
+  }
+}
+
+
+// RecipePageUI.cpp - NEW method
+void RecipePageUI::RenderGroupEditor() {
+  ImGui::OpenPopup("Group Editor");
+
+  if (ImGui::BeginPopupModal("Group Editor", &m_showGroupEditor,
+    ImGuiWindowFlags_AlwaysAutoResize)) {
+
+    ImGui::Text("Manage Process Groups");
+    ImGui::Separator();
+
+    // List existing groups
+    ImGui::Text("Existing Groups:");
+    ImGui::BeginChild("GroupList", ImVec2(300, 150), true);
+
+    std::string groupToDelete = "";
+    for (auto& [groupId, groupName] : m_groups) {
+      ImGui::PushID(groupId.c_str());
+
+      ImGui::Text("%s", groupName.c_str());
+      ImGui::SameLine(250);
+
+      if (ImGui::SmallButton("Delete")) {
+        groupToDelete = groupId;
+      }
+
+      ImGui::PopID();
+    }
+
+    ImGui::EndChild();
+
+    // Handle deletion
+    if (!groupToDelete.empty()) {
+      // Ungroup all processes in this group
+      for (auto& inst : m_processInstances) {
+        if (inst.groupId == groupToDelete) {
+          inst.groupId = "";
+          inst.executionOrder = 0;
+        }
+      }
+      m_groups.erase(groupToDelete);
+      m_isModified = true;
+    }
+
+    ImGui::Separator();
+
+    // Add new group
+    ImGui::Text("Create New Group:");
+    ImGui::SetNextItemWidth(200);
+    ImGui::InputText("##NewGroupName", m_newGroupNameBuffer,
+      sizeof(m_newGroupNameBuffer));
+
+    ImGui::SameLine();
+    if (ImGui::Button("Add Group")) {
+      if (strlen(m_newGroupNameBuffer) > 0) {
+        std::string groupName = std::string(m_newGroupNameBuffer);
+        std::string groupId = GenerateGroupId(groupName);
+        m_groups[groupId] = groupName;
+        memset(m_newGroupNameBuffer, 0, sizeof(m_newGroupNameBuffer));
+        m_isModified = true;
+      }
+    }
+
+    ImGui::Separator();
+
+    if (ImGui::Button("Close", ImVec2(-1, 30))) {
+      m_showGroupEditor = false;
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+  }
+}
+
+// Helper to generate group ID
+std::string RecipePageUI::GenerateGroupId(const std::string& groupName) {
+  std::string id = "group_";
+  for (char c : groupName) {
+    if (std::isalnum(c)) {
+      id += std::tolower(c);
+    }
+    else if (c == ' ') {
+      id += '_';
+    }
+  }
+
+  // Ensure uniqueness
+  int counter = 1;
+  std::string uniqueId = id;
+  while (m_groups.find(uniqueId) != m_groups.end()) {
+    uniqueId = id + "_" + std::to_string(counter++);
+  }
+
+  return uniqueId;
+}
+
+
+// RecipePageUI.cpp - NEW method
+void RecipePageUI::RenderInstanceItem(ProcessInstance* instance,
+  int& indexToRemove, int indentLevel) {
+  ImGui::PushID(instance->instanceId.c_str());
+
+  // Apply indent
+  if (indentLevel > 0) {
+    ImGui::Indent(20.0f * indentLevel);
+  }
+
+  bool isSelected = (instance->instanceId == m_selectedInstanceId);
+  if (isSelected) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.5f, 0.8f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.0f, 0.6f, 0.9f, 1.0f));
+  }
+
+  // Build button text with order number if grouped
+  std::string buttonText;
+  if (instance->IsGrouped()) {
+    buttonText = std::to_string(instance->executionOrder) + ". " +
+      instance->GetUIDisplayName();
+  }
+  else {
+    buttonText = instance->GetUIDisplayName();
+  }
+
+  if (ImGui::Button(buttonText.c_str(), ImVec2(-90, 25))) {
+    OnInstanceSelected(instance->instanceId);
+  }
+
+  if (isSelected) {
+    ImGui::PopStyleColor(2);
+  }
+
+  // Tooltip
+  if (ImGui::IsItemHovered()) {
+    ImGui::BeginTooltip();
+    ImGui::Text("ID: %s", instance->instanceId.c_str());
+    ImGui::Text("Type: %s", instance->processType.c_str());
+    if (!instance->nickname.empty()) {
+      ImGui::Text("Nickname: %s", instance->nickname.c_str());
+    }
+    if (instance->IsGrouped()) {
+      ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f),
+        "Group: %s (Order: %d)",
+        m_groups[instance->groupId].c_str(),
+        instance->executionOrder);
+    }
+    ImGui::EndTooltip();
+  }
+
+  // Remove button
+  ImGui::SameLine();
+  if (ImGui::SmallButton("Remove")) {
+    // Find index in main list
+    for (size_t i = 0; i < m_processInstances.size(); i++) {
+      if (&m_processInstances[i] == instance) {
+        indexToRemove = static_cast<int>(i);
+        break;
+      }
+    }
+  }
+
+  if (indentLevel > 0) {
+    ImGui::Unindent(20.0f * indentLevel);
+  }
+
+  ImGui::PopID();
+}
+
+
+// RecipePageUI.cpp - Update existing method
+void RecipePageUI::RenderParameterEditor() {
+  ProcessInstance* instance = GetSelectedInstance();
+  if (!instance) {
+    ImGui::Text("Selected instance not found");
+    return;
+  }
+
+  ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Parameter Editor");
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  ImGui::Text("Instance: %s", instance->GetUIDisplayName().c_str());
+  ImGui::Text("Type: %s", instance->processType.c_str());
+  ImGui::Text("ID: %s", instance->instanceId.c_str());
+
+  // Nickname editor
+  RenderNicknameEditor(*instance);
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  // NEW: Group assignment section
+  ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "Group Assignment:");
+
+  // Build group options
+  std::vector<std::string> groupOptions = { "(None)" };
+  for (const auto& [id, name] : m_groups) {
+    groupOptions.push_back(name);
+  }
+
+  // Find current selection
+  int currentGroupIndex = 0;
+  if (instance->IsGrouped()) {
+    auto it = m_groups.find(instance->groupId);
+    if (it != m_groups.end()) {
+      for (size_t i = 1; i < groupOptions.size(); i++) {
+        if (groupOptions[i] == it->second) {
+          currentGroupIndex = static_cast<int>(i);
+          break;
+        }
+      }
+    }
+  }
+
+  // Group dropdown
+  std::vector<const char*> groupNames;
+  for (const auto& opt : groupOptions) {
+    groupNames.push_back(opt.c_str());
+  }
+
+  ImGui::SetNextItemWidth(-1);
+  if (ImGui::Combo("Group", &currentGroupIndex, groupNames.data(),
+    static_cast<int>(groupNames.size()))) {
+    if (currentGroupIndex == 0) {
+      // Ungroup
+      instance->groupId = "";
+      instance->executionOrder = 0;
+    }
+    else {
+      // Assign to group
+      std::string selectedGroupName = groupOptions[currentGroupIndex];
+      for (const auto& [id, name] : m_groups) {
+        if (name == selectedGroupName) {
+          instance->groupId = id;
+          instance->executionOrder = GetNextExecutionOrder(id);
+          break;
+        }
+      }
+    }
+    m_isModified = true;
+  }
+
+  // Show execution order editor if grouped
+  if (instance->IsGrouped()) {
+    int order = instance->executionOrder;
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::InputInt("Execution Order", &order, 1, 5)) {
+      if (order < 1) order = 1;
+      instance->executionOrder = order;
+      m_isModified = true;
+    }
+
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Order of execution within the group (1, 2, 3...)");
+    }
+  }
+
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  // Get parameter schema
+  auto schema = ProcessParameterSchema::GetParametersForProcess(instance->processType);
+
+  if (schema.empty()) {
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+      "No parameter schema found for this process type");
+    return;
+  }
+
+  // Render parameters
+  for (const auto& paramDef : schema) {
+    RenderParameterControl(paramDef, *instance);
+    ImGui::Spacing();
+  }
+}
+
+// NEW: Helper method
+int RecipePageUI::GetNextExecutionOrder(const std::string& groupId) {
+  int maxOrder = 0;
+  for (const auto& inst : m_processInstances) {
+    if (inst.groupId == groupId && inst.executionOrder > maxOrder) {
+      maxOrder = inst.executionOrder;
+    }
+  }
+  return maxOrder + 1;
 }
 
 // 3. Update RenderInstanceList in RecipePageUI.cpp
@@ -398,44 +706,85 @@ void RecipePageUI::RenderProcessList(const std::vector<std::string>& processes) 
 }
 
 
-
-// 4. Add nickname editor to parameter editor
-void RecipePageUI::RenderParameterEditor() {
-  ProcessInstance* instance = GetSelectedInstance();
-  if (!instance) {
-    ImGui::Text("Selected instance not found");
+// RecipePageUI.cpp - Add this method
+void RecipePageUI::RenderGroupedInstanceList() {
+  if (m_processInstances.empty()) {
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
+      "(No process instances yet)");
     return;
   }
 
-  ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Parameter Editor");
-  ImGui::Separator();
-  ImGui::Spacing();
+  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f),
+    "Process Instances (%zu):", m_processInstances.size());
 
-  ImGui::Text("Instance: %s", instance->GetUIDisplayName().c_str());
-  ImGui::Text("Type: %s", instance->processType.c_str());
-  ImGui::Text("ID: %s", instance->instanceId.c_str());
+  // Organize instances by group
+  std::map<std::string, std::vector<ProcessInstance*>> groupedInstances;
 
-  // Add nickname editor at the top
-  RenderNicknameEditor(*instance);
-
-  ImGui::Spacing();
-  ImGui::Separator();
-  ImGui::Spacing();
-
-  // Get parameter schema for this process type
-  auto schema = ProcessParameterSchema::GetParametersForProcess(instance->processType);
-
-  if (schema.empty()) {
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No parameter schema found for this process type");
-    return;
+  for (auto& instance : m_processInstances) {
+    std::string groupKey = instance.IsGrouped() ? instance.groupId : "_ungrouped";
+    groupedInstances[groupKey].push_back(&instance);
   }
 
-  // Render parameters based on schema
-  for (const auto& paramDef : schema) {
-    RenderParameterControl(paramDef, *instance);
+  // Sort instances within each group by executionOrder
+  for (auto& [groupId, instances] : groupedInstances) {
+    std::sort(instances.begin(), instances.end(),
+      [](ProcessInstance* a, ProcessInstance* b) {
+      return a->executionOrder < b->executionOrder;
+    });
+  }
+
+  int indexToRemove = -1;
+
+  ImGui::BeginChild("GroupedList", ImVec2(0, 300), true);
+
+  // Render grouped instances first
+  for (const auto& [groupId, instances] : groupedInstances) {
+    if (groupId == "_ungrouped") continue; // Skip ungrouped for now
+
+    // Group header with TreeNode (collapsible)
+    std::string groupName = m_groups[groupId];
+    bool isOpen = ImGui::TreeNodeEx(
+      (groupName + "##" + groupId).c_str(),
+      ImGuiTreeNodeFlags_DefaultOpen
+    );
+
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "(%zu)", instances.size());
+
+    if (isOpen) {
+      for (auto* instance : instances) {
+        RenderInstanceItem(instance, indexToRemove, 1);
+      }
+      ImGui::TreePop();
+    }
+
     ImGui::Spacing();
   }
+
+  // Render ungrouped instances at bottom
+  auto ungroupedIt = groupedInstances.find("_ungrouped");
+  if (ungroupedIt != groupedInstances.end() && !ungroupedIt->second.empty()) {
+    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Ungrouped:");
+    for (auto* instance : ungroupedIt->second) {
+      RenderInstanceItem(instance, indexToRemove, 0);
+    }
+  }
+
+  ImGui::EndChild();
+
+  // Handle removal after loop
+  if (indexToRemove >= 0) {
+    std::string removedId = m_processInstances[indexToRemove].instanceId;
+    m_processInstances.erase(m_processInstances.begin() + indexToRemove);
+
+    if (m_selectedInstanceId == removedId) {
+      m_selectedInstanceId = "";
+    }
+    m_isModified = true;
+  }
 }
+
+
 
 // 5. Implement nickname editor method
 void RecipePageUI::RenderNicknameEditor(ProcessInstance& instance) {
@@ -677,7 +1026,7 @@ void RecipePageUI::EnsureRecipesDirectory() {
 }
 
 
-// 7. Update save/load JSON to include nickname
+// RecipePageUI.cpp - Update SerializeRecipe()
 nlohmann::json RecipePageUI::SerializeRecipe() const {
   nlohmann::json recipeJson;
 
@@ -685,6 +1034,15 @@ nlohmann::json RecipePageUI::SerializeRecipe() const {
   recipeJson["version"] = "1.0";
   recipeJson["created"] = std::time(nullptr);
   recipeJson["name"] = std::string(m_recipeNameBuffer);
+
+  // NEW: Serialize groups
+  if (!m_groups.empty()) {
+    nlohmann::json groupsJson;
+    for (const auto& [id, name] : m_groups) {
+      groupsJson[id] = name;
+    }
+    recipeJson["groups"] = groupsJson;
+  }
 
   // Process instances array
   nlohmann::json instancesArray = nlohmann::json::array();
@@ -694,7 +1052,11 @@ nlohmann::json RecipePageUI::SerializeRecipe() const {
     instanceJson["instanceId"] = instance.instanceId;
     instanceJson["processType"] = instance.processType;
     instanceJson["displayName"] = instance.displayName;
-    instanceJson["nickname"] = instance.nickname; // NEW: Save nickname
+    instanceJson["nickname"] = instance.nickname;
+
+    // NEW: Serialize group info
+    instanceJson["groupId"] = instance.groupId;
+    instanceJson["executionOrder"] = instance.executionOrder;
 
     // Serialize parameters
     nlohmann::json parametersJson;
@@ -710,7 +1072,7 @@ nlohmann::json RecipePageUI::SerializeRecipe() const {
   return recipeJson;
 }
 
-// 8. Update deserialize to load nickname
+// RecipePageUI.cpp - Update DeserializeRecipe()
 bool RecipePageUI::DeserializeRecipe(const nlohmann::json& recipeJson) {
   try {
     // Clear current recipe
@@ -723,6 +1085,14 @@ bool RecipePageUI::DeserializeRecipe(const nlohmann::json& recipeJson) {
       m_currentRecipeName = recipeName;
     }
 
+    // NEW: Load groups
+    m_groups.clear();
+    if (recipeJson.contains("groups") && recipeJson["groups"].is_object()) {
+      for (const auto& [id, name] : recipeJson["groups"].items()) {
+        m_groups[id] = name;
+      }
+    }
+
     // Load process instances
     if (recipeJson.contains("processInstances") && recipeJson["processInstances"].is_array()) {
       for (const auto& instanceJson : recipeJson["processInstances"]) {
@@ -731,9 +1101,17 @@ bool RecipePageUI::DeserializeRecipe(const nlohmann::json& recipeJson) {
           instanceJson["processType"]
         );
 
-        // Load nickname if present
+        // Load nickname
         if (instanceJson.contains("nickname")) {
           instance.nickname = instanceJson["nickname"];
+        }
+
+        // NEW: Load group info (backward compatible)
+        if (instanceJson.contains("groupId")) {
+          instance.groupId = instanceJson["groupId"];
+        }
+        if (instanceJson.contains("executionOrder")) {
+          instance.executionOrder = instanceJson["executionOrder"];
         }
 
         // Load parameters
@@ -757,6 +1135,7 @@ bool RecipePageUI::DeserializeRecipe(const nlohmann::json& recipeJson) {
     return false;
   }
 }
+
 
 
 // Save recipe to file

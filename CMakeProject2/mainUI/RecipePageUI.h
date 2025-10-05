@@ -112,4 +112,18 @@ private:
 
   bool m_showLoadDialog = false;
   std::string m_selectedRecipeToLoad = "";
+
+
+  // NEW: Group management
+  std::map<std::string, std::string> m_groups;  // groupId -> display name
+  bool m_showGroupEditor = false;
+  char m_newGroupNameBuffer[128] = "";
+  std::string m_editingGroupId = "";
+
+  // NEW: Methods for group management
+  void RenderGroupEditor();
+  void RenderGroupedInstanceList();
+  void RenderInstanceItem(ProcessInstance* instance, int& indexToRemove, int indentLevel);
+  int GetNextExecutionOrder(const std::string& groupId);
+  std::string GenerateGroupId(const std::string& groupName);
 };
