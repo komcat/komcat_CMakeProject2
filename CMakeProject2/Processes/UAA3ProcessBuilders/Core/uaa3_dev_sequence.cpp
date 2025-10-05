@@ -213,17 +213,24 @@ namespace UAA3ProcessBuilders {
   }
 
   // ========================================================================
-  // Parameterized builder for Core_PickOnly
-  // ========================================================================
+// Parameterized builder for Core_PickOnly
+// ========================================================================
   std::unique_ptr<SequenceStep> createCorePickOnly(
     MachineOperations& machineOps,
     UserPromptUI& promptUI,
     const std::string& deviceName,
+    const std::string& graphName,
     const std::string& pickNode,
     const std::string& cameraGantry,
     const std::string& cameraViewNode,
+    const std::string& gripperOutputDevice,
+    const std::string& gripperPinName,
+    float gripperHoldDelay,
     float speed,
-    bool enableCameraView)
+    bool enableCameraView,
+    bool slowDownOnApproach,
+    float approachDistance,
+    float speedOnApproach)
   {
     auto sequence = std::make_unique<SequenceStep>(
       "Core Pick Only Sequence",
@@ -231,12 +238,19 @@ namespace UAA3ProcessBuilders {
     );
 
     sequence->AddOperation(std::make_shared<::CorePick>(
-      deviceName,
-      speed,
-      pickNode,
-      enableCameraView,
-      cameraGantry,
-      cameraViewNode
+      deviceName,              // 1
+      graphName,               // 2
+      pickNode,                // 3
+      cameraGantry,            // 4
+      cameraViewNode,          // 5
+      gripperOutputDevice,     // 6
+      gripperPinName,          // 7
+      gripperHoldDelay,        // 8
+      speed,                   // 9
+      enableCameraView,        // 10
+      slowDownOnApproach,      // 11
+      approachDistance,        // 12
+      speedOnApproach          // 13
     ));
 
     return sequence;
@@ -249,11 +263,18 @@ namespace UAA3ProcessBuilders {
     MachineOperations& machineOps,
     UserPromptUI& promptUI,
     const std::string& deviceName,
+    const std::string& graphName,
     const std::string& placeNode,
     const std::string& cameraGantry,
     const std::string& cameraViewNode,
+    const std::string& gripperOutputDevice,
+    const std::string& gripperPinName,
+    float gripperHoldDelay,
     float speed,
-    bool enableCameraView)
+    bool enableCameraView,
+    bool slowDownOnApproach,
+    float approachDistance,
+    float speedOnApproach)
   {
     auto sequence = std::make_unique<SequenceStep>(
       "Core Place Only Sequence",
@@ -261,16 +282,71 @@ namespace UAA3ProcessBuilders {
     );
 
     sequence->AddOperation(std::make_shared<::CorePlace>(
-      deviceName,
-      speed,
-      placeNode,
-      enableCameraView,
-      cameraGantry,
-      cameraViewNode
+      deviceName,              // 1
+      graphName,               // 2
+      placeNode,               // 3
+      cameraGantry,            // 4
+      cameraViewNode,          // 5
+      gripperOutputDevice,     // 6
+      gripperPinName,          // 7
+      gripperHoldDelay,        // 8
+      speed,                   // 9
+      enableCameraView,        // 10
+      slowDownOnApproach,      // 11
+      approachDistance,        // 12
+      speedOnApproach          // 13
     ));
 
     return sequence;
   }
 
+
+
+
+  // ========================================================================
+  // Parameterized builder for CoreUVOnly
+  // ========================================================================
+  std::unique_ptr<SequenceStep> createCoreUVOnly(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI,
+    const std::string& deviceName,
+    const std::string& graphName,
+    const std::string& uvNode,
+    const std::string& pneumaticUVDevice,
+    const std::string& ioDevice,
+    const std::string& uvTriggerPinName,
+    float uvDurationSeconds,
+    float speed,
+    bool fineAlignmentEnable1,
+    const std::string& fineAlignmentDevice1,
+    const std::string& feedBackChannelName1,
+    bool fineAlignmentEnable2,
+    const std::string& fineAlignmentDevice2,
+    const std::string& feedBackChannelName2)
+  {
+    auto sequence = std::make_unique<SequenceStep>(
+      "Core UV Only Sequence",
+      machineOps
+    );
+
+    sequence->AddOperation(std::make_shared<::CoreUV>(
+      deviceName,                // 1
+      graphName,                 // 2
+      uvNode,                    // 3
+      pneumaticUVDevice,         // 4
+      ioDevice,                  // 5
+      uvTriggerPinName,          // 6
+      uvDurationSeconds,         // 7
+      speed,                     // 8
+      fineAlignmentEnable1,      // 9
+      fineAlignmentDevice1,      // 10
+      feedBackChannelName1,      // 11
+      fineAlignmentEnable2,      // 12
+      fineAlignmentDevice2,      // 13
+      feedBackChannelName2       // 14
+    ));
+
+    return sequence;
+  }
 
 }

@@ -232,6 +232,11 @@ public:
 		const std::vector<std::string>& axesToScan = { "Z", "X", "Y" },
 		const std::string& callerContext = "");  // NEW parameter
 
+	bool Runscan(const std::string& deviceName, const std::string& dataChannel,
+		const std::vector<double>& stepSizes, int settlingTimeMs,
+		const std::vector<std::string>& axesToScan = { "Z", "X", "Y" },
+		const std::string& callerContext = "");  // NEW parameter
+
 	bool StartScan(const std::string& deviceName, const std::string& dataChannel,
 		const std::vector<double>& stepSizes, int settlingTimeMs,
 		const std::vector<std::string>& axesToScan = { "Z", "X", "Y" },

@@ -33,7 +33,7 @@ version
 #define VERSION_MAJOR 2
 #define VERSION_MINOR 5
 #define VERSION_PATCH 0
-#define VERSION_BUILD 637
+#define VERSION_BUILD 638
 
 - Recipe system
 - have CorePickPlace method with parameeterize system
@@ -45,8 +45,8 @@ version
 // Version information - manually set for now
 #define VERSION_MAJOR 2
 #define VERSION_MINOR 5
-#define VERSION_PATCH 5
-#define VERSION_BUILD 637
+#define VERSION_PATCH 0
+#define VERSION_BUILD 638
 
 // Build information
 #define BUILD_DATE __DATE__

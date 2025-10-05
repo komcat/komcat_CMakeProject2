@@ -48,27 +48,61 @@ namespace UAA3ProcessBuilders {
   );
 
   std::unique_ptr<SequenceStep> createCorePickOnly(
-    MachineOperations& machineOps,
-    UserPromptUI& promptUI,
-    const std::string& deviceName,
-    const std::string& pickNode,
-    const std::string& cameraGantry,
-    const std::string& cameraViewNode,
-    float speed,
-    bool enableCameraView
+    MachineOperations& machineOps,        //1
+    UserPromptUI& promptUI,               //2
+    const std::string& deviceName,        //3
+    const std::string& graphName,         // 4
+    const std::string& pickNode,          //5
+    const std::string& cameraGantry,      //6
+    const std::string& cameraViewNode,    //7
+    const std::string& gripperOutputDevice,// 8
+    const std::string& gripperPinName,    // 9
+    float gripperHoldDelay = 0.5f,       //10
+    float speed=5.0f,                          //11
+    bool enableCameraView = true,                 //12
+		bool slowDownOnApproach = true,       //13
+		float approachDistance = 1.0f,          //14
+		float speedOnApproach = 1.0f       //15
+
   );
 
   std::unique_ptr<SequenceStep> createCorePlaceOnly(
-    MachineOperations& machineOps,
-    UserPromptUI& promptUI,
-    const std::string& deviceName,
-    const std::string& placeNode,
-    const std::string& cameraGantry,
-    const std::string& cameraViewNode,
-    float speed,
-    bool enableCameraView
+    MachineOperations& machineOps,        //1
+    UserPromptUI& promptUI,               //2
+    const std::string& deviceName,        //3
+    const std::string& graphName,         // 4
+    const std::string& placeNode,          //5
+    const std::string& cameraGantry,      //6
+    const std::string& cameraViewNode,    //7
+    const std::string& gripperOutputDevice,// 8
+    const std::string& gripperPinName,    // 9
+    float gripperHoldDelay = 0.5f,       //10
+    float speed = 5.0f,                          //11
+    bool enableCameraView=true,                 //12
+    bool slowDownOnApproach = true,       //13
+    float approachDistance = 1.0f,          //14
+    float speedOnApproach = 1.0f       //15
   );
 
+
+  std::unique_ptr<SequenceStep> createCoreUVOnly(
+    MachineOperations& machineOps,        // 1
+    UserPromptUI& promptUI,               // 2
+    const std::string& deviceName,        // 3
+    const std::string& graphName,         // 4
+    const std::string& uvNode,            // 5
+    const std::string& pneumaticUVDevice, // 6
+    const std::string& ioDevice,          // 7
+    const std::string& uvTriggerPinName,  // 8
+    float uvDurationSeconds = 210.0f,     // 9 (default from your UV sequence)
+    float speed = 5.0f,                    // 10
+		bool fineAlignement_enable_1 = true, // 11
+		const std::string& fineAlignmentDevice_1 = "hex-left", // 12
+		const std::string& feedBackChannelName_1 = "GPIB-Current", // 13
+    bool fineAlignement_enable_2 = true, // 14
+    const std::string& fineAlignmentDevice_2 = "hex-left", // 15
+    const std::string& feedBackChannelName_2 = "GPIB-Current" // 16
+  );
 
   // ============================================================================
   // CORE PROCESSES

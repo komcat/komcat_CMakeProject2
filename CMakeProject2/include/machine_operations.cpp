@@ -1549,6 +1549,18 @@ bool MachineOperations::HasDataValue(const std::string& dataId) {
 }
 
 
+//wrapper for RunScan name
+bool MachineOperations::Runscan(const std::string& deviceName, 
+  const std::string& dataChannel,
+  const std::vector<double>& stepSizes, 
+  int settlingTimeMs,
+  const std::vector<std::string>& axesToScan,
+  const std::string& callerContext
+) {
+	return PerformScan(deviceName, dataChannel, stepSizes, settlingTimeMs, axesToScan, callerContext);
+}
+
+
 // CORRECTED PerformScan method with tracking
 bool MachineOperations::PerformScan(const std::string& deviceName, const std::string& dataChannel,
   const std::vector<double>& stepSizes, int settlingTimeMs,

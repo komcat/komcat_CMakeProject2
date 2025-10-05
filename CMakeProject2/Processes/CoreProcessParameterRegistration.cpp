@@ -114,5 +114,50 @@ void RegisterCoreProcessParameters() {
   }));
 
 
+
+
+  // === Core_UVOnly Parameters ===
+  ProcessParameterSchema::RegisterProcessSchema("Core_UVOnly", {
+      ParameterDefinition("deviceName", ParameterType::DEVICE_SELECTION,
+                        "gantry-main", "Device to move to UV position"),
+      ParameterDefinition("graphName", ParameterType::STRING,
+                        "Process_Flow", "Graph for motion planning"),
+      ParameterDefinition("uvNode", ParameterType::NODE_SELECTION,
+                        "node_4426", "UV curing position node"),
+      ParameterDefinition("pneumaticUVDevice", ParameterType::DEVICE_SELECTION,
+                        "UV_Head", "Pneumatic UV head device"),
+      ParameterDefinition("ioDevice", ParameterType::DEVICE_SELECTION,
+                        "IOBottom", "IO device for UV trigger"),
+      ParameterDefinition("uvTriggerPinName", ParameterType::STRING,
+                        "uv-plc-trigger", "UV trigger pin name"),
+      ParameterDefinition("uvDurationSeconds", ParameterType::DOUBLE,
+                        "210.0", "UV curing duration in seconds"),
+      ParameterDefinition("speed", ParameterType::DOUBLE,
+                        "5.0", "Movement speed (mm/s)"),
+      // Fine alignment 1
+      ParameterDefinition("fineAlignmentEnable1", ParameterType::BOOLEAN,
+                        "true", "Enable fine alignment 1"),
+      ParameterDefinition("fineAlignmentDevice1", ParameterType::DEVICE_SELECTION,
+                        "hex-left", "Fine alignment device 1"),
+      ParameterDefinition("feedBackChannelName1", ParameterType::STRING,
+                        "GPIB-Current", "Feedback channel for alignment 1"),
+      // Fine alignment 2
+      ParameterDefinition("fineAlignmentEnable2", ParameterType::BOOLEAN,
+                        "true", "Enable fine alignment 2"),
+      ParameterDefinition("fineAlignmentDevice2", ParameterType::DEVICE_SELECTION,
+                        "hex-right", "Fine alignment device 2"),
+      ParameterDefinition("feedBackChannelName2", ParameterType::STRING,
+                        "GPIB-Current", "Feedback channel for alignment 2")
+  });
+
+  ProcessParameterFactory::RegisterParameterInitializer("Core_UVOnly",
+    static_cast<ParameterInitializer>([](ProcessInstance& instance) {
+    auto schema = ProcessParameterSchema::GetParametersForProcess("Core_UVOnly");
+    for (const auto& param : schema) {
+      instance.parameters[param.name] = param.defaultValue;
+    }
+  }));
+
+
   std::cout << "Core process parameters registered successfully" << std::endl;
 }

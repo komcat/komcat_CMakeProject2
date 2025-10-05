@@ -314,16 +314,36 @@ namespace UAA3ProcessRegistration {
         return defaultValue;
       };
 
-      std::string deviceName = getParam("deviceName", "Precision_Manipulator");
-      std::string pickNode = getParam("pickNode", "Precision_Pick_Point");
+      // Extract all parameters
+      std::string deviceName = getParam("deviceName", "hex-right");
+      std::string graphName = getParam("graphName", "Process_Flow");
+      std::string pickNode = getParam("pickNode", "node_5245");
       std::string cameraGantry = getParam("cameraGantryDevice", "gantry-main");
-      std::string cameraViewNode = getParam("cameraViewNode", "Precision_View_Point");
-      float speed = getFloatParam("speed", 50.0f);
+      std::string cameraViewNode = getParam("cameraViewNode", "node_4209");
+      std::string gripperOutputDevice = getParam("gripperOutputDevice", "IOBottom");
+      std::string gripperPinName = getParam("gripperPinName", "R_Gripper");
+      float gripperHoldDelay = getFloatParam("gripperHoldDelay", 1.5f);
+      float speed = getFloatParam("speed", 5.0f);
       bool enableCameraView = getBoolParam("enableCameraView", true);
+      bool slowDownOnApproach = getBoolParam("slowDownOnApproach", true);
+      float approachDistance = getFloatParam("approachDistance", 1.0f);
+      float speedOnApproach = getFloatParam("speedOnApproach", 1.0f);
 
       return UAA3ProcessBuilders::createCorePickOnly(
-        ops, ui, deviceName, pickNode,
-        cameraGantry, cameraViewNode, speed, enableCameraView
+        ops, ui,
+        deviceName,
+        graphName,
+        pickNode,
+        cameraGantry,
+        cameraViewNode,
+        gripperOutputDevice,
+        gripperPinName,
+        gripperHoldDelay,
+        speed,
+        enableCameraView,
+        slowDownOnApproach,
+        approachDistance,
+        speedOnApproach
       );
     }
     );
@@ -361,19 +381,114 @@ namespace UAA3ProcessRegistration {
         return defaultValue;
       };
 
+      // Extract all parameters
       std::string deviceName = getParam("deviceName", "hex-right");
+      std::string graphName = getParam("graphName", "Process_Flow");
       std::string placeNode = getParam("placeNode", "node_5263");
       std::string cameraGantry = getParam("cameraGantryDevice", "gantry-main");
-      std::string cameraViewNode = getParam("cameraViewNode", "QC_Camera_Position");
-      float speed = getFloatParam("speed", 50.0f);
+      std::string cameraViewNode = getParam("cameraViewNode", "node_4156");
+      std::string gripperOutputDevice = getParam("gripperOutputDevice", "IOBottom");
+      std::string gripperPinName = getParam("gripperPinName", "R_Gripper");
+      float gripperHoldDelay = getFloatParam("gripperHoldDelay", 1.5f);
+      float speed = getFloatParam("speed", 5.0f);
       bool enableCameraView = getBoolParam("enableCameraView", true);
+      bool slowDownOnApproach = getBoolParam("slowDownOnApproach", true);
+      float approachDistance = getFloatParam("approachDistance", 1.0f);
+      float speedOnApproach = getFloatParam("speedOnApproach", 1.0f);
 
       return UAA3ProcessBuilders::createCorePlaceOnly(
-        ops, ui, deviceName, placeNode,
-        cameraGantry, cameraViewNode, speed, enableCameraView
+        ops, ui,
+        deviceName,
+        graphName,
+        placeNode,
+        cameraGantry,
+        cameraViewNode,
+        gripperOutputDevice,
+        gripperPinName,
+        gripperHoldDelay,
+        speed,
+        enableCameraView,
+        slowDownOnApproach,
+        approachDistance,
+        speedOnApproach
       );
     }
     );
+
+
+
+    // ========================================================================
+    // Core_UVOnly - PARAMETERIZED VERSION
+    // ========================================================================
+    registry.RegisterProcessWithParams(
+      "Core_UVOnly",
+      "Core",
+      "UV curing operation with pneumatic head control and fine alignment",
+      true,
+      [](MachineOperations& ops, UserPromptUI& ui,
+        const std::map<std::string, std::string>& params) -> std::unique_ptr<SequenceStep> {
+
+      auto getParam = [&params](const std::string& key, const std::string& defaultValue) {
+        auto it = params.find(key);
+        return (it != params.end()) ? it->second : defaultValue;
+      };
+
+      auto getFloatParam = [&params](const std::string& key, float defaultValue) {
+        auto it = params.find(key);
+        if (it != params.end()) {
+          try { return std::stof(it->second); }
+          catch (...) { return defaultValue; }
+        }
+        return defaultValue;
+      };
+
+      auto getBoolParam = [&params](const std::string& key, bool defaultValue) {
+        auto it = params.find(key);
+        if (it != params.end()) {
+          return (it->second == "true" || it->second == "1");
+        }
+        return defaultValue;
+      };
+
+      // Extract all parameters
+      std::string deviceName = getParam("deviceName", "gantry-main");
+      std::string graphName = getParam("graphName", "Process_Flow");
+      std::string uvNode = getParam("uvNode", "node_4426");
+      std::string pneumaticUVDevice = getParam("pneumaticUVDevice", "UV_Head");
+      std::string ioDevice = getParam("ioDevice", "IOBottom");
+      std::string uvTriggerPinName = getParam("uvTriggerPinName", "uv-plc-trigger");
+      float uvDurationSeconds = getFloatParam("uvDurationSeconds", 210.0f);
+      float speed = getFloatParam("speed", 5.0f);
+
+      // Fine alignment parameters
+      bool fineAlignmentEnable1 = getBoolParam("fineAlignmentEnable1", true);
+      std::string fineAlignmentDevice1 = getParam("fineAlignmentDevice1", "hex-left");
+      std::string feedBackChannelName1 = getParam("feedBackChannelName1", "GPIB-Current");
+      bool fineAlignmentEnable2 = getBoolParam("fineAlignmentEnable2", true);
+      std::string fineAlignmentDevice2 = getParam("fineAlignmentDevice2", "hex-right");
+      std::string feedBackChannelName2 = getParam("feedBackChannelName2", "GPIB-Current");
+
+      return UAA3ProcessBuilders::createCoreUVOnly(
+        ops, ui,
+        deviceName,
+        graphName,
+        uvNode,
+        pneumaticUVDevice,
+        ioDevice,
+        uvTriggerPinName,
+        uvDurationSeconds,
+        speed,
+        fineAlignmentEnable1,
+        fineAlignmentDevice1,
+        feedBackChannelName1,
+        fineAlignmentEnable2,
+        fineAlignmentDevice2,
+        feedBackChannelName2
+      );
+    }
+    );
+
+
 
     printf("RegisterCoreProcesses: Registered 3 parameterized core processes\n");
   }
