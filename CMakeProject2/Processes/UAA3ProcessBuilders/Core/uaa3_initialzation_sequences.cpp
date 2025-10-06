@@ -3,15 +3,26 @@
 #include "CoreSequenceStep.h"	
 #include <iostream>
 
+
+
 namespace UAA3ProcessBuilders {
 
 	std::unique_ptr<SequenceStep> BuildInitializationSequence_uaa3(
-		MachineOperations& machineOps, UserPromptUI& promptUI) {
+		MachineOperations& machineOps,
+		UserPromptUI& promptUI) {  // Interface parameter
 
 		auto sequence = std::make_unique<SequenceStep>("UAA3 Initialization", machineOps);
 
+		// GET DISPLAY OUTPUT FROM MACHINE OPERATIONS
+		IDisplayOutput* displayOutput = machineOps.GetDisplayOutput();
+
+		// Print value - use runPageUI instead of promptUI
 		sequence->AddOperation(std::make_shared<PrintOutValue>(
-			&promptUI, "GPIB-Current", "A", true, true
+			displayOutput,           // CHANGED: use RunPageUI
+			"GPIB-Current",
+			"A",
+			true,
+			false
 		));
 
 		//CRITICAL END DUT RECORDING AND EXPORT DATA
@@ -65,8 +76,13 @@ namespace UAA3ProcessBuilders {
 			"IOBottom", 10));  // Clear Vacuum_Base (pin 10)
 
 
+		// Print value - use runPageUI instead of promptUI
 		sequence->AddOperation(std::make_shared<PrintOutValue>(
-			&promptUI, "GPIB-Current", "A", true, true
+			displayOutput,           // CHANGED: use RunPageUI
+			"GPIB-Current",
+			"A",
+			true,
+			false
 		));
 
 

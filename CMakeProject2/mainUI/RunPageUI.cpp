@@ -25,6 +25,11 @@ RunPageUI::RunPageUI(MachineOperations& machineOps)
 {
   m_logger = Logger::GetInstance();
 
+
+  // REGISTER THIS AS THE DISPLAY OUTPUT
+  m_machineOps.SetDisplayOutput(this);  // ADD THIS LINE
+
+
   // Initialize spec value from database
   LoadSpecFromDatabase();
 

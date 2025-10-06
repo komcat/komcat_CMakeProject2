@@ -7,6 +7,9 @@
 #include <memory>
 #include <string>
 
+// Add this forward declaration at the top
+class IDisplayOutput;
+
 // UAA3 Process Builders - Main Header
 // This is the main header that includes all UAA3 process sequences
 namespace UAA3ProcessBuilders {
@@ -112,7 +115,8 @@ namespace UAA3ProcessBuilders {
   /// Build initialization sequence for UAA3
   /// </summary>
   std::unique_ptr<SequenceStep> BuildInitializationSequence_uaa3(
-    MachineOperations& machineOps, UserPromptUI& promptUI);
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI);  // That's it!
 
   /// <summary>
   /// Build probing sequence using UserPromptUI

@@ -35,24 +35,46 @@ class PrintOutValue : public SequenceOperation {
 private:
   IDisplayOutput* displayOutput;
   std::string channelName;
+  std::string unit;
   bool addTimestamp;
+  bool useSIFormat;
 
 public:
   PrintOutValue(IDisplayOutput* output,
     const std::string& channel,
-    bool timestamp = true)
+    const std::string& unitType = "A",
+    bool timestamp = true,
+    bool siFormat = true)
     : displayOutput(output)
     , channelName(channel)
-    , addTimestamp(timestamp) {
+    , unit(unitType)
+    , addTimestamp(timestamp)
+    , useSIFormat(siFormat) {
   }
 
   bool Execute(MachineOperations& ops) override {
     if (!displayOutput) return false;
 
-    GlobalDataStore& dataStore = GlobalDataStore::getInstance();
-    double value = dataStore.getDouble(channelName);
+    // FIX 1: GetInstance() with capital G and I
+    GlobalDataStore* dataStore = GlobalDataStore::GetInstance();
+    if (!dataStore) return false;
 
-    std::string message = channelName + ": " + std::to_string(value);
+    // FIX 2: Use GetValue() not getDouble()
+    float value = dataStore->GetValue(channelName, 0.0f);
+
+    std::string formattedValue;
+
+    if (useSIFormat) {
+      formattedValue = FormatWithSI(value, unit);
+    }
+    else {
+      // Raw decimal with 12 places
+      char buffer[64];
+      snprintf(buffer, sizeof(buffer), "%.12f %s", value, unit.c_str());
+      formattedValue = std::string(buffer);
+    }
+
+    std::string message = channelName + ": " + formattedValue;
 
     if (addTimestamp) {
       auto now = std::chrono::system_clock::now();
@@ -65,13 +87,62 @@ public:
     }
 
     displayOutput->displayText(message);
-    return true;  // Success
+    return true;
   }
 
   std::string GetDescription() const override {
-    return "Print value: " + channelName;
+    return "Print value: " + channelName +
+      (useSIFormat ? " (SI format)" : " (raw decimal)");
+  }
+
+private:
+  std::string FormatWithSI(double value, const std::string& baseUnit) {
+    double absValue = std::abs(value);
+    char buffer[64];
+
+    if (absValue == 0.0) {
+      snprintf(buffer, sizeof(buffer), "0.00 %s", baseUnit.c_str());
+    }
+    else if (absValue < 1e-12) {
+      snprintf(buffer, sizeof(buffer), "%.3e %s", value, baseUnit.c_str());
+    }
+    else if (absValue < 1e-9) {
+      // pico
+      snprintf(buffer, sizeof(buffer), "%.2f p%s", value * 1e12, baseUnit.c_str());
+    }
+    else if (absValue < 1e-6) {
+      // nano
+      snprintf(buffer, sizeof(buffer), "%.2f n%s", value * 1e9, baseUnit.c_str());
+    }
+    else if (absValue < 1e-3) {
+      // micro
+      snprintf(buffer, sizeof(buffer), "%.2f µ%s", value * 1e6, baseUnit.c_str());
+    }
+    else if (absValue < 1.0) {
+      // milli
+      snprintf(buffer, sizeof(buffer), "%.3f m%s", value * 1e3, baseUnit.c_str());
+    }
+    else if (absValue < 1e3) {
+      // base unit
+      snprintf(buffer, sizeof(buffer), "%.3f %s", value, baseUnit.c_str());
+    }
+    else if (absValue < 1e6) {
+      // kilo
+      snprintf(buffer, sizeof(buffer), "%.3f k%s", value * 1e-3, baseUnit.c_str());
+    }
+    else if (absValue < 1e9) {
+      // mega
+      snprintf(buffer, sizeof(buffer), "%.3f M%s", value * 1e-6, baseUnit.c_str());
+    }
+    else {
+      snprintf(buffer, sizeof(buffer), "%.3e %s", value, baseUnit.c_str());
+    }
+
+    return std::string(buffer);
   }
 };
+
+
 
 class CorePickPlace : public SequenceOperation {
 public:

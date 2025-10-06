@@ -29,6 +29,7 @@
 #include "include/camera/CameraManager.h"
 #include "include/vision/VisionCameraExposureManager.h"
 #include "GlobalMotionController.h"
+#include "IDisplayOutput.h"  // ADD THIS INCLUDE
 // Add these includes at the top:
 
 #include <string>
@@ -105,6 +106,20 @@ public:
 	~MachineOperations();
 
 	Logger* m_logger;
+
+
+	// ADD THESE METHODS
+	void SetDisplayOutput(IDisplayOutput* display) {
+		m_displayOutput = display;
+	}
+
+	IDisplayOutput* GetDisplayOutput() const {
+		return m_displayOutput;
+	}
+
+	// ... existing members ...
+	IDisplayOutput* m_displayOutput = nullptr;  // ADD THIS
+
 
 	// Add these public methods for result access
 	std::shared_ptr<OperationResultsManager> GetResultsManager() { return m_resultsManager; }
@@ -725,11 +740,16 @@ protected:
 		size_t GetRecordCount() const { return m_recordCount; }
 		const std::vector<std::string>& GetChannels() const { return m_channels; }
 
+
+
+
+
 	private:
 		std::string m_filename;  // Add this member variable
 		std::ofstream m_file;
 		std::vector<std::string> m_channels;
 		std::atomic<size_t> m_recordCount;
+
 	};
 
 	std::map<std::string, std::unique_ptr<ChannelRecorder>> m_activeRecorders;
