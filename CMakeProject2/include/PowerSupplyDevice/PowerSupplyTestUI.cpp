@@ -430,7 +430,9 @@ void PowerSupplyTestUI::AddLogMessage(const std::string& msg) {
   auto time_t = std::chrono::system_clock::to_time_t(now);
 
   std::stringstream ss;
-  ss << std::put_time(std::localtime(&time_t), "%H:%M:%S");
+  std::tm tm_buf;
+  localtime_s(&tm_buf, &time_t);
+  ss << std::put_time(&tm_buf, "%H:%M:%S");
   ss << " - " << msg;
 
   m_state.display.logMessages.push_back(ss.str());

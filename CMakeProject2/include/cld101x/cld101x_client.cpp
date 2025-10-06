@@ -924,7 +924,7 @@ void CLD101xClient::SyncHardwareStatus() {
           setpointReading = std::stof(setpointResponse);
         }
       }
-      catch (const std::exception& e) {
+      catch (const std::exception& ) {
         Logger::GetInstance()->LogWarning("CLD101xClient: Failed to parse setpoint during sync - using 25°C");
         setpointReading = 25.0f;
       }

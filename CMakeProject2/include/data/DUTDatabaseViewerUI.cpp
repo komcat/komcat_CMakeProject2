@@ -197,7 +197,7 @@ void DUTDatabaseViewerUI::LoadDataForSerial(const std::string& serialNumber) {
   sqlite3_finalize(stmt);
 
   // Update pagination
-  m_totalPages = (m_displayData.size() + m_recordsPerPage - 1) / m_recordsPerPage;
+  m_totalPages = (static_cast<int>(m_displayData.size()) + m_recordsPerPage - 1) / m_recordsPerPage;
   m_currentPage = 0;
 
   UpdateStatistics();

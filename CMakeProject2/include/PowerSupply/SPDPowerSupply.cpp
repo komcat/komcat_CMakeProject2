@@ -311,7 +311,7 @@ namespace PowerSupply {
 
 			return outputOn;
 		}
-		catch (const std::exception& e) {
+		catch (const std::exception& ) {
 			std::cerr << "Failed to parse system status: " << response << std::endl;
 			return std::nullopt;
 		}

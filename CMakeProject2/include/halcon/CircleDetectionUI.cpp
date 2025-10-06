@@ -561,7 +561,7 @@ bool CircleDetectionUI::detectCircleCenter(const std::string& imagePath, double&
           }
         }
       }
-      catch (HException& ex) {
+      catch (HException& ) {
         continue;
       }
     }
@@ -584,7 +584,7 @@ bool CircleDetectionUI::detectCircleCenter(const std::string& imagePath, double&
           }
         }
       }
-      catch (HException& ex) {
+      catch (HException& ) {
         // Fallback failed
       }
     }
@@ -744,9 +744,9 @@ void CircleDetectionUI::renderImageWithCrosshair()
 
   // Draw crosshair overlay if circle was detected
   if (m_circleFound && m_detectionRan) {
-    float crosshairX = imagePos.x + (m_centerX * scaleX);
-    float crosshairY = imagePos.y + (m_centerY * scaleY);
-    float crosshairRadius = m_radius * scaleX;
+    float crosshairX = imagePos.x + (static_cast<float>(m_centerX) * scaleX);
+    float crosshairY = imagePos.y + (static_cast<float>(m_centerY) * scaleY);
+    float crosshairRadius = static_cast<float>(m_radius) * scaleX;
 
     // Colors
     ImU32 crosshairColor = IM_COL32(0, 255, 0, 255);    // Green crosshair
@@ -1176,7 +1176,9 @@ std::vector<CircleDetectionUI::ProfileInfo> CircleDetectionUI::GetProfileDetails
       auto cftime = std::chrono::system_clock::to_time_t(sctp);
 
       std::stringstream ss;
-      ss << std::put_time(std::localtime(&cftime), "%Y-%m-%d %H:%M");
+      std::tm tm_buf;
+      localtime_s(&tm_buf, &cftime);
+      ss << std::put_time(&tm_buf, "%Y-%m-%d %H:%M");      
       info.lastModified = ss.str();
 
       // Try to load description from file
@@ -1190,7 +1192,7 @@ std::vector<CircleDetectionUI::ProfileInfo> CircleDetectionUI::GetProfileDetails
         file.close();
       }
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& ) {
       info.lastModified = "Unknown";
       info.description = "Error reading file";
     }
@@ -1461,7 +1463,9 @@ std::string CircleDetectionUI::getCurrentTimestamp()
   auto now = std::chrono::system_clock::now();
   auto time_t = std::chrono::system_clock::to_time_t(now);
   std::stringstream ss;
-  ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+  std::tm tm_buf;
+  localtime_s(&tm_buf, &time_t);
+  ss << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
   return ss.str();
 }
 

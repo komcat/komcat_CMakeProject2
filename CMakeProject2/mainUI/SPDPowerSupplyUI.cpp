@@ -83,7 +83,7 @@ void SPDPowerSupplyUI::RenderStatusSection() {
   ImGui::SameLine();
 
   int connectedCount = m_spdManager->GetConnectedCount();
-  int totalCount = m_spdManager->GetDeviceNames().size();
+  int totalCount = static_cast<int>(m_spdManager->GetDeviceNames().size());
 
   if (connectedCount > 0) {
     ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%d/%d devices connected", connectedCount, totalCount);

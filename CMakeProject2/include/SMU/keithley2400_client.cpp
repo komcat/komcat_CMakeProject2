@@ -196,7 +196,7 @@ bool Keithley2400Client::ResetInstrument() {
         return false;
       }
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& ) {
       m_lastError = "Failed to parse reset response";
       return false;
     }
@@ -243,7 +243,7 @@ bool Keithley2400Client::SetOutput(bool enable) {
         return false;
       }
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& ) {
       m_lastError = "Failed to parse output response";
       return false;
     }
@@ -278,7 +278,7 @@ bool Keithley2400Client::GetStatus(std::string& instrumentId, std::string& outpu
         return false;
       }
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& ) {
       m_lastError = "Failed to parse status response";
       return false;
     }
@@ -311,7 +311,7 @@ bool Keithley2400Client::SetupVoltageSource(double voltage, double compliance, c
         return false;
       }
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& ) {
       m_lastError = "Failed to parse voltage source response";
       return false;
     }
@@ -374,7 +374,7 @@ bool Keithley2400Client::SendWriteCommand(const std::string& command) {
         return false;
       }
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& ) {
       m_lastError = "Failed to parse write response";
       return false;
     }
@@ -402,7 +402,7 @@ bool Keithley2400Client::SendQueryCommand(const std::string& command, std::strin
         return false;
       }
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& ) {
       m_lastError = "Failed to parse query response";
       return false;
     }
@@ -439,7 +439,7 @@ bool Keithley2400Client::ParseMeasurement(const std::string& jsonResponse, Keith
       return false;
     }
   }
-  catch (const std::exception& e) {
+  catch (const std::exception& ) {
     m_lastError = "Failed to parse measurement response";
     return false;
   }

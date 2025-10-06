@@ -246,7 +246,7 @@ bool MachineOperations::SetDataValue(const std::string& dataKey, double value,
 
   try {
     // Set the value in GlobalDataStore
-    dataStore->SetValue(dataKey, value);
+    dataStore->SetValue(dataKey, static_cast<float>(value));
     LogInfo("Successfully stored: " + dataKey + " = " + std::to_string(value));
     return true;
   }

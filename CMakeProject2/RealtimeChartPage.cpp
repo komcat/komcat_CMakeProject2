@@ -1068,7 +1068,7 @@ void RealtimeChartPage::renderChannelItem(Rectangle rect, const std::string& cha
     // Find the actual index in the full list
     auto it = std::find(m_availableChannels.begin(), m_availableChannels.end(), channelName);
     if (it != m_availableChannels.end()) {
-      m_selectedChannelIndex = std::distance(m_availableChannels.begin(), it);
+      m_selectedChannelIndex = static_cast<int>(std::distance(m_availableChannels.begin(), it));
     }
 
     m_dataBuffer.clear();
@@ -1229,10 +1229,10 @@ void RealtimeChartPage::drawDataLine(Rectangle chartArea, float minValue, float 
     const auto& prev = m_dataBuffer[i - 1];
     const auto& curr = m_dataBuffer[i];
 
-    float x1 = static_cast<double>(chartArea.x + ((prev.timestamp - minTime) / timeRange) * chartArea.width);
-    float y1 = static_cast<double>(chartArea.y + chartArea.height - ((prev.value - minValue) / valueRange) * chartArea.height);
-    float x2 = static_cast<double>(chartArea.x + ((curr.timestamp - minTime) / timeRange) * chartArea.width);
-    float y2 = static_cast<double>(chartArea.y + chartArea.height - ((curr.value - minValue) / valueRange) * chartArea.height);
+    float x1 = static_cast<float>(chartArea.x + ((prev.timestamp - minTime) / timeRange) * chartArea.width);
+    float y1 = static_cast<float>(chartArea.y + chartArea.height - ((prev.value - minValue) / valueRange) * chartArea.height);
+    float x2 = static_cast<float>(chartArea.x + ((curr.timestamp - minTime) / timeRange) * chartArea.width);
+    float y2 = static_cast<float>(chartArea.y + chartArea.height - ((curr.value - minValue) / valueRange) * chartArea.height);
 
     DrawLineEx(Vector2{ x1, y1 }, Vector2{ x2, y2 }, 2.0f, LIME);
   }

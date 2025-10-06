@@ -34,7 +34,7 @@ void ScriptPrintViewer::AddPrintMessage(const std::string& message) {
       m_printHistory.pop_front();
     }
   }
-  catch (const std::exception& e) {
+  catch (const std::exception& ) {
     // Log the error but don't let it propagate
   }
 }
@@ -102,7 +102,9 @@ void ScriptPrintViewer::RenderUI() {
         auto time_t = std::chrono::system_clock::to_time_t(entry.timestamp);
 
         std::stringstream timestampStr;
-        timestampStr << std::put_time(std::localtime(&time_t), "%H:%M:%S");
+        std::tm tm_buf;
+        localtime_s(&tm_buf, &time_t);
+        timestampStr << std::put_time(&tm_buf, "%H:%M:%S");
 
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "[%s]", timestampStr.str().c_str());
         ImGui::SameLine();
@@ -141,13 +143,15 @@ void ScriptPrintViewer::InitializeLogFile() {
         m_logFile << "=== Script Print Log Started at ";
         
         auto time_t = std::chrono::system_clock::to_time_t(m_currentLogDate);
-        m_logFile << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+        std::tm tm_buf;
+        localtime_s(&tm_buf, &time_t);
+        m_logFile << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
         m_logFile << " ===" << std::endl;
         m_logFile << std::endl;
       }
     }
   }
-  catch (const std::exception& e) {
+  catch (const std::exception& ) {
     // If we can't create the log file, disable file logging
     m_fileLoggingEnabled = false;
   }
@@ -189,7 +193,9 @@ void ScriptPrintViewer::WriteToLogFile(const PrintEntry& entry) {
   auto time_t = std::chrono::system_clock::to_time_t(entry.timestamp);
   
   m_logFile << "[";
-  m_logFile << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+  std::tm tm_buf;
+  localtime_s(&tm_buf, &time_t);
+  m_logFile << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
   m_logFile << "] " << entry.message << std::endl;
   
   // Flush to ensure data is written
@@ -201,7 +207,9 @@ std::string ScriptPrintViewer::GetLogFileName(const std::chrono::system_clock::t
   
   std::stringstream filename;
   filename << m_logDirectory << "/script_print_";
-  filename << std::put_time(std::localtime(&time_t), "%Y%m%d");
+  std::tm tm_buf;
+  localtime_s(&tm_buf, &time_t);
+  filename << std::put_time(&tm_buf, "%Y%m%d");
   filename << ".log";
   
   return filename.str();
@@ -215,8 +223,9 @@ void ScriptPrintViewer::CloseLogFile() {
     
     m_logFile << std::endl;
     m_logFile << "=== Script Print Log Closed at ";
-    m_logFile << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
-    m_logFile << " ===" << std::endl;
+    std::tm tm_buf;
+    localtime_s(&tm_buf, &time_t);
+    m_logFile << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");    m_logFile << " ===" << std::endl;
     
     m_logFile.close();
   }

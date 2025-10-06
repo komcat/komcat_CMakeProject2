@@ -181,7 +181,7 @@ void VisionCameraExposureUI::RenderTopControls() {
   ImGui::SameLine();
   ImGui::SetNextItemWidth(200);
   char graphBuffer[256];
-  strcpy(graphBuffer, m_selectedGraph.c_str());
+  strcpy_s(graphBuffer, sizeof(graphBuffer), m_selectedGraph.c_str());
   if (ImGui::InputText("##Graph", graphBuffer, sizeof(graphBuffer))) {
     m_selectedGraph = graphBuffer;
   }
@@ -191,7 +191,7 @@ void VisionCameraExposureUI::RenderTopControls() {
   ImGui::SameLine();
   ImGui::SetNextItemWidth(150);
   char cameraBuffer[256];
-  strcpy(cameraBuffer, m_selectedCameraId.c_str());
+  strcpy_s(cameraBuffer, sizeof(cameraBuffer), m_selectedCameraId.c_str());
   if (ImGui::InputText("##Camera", cameraBuffer, sizeof(cameraBuffer))) {
     m_selectedCameraId = cameraBuffer;
   }

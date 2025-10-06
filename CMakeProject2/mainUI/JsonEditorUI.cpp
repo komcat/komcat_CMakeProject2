@@ -137,8 +137,7 @@ void JsonEditorUI::RenderEditor() {
   // Copy content to buffer on file load (one-time)
   static int lastSelectedIndex = -1;
   if (lastSelectedIndex != m_selectedFileIndex) {
-    strncpy(editBuffer, m_editorContent.c_str(), sizeof(editBuffer) - 1);
-    editBuffer[sizeof(editBuffer) - 1] = '\0';
+    strcpy_s(editBuffer, sizeof(editBuffer), m_editorContent.c_str());
     lastSelectedIndex = m_selectedFileIndex;
   }
 

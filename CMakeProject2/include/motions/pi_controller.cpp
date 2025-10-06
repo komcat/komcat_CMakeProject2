@@ -1945,7 +1945,7 @@ void PIController::NotifyMotionStatusSubscribers(const std::string& axis, bool i
 			try {
 				subscriber->OnMotionStatusChange(m_deviceName, axis, isMoving);
 			}
-			catch (const std::exception& e) {
+			catch (const std::exception& ) {
 				// Silent catch - OnMotionStatusChange is optional
 			}
 		}

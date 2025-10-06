@@ -141,8 +141,9 @@ ProgramInfo ProgramManager::ExtractProgramInfo(const std::string& filepath) {
     auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
       ftime - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
     std::time_t cftime = std::chrono::system_clock::to_time_t(sctp);
-    info.lastModified = std::ctime(&cftime);
-
+    char timeBuffer[26];
+    ctime_s(timeBuffer, sizeof(timeBuffer), &cftime);
+    info.lastModified = timeBuffer;
     // Parse JSON to extract metadata
     std::ifstream inFile(filepath);
     if (inFile.is_open()) {
@@ -150,7 +151,7 @@ ProgramInfo ProgramManager::ExtractProgramInfo(const std::string& filepath) {
       inFile >> programData;
 
       if (programData.contains("blocks")) {
-        info.blockCount = programData["blocks"].size();
+        info.blockCount = static_cast<int>(programData["blocks"].size());
 
         // Extract program info from START block
         for (const auto& block : programData["blocks"]) {
@@ -171,7 +172,7 @@ ProgramInfo ProgramManager::ExtractProgramInfo(const std::string& filepath) {
       }
 
       if (programData.contains("connections")) {
-        info.connectionCount = programData["connections"].size();
+        info.connectionCount = static_cast<int>(programData["connections"].size());
       }
     }
   }

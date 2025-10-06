@@ -93,7 +93,7 @@ void CameraViewport::UpdateSubscription() {
       m_isConnected = false;
     }
   }
-  catch (const std::exception& e) {
+  catch (const std::exception& ) {
     m_isConnected = false;
     if (m_subscriber && m_cameraManager) {
       m_cameraManager->UnsubscribeFromFrames(m_subscriber->GetSubscriberId());

@@ -745,7 +745,7 @@ ImVec4 DigitalDisplayWithChart::generateColor(const std::string& channelName) {
 
   // Convert HSV to RGB
   float c = value * saturation;
-  float x = c * (1 - std::abs(std::fmod(hue * 6, 2) - 1));
+  float x = static_cast<float>(c * (1 - std::abs(std::fmod(hue * 6, 2) - 1)));
   float m = value - c;
 
   float r, g, b;

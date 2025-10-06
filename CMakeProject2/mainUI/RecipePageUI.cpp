@@ -792,7 +792,7 @@ void RecipePageUI::RenderNicknameEditor(ProcessInstance& instance) {
 
   // Initialize buffer with current nickname
   if (strlen(m_nicknameEditBuffer) == 0 && !instance.nickname.empty()) {
-    strncpy(m_nicknameEditBuffer, instance.nickname.c_str(), sizeof(m_nicknameEditBuffer) - 1);
+    strcpy_s(m_nicknameEditBuffer, sizeof(m_nicknameEditBuffer), instance.nickname.c_str());
   }
 
   ImGui::SetNextItemWidth(-80);
@@ -955,8 +955,7 @@ void RecipePageUI::OnInstanceSelected(const std::string& instanceId) {
   // Load nickname into edit buffer
   ProcessInstance* instance = GetSelectedInstance();
   if (instance) {
-    strncpy(m_nicknameEditBuffer, instance->nickname.c_str(), sizeof(m_nicknameEditBuffer) - 1);
-    m_nicknameEditBuffer[sizeof(m_nicknameEditBuffer) - 1] = '\0';
+    strcpy_s(m_nicknameEditBuffer, sizeof(m_nicknameEditBuffer), instance->nickname.c_str());
   }
 
   std::cout << "RecipePageUI: Selected instance " << instanceId << " for editing" << std::endl;
@@ -1081,7 +1080,7 @@ bool RecipePageUI::DeserializeRecipe(const nlohmann::json& recipeJson) {
     // Load recipe name
     if (recipeJson.contains("name")) {
       std::string recipeName = recipeJson["name"];
-      strncpy(m_recipeNameBuffer, recipeName.c_str(), sizeof(m_recipeNameBuffer) - 1);
+      strcpy_s(m_recipeNameBuffer, sizeof(m_recipeNameBuffer), recipeName.c_str());
       m_currentRecipeName = recipeName;
     }
 

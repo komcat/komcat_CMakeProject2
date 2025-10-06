@@ -601,8 +601,7 @@ void CameraExposureManager::RenderUI() {
           if (ImGui::Selectable(nodeInfo.displayText.c_str(), isSelected)) {
             selectedMotionNodeIndex = i;
             // Copy the selected node ID to the input field
-            strncpy(newNodeId, nodeInfo.nodeId.c_str(), sizeof(newNodeId) - 1);
-            newNodeId[sizeof(newNodeId) - 1] = '\0';
+            strcpy_s(newNodeId, sizeof(newNodeId), nodeInfo.nodeId.c_str());
           }
           ImGui::PopStyleColor();
 
@@ -667,8 +666,7 @@ void CameraExposureManager::RenderUI() {
 
     // Description input
     static char descBuffer[256];
-    strncpy(descBuffer, newNodeSettings.description.c_str(), sizeof(descBuffer) - 1);
-    descBuffer[sizeof(descBuffer) - 1] = '\0';
+    strcpy_s(descBuffer, sizeof(descBuffer), newNodeSettings.description.c_str());
 
     if (ImGui::InputText("Description", descBuffer, sizeof(descBuffer))) {
       newNodeSettings.description = std::string(descBuffer);
@@ -921,8 +919,7 @@ void CameraExposureManager::RenderUI() {
       for (const auto& [nodeId, settings] : m_nodeSettings) {
         if (ImGui::Selectable(nodeId.c_str())) {
           // Copy the node ID to the copy field
-          strncpy(copyFromNodeId, nodeId.c_str(), sizeof(copyFromNodeId) - 1);
-          copyFromNodeId[sizeof(copyFromNodeId) - 1] = '\0';
+          strcpy_s(copyFromNodeId, sizeof(copyFromNodeId), nodeId.c_str());
           copyFromExisting = true;
         }
         if (ImGui::IsItemHovered()) {

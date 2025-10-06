@@ -13,7 +13,9 @@ ScanDataCollector::ScanDataCollector(const std::string& deviceName)
   auto now = std::chrono::system_clock::now();
   auto time_t = std::chrono::system_clock::to_time_t(now);
   std::stringstream ss;
-  ss << "scan_" << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
+  std::tm tm_buf;
+  localtime_s(&tm_buf, &time_t);
+  ss << "scan_" << std::put_time(&tm_buf, "%Y%m%d_%H%M%S");
   m_scanId = ss.str();
 }
 
@@ -136,7 +138,7 @@ ScanResults ScanDataCollector::GetResults() const {
     results.peak = std::make_unique<ScanPeak>(*m_currentPeak);
   }
 
-  results.totalMeasurements = m_measurements.size();
+  results.totalMeasurements = static_cast<int>(m_measurements.size());
   results.measurements = m_measurements;
   results.statistics = std::make_unique<ScanStatistics>(CalculateStatistics());
 
@@ -211,7 +213,7 @@ ScanStatistics ScanDataCollector::CalculateStatistics() const {
     stats.totalDuration = std::chrono::duration_cast<std::chrono::seconds>(duration);
   }
 
-  stats.totalMeasurements = m_measurements.size();
+  stats.totalMeasurements = static_cast<int>(m_measurements.size());
 
   // Count per axis
   stats.measurementsPerAxis.clear();
@@ -255,7 +257,9 @@ nlohmann::json ScanMeasurement::ToJson() const {
   // Convert timestamp to string
   auto time_t = std::chrono::system_clock::to_time_t(timestamp);
   std::stringstream ss;
-  ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+  std::tm tm_buf;
+  localtime_s(&tm_buf, &time_t);
+  ss << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
   j["timestamp"] = ss.str();
 
   j["axis"] = axis;
@@ -285,7 +289,9 @@ nlohmann::json ScanBaseline::ToJson() const {
   // Convert timestamp to string
   auto time_t = std::chrono::system_clock::to_time_t(timestamp);
   std::stringstream ss;
-  ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+  std::tm tm_buf;
+  localtime_s(&tm_buf, &time_t);
+  ss << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
   j["timestamp"] = ss.str();
 
   return j;
@@ -307,7 +313,9 @@ nlohmann::json ScanPeak::ToJson() const {
   // Convert timestamp to string
   auto time_t = std::chrono::system_clock::to_time_t(timestamp);
   std::stringstream ss;
-  ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+  std::tm tm_buf;
+  localtime_s(&tm_buf, &time_t);
+  ss << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
   j["timestamp"] = ss.str();
 
   j["context"] = context;
@@ -342,8 +350,11 @@ nlohmann::json ScanResults::ToJson() const {
   auto endTime_t = std::chrono::system_clock::to_time_t(endTime);
 
   std::stringstream startSs, endSs;
-  startSs << std::put_time(std::localtime(&startTime_t), "%Y-%m-%d %H:%M:%S");
-  endSs << std::put_time(std::localtime(&endTime_t), "%Y-%m-%d %H:%M:%S");
+  std::tm startTm, endTm;
+  localtime_s(&startTm, &startTime_t);
+  localtime_s(&endTm, &endTime_t);
+  startSs << std::put_time(&startTm, "%Y-%m-%d %H:%M:%S");
+  endSs << std::put_time(&endTm, "%Y-%m-%d %H:%M:%S");
 
   j["startTime"] = startSs.str();
   j["endTime"] = endSs.str();

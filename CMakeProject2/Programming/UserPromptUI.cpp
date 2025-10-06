@@ -193,8 +193,7 @@ void UserPromptUI::RenderTextInputDialog() {
     // Text input field
     static char inputBuffer[256];
     if (shouldOpen) {
-      strncpy(inputBuffer, m_inputBuffer.c_str(), sizeof(inputBuffer) - 1);
-      inputBuffer[sizeof(inputBuffer) - 1] = '\0';
+      strcpy_s(inputBuffer, sizeof(inputBuffer), m_inputBuffer.c_str());
       shouldOpen = false;
     }
 

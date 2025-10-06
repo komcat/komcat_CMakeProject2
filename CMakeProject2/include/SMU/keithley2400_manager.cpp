@@ -156,7 +156,7 @@ void Keithley2400Manager::StopAllPolling() {
 Keithley2400Manager::AggregatedData Keithley2400Manager::GetAggregatedData() const {
   AggregatedData data;
   data.connectedCount = 0;
-  data.totalCount = m_clients.size();
+  data.totalCount = static_cast<int>(m_clients.size());
   data.totalVoltage = 0.0;
   data.totalCurrent = 0.0;
   data.totalPower = 0.0;

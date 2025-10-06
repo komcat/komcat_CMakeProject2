@@ -391,7 +391,9 @@ std::string AdaptivePowerScanner::getCurrentTimestamp() const {
   auto time_t = std::chrono::system_clock::to_time_t(now);
 
   std::stringstream ss;
-  ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+  std::tm tm_buf;
+  localtime_s(&tm_buf, &time_t);
+  ss << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
   return ss.str();
 }
 

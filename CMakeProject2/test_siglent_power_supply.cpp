@@ -69,11 +69,11 @@ private:
 
   void PrintResult(bool passed, const std::string& message) {
     if (passed) {
-      std::cout << GREEN << "  ✓ " << message << RESET << std::endl;
+      std::cout << GREEN << "  [YES] " << message << RESET << std::endl;
       m_testsPassed++;
     }
     else {
-      std::cout << RED << "  ✗ " << message << RESET << std::endl;
+      std::cout << RED << "  [NO] " << message << RESET << std::endl;
       m_testsFailed++;
     }
   }
@@ -418,7 +418,7 @@ private:
     std::cout << RED << "Failed: " << m_testsFailed << RESET << std::endl;
 
     if (m_testsFailed == 0) {
-      std::cout << GREEN << "\nAll tests passed! ✓" << RESET << std::endl;
+      std::cout << GREEN << "\nAll tests passed! [YES]" << RESET << std::endl;
     }
     else {
       std::cout << YELLOW << "\nSome tests failed. Please review the output above."
