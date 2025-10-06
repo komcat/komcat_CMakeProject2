@@ -475,7 +475,49 @@ void RunPageUI::RenderColumn2() {
       ImGui::EndTabItem();
     }
 
+    // NEW PRINT TAB
+    if (ImGui::BeginTabItem("Print")) {
+      RenderPrintTab();
+      ImGui::EndTabItem();
+    }
+
     ImGui::EndTabBar();
+  }
+}
+
+void RunPageUI::RenderPrintTab() {
+  // Controls row
+  if (ImGui::Button("Clear", ImVec2(80, 25))) {
+    printMessages.clear();
+  }
+  ImGui::SameLine();
+  ImGui::Checkbox("Auto-scroll", &autoScrollPrint);
+
+  ImGui::Separator();
+
+  // Text display area
+  ImGui::BeginChild("PrintOutput", ImVec2(0, 0), true,
+    ImGuiWindowFlags_HorizontalScrollbar);
+  {
+    for (const auto& msg : printMessages) {
+      ImGui::TextUnformatted(msg.c_str());
+    }
+
+    // Auto-scroll to bottom
+    if (autoScrollPrint && ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+      ImGui::SetScrollHereY(1.0f);
+    }
+  }
+  ImGui::EndChild();
+}
+
+void RunPageUI::displayText(const std::string& text) {
+  printMessages.push_back(text);
+
+  // Limit message history
+  const size_t MAX_MESSAGES = 1000;
+  if (printMessages.size() > MAX_MESSAGES) {
+    printMessages.erase(printMessages.begin());
   }
 }
 

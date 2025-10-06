@@ -1,6 +1,10 @@
 #pragma once
 #include "ProcessStep.h"
 #include "SequenceStep.h"
+#include "IDisplayOutput.h"
+#include "global_data_store.h"
+#include <chrono>
+#include <ctime>
 #include <iostream>
 #include <string>
 
@@ -24,6 +28,49 @@ public:
   }
 private:
   std::string m_task;
+};
+
+
+class PrintOutValue : public SequenceOperation {
+private:
+  IDisplayOutput* displayOutput;
+  std::string channelName;
+  bool addTimestamp;
+
+public:
+  PrintOutValue(IDisplayOutput* output,
+    const std::string& channel,
+    bool timestamp = true)
+    : displayOutput(output)
+    , channelName(channel)
+    , addTimestamp(timestamp) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    if (!displayOutput) return false;
+
+    GlobalDataStore& dataStore = GlobalDataStore::getInstance();
+    double value = dataStore.getDouble(channelName);
+
+    std::string message = channelName + ": " + std::to_string(value);
+
+    if (addTimestamp) {
+      auto now = std::chrono::system_clock::now();
+      auto time = std::chrono::system_clock::to_time_t(now);
+      std::tm tm;
+      localtime_s(&tm, &time);
+      char timeStr[100];
+      std::strftime(timeStr, sizeof(timeStr), "[%Y-%m-%d %H:%M:%S] ", &tm);
+      message = std::string(timeStr) + message;
+    }
+
+    displayOutput->displayText(message);
+    return true;  // Success
+  }
+
+  std::string GetDescription() const override {
+    return "Print value: " + channelName;
+  }
 };
 
 class CorePickPlace : public SequenceOperation {

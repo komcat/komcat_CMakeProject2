@@ -1,5 +1,6 @@
 // Core/uaa3_pick_place_sequences.cpp
 #include "../uaa3_process_builders.h"
+#include "CoreSequenceStep.h"	
 #include <iostream>
 
 namespace UAA3ProcessBuilders {
@@ -9,6 +10,9 @@ namespace UAA3ProcessBuilders {
 
 		auto sequence = std::make_unique<SequenceStep>("UAA3 Initialization", machineOps);
 
+		sequence->AddOperation(std::make_shared<PrintOutValue>(
+			&promptUI, "GPIB-Current", "A", true, true
+		));
 
 		//CRITICAL END DUT RECORDING AND EXPORT DATA
 		sequence->AddOperation(std::make_shared<DUTEndRecordingOperation>(true, true));
@@ -61,7 +65,9 @@ namespace UAA3ProcessBuilders {
 			"IOBottom", 10));  // Clear Vacuum_Base (pin 10)
 
 
-
+		sequence->AddOperation(std::make_shared<PrintOutValue>(
+			&promptUI, "GPIB-Current", "A", true, true
+		));
 
 
 		return sequence;

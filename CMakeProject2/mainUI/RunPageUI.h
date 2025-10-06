@@ -13,7 +13,7 @@
 #include "logger.h"
 #include "CameraViewport.h"
 #include "LiveVideoSubscriber.h"  // NEW: Add camera support
-// Add to includes section
+#include "IDisplayOutput.h"
 #include "ProcessConfiguration.h"
 #include "ProcessConfigBuilders.h"
 #include "ProcessConfigUI.h"
@@ -40,7 +40,7 @@ using namespace UAA3ProcessBuilders;
 // Forward declarations
 class CameraManager;
 
-class RunPageUI {
+class RunPageUI : public IDisplayOutput {
 public:
   RunPageUI(MachineOperations& machineOps);
   ~RunPageUI();
@@ -324,6 +324,13 @@ private:
   float m_exceptionalThreshold = 135.0f;  // Exceptional threshold percentage
 
   std::unique_ptr<SettingsEditorUI> m_settingsEditor;
+
+	//member for IDisplayOutput
+  std::vector<std::string> printMessages;
+  bool autoScrollPrint = true;
+  void RenderPrintTab();
+  void displayText(const std::string& text) override;
+
 
   void RefreshSettingsFromDatabase();
 
