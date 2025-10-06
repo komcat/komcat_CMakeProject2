@@ -963,7 +963,26 @@ std::vector<std::string> RunPageUI::GetSortedProcessList() const {
 }
 
 
-// UPDATE: ProcessThreadFunc to track both completed and failed processes
+
+
+/*
+
+Key Changes:
+
+Removed return; after ExecuteProcessGroup() - this was preventing cleanup
+Changed structure to use if/else so either group OR single execution runs
+Cleanup code now always runs - whether group succeeds, fails, or single process runs
+
+This ensures:
+
+When group execution completes (success or failure), m_processRunning is set to false
+START button becomes enabled again
+All state flags are properly reset
+UI returns to ready state
+
+
+*/
+
 void RunPageUI::ProcessThreadFunc(const std::string& processName) {
   // Record start time and calculate idle time
   m_processStartTime = std::chrono::steady_clock::now();
@@ -989,19 +1008,24 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
   }
 
   try {
-    // NEW: Check if this is a grouped process and auto-execute is enabled
+    // Check if this is a grouped process and auto-execute is enabled
     if (m_usingRecipe && m_autoExecuteGroup) {
       ProcessInstance* startInstance = GetSelectedRecipeInstance();
 
       if (startInstance && startInstance->IsGrouped()) {
         // GROUP EXECUTION MODE
         ExecuteProcessGroup(startInstance->groupId, idleTimeStr);
-        return;
+        // ✅ REMOVED return; - let it fall through to cleanup
+      }
+      else {
+        // SINGLE PROCESS EXECUTION
+        ExecuteSingleProcess(processName, idleTimeStr);
       }
     }
-
-    // SINGLE PROCESS EXECUTION (original behavior)
-    ExecuteSingleProcess(processName, idleTimeStr);
+    else {
+      // SINGLE PROCESS EXECUTION (original behavior)
+      ExecuteSingleProcess(processName, idleTimeStr);
+    }
 
   }
   catch (const std::exception& e) {
@@ -1025,6 +1049,7 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
     m_hasLastProcessEndTime = true;
   }
 
+  // ✅ Cleanup code - now ALWAYS runs for both group and single execution
   m_processRunning = false;
   m_processPaused = false;
   m_progress = 0.0f;
@@ -1032,9 +1057,6 @@ void RunPageUI::ProcessThreadFunc(const std::string& processName) {
   m_currentGroupId = "";
 }
 
-
-
-// NEW: Helper method for group execution
 void RunPageUI::ExecuteProcessGroup(const std::string& groupId,
   const std::string& initialIdleTime) {
   m_runningGroupExecution = true;
@@ -1070,6 +1092,17 @@ void RunPageUI::ExecuteProcessGroup(const std::string& groupId,
       break;
     }
 
+    // FIX 1: Update selected process for UI display
+    m_selectedProcess = instance->GetUIDisplayName();
+
+    // FIX 2: Reset operation tracking for this process
+    {
+      std::lock_guard<std::mutex> lock(m_operationMutex);
+      m_currentOperationIndex = 0;
+      m_lastCompletedIndex = 0;
+      m_operationInProgress = false;
+    }
+
     // Update status with progress
     UpdateStatus("Group [" + std::to_string(i + 1) + "/" +
       std::to_string(groupProcesses.size()) + "]: " +
@@ -1085,12 +1118,33 @@ void RunPageUI::ExecuteProcessGroup(const std::string& groupId,
       break;
     }
 
+    // FIX 3: Extract operations for Sequence tab display
+    const auto& operations = sequence->GetOperations();
+    m_selectedProcessOperations.clear();
+    for (const auto& op : operations) {
+      if (op) {
+        m_selectedProcessOperations.push_back(op->GetDescription());
+      }
+    }
+    m_logger->LogInfo("Loaded " + std::to_string(m_selectedProcessOperations.size()) +
+      " operations for: " + instance->GetUIDisplayName());
+
     // Set up operation callback
     sequence->SetOperationCallback([this](size_t index, const std::string& desc, bool starting) {
       std::lock_guard<std::mutex> lock(m_operationMutex);
       if (starting) {
         m_currentOperationIndex = index;
         m_operationInProgress = true;
+        // Update progress based on current operation
+        if (!m_selectedProcessOperations.empty()) {
+          m_progress = static_cast<float>(index) /
+            static_cast<float>(m_selectedProcessOperations.size());
+        }
+      }
+      else {
+        // Operation completed
+        m_lastCompletedIndex = index;
+        m_operationInProgress = false;
       }
     });
 
@@ -1098,6 +1152,13 @@ void RunPageUI::ExecuteProcessGroup(const std::string& groupId,
     auto stepStartTime = std::chrono::steady_clock::now();
     bool success = sequence->Execute();
     auto stepEndTime = std::chrono::steady_clock::now();
+
+    // FIX 4: Reset operation tracking after process completes
+    {
+      std::lock_guard<std::mutex> lock(m_operationMutex);
+      m_operationInProgress = false;
+      m_lastCompletedIndex = m_selectedProcessOperations.size();
+    }
 
     // Calculate duration for this step
     auto stepDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1118,11 +1179,22 @@ void RunPageUI::ExecuteProcessGroup(const std::string& groupId,
     // Update last end time for next process
     m_lastProcessEndTime = stepEndTime;
     m_hasLastProcessEndTime = true;
+
+    m_logger->LogInfo("Completed process " + std::to_string(i + 1) + "/" +
+      std::to_string(groupProcesses.size()) + ": " + instance->GetUIDisplayName());
   }
 
+  // FIX 5: Final cleanup after group completes
   UpdateStatus("Group execution completed: " + groupId);
   m_logger->LogInfo("Group execution finished: " + groupId);
+
+  m_runningGroupExecution = false;
+  m_currentGroupId = "";
+  m_progress = 1.0f;  // Show 100% complete
 }
+
+
+
 
 // NEW: Helper method for single process execution (extracted from original code)
 void RunPageUI::ExecuteSingleProcess(const std::string& processName,
