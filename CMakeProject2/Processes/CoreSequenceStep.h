@@ -620,3 +620,170 @@ private:
   std::string m_fineAlignmentDevice2;
   std::string m_feedBackChannelName2;
 };
+
+
+
+class CoreUnload : public SequenceOperation {
+public:
+  CoreUnload(
+    const std::string& deviceName,
+    const std::string& graphName,
+    const std::string& homeNode,
+    const std::string& ioDeviceVacuum,
+    const std::string& vacuumPinName,
+    const std::string& ioDeviceGripper,
+    const std::string& gripperPinName)
+    : m_deviceName(deviceName),
+    m_graphName(graphName),
+    m_homeNode(homeNode),
+    m_ioDeviceVacuum(ioDeviceVacuum),
+    m_vacuumPinName(vacuumPinName),
+    m_ioDeviceGripper(ioDeviceGripper),
+    m_gripperPinName(gripperPinName) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    ops.LogInfo("=== CoreUnload Operation ===");
+    ops.LogInfo("Device: " + m_deviceName);
+    ops.LogInfo("Home Node: " + m_homeNode);
+
+    // Release gripper
+    ops.LogInfo("Releasing gripper: " + m_gripperPinName);
+    if (!ops.SetOutputByName(m_ioDeviceGripper, m_gripperPinName, false)) {
+      ops.LogError("Failed to release gripper");
+      return false;
+    }
+    ops.Wait(300);
+
+    // Turn off vacuum
+    ops.LogInfo("Turning off vacuum: " + m_vacuumPinName);
+    if (!ops.SetOutputByName(m_ioDeviceVacuum, m_vacuumPinName, false)) {
+      ops.LogError("Failed to turn off vacuum");
+      return false;
+    }
+    ops.Wait(200);
+
+    // Move to home position
+    ops.LogInfo("Moving to home position: " + m_homeNode);
+    if (!ops.MoveToNode(m_deviceName, m_graphName, m_homeNode, true, "CoreUnload")) {
+      ops.LogError("Failed to move to home position");
+      return false;
+    }
+    ops.Wait(500);
+
+    ops.LogInfo("CoreUnload completed successfully");
+    return true;
+  }
+
+  std::string GetDescription() const override {
+    return "Core Unload: " + m_deviceName + " -> " + m_homeNode;
+  }
+
+private:
+  std::string m_deviceName;
+  std::string m_graphName;
+  std::string m_homeNode;
+  std::string m_ioDeviceVacuum;
+  std::string m_vacuumPinName;
+  std::string m_ioDeviceGripper;
+  std::string m_gripperPinName;
+};
+
+
+
+class CoreUnloadTwoGrippers : public SequenceOperation {
+public:
+  CoreUnloadTwoGrippers(
+    const std::string& deviceNameLeft,
+    const std::string& graphNameLeft,
+    const std::string& homeNodeLeft,
+    const std::string& deviceNameRight,
+    const std::string& graphNameRight,
+    const std::string& homeNodeRight,
+    const std::string& ioDeviceVacuum,
+    const std::string& vacuumPinName,
+    const std::string& ioDeviceGripperLeft,
+    const std::string& gripperPinNameLeft,
+    const std::string& ioDeviceGripperRight,
+    const std::string& gripperPinNameRight)
+    : m_deviceNameLeft(deviceNameLeft),
+    m_graphNameLeft(graphNameLeft),
+    m_homeNodeLeft(homeNodeLeft),
+    m_deviceNameRight(deviceNameRight),
+    m_graphNameRight(graphNameRight),
+    m_homeNodeRight(homeNodeRight),
+    m_ioDeviceVacuum(ioDeviceVacuum),
+    m_vacuumPinName(vacuumPinName),
+    m_ioDeviceGripperLeft(ioDeviceGripperLeft),
+    m_gripperPinNameLeft(gripperPinNameLeft),
+    m_ioDeviceGripperRight(ioDeviceGripperRight),
+    m_gripperPinNameRight(gripperPinNameRight) {
+  }
+
+  bool Execute(MachineOperations& ops) override {
+    ops.LogInfo("=== CoreUnloadTwoGrippers Operation ===");
+    ops.LogInfo("Left Device: " + m_deviceNameLeft + " -> " + m_homeNodeLeft);
+    ops.LogInfo("Right Device: " + m_deviceNameRight + " -> " + m_homeNodeRight);
+
+    // Release left gripper
+    ops.LogInfo("Releasing left gripper: " + m_gripperPinNameLeft);
+    if (!ops.SetOutputByName(m_ioDeviceGripperLeft, m_gripperPinNameLeft, false)) {
+      ops.LogError("Failed to release left gripper");
+      return false;
+    }
+    ops.Wait(300);
+
+    // Release right gripper
+    ops.LogInfo("Releasing right gripper: " + m_gripperPinNameRight);
+    if (!ops.SetOutputByName(m_ioDeviceGripperRight, m_gripperPinNameRight, false)) {
+      ops.LogError("Failed to release right gripper");
+      return false;
+    }
+    ops.Wait(300);
+
+    // Turn off vacuum
+    ops.LogInfo("Turning off vacuum: " + m_vacuumPinName);
+    if (!ops.SetOutputByName(m_ioDeviceVacuum, m_vacuumPinName, false)) {
+      ops.LogError("Failed to turn off vacuum");
+      return false;
+    }
+    ops.Wait(200);
+
+    // Move left device to home
+    ops.LogInfo("Moving left device to home: " + m_homeNodeLeft);
+    if (!ops.MoveToNode(m_deviceNameLeft, m_graphNameLeft, m_homeNodeLeft, true, "CoreUnloadTwoGrippers")) {
+      ops.LogError("Failed to move left device to home");
+      return false;
+    }
+    ops.Wait(500);
+
+    // Move right device to home
+    ops.LogInfo("Moving right device to home: " + m_homeNodeRight);
+    if (!ops.MoveToNode(m_deviceNameRight, m_graphNameRight, m_homeNodeRight, true, "CoreUnloadTwoGrippers")) {
+      ops.LogError("Failed to move right device to home");
+      return false;
+    }
+    ops.Wait(500);
+
+    ops.LogInfo("CoreUnloadTwoGrippers completed successfully");
+    return true;
+  }
+
+  std::string GetDescription() const override {
+    return "Core Unload Two Grippers: " + m_deviceNameLeft + " & " + m_deviceNameRight + " -> Home";
+  }
+
+private:
+  std::string m_deviceNameLeft;
+  std::string m_graphNameLeft;
+  std::string m_homeNodeLeft;
+  std::string m_deviceNameRight;
+  std::string m_graphNameRight;
+  std::string m_homeNodeRight;
+  std::string m_ioDeviceVacuum;
+  std::string m_vacuumPinName;
+  std::string m_ioDeviceGripperLeft;
+  std::string m_gripperPinNameLeft;
+  std::string m_ioDeviceGripperRight;
+  std::string m_gripperPinNameRight;
+};

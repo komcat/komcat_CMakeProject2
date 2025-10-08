@@ -159,5 +159,75 @@ void RegisterCoreProcessParameters() {
   }));
 
 
+  // === Core_Unload Parameters ===
+  ProcessParameterSchema::RegisterProcessSchema("Core_Unload", {
+      ParameterDefinition("deviceName", ParameterType::DEVICE_SELECTION,
+                        "hex-right", "Device to move to home"),
+      ParameterDefinition("graphName", ParameterType::STRING,
+                        "Process_Flow", "Graph for motion planning"),
+      ParameterDefinition("homeNode", ParameterType::NODE_SELECTION,
+                        "home_position", "Home position node"),
+      ParameterDefinition("ioDeviceVacuum", ParameterType::DEVICE_SELECTION,
+                        "IOBottom", "Vacuum control device"),
+      ParameterDefinition("vacuumPinName", ParameterType::STRING,
+                        "vacuum-pump", "Vacuum pin name"),
+      ParameterDefinition("ioDeviceGripper", ParameterType::DEVICE_SELECTION,
+                        "IOBottom", "Gripper control device"),
+      ParameterDefinition("gripperPinName", ParameterType::STRING,
+                        "gripper-right", "Gripper pin name")
+    });
+
+  ProcessParameterFactory::RegisterParameterInitializer("Core_Unload",
+    static_cast<ParameterInitializer>([](ProcessInstance& instance) {
+    auto schema = ProcessParameterSchema::GetParametersForProcess("Core_Unload");
+    for (const auto& param : schema) {
+      instance.parameters[param.name] = param.defaultValue;
+    }
+  }));
+
+
+  // === Core_UnloadTwoGrippers Parameters ===
+  ProcessParameterSchema::RegisterProcessSchema("Core_UnloadTwoGrippers", {
+    // Left device parameters
+    ParameterDefinition("deviceNameLeft", ParameterType::DEVICE_SELECTION,
+                      "hex-left", "Left device to move to home"),
+    ParameterDefinition("graphNameLeft", ParameterType::STRING,
+                      "Process_Flow", "Graph for left device motion planning"),
+    ParameterDefinition("homeNodeLeft", ParameterType::NODE_SELECTION,
+                      "home_position_left", "Home position node for left device"),
+    // Right device parameters
+    ParameterDefinition("deviceNameRight", ParameterType::DEVICE_SELECTION,
+                      "hex-right", "Right device to move to home"),
+    ParameterDefinition("graphNameRight", ParameterType::STRING,
+                      "Process_Flow", "Graph for right device motion planning"),
+    ParameterDefinition("homeNodeRight", ParameterType::NODE_SELECTION,
+                      "home_position_right", "Home position node for right device"),
+    // Vacuum parameters
+    ParameterDefinition("ioDeviceVacuum", ParameterType::DEVICE_SELECTION,
+                      "IOBottom", "Vacuum control device"),
+    ParameterDefinition("vacuumPinName", ParameterType::STRING,
+                      "vacuum-pump", "Vacuum pin name"),
+    // Left gripper parameters
+    ParameterDefinition("ioDeviceGripperLeft", ParameterType::DEVICE_SELECTION,
+                      "IOBottom", "Left gripper control device"),
+    ParameterDefinition("gripperPinNameLeft", ParameterType::STRING,
+                      "gripper-left", "Left gripper pin name"),
+    // Right gripper parameters
+    ParameterDefinition("ioDeviceGripperRight", ParameterType::DEVICE_SELECTION,
+                      "IOBottom", "Right gripper control device"),
+    ParameterDefinition("gripperPinNameRight", ParameterType::STRING,
+                      "gripper-right", "Right gripper pin name")
+    });
+
+  ProcessParameterFactory::RegisterParameterInitializer("Core_UnloadTwoGrippers",
+    static_cast<ParameterInitializer>([](ProcessInstance& instance) {
+    auto schema = ProcessParameterSchema::GetParametersForProcess("Core_UnloadTwoGrippers");
+    for (const auto& param : schema) {
+      instance.parameters[param.name] = param.defaultValue;
+    }
+  }));
+
+
+
   std::cout << "Core process parameters registered successfully" << std::endl;
 }

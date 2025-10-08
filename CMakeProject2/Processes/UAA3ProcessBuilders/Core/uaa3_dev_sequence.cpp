@@ -349,4 +349,81 @@ namespace UAA3ProcessBuilders {
     return sequence;
   }
 
+
+
+  // ========================================================================
+// Parameterized builder for Core_Unload
+// ========================================================================
+  std::unique_ptr<SequenceStep> createCoreUnload(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI,
+    const std::string& deviceName,
+    const std::string& graphName,
+    const std::string& homeNode,
+    const std::string& ioDeviceVacuum,
+    const std::string& vacuumPinName,
+    const std::string& ioDeviceGripper,
+    const std::string& gripperPinName)
+  {
+    auto sequence = std::make_unique<SequenceStep>(
+      "Core Unload Sequence",
+      machineOps
+    );
+
+    sequence->AddOperation(std::make_shared<::CoreUnload>(
+      deviceName,           // 1
+      graphName,            // 2
+      homeNode,             // 3
+      ioDeviceVacuum,       // 4
+      vacuumPinName,        // 5
+      ioDeviceGripper,      // 6
+      gripperPinName        // 7
+    ));
+
+    return sequence;
+  }
+
+
+  // ========================================================================
+// Parameterized builder for Core_UnloadTwoGrippers
+// ========================================================================
+  std::unique_ptr<SequenceStep> createCoreUnloadTwoGrippers(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI,
+    const std::string& deviceNameLeft,
+    const std::string& graphNameLeft,
+    const std::string& homeNodeLeft,
+    const std::string& deviceNameRight,
+    const std::string& graphNameRight,
+    const std::string& homeNodeRight,
+    const std::string& ioDeviceVacuum,
+    const std::string& vacuumPinName,
+    const std::string& ioDeviceGripperLeft,
+    const std::string& gripperPinNameLeft,
+    const std::string& ioDeviceGripperRight,
+    const std::string& gripperPinNameRight)
+  {
+    auto sequence = std::make_unique<SequenceStep>(
+      "Core Unload Two Grippers Sequence",
+      machineOps
+    );
+
+    sequence->AddOperation(std::make_shared<::CoreUnloadTwoGrippers>(
+      deviceNameLeft,           // 1
+      graphNameLeft,            // 2
+      homeNodeLeft,             // 3
+      deviceNameRight,          // 4
+      graphNameRight,           // 5
+      homeNodeRight,            // 6
+      ioDeviceVacuum,           // 7
+      vacuumPinName,            // 8
+      ioDeviceGripperLeft,      // 9
+      gripperPinNameLeft,       // 10
+      ioDeviceGripperRight,     // 11
+      gripperPinNameRight       // 12
+    ));
+
+    return sequence;
+  }
+
 }

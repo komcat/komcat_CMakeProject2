@@ -107,6 +107,36 @@ namespace UAA3ProcessBuilders {
     const std::string& feedBackChannelName_2 = "GPIB-Current" // 16
   );
 
+
+  std::unique_ptr<SequenceStep> createCoreUnload(
+    MachineOperations& machineOps,        // 1
+    UserPromptUI& promptUI,               // 2
+    const std::string& deviceName,        // 3
+    const std::string& graphName,         // 4
+    const std::string& homeNode,          // 5
+    const std::string& ioDeviceVacuum,    // 6
+    const std::string& vacuumPinName,     // 7
+    const std::string& ioDeviceGripper,   // 8
+    const std::string& gripperPinName     // 9
+  );
+
+  std::unique_ptr<SequenceStep> createCoreUnloadTwoGrippers(
+    MachineOperations& machineOps,        // 1
+    UserPromptUI& promptUI,               // 2
+    const std::string& deviceNameLeft,    // 3
+    const std::string& graphNameLeft,     // 4
+    const std::string& homeNodeLeft,      // 5
+    const std::string& deviceNameRight,   // 6
+    const std::string& graphNameRight,    // 7
+    const std::string& homeNodeRight,     // 8
+    const std::string& ioDeviceVacuum,    // 9
+    const std::string& vacuumPinName,     // 10
+    const std::string& ioDeviceGripperLeft,   // 11
+    const std::string& gripperPinNameLeft,    // 12
+    const std::string& ioDeviceGripperRight,  // 13
+    const std::string& gripperPinNameRight    // 14
+  );
+
   // ============================================================================
   // CORE PROCESSES
   // ============================================================================

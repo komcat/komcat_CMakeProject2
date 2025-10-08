@@ -489,8 +489,95 @@ namespace UAA3ProcessRegistration {
     );
 
 
+    // ========================================================================
+// Core_Unload - PARAMETERIZED VERSION
+// ========================================================================
+    registry.RegisterProcessWithParams(
+      "Core_Unload",
+      "Core",
+      "Unload operation - releases gripper, turns off vacuum, and returns to home",
+      true,
+      [](MachineOperations& ops, UserPromptUI& ui,
+        const std::map<std::string, std::string>& params) -> std::unique_ptr<SequenceStep> {
 
-    printf("RegisterCoreProcesses: Registered 3 parameterized core processes\n");
+      auto getParam = [&params](const std::string& key, const std::string& defaultValue) {
+        auto it = params.find(key);
+        return (it != params.end()) ? it->second : defaultValue;
+      };
+
+      // Extract all parameters
+      std::string deviceName = getParam("deviceName", "hex-right");
+      std::string graphName = getParam("graphName", "Process_Flow");
+      std::string homeNode = getParam("homeNode", "home_position");
+      std::string ioDeviceVacuum = getParam("ioDeviceVacuum", "IOBottom");
+      std::string vacuumPinName = getParam("vacuumPinName", "vacuum-pump");
+      std::string ioDeviceGripper = getParam("ioDeviceGripper", "IOBottom");
+      std::string gripperPinName = getParam("gripperPinName", "gripper-right");
+
+      return UAA3ProcessBuilders::createCoreUnload(
+        ops, ui,
+        deviceName,
+        graphName,
+        homeNode,
+        ioDeviceVacuum,
+        vacuumPinName,
+        ioDeviceGripper,
+        gripperPinName
+      );
+    }
+    );
+
+
+    // ========================================================================
+// Core_UnloadTwoGrippers - PARAMETERIZED VERSION
+// ========================================================================
+    registry.RegisterProcessWithParams(
+      "Core_UnloadTwoGrippers",
+      "Core",
+      "Unload operation for two grippers - releases both grippers, turns off vacuum, and returns both devices to home",
+      true,
+      [](MachineOperations& ops, UserPromptUI& ui,
+        const std::map<std::string, std::string>& params) -> std::unique_ptr<SequenceStep> {
+
+      auto getParam = [&params](const std::string& key, const std::string& defaultValue) {
+        auto it = params.find(key);
+        return (it != params.end()) ? it->second : defaultValue;
+      };
+
+      // Extract all parameters
+      std::string deviceNameLeft = getParam("deviceNameLeft", "hex-left");
+      std::string graphNameLeft = getParam("graphNameLeft", "Process_Flow");
+      std::string homeNodeLeft = getParam("homeNodeLeft", "home_position_left");
+      std::string deviceNameRight = getParam("deviceNameRight", "hex-right");
+      std::string graphNameRight = getParam("graphNameRight", "Process_Flow");
+      std::string homeNodeRight = getParam("homeNodeRight", "home_position_right");
+      std::string ioDeviceVacuum = getParam("ioDeviceVacuum", "IOBottom");
+      std::string vacuumPinName = getParam("vacuumPinName", "vacuum-pump");
+      std::string ioDeviceGripperLeft = getParam("ioDeviceGripperLeft", "IOBottom");
+      std::string gripperPinNameLeft = getParam("gripperPinNameLeft", "gripper-left");
+      std::string ioDeviceGripperRight = getParam("ioDeviceGripperRight", "IOBottom");
+      std::string gripperPinNameRight = getParam("gripperPinNameRight", "gripper-right");
+
+      return UAA3ProcessBuilders::createCoreUnloadTwoGrippers(
+        ops, ui,
+        deviceNameLeft,
+        graphNameLeft,
+        homeNodeLeft,
+        deviceNameRight,
+        graphNameRight,
+        homeNodeRight,
+        ioDeviceVacuum,
+        vacuumPinName,
+        ioDeviceGripperLeft,
+        gripperPinNameLeft,
+        ioDeviceGripperRight,
+        gripperPinNameRight
+      );
+    }
+    );
+
+
+    //printf("RegisterCoreProcesses: Registered 3 parameterized core processes\n");
   }
 
 
