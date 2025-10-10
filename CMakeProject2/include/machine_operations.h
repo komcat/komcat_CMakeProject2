@@ -44,7 +44,7 @@
 
 class CLD101xOperations;
 class Keithley2400Operations;
-
+class UserPromptUI;  // ADD THIS
 
 extern "C" {
 	bool MachineOperations_PerformScan(void* machineOpsPtr,
@@ -108,6 +108,18 @@ public:
 	Logger* m_logger;
 
 
+	// Add setter for UserPromptUI
+	void SetUserPromptUI(UserPromptUI* promptUI) {
+		m_userPromptUI = promptUI;
+		if (m_userPromptUI) {
+			LogInfo("UserPromptUI connected to MachineOperations");
+		}
+	}
+
+	// Add getter for UserPromptUI
+	UserPromptUI* GetUserPromptUI() const {
+		return m_userPromptUI;
+	}
 	// ADD THESE METHODS
 	void SetDisplayOutput(IDisplayOutput* display) {
 		m_displayOutput = display;
@@ -609,9 +621,9 @@ public:
 		const std::string& callerContext = ""
 	);
 protected:
-	
+
 	bool m_enableDebug = false;
-	
+
 	// Core system references
 	MotionControlLayer& m_motionLayer;
 	PIControllerManager& m_piControllerManager;
@@ -755,29 +767,34 @@ protected:
 	std::map<std::string, std::unique_ptr<ChannelRecorder>> m_activeRecorders;
 
 	// Helper to create and register a recorder
-	public:
-		AppContext* GetAppContext() const { return m_appContext; }
-		// or
-		PIControllerManager* GetPIController() const {
-			return m_appContext ? m_appContext->GetPIController() : nullptr;
-		}
-		ACSControllerManager* GetACSController() const {
-			return m_appContext ? m_appContext->GetACSController() : nullptr;
-		}
+public:
+	AppContext* GetAppContext() const { return m_appContext; }
+	// or
+	PIControllerManager* GetPIController() const {
+		return m_appContext ? m_appContext->GetPIController() : nullptr;
+	}
+	ACSControllerManager* GetACSController() const {
+		return m_appContext ? m_appContext->GetACSController() : nullptr;
+	}
 
-		MotionConfigManager* GetMotionConfigManager() const {
-			return m_appContext ? m_appContext->GetMotionConfig() : nullptr;
-		}
+	MotionConfigManager* GetMotionConfigManager() const {
+		return m_appContext ? m_appContext->GetMotionConfig() : nullptr;
+	}
 
-		MotionControlLayer* GetMotionControl() const {
-			return m_appContext ? m_appContext->GetMotionControlLayer() : nullptr;
-		}
-		// Global motion controller access
-		GlobalMotionController* GetGlobalMotionController() { return m_globalMotionController.get(); }
-		const GlobalMotionController* GetGlobalMotionController() const { return m_globalMotionController.get(); }
+	MotionControlLayer* GetMotionControl() const {
+		return m_appContext ? m_appContext->GetMotionControlLayer() : nullptr;
+	}
+	// Global motion controller access
+	GlobalMotionController* GetGlobalMotionController() { return m_globalMotionController.get(); }
+	const GlobalMotionController* GetGlobalMotionController() const { return m_globalMotionController.get(); }
 
-		// Initialize global motion controller
-		void InitializeGlobalMotion(const std::string& matrixFile = "transformation_matrix.json");
+	// Initialize global motion controller
+	void InitializeGlobalMotion(const std::string& matrixFile = "transformation_matrix.json");
+
+
+protected:
+	UserPromptUI* m_userPromptUI = nullptr;  // ADD THIS
+
 
 private:
 	AppContext* m_appContext = nullptr;

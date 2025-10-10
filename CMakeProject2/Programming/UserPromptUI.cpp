@@ -16,7 +16,7 @@ UserPromptUI::UserPromptUI()
   , m_promptStartTime(0.0f)
   , m_autoConfirmTriggered(false)
   , m_windowSizeCalculated(false)
-  , m_calculatedWindowSize(ImVec2(500, 300))
+  , m_calculatedWindowSize(ImVec2(600, 400))
   , m_showInputPrompt(false)
   , m_textInputRequested(false)
 {
@@ -76,8 +76,8 @@ void UserPromptUI::CalculateWindowSize() {
     return;
   }
 
-  ImVec2 minSize = ImVec2(500, 300);
-  ImVec2 maxSize = ImVec2(800, 600);
+  ImVec2 minSize = ImVec2(600, 400);  // Was 500, 300
+  ImVec2 maxSize = ImVec2(1000, 800); // Was 800, 600
 
   float estimatedHeight = 120;
 
@@ -306,8 +306,8 @@ void UserPromptUI::Render() {
   ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
   ImGui::SetNextWindowSize(m_calculatedWindowSize, ImGuiCond_Appearing);
 
-  ImVec2 minSize = ImVec2(400, 250);
-  ImVec2 maxSize = ImVec2(900, 700);
+  ImVec2 minSize = ImVec2(500, 350);  // Was 400, 250
+  ImVec2 maxSize = ImVec2(1100, 900); // Was 900, 700
   ImGui::SetNextWindowSizeConstraints(minSize, maxSize);
 
   ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;

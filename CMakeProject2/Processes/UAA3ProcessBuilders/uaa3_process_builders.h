@@ -47,7 +47,8 @@ namespace UAA3ProcessBuilders {
     const std::string& gripperPinName,    // 11
     float gripperHoldDelay,               // 12
     float speed,                          // 13
-    bool enableCameraView                 // 14 ← ADD THIS
+    bool enableCameraView,                 // 14 ← ADD THIS
+		bool enableUserConfirm = true         // 15 ← ADD THIS
   );
 
   std::unique_ptr<SequenceStep> createCorePickOnly(

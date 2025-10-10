@@ -187,7 +187,8 @@ namespace UAA3ProcessBuilders {
     const std::string& gripperPinName,
     float gripperHoldDelay,
     float speed,
-    bool enableCameraView)              // ← ADD THIS
+    bool enableCameraView,
+    bool enableUserConfirm)              // ← ADD THIS
   {
     auto sequence = std::make_unique<SequenceStep>(
       "Core Pick & Place Sequence",
@@ -206,7 +207,8 @@ namespace UAA3ProcessBuilders {
       graphName,
       gripperOutputDevice,
       gripperPinName,
-      gripperHoldDelay
+      gripperHoldDelay,
+      enableUserConfirm
     ));
 
     return sequence;

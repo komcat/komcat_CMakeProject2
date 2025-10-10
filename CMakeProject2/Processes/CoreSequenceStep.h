@@ -158,7 +158,8 @@ public:
     const std::string& graphName,
     const std::string& gripperOutputDevice,
     const std::string& gripperPinName,      // Changed to pin name
-    float gripperHoldDelay)
+    float gripperHoldDelay,
+    bool enableUserConfirm = false)  // Add this parameter
     : m_deviceName(deviceName),
     m_speed(speed),
     m_pickNode(pickNode),
@@ -170,7 +171,8 @@ public:
     m_graphName(graphName),
     m_gripperOutputDevice(gripperOutputDevice),
     m_gripperPinName(gripperPinName),
-    m_gripperHoldDelay(gripperHoldDelay) {
+    m_gripperHoldDelay(gripperHoldDelay),
+    m_enableUserConfirm(enableUserConfirm) {
   }
 
   bool Execute(MachineOperations& ops) override {
@@ -203,8 +205,9 @@ public:
     if (!ops.SetOutputByName(m_gripperOutputDevice, m_gripperPinName, true)) {
       ops.LogError("Failed to activate gripper");
       return false;
-    }
-    ops.Wait(200);
+    }   
+    ops.Wait(static_cast<int>(m_gripperHoldDelay * 1000));
+
 
     // Release and re-grip cycle
     ops.LogInfo("Grip verification cycle");
@@ -212,13 +215,55 @@ public:
       ops.LogError("Failed to release gripper");
       return false;
     }
-    ops.Wait(static_cast<int>(m_gripperHoldDelay * 1000));
+    ops.Wait(500);
 
     if (!ops.SetOutputByName(m_gripperOutputDevice, m_gripperPinName, true)) {
       ops.LogError("Failed to re-grip");
       return false;
     }
     ops.Wait(500);
+
+
+    //add user prompt here
+    //to confirm move to place
+
+ // === USER CONFIRMATION PROMPT ===
+    if (m_enableUserConfirm) {
+      // GET UserPromptUI from ops at runtime
+      UserPromptUI* promptUI = ops.GetUserPromptUI();
+
+      if (!promptUI) {
+        ops.LogError("UserPromptUI not available - cannot show prompt");
+        return false;
+      }
+
+      ops.LogInfo("Waiting for user confirmation to proceed to Place...");
+
+      std::atomic<bool> responseReceived(false);
+      std::atomic<bool> userConfirmed(false);
+
+      promptUI->RequestPrompt(
+        "Pick Complete",
+        "Gripper has picked the object.\n\nConfirm to continue to Place position?",
+        [&](PromptResult result) {
+        userConfirmed = (result == PromptResult::YES);
+        responseReceived = true;
+      });
+
+      // Wait for user response
+      while (!responseReceived) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      }
+
+      if (!userConfirmed) {
+        ops.LogInfo("User cancelled operation - aborting before Place");
+        return false;
+      }
+
+      ops.LogInfo("User confirmed - proceeding to Place");
+    }
+
+
 
     // === PLACE SEQUENCE ===
 
@@ -238,13 +283,7 @@ public:
     }
     ops.Wait(500);
 
-    // Release gripper using pin name
-    ops.LogInfo("Releasing gripper");
-    if (!ops.SetOutputByName(m_gripperOutputDevice, m_gripperPinName, false)) {
-      ops.LogError("Failed to release gripper");
-      return false;
-    }
-    ops.Wait(300);
+
 
     ops.LogInfo("CorePickPlace completed successfully");
     return true;
@@ -267,6 +306,8 @@ private:
   std::string m_gripperOutputDevice;
   std::string m_gripperPinName;      // Now a name instead of number
   float m_gripperHoldDelay;
+  bool m_enableUserConfirm;  // NEW MEMBER
+
 };
 
 
@@ -355,7 +396,8 @@ public:
       ops.LogError("Failed to activate gripper");
       return false;
     }
-    ops.Wait(200);
+    ops.Wait(static_cast<int>(m_gripperHoldDelay * 1000));
+
 
     // Grip verification cycle
     ops.LogInfo("Grip verification cycle");
@@ -363,7 +405,7 @@ public:
       ops.LogError("Failed to release gripper");
       return false;
     }
-    ops.Wait(static_cast<int>(m_gripperHoldDelay * 1000));
+    ops.Wait(500);
 
     if (!ops.SetOutputByName(m_gripperOutputDevice, m_gripperPinName, true)) {
       ops.LogError("Failed to re-grip");

@@ -46,7 +46,10 @@ public:
   ~RunPageUI();
 
   void RenderUI();
-  void SetUserPromptUI(UserPromptUI* promptUI) { m_promptUI = promptUI; }
+  void SetUserPromptUI(UserPromptUI* promptUI) {
+    m_promptUI = promptUI; 
+		m_machineOps.SetUserPromptUI(promptUI);
+  }
   void SetImguiFont(ImFont* font);
   ImFont* GetImguiFont() const { return m_imguiFont; }
 
