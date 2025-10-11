@@ -296,8 +296,16 @@ void ManualAdjustmentOperation::RenderImGui() {
 
   ImGui::SetNextWindowSize(ImVec2(500, 600), ImGuiCond_FirstUseEver); // Increased height
 
+
+
   ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoCollapse |
     ImGuiWindowFlags_AlwaysAutoResize;
+
+
+  // Softer yellow background + dark text for readability
+  ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(1.0f, 0.9f, 0.4f, 1.0f));  // Softer yellow
+  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));       // Black text
+
 
   if (ImGui::Begin(m_title.c_str(), &m_showWindow, window_flags)) {
 
@@ -385,6 +393,11 @@ void ManualAdjustmentOperation::RenderImGui() {
       ImGui::OpenPopup("Cancel Confirmation");
     }
 
+    // Push popup styling BEFORE BeginPopupModal
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(1.0f, 0.9f, 0.4f, 1.0f));  // Yellow background
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));     // Black text
+
+
     if (ImGui::BeginPopupModal("Cancel Confirmation", NULL,
       ImGuiWindowFlags_AlwaysAutoResize)) {
       ImGui::Text("Are you sure you want to cancel the adjustment?");
@@ -402,9 +415,17 @@ void ManualAdjustmentOperation::RenderImGui() {
       }
 
       ImGui::EndPopup();
+
+
+      ImGui::PopStyleColor(2);  // Pop both colors AFTER EndPopup()
     }
   }
   ImGui::End();
+
+
+  // Pop AFTER End() - CRITICAL! This must ALWAYS execute
+  ImGui::PopStyleColor(2);
+
 }
 
 
