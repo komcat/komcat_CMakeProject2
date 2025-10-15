@@ -228,6 +228,57 @@ void RegisterCoreProcessParameters() {
   }));
 
 
+  // Add these to RegisterCoreProcessParameters() in CoreProcessParameterRegistration.cpp
+
+// === Core_MoveToNode Parameters ===
+  ProcessParameterSchema::RegisterProcessSchema("Core_MoveToNode", {
+      ParameterDefinition("deviceName", ParameterType::DEVICE_SELECTION,
+                        "gantry-main", "Device to move"),
+      ParameterDefinition("graphName", ParameterType::STRING,
+                        "Process_Flow", "Graph for motion planning"),
+      ParameterDefinition("targetNode", ParameterType::NODE_SELECTION,
+                        "node_4027", "Target position node"),
+      ParameterDefinition("speed", ParameterType::DOUBLE,
+                        "10.0", "Movement speed (mm/s)")
+    });
+
+  ProcessParameterFactory::RegisterParameterInitializer("Core_MoveToNode",
+    static_cast<ParameterInitializer>([](ProcessInstance& instance) {
+    auto schema = ProcessParameterSchema::GetParametersForProcess("Core_MoveToNode");
+    for (const auto& param : schema) {
+      instance.parameters[param.name] = param.defaultValue;
+    }
+  }));
+
+
+  // === Core_Dispense Parameters ===
+// === Core_Dispense Parameters ===
+  ProcessParameterSchema::RegisterProcessSchema("Core_Dispense", {
+      ParameterDefinition("deviceName", ParameterType::DEVICE_SELECTION,
+                        "gantry-main", "Device to move to dispense position"),
+      ParameterDefinition("graphName", ParameterType::STRING,
+                        "Process_Flow", "Graph for motion planning"),
+      ParameterDefinition("dispensePointName", ParameterType::STRING,
+                        "dispense1", "Dispense position point name"),
+      ParameterDefinition("safeDispenseZOffset", ParameterType::DOUBLE,
+                        "-1.0", "Z offset for safe position above dispense (mm, negative value)"),
+      ParameterDefinition("homeNode", ParameterType::NODE_SELECTION,
+                        "node_4027", "Safe/home position after dispense"),
+      ParameterDefinition("ioDeviceDispense", ParameterType::DEVICE_SELECTION,
+                        "IOBottom", "Dispense control device"),
+      ParameterDefinition("dispensePinName", ParameterType::STRING,
+                        "dispense-trigger", "Dispense trigger pin name"),
+      ParameterDefinition("pneumaticDispenseDevice", ParameterType::DEVICE_SELECTION,
+                        "Dispenser_Head", "Pneumatic dispenser device"),
+      ParameterDefinition("dispenseDurationSeconds", ParameterType::DOUBLE,
+                        "2.0", "Dispense duration in seconds"),
+      ParameterDefinition("moveSpeed", ParameterType::DOUBLE,
+                        "5.0", "General movement speed (mm/s)"),
+      ParameterDefinition("touchDownSpeed", ParameterType::DOUBLE,
+                        "1.0", "Slow touchdown speed (mm/s)"),
+      ParameterDefinition("liftOffSpeed", ParameterType::DOUBLE,
+                        "1.0", "Slow liftoff speed (mm/s)")
+    });
 
   std::cout << "Core process parameters registered successfully" << std::endl;
 }

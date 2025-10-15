@@ -577,6 +577,109 @@ namespace UAA3ProcessRegistration {
     );
 
 
+    // Add these at the end of RegisterCoreProcesses(), before the printf statement:
+
+// ========================================================================
+// Core_MoveToNode - PARAMETERIZED VERSION
+// ========================================================================
+    registry.RegisterProcessWithParams(
+      "Core_MoveToNode",
+      "Core",
+      "Simple move operation to target node",
+      true,
+      [](MachineOperations& ops, UserPromptUI& ui,
+        const std::map<std::string, std::string>& params) -> std::unique_ptr<SequenceStep> {
+
+      auto getParam = [&params](const std::string& key, const std::string& defaultValue) {
+        auto it = params.find(key);
+        return (it != params.end()) ? it->second : defaultValue;
+      };
+
+      auto getFloatParam = [&params](const std::string& key, float defaultValue) {
+        auto it = params.find(key);
+        if (it != params.end()) {
+          try { return std::stof(it->second); }
+          catch (...) { return defaultValue; }
+        }
+        return defaultValue;
+      };
+
+      // Extract all parameters
+      std::string deviceName = getParam("deviceName", "gantry-main");
+      std::string graphName = getParam("graphName", "Process_Flow");
+      std::string targetNode = getParam("targetNode", "node_4027");
+      float speed = getFloatParam("speed", 10.0f);
+
+      return UAA3ProcessBuilders::createCoreMoveToNode(
+        ops, ui,
+        deviceName,
+        graphName,
+        targetNode,
+        speed
+      );
+    }
+    );
+
+    // Replace the Core_Dispense registration with this updated version:
+
+    // ========================================================================
+    // Core_Dispense - PARAMETERIZED VERSION
+    // ========================================================================
+    registry.RegisterProcessWithParams(
+      "Core_Dispense",
+      "Core",
+      "Dispense operation with automatic safe Z positioning, trigger control, and multi-speed control",
+      true,
+      [](MachineOperations& ops, UserPromptUI& ui,
+        const std::map<std::string, std::string>& params) -> std::unique_ptr<SequenceStep> {
+
+      auto getParam = [&params](const std::string& key, const std::string& defaultValue) {
+        auto it = params.find(key);
+        return (it != params.end()) ? it->second : defaultValue;
+      };
+
+      auto getFloatParam = [&params](const std::string& key, float defaultValue) {
+        auto it = params.find(key);
+        if (it != params.end()) {
+          try { return std::stof(it->second); }
+          catch (...) { return defaultValue; }
+        }
+        return defaultValue;
+      };
+
+      // Extract all parameters
+      std::string deviceName = getParam("deviceName", "gantry-main");
+      std::string graphName = getParam("graphName", "Process_Flow");
+      std::string dispensePointName = getParam("dispensePointName", "dispense1");
+      float safeDispenseZOffset = getFloatParam("safeDispenseZOffset", -1.0f);
+      std::string homeNode = getParam("homeNode", "node_4027");
+      std::string ioDeviceDispense = getParam("ioDeviceDispense", "IOBottom");
+      std::string dispensePinName = getParam("dispensePinName", "dispense-trigger");
+      std::string pneumaticDispenseDevice = getParam("pneumaticDispenseDevice", "Dispenser_Head");
+      float dispenseDurationSeconds = getFloatParam("dispenseDurationSeconds", 2.0f);
+      float moveSpeed = getFloatParam("moveSpeed", 5.0f);
+      float touchDownSpeed = getFloatParam("touchDownSpeed", 1.0f);
+      float liftOffSpeed = getFloatParam("liftOffSpeed", 1.0f);
+
+      return UAA3ProcessBuilders::createCoreDispense(
+        ops, ui,
+        deviceName,
+        graphName,
+        dispensePointName,
+        safeDispenseZOffset,      // NEW
+        homeNode,
+        ioDeviceDispense,
+        dispensePinName,
+        pneumaticDispenseDevice,
+        dispenseDurationSeconds,
+        moveSpeed,                // NEW
+        touchDownSpeed,           // NEW
+        liftOffSpeed              // NEW
+      );
+    }
+    );
+
+
     //printf("RegisterCoreProcesses: Registered 3 parameterized core processes\n");
   }
 

@@ -138,6 +138,38 @@ namespace UAA3ProcessBuilders {
     const std::string& gripperPinNameRight    // 14
   );
 
+
+  // Add these after the createCoreUnloadTwoGrippers declaration:
+
+  std::unique_ptr<SequenceStep> createCoreMoveToNode(
+    MachineOperations& machineOps,        // 1
+    UserPromptUI& promptUI,               // 2
+    const std::string& deviceName,        // 3
+    const std::string& graphName,         // 4
+    const std::string& targetNode,        // 5
+    float speed                           // 6
+  );
+
+  // Update the createCoreDispense signature:
+
+  std::unique_ptr<SequenceStep> createCoreDispense(
+    MachineOperations& machineOps,        // 1
+    UserPromptUI& promptUI,               // 2
+    const std::string& deviceName,        // 3
+    const std::string& graphName,         // 4
+    const std::string& dispensePointName, // 5
+    float safeDispenseZOffset,            // 6 - NEW: Z offset for safe position
+    const std::string& homeNode,          // 7
+    const std::string& ioDeviceDispense,  // 8
+    const std::string& dispensePinName,   // 9
+    const std::string& pneumaticDispenseDevice, // 10
+    float dispenseDurationSeconds,        // 11
+    float moveSpeed,                      // 12
+    float touchDownSpeed,                 // 13
+    float liftOffSpeed                    // 14
+  );
+
+
   // ============================================================================
   // CORE PROCESSES
   // ============================================================================

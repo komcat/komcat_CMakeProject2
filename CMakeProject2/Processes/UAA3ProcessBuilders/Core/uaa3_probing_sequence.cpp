@@ -79,9 +79,9 @@ namespace UAA3ProcessBuilders {
     sequence->AddOperation(std::make_shared<TECOnOperation>());
     sequence->AddOperation(std::make_shared<SetTECTemperatureOperation>(25.0f));
 
-    // 2. Wait for temperature to stabilize
-    sequence->AddOperation(std::make_shared<WaitForLaserTemperatureOperation>(
-      25.0f, 1.0f, 5000)); //100ms
+    //// 2. Wait for temperature to stabilize
+    //sequence->AddOperation(std::make_shared<WaitForLaserTemperatureOperation>(
+    //  25.0f, 1.0f, 5000)); //100ms
 
     // 3. Set laser current and turn on laser
     sequence->AddOperation(std::make_shared<SetLaserCurrentOperation>(0.250f)); // 150mA

@@ -428,4 +428,79 @@ namespace UAA3ProcessBuilders {
     return sequence;
   }
 
+
+  // Add these implementations at the end of the namespace, before the closing brace:
+
+// ========================================================================
+// Parameterized builder for Core_MoveToNode
+// ========================================================================
+  std::unique_ptr<SequenceStep> createCoreMoveToNode(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI,
+    const std::string& deviceName,
+    const std::string& graphName,
+    const std::string& targetNode,
+    float speed)
+  {
+    auto sequence = std::make_unique<SequenceStep>(
+      "Core Move To Node Sequence",
+      machineOps
+    );
+
+    sequence->AddOperation(std::make_shared<::CoreMoveToNode>(
+      deviceName,           // 1
+      graphName,            // 2
+      targetNode,           // 3
+      speed                 // 4
+    ));
+
+    return sequence;
+  }
+
+
+  // Add this implementation at the end of the namespace:
+
+// ========================================================================
+// Parameterized builder for Core_Dispense
+// ========================================================================
+  std::unique_ptr<SequenceStep> createCoreDispense(
+    MachineOperations& machineOps,
+    UserPromptUI& promptUI,
+    const std::string& deviceName,
+    const std::string& graphName,
+    const std::string& dispensePointName,
+    float safeDispenseZOffset,
+    const std::string& homeNode,
+    const std::string& ioDeviceDispense,
+    const std::string& dispensePinName,
+    const std::string& pneumaticDispenseDevice,
+    float dispenseDurationSeconds,
+    float moveSpeed,
+    float touchDownSpeed,
+    float liftOffSpeed)
+  {
+    auto sequence = std::make_unique<SequenceStep>(
+      "Core Dispense Sequence",
+      machineOps
+    );
+
+    sequence->AddOperation(std::make_shared<::CoreDispense>(
+      deviceName,                 // 1
+      graphName,                  // 2
+      dispensePointName,          // 3
+      safeDispenseZOffset,        // 4 - NEW
+      homeNode,                   // 5
+      ioDeviceDispense,           // 6
+      dispensePinName,            // 7
+      pneumaticDispenseDevice,    // 8
+      dispenseDurationSeconds,    // 9
+      moveSpeed,                  // 10
+      touchDownSpeed,             // 11
+      liftOffSpeed                // 12
+    ));
+
+    return sequence;
+  }
+
+
 }
