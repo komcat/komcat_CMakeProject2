@@ -74,10 +74,24 @@ void PIController::StopCommunicationThread() {
 }
 
 void PIController::CommunicationThreadFunc() {
-	const auto updateInterval = std::chrono::milliseconds(50);  // 20Hz update rate
 	int frameCounter = 0;
 
 	while (!m_terminateThread) {
+		// Adaptive polling: determine update interval based on mode
+		std::chrono::milliseconds updateInterval(100);  // Default: 10Hz (NORMAL mode)
+
+		switch (m_pollingMode.load()) {
+			case PollingMode::FAST:
+				updateInterval = std::chrono::milliseconds(50);   // 20Hz - responsive during motion
+				break;
+			case PollingMode::NORMAL:
+				updateInterval = std::chrono::milliseconds(100);  // 10Hz - standard monitoring
+				break;
+			case PollingMode::SLOW:
+				updateInterval = std::chrono::milliseconds(500);  // 2Hz - idle background monitoring
+				break;
+		}
+
 		if (m_isConnected) {
 			frameCounter++;
 
@@ -89,11 +103,12 @@ void PIController::CommunicationThreadFunc() {
 					m_axisPositions = positions;
 				}
 
-				// *** ADD THIS LINE - THIS IS WHAT'S MISSING! ***
+				// Notify subscribers
 				NotifyPositionSubscribers(positions);
 			}
 
 			// Update motion status
+			bool anyAxisMoving = false;
 			{
 				const char* allAxes = "X Y Z U V W";
 				BOOL isMovingArray[6] = { FALSE, FALSE, FALSE, FALSE, FALSE, FALSE };
@@ -107,6 +122,8 @@ void PIController::CommunicationThreadFunc() {
 						bool nowMoving = (isMovingArray[i] == TRUE);
 						m_axisMoving[axisNames[i]] = nowMoving;
 
+						if (nowMoving) anyAxisMoving = true;
+
 						// Notify if motion status changed
 						if (wasMoving != nowMoving) {
 							NotifyMotionStatusSubscribers(axisNames[i], nowMoving);
@@ -115,8 +132,20 @@ void PIController::CommunicationThreadFunc() {
 				}
 			}
 
-			// Update servo status less frequently
-			if (frameCounter % 3 == 0) {
+			// Auto-adjust polling mode based on motion state and UI visibility
+			if (anyAxisMoving) {
+				// Any axis moving - switch to FAST mode for responsive feedback
+				m_pollingMode = PollingMode::FAST;
+			} else if (m_showWindow || !m_positionSubscribers.empty()) {
+				// Idle but UI visible or subscribers active - NORMAL mode
+				m_pollingMode = PollingMode::NORMAL;
+			} else {
+				// All idle, no UI, no subscribers - SLOW mode for background monitoring
+				m_pollingMode = PollingMode::SLOW;
+			}
+
+			// Update servo status less frequently (only in NORMAL/FAST mode)
+			if (m_pollingMode != PollingMode::SLOW && frameCounter % 3 == 0) {
 				for (const auto& axis : m_availableAxes) {
 					bool enabled;
 					if (IsServoEnabled(axis, enabled)) {
@@ -126,9 +155,23 @@ void PIController::CommunicationThreadFunc() {
 				}
 			}
 
-			// Update analog readings every frame (if enabled)
-			if (m_enableAnalogReading && frameCounter % 2 == 0) {  // Update analog every other frame (10Hz)
-				UpdateAnalogReadings();
+			// Update analog readings (if enabled) - adjust rate based on mode
+			if (m_enableAnalogReading) {
+				bool shouldUpdateAnalog = false;
+				switch (m_pollingMode.load()) {
+					case PollingMode::FAST:
+						shouldUpdateAnalog = (frameCounter % 2 == 0);  // 10Hz
+						break;
+					case PollingMode::NORMAL:
+						shouldUpdateAnalog = (frameCounter % 2 == 0);  // 5Hz
+						break;
+					case PollingMode::SLOW:
+						shouldUpdateAnalog = (frameCounter % 5 == 0);  // 0.4Hz
+						break;
+				}
+				if (shouldUpdateAnalog) {
+					UpdateAnalogReadings();
+				}
 			}
 		}
 

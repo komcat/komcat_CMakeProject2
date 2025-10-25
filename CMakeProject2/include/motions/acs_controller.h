@@ -109,6 +109,11 @@ public:
   void StopCommunicationThread();
   void CommunicationThreadFunc();
 
+  // Polling mode control
+  enum class PollingMode { FAST, NORMAL, SLOW };
+  void SetPollingMode(PollingMode mode) { m_pollingMode = mode; }
+  PollingMode GetPollingMode() const { return m_pollingMode; }
+
 private:
 
   // Add to the private section of ACSController class in acs_controller.h
@@ -181,4 +186,7 @@ private:
   // Notify all subscribers
   void NotifyPositionSubscribers(const std::map<std::string, double>& positions);
   void NotifyMotionStatusSubscribers(const std::string& axis, bool isMoving);
+
+  // Adaptive polling mode
+  std::atomic<PollingMode> m_pollingMode{ PollingMode::NORMAL };
 };

@@ -67,7 +67,6 @@ void ACSController::StopCommunicationThread() {
 
 // Update the CommunicationThreadFunc in acs_controller.cpp
 void ACSController::CommunicationThreadFunc() {
-  const auto updateInterval = std::chrono::milliseconds(200);
   int frameCounter = 0;
 
   m_lastStatusUpdate = std::chrono::steady_clock::now();
@@ -75,6 +74,21 @@ void ACSController::CommunicationThreadFunc() {
 
   while (!m_terminateThread) {
     auto cycleStartTime = std::chrono::steady_clock::now();
+
+    // Adaptive polling: determine update interval based on mode
+    std::chrono::milliseconds updateInterval(200);  // Default: 5Hz (NORMAL mode)
+
+    switch (m_pollingMode.load()) {
+      case PollingMode::FAST:
+        updateInterval = std::chrono::milliseconds(100);  // 10Hz - responsive during motion
+        break;
+      case PollingMode::NORMAL:
+        updateInterval = std::chrono::milliseconds(200);  // 5Hz - standard monitoring
+        break;
+      case PollingMode::SLOW:
+        updateInterval = std::chrono::milliseconds(500);  // 2Hz - idle background monitoring
+        break;
+    }
 
     // Process any pending motor commands first
     {
@@ -110,6 +124,7 @@ void ACSController::CommunicationThreadFunc() {
       }
 
       // Update motion status less frequently (every 3rd frame)
+      bool anyAxisMoving = false;
       if (frameCounter % 3 == 0) {
         // Track previous states for change detection
         std::map<std::string, bool> previousMovingStates;
@@ -127,6 +142,8 @@ void ACSController::CommunicationThreadFunc() {
             m_axisMoving[axis] = moving;
           }
 
+          if (moving) anyAxisMoving = true;
+
           // ADDED: Notify if motion status changed
           auto prevIt = previousMovingStates.find(axis);
           if (prevIt != previousMovingStates.end() && prevIt->second != moving) {
@@ -134,16 +151,30 @@ void ACSController::CommunicationThreadFunc() {
           }
         }
 
-        // Update servo status for X, Y, Z
-        for (const auto& axis : { "X", "Y", "Z" }) {
-          bool enabled;
-          if (IsServoEnabled(axis, enabled)) {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            m_axisServoEnabled[axis] = enabled;
+        // Update servo status for X, Y, Z (only in NORMAL/FAST mode)
+        if (m_pollingMode != PollingMode::SLOW) {
+          for (const auto& axis : { "X", "Y", "Z" }) {
+            bool enabled;
+            if (IsServoEnabled(axis, enabled)) {
+              std::lock_guard<std::mutex> lock(m_mutex);
+              m_axisServoEnabled[axis] = enabled;
+            }
           }
         }
 
         m_lastStatusUpdate = std::chrono::steady_clock::now();
+      }
+
+      // Auto-adjust polling mode based on motion state and UI visibility
+      if (anyAxisMoving) {
+        // Any axis moving - switch to FAST mode for responsive feedback
+        m_pollingMode = PollingMode::FAST;
+      } else if (m_showWindow || !m_positionSubscribers.empty()) {
+        // Idle but UI visible or subscribers active - NORMAL mode
+        m_pollingMode = PollingMode::NORMAL;
+      } else {
+        // All idle, no UI, no subscribers - SLOW mode for background monitoring
+        m_pollingMode = PollingMode::SLOW;
       }
     }
 

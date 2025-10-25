@@ -129,6 +129,11 @@ public:
   void SubscribeToPositions(IPositionSubscriber* subscriber, const std::string& subscriberId);
   void UnsubscribeFromPositions(const std::string& subscriberId);
 
+  // Polling mode control
+  enum class PollingMode { FAST, NORMAL, SLOW };
+  void SetPollingMode(PollingMode mode) { m_pollingMode = mode; }
+  PollingMode GetPollingMode() const { return m_pollingMode; }
+
 private:
   bool m_debugVerbose = false;
   bool enableDebug = false;
@@ -186,6 +191,9 @@ private:
   const int m_statusUpdateInterval = 200;  // 5Hz updates
 
   bool m_enableDebug = false;  // Add this line
+
+  // Adaptive polling mode
+  std::atomic<PollingMode> m_pollingMode{ PollingMode::NORMAL };
 
   // Helper method to convert vector of axes to space-separated string
   std::string AxesToString(const std::vector<std::string>& axes) const;
